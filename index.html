@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speedy Insurance Agency — Auto, SR-22, Home & Commercial Insurance | Inland Empire</title>
+<meta name="description" content="Speedy Insurance Agency — auto, SR-22, DUI, home & commercial insurance plus DMV services. 4 locations: Moreno Valley, Riverside & Lake Elsinore. Open 7 days, 9am–8pm. Hablamos Español.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#D42B2B;
+  --red-dark:#B02222;
+  --blue:#1A4FA0;
+  --navy:#0A1628;
+  --navy-2:#13264A;
+  --white:#FFFFFF;
+  --ink:#1B2434;
+  --muted:#5B6779;
+  --tint:#F2F5FA;
+  --line:#E3E8F0;
+  --radius:10px;
+  --shadow:0 8px 30px rgba(10,22,40,.10);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Barlow',sans-serif;color:var(--ink);background:var(--white);line-height:1.55}
+img,svg{display:block}
+a{color:inherit;text-decoration:none}
+ul{list-style:none}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:4px}
+.container{max-width:1160px;margin:0 auto;padding:0 24px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--red);margin-bottom:10px}
+.section-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(28px,4vw,40px);color:var(--navy);line-height:1.05}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:14px 26px;border-radius:6px;border:none;transition:transform .15s ease,background .15s ease,box-shadow .15s ease}
+.btn:hover{transform:translateY(-1px)}
+.btn-red{background:var(--red);color:#fff;box-shadow:0 6px 18px rgba(212,43,43,.35)}
+.btn-red:hover{background:var(--red-dark)}
+.btn-ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4)}
+.btn-ghost:hover{border-color:#fff}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:hover{background:#163F82}
+
+/* ---------- Nav ---------- */
+.nav{position:sticky;top:0;z-index:60;background:var(--navy);box-shadow:0 2px 14px rgba(0,0,0,.25)}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
+.nav-logo{display:flex;align-items:center;gap:10px}
+.brand{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:#fff;line-height:1}
+.brand small{display:block;font-family:'Barlow',sans-serif;font-size:9px;letter-spacing:3px;color:rgba(255,255,255,.55);text-transform:uppercase;margin-top:2px}
+.nav-links{display:flex;gap:26px;align-items:center}
+.nav-link{font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.75);transition:color .15s}
+.nav-link:hover{color:#fff}
+.nav-cta{font-size:12px;padding:10px 18px}
+.nav-phone{display:flex;align-items:center;gap:6px;color:#fff;font-weight:700;font-size:14px}
+@media(max-width:880px){.nav-links .nav-link{display:none}}
+
+/* ---------- Hero ---------- */
+.hero{position:relative;background:linear-gradient(130deg,var(--navy) 0%,var(--navy-2) 55%,var(--navy) 100%);color:#fff;overflow:hidden}
+.hero::after{content:"";position:absolute;right:-160px;top:-120px;width:560px;height:560px;border-radius:50%;border:90px solid rgba(212,43,43,.10);pointer-events:none}
+.hero-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:48px;align-items:center;padding:72px 0 56px}
+.hero h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(48px,7vw,84px);line-height:.95;letter-spacing:2px;margin-bottom:16px}
+.hero h1 span{color:var(--red)}
+.hero-sub{font-size:17px;color:rgba(255,255,255,.7);max-width:480px;margin-bottom:28px}
+.hero-btns{display:flex;gap:14px;flex-wrap:wrap}
+.hero-stats{display:flex;gap:36px;margin-top:42px;padding-top:26px;border-top:1px solid rgba(255,255,255,.12);flex-wrap:wrap}
+.stat-num{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:1px}
+.stat-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.5)}
+.dial-wrap{display:flex;justify-content:center}
+@media(max-width:880px){.hero-grid{grid-template-columns:1fr;padding:52px 0 40px}.dial-wrap{display:none}}
+@keyframes needleSweep{from{transform:rotate(-110deg)}to{transform:rotate(78deg)}}
+.needle{transform-origin:140px 150px;transform:rotate(78deg)}
+@media(prefers-reduced-motion:no-preference){.needle{animation:needleSweep 1.6s cubic-bezier(.3,1.4,.4,1) .3s both}}
+
+/* ---------- Trust bar ---------- */
+.trust{background:var(--red);color:#fff;padding:12px 0}
+.trust-inner{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.trust-item{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap}
+.trust-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.6)}
+
+/* ---------- Services ---------- */
+.services{padding:80px 0;background:var(--white)}
+.services-head{max-width:560px;margin-bottom:42px}
+.svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.svc-card{border:1px solid var(--line);border-radius:var(--radius);padding:28px 24px;transition:box-shadow .2s,transform .2s,border-color .2s;background:#fff}
+.svc-card:hover{box-shadow:var(--shadow);transform:translateY(-3px);border-color:transparent}
+.svc-icon{width:46px;height:46px;border-radius:9px;background:var(--tint);display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--blue)}
+.svc-card h3{font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.svc-card p{font-size:14px;color:var(--muted)}
+@media(max-width:880px){.svc-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.svc-grid{grid-template-columns:1fr}}
+
+/* ---------- Quote band ---------- */
+.quote-band{background:linear-gradient(120deg,var(--blue),#123A78);color:#fff;padding:64px 0}
+.quote-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.quote-band h2{font-family:'Barlow Condensed',sans-serif;font-size:clamp(28px,4vw,38px);font-weight:700;line-height:1.1;margin-bottom:10px}
+.quote-band p{color:rgba(255,255,255,.75);font-size:15px}
+.quote-form{background:#fff;border-radius:var(--radius);padding:28px;box-shadow:var(--shadow)}
+.quote-form label{display:block;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.quote-form label:first-of-type{margin-top:0}
+.quote-form input,.quote-form select{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:15px;color:var(--ink);background:#fff}
+.quote-form .btn{width:100%;margin-top:18px}
+.quote-note{font-size:12px;color:var(--muted);margin-top:12px;text-align:center}
+@media(max-width:880px){.quote-grid{grid-template-columns:1fr}}
+
+/* ---------- Branches ---------- */
+.branches{padding:80px 0;background:var(--tint)}
+.branch-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:42px}
+.branch-card{background:#fff;border-radius:var(--radius);padding:24px 20px;border:1px solid var(--line);display:flex;flex-direction:column;gap:8px;transition:box-shadow .2s,transform .2s}
+.branch-card:hover{box-shadow:var(--shadow);transform:translateY(-3px)}
+.branch-tag{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red)}
+.branch-card h3{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--navy)}
+.branch-addr{font-size:13px;color:var(--muted);min-height:38px}
+.branch-phone{font-size:17px;font-weight:700;color:var(--navy)}
+.branch-hours{font-size:12px;color:var(--muted)}
+.branch-card .btn{margin-top:auto;font-size:12px;padding:11px 14px}
+@media(max-width:980px){.branch-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.branch-grid{grid-template-columns:1fr}}
+
+/* ---------- Reviews ---------- */
+.reviews{padding:80px 0;background:#fff}
+.review-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:38px}
+.gbadge{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;color:var(--navy)}
+.stars{color:#F5A623;letter-spacing:2px;font-size:15px}
+.review-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.review-card{background:var(--tint);border-radius:var(--radius);padding:26px}
+.review-card .stars{margin-bottom:12px}
+.review-text{font-size:14.5px;color:var(--ink);margin-bottom:16px}
+.review-name{font-size:13px;font-weight:700;color:var(--navy)}
+.review-loc{font-size:12px;color:var(--muted)}
+.review-cta{text-align:center;margin-top:34px}
+@media(max-width:880px){.review-grid{grid-template-columns:1fr}}
+
+/* ---------- CTA strip ---------- */
+.cta-strip{background:var(--navy);color:#fff;padding:56px 0;text-align:center}
+.cta-strip h2{font-family:'Bebas Neue',sans-serif;font-size:clamp(30px,5vw,46px);letter-spacing:2px;margin-bottom:10px}
+.cta-strip p{color:rgba(255,255,255,.65);margin-bottom:24px}
+
+/* ---------- Footer ---------- */
+.footer{background:#070F1D;color:rgba(255,255,255,.65);padding:56px 0 32px;font-size:13.5px}
+.footer-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:36px;margin-bottom:36px}
+.footer h4{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#fff;margin-bottom:14px}
+.footer li{margin-bottom:9px}
+.footer a:hover{color:#fff}
+.social-row{display:flex;gap:12px;margin-top:16px}
+.social-row a{width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.75);transition:background .15s,color .15s}
+.social-row a:hover{background:var(--red);border-color:var(--red);color:#fff}
+.footer-bottom{border-top:1px solid rgba(255,255,255,.1);padding-top:22px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px}
+@media(max-width:880px){.footer-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.footer-grid{grid-template-columns:1fr}}
+
+/* ---------- Branch modal ---------- */
+.modal-backdrop{position:fixed;inset:0;background:rgba(7,15,29,.62);z-index:90;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-backdrop.open{display:flex}
+.modal{background:#fff;border-radius:14px;max-width:440px;width:100%;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.4);max-height:92vh;overflow-y:auto}
+.modal-head{background:var(--navy);color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start}
+.modal-head h3{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700}
+.modal-head p{font-size:12.5px;color:rgba(255,255,255,.65);margin-top:2px}
+.modal-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:26px;line-height:1;padding:2px 6px}
+.modal-close:hover{color:#fff}
+.modal-body{padding:22px 24px 26px}
+.modal-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px}
+.modal-actions a{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 8px;border:1px solid var(--line);border-radius:9px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--navy);transition:border-color .15s,background .15s}
+.modal-actions a:hover{border-color:var(--blue);background:var(--tint)}
+.modal-actions svg{color:var(--red)}
+.modal-map{border-radius:9px;overflow:hidden;border:1px solid var(--line)}
+.modal-map iframe{width:100%;height:200px;border:0;display:block}
+.modal-meta{font-size:12.5px;color:var(--muted);margin-top:12px;text-align:center}
+
+/* ---------- Floating agent bubble ---------- */
+.agent-fab{position:fixed;right:22px;bottom:22px;z-index:80;display:flex;align-items:center;gap:10px;background:var(--red);color:#fff;border:none;border-radius:999px;padding:14px 22px 14px 16px;font-size:14px;font-weight:700;letter-spacing:.5px;box-shadow:0 10px 28px rgba(212,43,43,.45);transition:transform .15s}
+.agent-fab:hover{transform:translateY(-2px)}
+.agent-panel{position:fixed;right:22px;bottom:88px;z-index:80;width:320px;max-width:calc(100vw - 44px);background:#fff;border-radius:14px;box-shadow:0 24px 60px rgba(7,15,29,.35);overflow:hidden;display:none}
+.agent-panel.open{display:block}
+.agent-panel-head{background:var(--navy);color:#fff;padding:16px 18px}
+.agent-panel-head h4{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700}
+.agent-panel-head p{font-size:12px;color:rgba(255,255,255,.6)}
+.agent-list{padding:10px}
+.agent-row{display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:9px;transition:background .15s}
+.agent-row:hover{background:var(--tint)}
+.agent-avatar{width:38px;height:38px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.agent-info{flex:1;min-width:0}
+.agent-name{font-size:14px;font-weight:700;color:var(--navy)}
+.agent-branch{font-size:11.5px;color:var(--muted)}
+.agent-call{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#fff;background:var(--red);border-radius:6px;padding:7px 12px}
+.agent-call:hover{background:var(--red-dark)}
+.online-dot{width:8px;height:8px;border-radius:50%;background:#27AE60;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="container nav-inner">
+    <a href="#top" class="nav-logo" aria-label="Speedy Insurance Agency home">
+      <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <circle cx="24" cy="26" r="19" stroke="#FFFFFF" stroke-width="3" stroke-dasharray="86 34" stroke-dashoffset="-17" stroke-linecap="round"/>
+        <line x1="24" y1="26" x2="35" y2="15" stroke="#D42B2B" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="24" cy="26" r="4" fill="#D42B2B"/>
+        <path d="M6 10 L16 10 M4 15 L14 15" stroke="#D42B2B" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span class="brand">SPEEDY INSURANCE<small>Agency · Est. 2005</small></span>
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a class="nav-link" href="#services">Services</a>
+      <a class="nav-link" href="#locations">Locations</a>
+      <a class="nav-link" href="#reviews">Reviews</a>
+      <a class="nav-phone" href="tel:+19514720927" aria-label="Call Moreno Valley headquarters">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>
+        (951) 472-0927
+      </a>
+      <a class="btn btn-red nav-cta" href="#quote">Get a Quote</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<main id="top">
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <p class="eyebrow">Serving the Inland Empire since 2005</p>
+      <h1>Insurance<br>You Can <span>Count On</span></h1>
+      <p class="hero-sub">Auto, SR-22, home and commercial coverage — plus DMV services under one roof. Every driver welcome: DUI, tickets, no license, no problem. Hablamos Español.</p>
+      <div class="hero-btns">
+        <a class="btn btn-red" href="#quote">Get My Free Quote</a>
+        <a class="btn btn-ghost" href="tel:+19514720927">Call Us Now</a>
+      </div>
+      <div class="hero-stats">
+        <div><span class="stat-num">4</span><span class="stat-label">Locations</span></div>
+        <div><span class="stat-num">20+</span><span class="stat-label">Carriers</span></div>
+        <div><span class="stat-num">7 Days</span><span class="stat-label">9am – 8pm</span></div>
+        <div><span class="stat-num">EN / ES</span><span class="stat-label">Bilingual Team</span></div>
+      </div>
+    </div>
+    <div class="dial-wrap" aria-hidden="true">
+      <svg width="300" height="230" viewBox="0 0 280 215" fill="none">
+        <path d="M30 150 A110 110 0 0 1 250 150" stroke="rgba(255,255,255,.15)" stroke-width="16" stroke-linecap="round"/>
+        <path d="M30 150 A110 110 0 0 1 250 150" stroke="#D42B2B" stroke-width="16" stroke-linecap="round" stroke-dasharray="346" stroke-dashoffset="60"/>
+        <line class="needle" x1="140" y1="150" x2="140" y2="58" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="140" cy="150" r="11" fill="#D42B2B"/>
+        <text x="140" y="195" text-anchor="middle" font-family="Bebas Neue" font-size="26" fill="#FFFFFF" letter-spacing="2">QUOTES IN MINUTES</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRUST BAR ============ -->
+<div class="trust">
+  <div class="container trust-inner">
+    <span class="trust-item">Auto Insurance</span><span class="trust-dot"></span>
+    <span class="trust-item">SR-22 Filings</span><span class="trust-dot"></span>
+    <span class="trust-item">Home Insurance</span><span class="trust-dot"></span>
+    <span class="trust-item">Commercial</span><span class="trust-dot"></span>
+    <span class="trust-item">DMV Services</span><span class="trust-dot"></span>
+    <span class="trust-item">Hablamos Español</span>
+  </div>
+</div>
+
+<!-- ============ SERVICES ============ -->
+<section class="services" id="services">
+  <div class="container">
+    <div class="services-head">
+      <p class="eyebrow">What we cover</p>
+      <h2 class="section-title">Insurance for every stage of your life</h2>
+    </div>
+    <div class="svc-grid">
+      <div class="svc-card">
+        <div class="svc-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 6.5C18.7 5.9 18.1 5.5 17.5 5.5h-11c-.6 0-1.2.4-1.4 1L3 12v8c0 .6.4 1 1 1h1c.6 0 1-.4 1-1v-1h12v1c0 .6.4 1 1 1h1c.6 0 1-.4 1-1v-8l-2.1-5.5zM6.9 7h10.2l1.1 3H5.8l1.1-3zM6.5 16c-.8 0-1.5-.7-1.5-1.5S5.7 13 6.5 13s1.5.7 1.5 1.5S7.3 16 6.5 16zm11 0c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg></div>
+        <h3>Auto Insurance</h3>
+        <p>Liability, full coverage, high-risk and non-standard drivers. Every driver welcome.</p>
+      </div>
+      <div class="svc-card">
+        <div class="svc-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></div>
+        <h3>SR-22 Filings</h3>
+        <p>Same-day SR-22 filings for DUI and license reinstatement. Fast and judgment-free.</p>
+      </div>
+      <div class="svc-card">
+        <div class="svc-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg></div>
+        <h3>Home Insurance</h3>
+        <p>Homeowners, renters, condo and CA FAIR Plan options for hard-to-place homes.</p>
+      </div>
+      <div class="svc-card">
+        <div class="svc-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 7h-4V5c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM10 5h4v2h-4V5z"/></svg></div>
+        <h3>Commercial</h3>
+        <p>Business auto, general liability and bonds for contractors and small businesses.</p>
+      </div>
+      <div class="svc-card">
+        <div class="svc-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5zm1-8h-2v3.2l2.6 1.6.8-1.3-1.4-.9V9z"/></svg></div>
+        <h3>DMV Services</h3>
+        <p>Registration, tags, title transfers and renewals — handled here, no DMV lines.</p>
+      </div>
+      <div class="svc-card">
+        <div class="svc-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 21c-1.4 0-2.7-.5-4-1.4-2.5 1.9-5.5 1.9-8 0-1.3.9-2.6 1.4-4 1.4H2v-2h2c1.4 0 2.7-.6 4-1.7 2.5 2.3 5.5 2.3 8 0 1.3 1.1 2.6 1.7 4 1.7h2v2h-2zM3.9 16 2 9.5l2-.5 8-2 8 2 2 .5-1.9 6.4c-1-.3-1.9-.9-2.8-1.7l-1.3-1.2-1.3 1.2c-1.6 1.5-3.8 1.5-5.4 0L8 13l-1.3 1.2c-.9.8-1.8 1.4-2.8 1.8zM12 4 6 5.5V3l6-1.5L18 3v2.5L12 4z"/></svg></div>
+        <h3>Boat · RV · Motorcycle</h3>
+        <p>Recreational vehicle coverage for weekends at the lake, the dunes or the open road.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUOTE BAND ============ -->
+<section class="quote-band" id="quote">
+  <div class="container quote-grid">
+    <div>
+      <p class="eyebrow" style="color:#FFD3D3">Get a free quote</p>
+      <h2>Compare rates from 20+ top carriers</h2>
+      <p>Tell us a little about what you need and an agent from your nearest branch will call or text you back — usually within minutes during business hours (9am–8pm, 7 days a week).</p>
+    </div>
+    <form class="quote-form" id="quoteForm">
+      <label for="qName">Your name</label>
+      <input id="qName" name="name" type="text" autocomplete="name" placeholder="First name" required>
+      <label for="qType">Insurance type</label>
+      <select id="qType" name="type" required>
+        <option value="Auto">Auto</option>
+        <option value="SR-22">SR-22 / DUI</option>
+        <option value="Home">Home / Renters</option>
+        <option value="Commercial">Commercial</option>
+        <option value="DMV">DMV Services</option>
+        <option value="Boat/RV/Moto">Boat / RV / Motorcycle</option>
+      </select>
+      <label for="qBranch">Nearest branch</label>
+      <select id="qBranch" name="branch" required>
+        <option value="+19514720927">Moreno Valley</option>
+        <option value="+19516951500">Riverside — Van Buren</option>
+        <option value="+19519779400">Riverside — Magnolia</option>
+        <option value="+19515794095">Lake Elsinore</option>
+      </select>
+      <button type="button" class="btn btn-red" onclick="sendQuote()">Text Me My Quote</button>
+      <p class="quote-note">Tapping the button opens a pre-filled text to your branch. Prefer to talk? <a href="tel:+19514720927" style="color:var(--blue);font-weight:600">Call (951) 472-0927</a></p>
+    </form>
+  </div>
+</section>
+
+<!-- ============ BRANCHES ============ -->
+<section class="branches" id="locations">
+  <div class="container">
+    <p class="eyebrow">Our 4 locations</p>
+    <h2 class="section-title">Find your nearest Speedy branch</h2>
+    <div class="branch-grid">
+      <div class="branch-card">
+        <span class="branch-tag">Headquarters</span>
+        <h3>Moreno Valley</h3>
+        <p class="branch-addr">12625 Frederick St #i-1<br>Moreno Valley, CA 92553</p>
+        <p class="branch-phone">(951) 472-0927</p>
+        <p class="branch-hours">Mon–Sun · 9am–8pm</p>
+        <button class="btn btn-blue" onclick="openModal('mv')">Contact This Branch</button>
+      </div>
+      <div class="branch-card">
+        <span class="branch-tag">Riverside 01</span>
+        <h3>Van Buren</h3>
+        <p class="branch-addr">2955 Van Buren Blvd Ste A7<br>Riverside, CA 92503</p>
+        <p class="branch-phone">(951) 695-1500</p>
+        <p class="branch-hours">Mon–Sun · 9am–8pm</p>
+        <button class="btn btn-blue" onclick="openModal('rv1')">Contact This Branch</button>
+      </div>
+      <div class="branch-card">
+        <span class="branch-tag">Riverside 02</span>
+        <h3>Magnolia</h3>
+        <p class="branch-addr">7010 Magnolia Ave<br>Riverside, CA 92506</p>
+        <p class="branch-phone">(951) 977-9400</p>
+        <p class="branch-hours">Mon–Sun · 9am–8pm</p>
+        <button class="btn btn-blue" onclick="openModal('rv2')">Contact This Branch</button>
+      </div>
+      <div class="branch-card">
+        <span class="branch-tag">Lake Elsinore</span>
+        <h3>Mission Trail</h3>
+        <p class="branch-addr">31948 Mission Trail Ste B<br>Lake Elsinore, CA 92530</p>
+        <p class="branch-phone">(951) 579-4095</p>
+        <p class="branch-hours">Mon–Sun · 9am–8pm</p>
+        <button class="btn btn-blue" onclick="openModal('le')">Contact This Branch</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REVIEWS ============ -->
+<section class="reviews" id="reviews">
+  <div class="container">
+    <div class="review-head">
+      <div>
+        <p class="eyebrow">Client reviews</p>
+        <h2 class="section-title">What our clients say</h2>
+      </div>
+      <div class="gbadge">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 11.1H12v3.8h5.4c-.5 2.5-2.6 3.9-5.4 3.9a6 6 0 1 1 0-12c1.5 0 2.9.6 4 1.5l2.8-2.8A9.9 9.9 0 0 0 12 2a10 10 0 1 0 0 20c5.8 0 9.6-4 9.6-9.7 0-.4 0-.8-.25-1.2z"/></svg>
+        <span class="stars" aria-label="Rated 4.8 out of 5 stars">★★★★★</span>
+        <span>Google Reviews</span>
+      </div>
+    </div>
+    <!-- PLACEHOLDER REVIEWS — replace with real Google reviews or a live widget -->
+    <div class="review-grid">
+      <div class="review-card">
+        <div class="stars">★★★★★</div>
+        <p class="review-text">"I needed an SR-22 the same day and they took care of everything in one visit. No judgment, no runaround — just fast help and a price I could actually afford."</p>
+        <p class="review-name">Maria G.</p>
+        <p class="review-loc">Moreno Valley</p>
+      </div>
+      <div class="review-card">
+        <div class="stars">★★★★★</div>
+        <p class="review-text">"Me atendieron en español y me explicaron todo con paciencia. Hice mi seguro y el registro del carro en el mismo lugar. ¡Súper recomendados!"</p>
+        <p class="review-name">Carlos R.</p>
+        <p class="review-loc">Riverside</p>
+      </div>
+      <div class="review-card">
+        <div class="stars">★★★★★</div>
+        <p class="review-text">"They're open on Sundays, which saved me when my policy lapsed before a road trip. The agent had me reinstated and back on the road in under 20 minutes."</p>
+        <p class="review-name">Danielle T.</p>
+        <p class="review-loc">Lake Elsinore</p>
+      </div>
+    </div>
+    <div class="review-cta">
+      <a class="btn btn-blue" href="https://www.google.com/search?q=Speedy+Insurance+Agency+Moreno+Valley+reviews" target="_blank" rel="noopener">Read All Reviews on Google</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA STRIP ============ -->
+<section class="cta-strip">
+  <div class="container">
+    <h2>Don't Wait — Get Covered Today</h2>
+    <p>Call any of our 4 branches or get your free quote now. Open 7 days a week, 9am–8pm.</p>
+    <a class="btn btn-red" href="#quote">Get My Free Quote</a>
+  </div>
+</section>
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h4>Speedy Insurance Agency</h4>
+        <p>Auto, SR-22, home and commercial insurance plus DMV services across the Inland Empire. Every driver welcome. Hablamos Español.</p>
+        <div class="social-row">
+          <a href="https://www.facebook.com/speedyins" aria-label="Facebook" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 9H16l.5-3h-3V4.5c0-.9.3-1.5 1.6-1.5H16.6V.2C16.3.2 15.3 0 14.2 0 11.8 0 10.2 1.5 10.2 4.2V6H7.5v3h2.7v9h3.3V9z"/></svg></a>
+          <a href="https://www.instagram.com/speedyins" aria-label="Instagram" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2-.1-1.3-.1-1.7-.1-4.9s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4 1.3-.1 1.7-.1 4.9-.1zm0 2c-3.1 0-3.5 0-4.8.1-1.1.1-1.4.2-1.7.3-.4.2-.7.4-1 .7-.3.3-.5.6-.7 1-.1.3-.3.6-.3 1.7-.1 1.3-.1 1.7-.1 4.8s0 3.5.1 4.8c.1 1.1.2 1.4.3 1.7.2.4.4.7.7 1 .3.3.6.5 1 .7.3.1.6.3 1.7.3 1.3.1 1.7.1 4.8.1s3.5 0 4.8-.1c1.1-.1 1.4-.2 1.7-.3.4-.2.7-.4 1-.7.3-.3.5-.6.7-1 .1-.3.3-.6.3-1.7.1-1.3.1-1.7.1-4.8s0-3.5-.1-4.8c-.1-1.1-.2-1.4-.3-1.7-.2-.4-.4-.7-.7-1-.3-.3-.6-.5-1-.7-.3-.1-.6-.3-1.7-.3-1.3-.1-1.7-.1-4.8-.1zm0 3.4a5.1 5.1 0 1 1 0 10.2 5.1 5.1 0 0 1 0-10.2zm0 2a3.1 3.1 0 1 0 0 6.2 3.1 3.1 0 0 0 0-6.2zm5.3-2.2a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z"/></svg></a>
+          <a href="https://www.yelp.com/biz/speedy-insurance-agency-moreno-valley" aria-label="Yelp" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10.9 1.6c.4-.6 1.3-.5 1.6.1l.1.3.6 8.1c0 .8-.8 1.3-1.5 1l-.3-.2-5.4-6c-.4-.5-.3-1.3.3-1.6l.2-.1 4.4-1.6zM6.1 12.4l5 1.7c.7.3.9 1.2.3 1.7l-.2.2-4.6 2.7c-.6.4-1.4 0-1.5-.7v-.3l.1-4.4c0-.7.6-1.1 1.2-.9h-.3zm14.5-3.2c.7.2 1 1 .5 1.6l-.2.2-3.6 2.3c-.6.4-1.4 0-1.5-.7v-.3l.5-4.2c.1-.7.8-1.1 1.4-.8l.2.1 2.7 1.8zm-4.5 7.1 3.4 2.7c.6.4.5 1.3-.1 1.7l-.3.1-4.3 1c-.7.2-1.3-.4-1.2-1.1l.1-.3 1.4-3.7c.2-.6 1-.8 1.5-.4h-.5z"/></svg></a>
+          <a href="https://www.google.com/search?q=Speedy+Insurance+Agency+Moreno+Valley" aria-label="Google Business Profile" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21.35 11.1H12v3.8h5.4c-.5 2.5-2.6 3.9-5.4 3.9a6 6 0 1 1 0-12c1.5 0 2.9.6 4 1.5l2.8-2.8A9.9 9.9 0 0 0 12 2a10 10 0 1 0 0 20c5.8 0 9.6-4 9.6-9.7 0-.4 0-.8-.25-1.2z"/></svg></a>
+        </div>
+      </div>
+      <div>
+        <h4>Services</h4>
+        <ul>
+          <li><a href="#services">Auto Insurance</a></li>
+          <li><a href="#services">SR-22 Filings</a></li>
+          <li><a href="#services">Home Insurance</a></li>
+          <li><a href="#services">Commercial</a></li>
+          <li><a href="#services">DMV Services</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Locations</h4>
+        <ul>
+          <li><a href="#locations">Moreno Valley HQ</a></li>
+          <li><a href="#locations">Riverside — Van Buren</a></li>
+          <li><a href="#locations">Riverside — Magnolia</a></li>
+          <li><a href="#locations">Lake Elsinore</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Contact</h4>
+        <ul>
+          <li><a href="tel:+19514720927">(951) 472-0927</a></li>
+          <li>Open 7 days · 9am–8pm</li>
+          <li><a href="https://speedyins.com">speedyins.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Speedy Insurance Agency. All rights reserved. CA License pending display.</span>
+      <span><a href="#">Privacy Policy</a> · <a href="#">Terms</a> · <a href="#">Español</a></span>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ BRANCH MODAL ============ -->
+<div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h3 id="modalTitle">Branch</h3>
+        <p id="modalAddr"></p>
+      </div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-actions">
+        <a id="modalCall" href="#">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>
+          Call
+        </a>
+        <a id="modalText" href="#">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM7 11h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2z"/></svg>
+          Text
+        </a>
+        <a id="modalChat" href="#" onclick="closeModal();toggleAgents(true);return false;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.9 14.6L2 22l5.6-1.1A10 10 0 1 0 12 2zm-4 9h8v2H8v-2zm0-3h8v2H8V8z"/></svg>
+          Chat
+        </a>
+      </div>
+      <div class="modal-map">
+        <iframe id="modalMap" src="" loading="lazy" title="Branch location map" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      </div>
+      <p class="modal-meta">Open Mon–Sun · 9am–8pm</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FLOATING AGENT BUBBLE ============ -->
+<div class="agent-panel" id="agentPanel">
+  <div class="agent-panel-head">
+    <h4>Talk to an agent</h4>
+    <p>Our team is available 9am–8pm, 7 days a week</p>
+  </div>
+  <div class="agent-list">
+    <div class="agent-row">
+      <span class="agent-avatar">T</span>
+      <div class="agent-info"><p class="agent-name">Tony</p><p class="agent-branch">Moreno Valley · Owner</p></div>
+      <span class="online-dot" aria-hidden="true"></span>
+      <a class="agent-call" href="tel:+19514720927">Call</a>
+    </div>
+    <div class="agent-row">
+      <span class="agent-avatar">A</span>
+      <div class="agent-info"><p class="agent-name">Alejandra</p><p class="agent-branch">Riverside · Agent · Español</p></div>
+      <span class="online-dot" aria-hidden="true"></span>
+      <a class="agent-call" href="tel:+19516951500">Call</a>
+    </div>
+    <div class="agent-row">
+      <span class="agent-avatar">L</span>
+      <div class="agent-info"><p class="agent-name">Lana</p><p class="agent-branch">Lake Elsinore · Agent</p></div>
+      <span class="online-dot" aria-hidden="true"></span>
+      <a class="agent-call" href="tel:+19515794095">Call</a>
+    </div>
+  </div>
+</div>
+<button class="agent-fab" id="agentFab" onclick="toggleAgents()" aria-expanded="false" aria-controls="agentPanel">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.9 14.6L2 22l5.6-1.1A10 10 0 1 0 12 2zm-4 9h8v2H8v-2zm0-3h8v2H8V8z"/></svg>
+  Talk to an Agent
+</button>
+
+<script>
+const BRANCHES = {
+  mv:  { name:"Moreno Valley — HQ", addr:"12625 Frederick St #i-1, Moreno Valley, CA 92553", phone:"+19514720927" },
+  rv1: { name:"Riverside — Van Buren", addr:"2955 Van Buren Blvd Ste A7, Riverside, CA 92503", phone:"+19516951500" },
+  rv2: { name:"Riverside — Magnolia", addr:"7010 Magnolia Ave, Riverside, CA 92506", phone:"+19519779400" },
+  le:  { name:"Lake Elsinore", addr:"31948 Mission Trail Ste B, Lake Elsinore, CA 92530", phone:"+19515794095" }
+};
+
+function openModal(key){
+  const b = BRANCHES[key];
+  document.getElementById('modalTitle').textContent = b.name;
+  document.getElementById('modalAddr').textContent = b.addr;
+  document.getElementById('modalCall').href = 'tel:' + b.phone;
+  document.getElementById('modalText').href = 'sms:' + b.phone;
+  document.getElementById('modalMap').src = 'https://www.google.com/maps?q=' + encodeURIComponent('Speedy Insurance Agency, ' + b.addr) + '&output=embed';
+  document.getElementById('modalBackdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(){
+  document.getElementById('modalBackdrop').classList.remove('open');
+  document.getElementById('modalMap').src = '';
+  document.body.style.overflow = '';
+}
+document.getElementById('modalBackdrop').addEventListener('click', e => { if(e.target.id === 'modalBackdrop') closeModal(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape'){ closeModal(); toggleAgents(false); } });
+
+function toggleAgents(force){
+  const panel = document.getElementById('agentPanel');
+  const fab = document.getElementById('agentFab');
+  const open = force !== undefined ? force : !panel.classList.contains('open');
+  panel.classList.toggle('open', open);
+  fab.setAttribute('aria-expanded', open);
+}
+
+function sendQuote(){
+  const name = document.getElementById('qName').value.trim();
+  const type = document.getElementById('qType').value;
+  const phone = document.getElementById('qBranch').value;
+  if(!name){ document.getElementById('qName').focus(); return; }
+  const body = encodeURIComponent('Hi, my name is ' + name + '. I\'d like a free ' + type + ' insurance quote from Speedy Insurance.');
+  window.location.href = 'sms:' + phone + '?&body=' + body;
+}
+</script>
+</body>
+</html>

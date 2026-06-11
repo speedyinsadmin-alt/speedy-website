@@ -185,16 +185,16 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 /* TEAM / BRANCHES */
 .team{background:var(--cream) !important}
 .team-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px}
-.branch-card{background:white;border-radius:var(--radius-xl);padding:28px;border:1.5px solid var(--gray-200);text-align:center;transition:all 0.3s;cursor:pointer;position:relative;overflow:hidden}
+.branch-card{background:rgba(255,255,255,0.06);border-radius:var(--radius-xl);padding:28px;border:1.5px solid rgba(255,255,255,0.1);text-align:center;transition:all 0.3s;cursor:pointer;position:relative;overflow:hidden}
 .branch-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;transition:transform 0.3s;transform:scaleX(0);transform-origin:left}
-.branch-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(0,0,0,0.12);border-color:var(--red)}
+.branch-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(0,0,0,0.3);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.1)}
 .branch-card:hover::before{transform:scaleX(1)}
 .branch-card-icon{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:26px;transition:transform 0.3s}
 .branch-card:hover .branch-card-icon{transform:scale(1.1)}
-.branch-card-name{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;margin-bottom:4px;color:var(--navy)}
-.branch-card-agents{font-size:13px;color:var(--gray-500);margin-bottom:12px}
+.branch-card-name{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;margin-bottom:4px;color:white}
+.branch-card-agents{font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:12px}
 .branch-card-avatars{display:flex;justify-content:center;gap:0;margin-bottom:14px}
-.branch-card-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid white;margin-left:-6px;color:white}
+.branch-card-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid rgba(255,255,255,0.2);margin-left:-6px;color:white}
 .branch-card-av:first-child{margin-left:0}
 .branch-card-phone{font-size:15px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px}
 .branch-card-phone i{font-size:13px}
@@ -426,16 +426,26 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 <!-- QUOTE FORM -->
 <section class="quote-section" id="quote">
   <div class="container">
+    <div class="section-label" style="color:var(--red-light)">Our 4 Branches</div>
+    <h2 class="section-title" style="color:white">Talk To Our Team</h2>
+    <p class="section-sub" style="color:rgba(255,255,255,0.5)">Pick your nearest branch — call, text, or chat. Walk-ins welcome. All agents in the branch are ready to help you.</p>
+    <div class="team-grid" id="teamGrid"></div>
+  </div>
+</section>
+
+<!-- OUR BRANCHES -->
+<section class="team section" id="locations" style="background:var(--cream);padding:80px 0">
+  <div class="container">
     <div class="quote-inner">
       <div class="quote-left">
-        <div class="section-label" style="color:var(--red-light)">Free Quote</div>
-        <h2 class="section-title" style="color:white">Get Your Best<br>Rate In 60 Seconds</h2>
-        <p class="section-sub" style="color:rgba(255,255,255,0.5)">We compare rates from over 20 top-rated carriers so you get the best price — guaranteed. No obligation, no pressure, just savings.</p>
+        <div class="section-label">Free Quote</div>
+        <h2 class="section-title">Get Your Best<br>Rate In 60 Seconds</h2>
+        <p class="section-sub">We compare rates from over 20 top-rated carriers so you get the best price — guaranteed. No obligation, no pressure, just savings.</p>
         <div style="margin-top:28px;display:flex;flex-direction:column;gap:14px">
-          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:rgba(255,255,255,0.7);font-size:14px">Compare 20+ carriers side by side</span></div>
-          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:rgba(255,255,255,0.7);font-size:14px">Quotes in under 60 seconds</span></div>
-          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:rgba(255,255,255,0.7);font-size:14px">No obligation — 100% free</span></div>
-          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:rgba(255,255,255,0.7);font-size:14px">Hablamos Español</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Compare 20+ carriers side by side</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Quotes in under 60 seconds</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">No obligation — 100% free</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Hablamos Español</span></div>
         </div>
       </div>
       <div class="quote-form fade-up">
@@ -466,16 +476,6 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         </div>
       </div>
     </div>
-  </div>
-</section>
-
-<!-- OUR BRANCHES -->
-<section class="team section" id="locations" style="background:var(--cream);padding:80px 0">
-  <div class="container">
-    <div class="section-label">Our 4 Branches</div>
-    <h2 class="section-title">Talk To Our Team</h2>
-    <p class="section-sub">Pick your nearest branch — call, text, or chat. Walk-ins welcome. All agents in the branch are ready to help you.</p>
-    <div class="team-grid" id="teamGrid"></div>
   </div>
 </section>
 

@@ -69,6 +69,12 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 .nav-links{display:flex;gap:4px;align-items:center}
 .nav-link{font-size:13px;font-weight:500;color:rgba(255,255,255,0.7);text-decoration:none;padding:8px 14px;border-radius:6px;transition:all 0.2s;letter-spacing:0.5px}
 .nav-link:hover{color:white;background:rgba(255,255,255,0.06)}
+.nav-dropdown{position:relative}
+.nav-dropdown-menu{position:absolute;top:calc(100% + 8px);left:0;background:var(--navy);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px;min-width:220px;opacity:0;visibility:hidden;transform:translateY(-8px);transition:all 0.2s;z-index:100;box-shadow:0 16px 40px rgba(0,0,0,0.4)}
+.nav-dropdown:hover .nav-dropdown-menu{opacity:1;visibility:visible;transform:translateY(0)}
+.nav-dropdown-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.8);text-decoration:none;transition:all 0.15s}
+.nav-dropdown-item:hover{background:rgba(255,255,255,0.08);color:white}
+.nav-dropdown-item i{color:var(--red);font-size:12px;width:14px}
 .nav-cta{background:var(--red);color:white;font-size:13px;font-weight:700;padding:10px 22px;border-radius:6px;text-decoration:none;letter-spacing:1px;text-transform:uppercase;transition:all 0.2s;margin-left:8px}
 .nav-cta:hover{background:var(--red-dark);transform:translateY(-1px)}
 .mobile-toggle{display:none;background:none;border:none;color:white;font-size:24px;cursor:pointer}
@@ -361,7 +367,15 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="nav-links" id="navLinks">
       <a href="#services" class="nav-link">Services</a>
       <a href="#quote" class="nav-link">Get a Quote</a>
-      <a href="#locations" class="nav-link">Locations</a>
+      <div class="nav-dropdown">
+        <a href="#locations" class="nav-link nav-dropdown-toggle">Locations <i class="fas fa-chevron-down" style="font-size:10px;margin-left:3px"></i></a>
+        <div class="nav-dropdown-menu">
+          <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Moreno Valley HQ</a>
+          <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Riverside — Van Buren</a>
+          <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Riverside — Magnolia</a>
+          <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Lake Elsinore</a>
+        </div>
+      </div>
       <a href="#about" class="nav-link">About Us</a>
       <a href="#blog" class="nav-link">Blog</a>
       <a href="#privacy" class="nav-link">Privacy Policy</a>
@@ -436,6 +450,29 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
           <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Quotes in under 60 seconds</span></div>
           <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">No obligation — 100% free</span></div>
           <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Hablamos Español</span></div>
+        </div>
+
+        <!-- Google Review Branch Cards -->
+        <div style="margin-top:36px">
+          <p style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gray-400);margin-bottom:14px">Rate Your Branch on Google</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <a href="https://g.page/r/CRndOnckRyDfEBE/review" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;gap:10px;background:white;border:1px solid var(--gray-200);border-radius:10px;padding:12px 14px;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.05)" onmouseover="this.style.borderColor='#D42B2B';this.style.boxShadow='0 4px 16px rgba(212,43,43,0.15)'" onmouseout="this.style.borderColor='var(--gray-200)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'">
+              <div style="width:34px;height:34px;background:#4285F4;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fab fa-google" style="color:white;font-size:16px"></i></div>
+              <div><div style="font-size:12px;font-weight:700;color:var(--navy);line-height:1.2">Moreno Valley</div><div style="font-size:10px;color:var(--gray-400)">⭐⭐⭐⭐⭐ Leave a review</div></div>
+            </a>
+            <a href="https://g.page/r/CYRJKiQNEUAJEBE/review" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;gap:10px;background:white;border:1px solid var(--gray-200);border-radius:10px;padding:12px 14px;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.05)" onmouseover="this.style.borderColor='#D42B2B';this.style.boxShadow='0 4px 16px rgba(212,43,43,0.15)'" onmouseout="this.style.borderColor='var(--gray-200)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'">
+              <div style="width:34px;height:34px;background:#4285F4;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fab fa-google" style="color:white;font-size:16px"></i></div>
+              <div><div style="font-size:12px;font-weight:700;color:var(--navy);line-height:1.2">Riverside 01</div><div style="font-size:10px;color:var(--gray-400)">⭐⭐⭐⭐⭐ Leave a review</div></div>
+            </a>
+            <a href="https://g.page/r/Ca8NG2LfuGczEBE/review" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;gap:10px;background:white;border:1px solid var(--gray-200);border-radius:10px;padding:12px 14px;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.05)" onmouseover="this.style.borderColor='#D42B2B';this.style.boxShadow='0 4px 16px rgba(212,43,43,0.15)'" onmouseout="this.style.borderColor='var(--gray-200)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'">
+              <div style="width:34px;height:34px;background:#4285F4;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fab fa-google" style="color:white;font-size:16px"></i></div>
+              <div><div style="font-size:12px;font-weight:700;color:var(--navy);line-height:1.2">Riverside 02</div><div style="font-size:10px;color:var(--gray-400)">⭐⭐⭐⭐⭐ Leave a review</div></div>
+            </a>
+            <a href="https://maps.app.goo.gl/TavZvYkmX9LgdvsAA" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;gap:10px;background:white;border:1px solid var(--gray-200);border-radius:10px;padding:12px 14px;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.05)" onmouseover="this.style.borderColor='#D42B2B';this.style.boxShadow='0 4px 16px rgba(212,43,43,0.15)'" onmouseout="this.style.borderColor='var(--gray-200)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'">
+              <div style="width:34px;height:34px;background:#4285F4;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fab fa-google" style="color:white;font-size:16px"></i></div>
+              <div><div style="font-size:12px;font-weight:700;color:var(--navy);line-height:1.2">Lake Elsinore</div><div style="font-size:10px;color:var(--gray-400)">⭐⭐⭐⭐⭐ Leave a review</div></div>
+            </a>
+          </div>
         </div>
       </div>
       <div class="quote-form fade-up">

@@ -423,70 +423,61 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   </div>
 </div>
 
-<!-- SERVICES -->
-<section class="services section" id="services">
+<!-- OUR BRANCHES -->
+<section class="team section" id="locations" style="background:var(--navy);padding:80px 0">
   <div class="container">
-    <div class="section-label">What We Cover</div>
-    <h2 class="section-title">Insurance For Every<br>Stage Of Your Life</h2>
-    <p class="section-sub">We compare rates from over 20 top carriers so you don't have to. One call, one agent, one quote — the best price.</p>
-    <div class="services-grid">
-      <div class="svc-card fade-up">
-        <div class="svc-icon"><i class="fas fa-car"></i></div>
-        <div class="svc-name">Auto Insurance</div>
-        <div class="svc-desc">Bodily injury liability, medical payments, PIP, comprehensive, collision & property damage. DUI, SR-22, tickets — every driver welcome. Full coverage as low as $59/mo.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+    <div class="section-label" style="color:var(--red-light)">Our 4 Branches</div>
+    <h2 class="section-title" style="color:white">Talk To Our Team</h2>
+    <p class="section-sub" style="color:rgba(255,255,255,0.5)">Pick your nearest branch — call, text, or chat. Walk-ins welcome. All agents in the branch are ready to help you.</p>
+    <div class="team-grid" id="teamGrid"></div>
+  </div>
+</section>
+
+<!-- BRANCH CONTACT MODAL -->
+<div class="branch-modal-overlay" id="branchModal" onclick="if(event.target===this)closeBranchModal()">
+  <div class="branch-modal">
+    <button class="branch-modal-close" onclick="closeBranchModal()"><i class="fas fa-times"></i></button>
+    <div class="branch-modal-header" id="modalHeader">
+      <div class="branch-modal-icon" id="modalIcon"><i class="fas fa-map-marker-alt"></i></div>
+      <h3 class="branch-modal-name" id="modalName">Branch Name</h3>
+      <p class="branch-modal-sub" id="modalSub">4 agents ready to help</p>
+    </div>
+    <div class="branch-modal-agents" id="modalAgents"></div>
+    <div class="branch-modal-map" id="modalMap" style="height:160px;background:var(--gray-100);border-bottom:1px solid var(--gray-200)"></div>
+    <div class="branch-modal-actions">
+      <a class="branch-action call" id="modalCall" href="tel:">
+        <div class="branch-action-icon"><i class="fas fa-phone"></i></div>
+        <div class="branch-action-text">
+          <span class="branch-action-label">Call Now</span>
+          <span class="branch-action-num" id="modalPhone">(951) 000-0000</span>
+        </div>
+      </a>
+      <a class="branch-action text" id="modalText" href="sms:">
+        <div class="branch-action-icon"><i class="fas fa-comment-dots"></i></div>
+        <div class="branch-action-text">
+          <span class="branch-action-label">Send Text</span>
+          <span class="branch-action-num" id="modalTextNum">(951) 000-0000</span>
+        </div>
+      </a>
+      <div class="branch-action chat" onclick="openBranchChat()">
+        <div class="branch-action-icon"><i class="fas fa-comments"></i></div>
+        <div class="branch-action-text">
+          <span class="branch-action-label">Live Chat</span>
+          <span class="branch-action-num">Chat with the team</span>
+        </div>
       </div>
-      <div class="svc-card fade-up fade-up-d1">
-        <div class="svc-icon"><i class="fas fa-home"></i></div>
-        <div class="svc-name">Home Insurance</div>
-        <div class="svc-desc">Homeowners insurance protects your structure, personal belongings, and covers injuries on your property. We find the best rates for homes across the Inland Empire — including CA FAIR Plan.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+    </div>
+    <div class="branch-chat-box" id="branchChatBox" style="display:none">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg bot"><div class="chat-bubble">Hi! 👋 How can we help you today? An agent from this branch will respond shortly.</div></div>
       </div>
-      <div class="svc-card fade-up fade-up-d2">
-        <div class="svc-icon"><i class="fas fa-building"></i></div>
-        <div class="svc-name">Commercial Insurance</div>
-        <div class="svc-desc">Commercial insurance protects your business from theft, liability, and property damage. Losses can cripple a business — be covered before the unexpected happens. Serving Inland Empire businesses since 2005.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
-      </div>
-      <div class="svc-card fade-up fade-up-d1">
-        <div class="svc-icon"><i class="fas fa-id-card"></i></div>
-        <div class="svc-name">DMV Services</div>
-        <div class="svc-desc">Registration renewals, replacement stickers, title transfers, duplicate titles, release of liability, disabled placards, personalized plates & more. No appointment necessary — get your stickers in minutes.</div>
-        <a href="#quote" class="svc-cta">Learn More <i class="fas fa-arrow-right"></i></a>
-      </div>
-      <div class="svc-card fade-up fade-up-d2">
-        <div class="svc-icon"><i class="fas fa-ship"></i></div>
-        <div class="svc-name">Boat · RV · Motorcycle</div>
-        <div class="svc-desc">Recreational vehicle coverage for boats, jet skis, RVs, ATVs, motorcycles & classic cars. Ride with confidence.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
-      </div>
-      <div class="svc-card fade-up fade-up-d1">
-        <div class="svc-icon"><i class="fas fa-file-alt"></i></div>
-        <div class="svc-name">SR-22 Insurance</div>
-        <div class="svc-desc">An SR-22 is filed with the CA DMV to verify you have the required liability insurance. We file instantly. Required after DUI, reckless driving, driving without insurance, or 3+ violations. No car? We offer non-owner SR-22 too.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
-      </div>
-      <div class="svc-card fade-up fade-up-d2">
-        <div class="svc-icon"><i class="fas fa-certificate"></i></div>
-        <div class="svc-name">Bond Insurance</div>
-        <div class="svc-desc">Business owners may need a surety bond for state tax or utility requirements. Contractors need license or permit bonds for municipal licensing. We align you with the best bond service that fits your needs.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
-      </div>
-      <div class="svc-card fade-up fade-up-d3">
-        <div class="svc-icon"><i class="fas fa-shield-alt"></i></div>
-        <div class="svc-name">General Liability</div>
-        <div class="svc-desc">Protects your business from bodily injury (e.g. a client who slips on your property), property damage, and data loss. If a client's belongings are damaged during business activities, you're protected.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
-      </div>
-      <div class="svc-card featured fade-up fade-up-d3">
-        <div class="svc-icon"><i class="fas fa-bolt"></i></div>
-        <div class="svc-name">Get a Free Quote</div>
-        <div class="svc-desc">Compare rates from 20+ top carriers instantly. No obligation. Fast, easy, and free — see your best price in 60 seconds.</div>
-        <a href="#quote" class="svc-cta">Start Now <i class="fas fa-arrow-right"></i></a>
+      <div class="chat-input-wrap">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Type your message..." onkeypress="if(event.key==='Enter')sendChat()">
+        <button class="chat-send" onclick="sendChat()"><i class="fas fa-paper-plane"></i></button>
       </div>
     </div>
   </div>
-</section>
+</div>
 
 <!-- QUOTE FORM -->
 <section class="quote-section" id="quote">
@@ -572,61 +563,70 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   </div>
 </div>
 
-<!-- OUR BRANCHES -->
-<section class="team section" id="locations" style="background:var(--navy);padding:80px 0">
+<!-- SERVICES -->
+<section class="services section" id="services">
   <div class="container">
-    <div class="section-label" style="color:var(--red-light)">Our 4 Branches</div>
-    <h2 class="section-title" style="color:white">Talk To Our Team</h2>
-    <p class="section-sub" style="color:rgba(255,255,255,0.5)">Pick your nearest branch — call, text, or chat. Walk-ins welcome. All agents in the branch are ready to help you.</p>
-    <div class="team-grid" id="teamGrid"></div>
+    <div class="section-label">What We Cover</div>
+    <h2 class="section-title">Insurance For Every<br>Stage Of Your Life</h2>
+    <p class="section-sub">We compare rates from over 20 top carriers so you don't have to. One call, one agent, one quote — the best price.</p>
+    <div class="services-grid">
+      <div class="svc-card fade-up">
+        <div class="svc-icon"><i class="fas fa-car"></i></div>
+        <div class="svc-name">Auto Insurance</div>
+        <div class="svc-desc">Bodily injury liability, medical payments, PIP, comprehensive, collision & property damage. DUI, SR-22, tickets — every driver welcome. Full coverage as low as $59/mo.</div>
+        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card fade-up fade-up-d1">
+        <div class="svc-icon"><i class="fas fa-home"></i></div>
+        <div class="svc-name">Home Insurance</div>
+        <div class="svc-desc">Homeowners insurance protects your structure, personal belongings, and covers injuries on your property. We find the best rates for homes across the Inland Empire — including CA FAIR Plan.</div>
+        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card fade-up fade-up-d2">
+        <div class="svc-icon"><i class="fas fa-building"></i></div>
+        <div class="svc-name">Commercial Insurance</div>
+        <div class="svc-desc">Commercial insurance protects your business from theft, liability, and property damage. Losses can cripple a business — be covered before the unexpected happens. Serving Inland Empire businesses since 2005.</div>
+        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card fade-up fade-up-d1">
+        <div class="svc-icon"><i class="fas fa-id-card"></i></div>
+        <div class="svc-name">DMV Services</div>
+        <div class="svc-desc">Registration renewals, replacement stickers, title transfers, duplicate titles, release of liability, disabled placards, personalized plates & more. No appointment necessary — get your stickers in minutes.</div>
+        <a href="#quote" class="svc-cta">Learn More <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card fade-up fade-up-d2">
+        <div class="svc-icon"><i class="fas fa-ship"></i></div>
+        <div class="svc-name">Boat · RV · Motorcycle</div>
+        <div class="svc-desc">Recreational vehicle coverage for boats, jet skis, RVs, ATVs, motorcycles & classic cars. Ride with confidence.</div>
+        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card fade-up fade-up-d1">
+        <div class="svc-icon"><i class="fas fa-file-alt"></i></div>
+        <div class="svc-name">SR-22 Insurance</div>
+        <div class="svc-desc">An SR-22 is filed with the CA DMV to verify you have the required liability insurance. We file instantly. Required after DUI, reckless driving, driving without insurance, or 3+ violations. No car? We offer non-owner SR-22 too.</div>
+        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card fade-up fade-up-d2">
+        <div class="svc-icon"><i class="fas fa-certificate"></i></div>
+        <div class="svc-name">Bond Insurance</div>
+        <div class="svc-desc">Business owners may need a surety bond for state tax or utility requirements. Contractors need license or permit bonds for municipal licensing. We align you with the best bond service that fits your needs.</div>
+        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card fade-up fade-up-d3">
+        <div class="svc-icon"><i class="fas fa-shield-alt"></i></div>
+        <div class="svc-name">General Liability</div>
+        <div class="svc-desc">Protects your business from bodily injury (e.g. a client who slips on your property), property damage, and data loss. If a client's belongings are damaged during business activities, you're protected.</div>
+        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+      </div>
+      <div class="svc-card featured fade-up fade-up-d3">
+        <div class="svc-icon"><i class="fas fa-bolt"></i></div>
+        <div class="svc-name">Get a Free Quote</div>
+        <div class="svc-desc">Compare rates from 20+ top carriers instantly. No obligation. Fast, easy, and free — see your best price in 60 seconds.</div>
+        <a href="#quote" class="svc-cta">Start Now <i class="fas fa-arrow-right"></i></a>
+      </div>
+    </div>
   </div>
 </section>
-
-<!-- BRANCH CONTACT MODAL -->
-<div class="branch-modal-overlay" id="branchModal" onclick="if(event.target===this)closeBranchModal()">
-  <div class="branch-modal">
-    <button class="branch-modal-close" onclick="closeBranchModal()"><i class="fas fa-times"></i></button>
-    <div class="branch-modal-header" id="modalHeader">
-      <div class="branch-modal-icon" id="modalIcon"><i class="fas fa-map-marker-alt"></i></div>
-      <h3 class="branch-modal-name" id="modalName">Branch Name</h3>
-      <p class="branch-modal-sub" id="modalSub">4 agents ready to help</p>
-    </div>
-    <div class="branch-modal-agents" id="modalAgents"></div>
-    <div class="branch-modal-map" id="modalMap" style="height:160px;background:var(--gray-100);border-bottom:1px solid var(--gray-200)"></div>
-    <div class="branch-modal-actions">
-      <a class="branch-action call" id="modalCall" href="tel:">
-        <div class="branch-action-icon"><i class="fas fa-phone"></i></div>
-        <div class="branch-action-text">
-          <span class="branch-action-label">Call Now</span>
-          <span class="branch-action-num" id="modalPhone">(951) 000-0000</span>
-        </div>
-      </a>
-      <a class="branch-action text" id="modalText" href="sms:">
-        <div class="branch-action-icon"><i class="fas fa-comment-dots"></i></div>
-        <div class="branch-action-text">
-          <span class="branch-action-label">Send Text</span>
-          <span class="branch-action-num" id="modalTextNum">(951) 000-0000</span>
-        </div>
-      </a>
-      <div class="branch-action chat" onclick="openBranchChat()">
-        <div class="branch-action-icon"><i class="fas fa-comments"></i></div>
-        <div class="branch-action-text">
-          <span class="branch-action-label">Live Chat</span>
-          <span class="branch-action-num">Chat with the team</span>
-        </div>
-      </div>
-    </div>
-    <div class="branch-chat-box" id="branchChatBox" style="display:none">
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-msg bot"><div class="chat-bubble">Hi! 👋 How can we help you today? An agent from this branch will respond shortly.</div></div>
-      </div>
-      <div class="chat-input-wrap">
-        <input type="text" class="chat-input" id="chatInput" placeholder="Type your message..." onkeypress="if(event.key==='Enter')sendChat()">
-        <button class="chat-send" onclick="sendChat()"><i class="fas fa-paper-plane"></i></button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ABOUT US -->
 <section class="section" id="about" style="background:var(--cream)">

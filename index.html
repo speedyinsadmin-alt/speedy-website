@@ -302,16 +302,19 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 .popup-main-label{font-size:11px;color:var(--gray-500)}
 .popup-main-num{font-size:14px;font-weight:700;color:var(--red)}
 
-/* MOBILE */
+/* TABLET (max 768px) */
 @media(max-width:768px){
   .top-bar{display:none}
   .navbar .container{height:60px}
   .logo img{height:38px}
   .nav-links{display:none}
+  .nav-dropdown-menu{display:none}
   .mobile-toggle{display:block}
   .mobile-menu.open{display:flex;flex-direction:column;position:absolute;top:60px;left:0;right:0;background:var(--navy);border-bottom:3px solid var(--red);padding:16px;gap:4px;z-index:999}
   .mobile-menu .nav-link{display:block;padding:12px 16px;font-size:15px}
   .mobile-menu .nav-cta{display:block;text-align:center;margin:8px 0 0}
+  .mobile-menu .mobile-locations-sub{display:block;padding:6px 16px 6px 36px;font-size:13px;color:rgba(255,255,255,0.6);text-decoration:none;border-left:2px solid var(--red);margin-left:16px}
+  .mobile-menu .mobile-locations-sub:hover{color:white}
   .hero .container{grid-template-columns:1fr;text-align:center}
   .hero-sub{margin:0 auto 28px}
   .hero-btns{justify-content:center}
@@ -321,7 +324,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   .trust-item{flex:0 0 auto;padding:10px 14px;font-size:11px}
   .services-grid{grid-template-columns:1fr 1fr}
   .quote-inner{grid-template-columns:1fr}
-  .quote-left{display:none}
+  .quote-left{display:block}
   .reviews-grid{grid-template-columns:1fr}
   .cta-inner{flex-direction:column;text-align:center}
   .loc-grid{grid-template-columns:1fr 1fr}
@@ -329,14 +332,25 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   .footer-grid{grid-template-columns:1fr 1fr}
   .agent-popup{width:calc(100vw - 32px);right:16px;bottom:90px}
   .section{padding:50px 0}
+  .about-grid{grid-template-columns:1fr !important}
+  .blog-grid{grid-template-columns:1fr !important}
+  .review-cards-grid{grid-template-columns:1fr 1fr !important}
 }
+/* MOBILE (max 480px) */
 @media(max-width:480px){
   .services-grid{grid-template-columns:1fr}
   .loc-grid{grid-template-columns:1fr}
-  .team-grid{grid-template-columns:1fr 1fr}
+  .team-grid{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr}
   .form-row{grid-template-columns:1fr}
   .hero-stats{flex-wrap:wrap;gap:20px}
+  .about-grid{grid-template-columns:1fr !important}
+  .about-stats-grid{grid-template-columns:1fr 1fr !important}
+  .blog-grid{grid-template-columns:1fr !important}
+  .review-cards-grid{grid-template-columns:1fr !important}
+  .testimonials-grid{grid-template-columns:1fr !important}
+  .branch-modal{width:calc(100vw - 24px);margin:12px}
+  .quote-review-grid{grid-template-columns:1fr 1fr !important}
 }
 </style>
 </head>
@@ -389,6 +403,10 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <a href="#services" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Services</a>
     <a href="#quote" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Get a Quote</a>
     <a href="#locations" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Locations</a>
+    <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Moreno Valley HQ</a>
+    <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Riverside — Van Buren</a>
+    <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Riverside — Magnolia</a>
+    <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Lake Elsinore</a>
     <a href="#about" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">About Us</a>
     <a href="#blog" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Blog</a>
     <a href="#privacy" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Privacy Policy</a>
@@ -475,7 +493,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <!-- Google Review Cards -->
         <div style="margin-bottom:14px">
           <p style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gray-400);margin-bottom:10px;text-align:center">⭐ Rate Us on Google — Pick Your Branch</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="quote-review-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <a href="https://g.page/r/CRndOnckRyDfEBE/review" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;gap:9px;background:white;border:1.5px solid #E3E8F0;border-radius:9px;padding:10px 12px;transition:all 0.2s" onmouseover="this.style.borderColor='#D42B2B';this.style.background='#FFF8F8'" onmouseout="this.style.borderColor='#E3E8F0';this.style.background='white'">
               <div style="width:30px;height:30px;background:var(--navy);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fab fa-google" style="color:white;font-size:14px"></i></div>
               <div style="min-width:0">
@@ -681,7 +699,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   <div class="container">
     <div class="section-label">About Us</div>
     <h2 class="section-title">Speedy Insurance Agency</h2>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-top:32px">
+    <div class="about-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-top:32px">
       <div>
         <p style="font-size:16px;color:var(--gray-500);line-height:1.7;margin-bottom:16px">
           Speedy Insurance Agency has delivered insurance coverage to satisfied clients for over 20 years. We research and review rates from hundreds of companies to find our customers the best rates available — we want each client to have the cheapest rates with quality coverage.
@@ -697,7 +715,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         </p>
         <a href="#quote" class="btn-primary"><i class="fas fa-bolt"></i> Get a Free Quote</a>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="about-stats-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div style="background:white;border-radius:var(--radius-lg);padding:24px;text-align:center;border:1px solid var(--gray-200)">
           <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--red);letter-spacing:2px">20+</div>
           <div style="font-size:13px;font-weight:600;color:var(--navy);letter-spacing:1px;text-transform:uppercase">Years Serving SoCal</div>
@@ -717,7 +735,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       </div>
     </div>
     <!-- Testimonials from old site -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:48px">
+    <div class="testimonials-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:48px">
       <div style="background:white;border-radius:var(--radius-lg);padding:28px;border:1px solid var(--gray-200)">
         <div style="color:#F5A623;font-size:18px;margin-bottom:12px">★★★★★</div>
         <p style="font-size:15px;color:var(--gray-500);line-height:1.7;font-style:italic;margin-bottom:16px">"Great place, nice people, good insurance prices.... the employees were extremely welcoming! I definitely recommend this place if you need good priced insurance."</p>
@@ -738,7 +756,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="section-label">Insurance Tips &amp; News</div>
     <h2 class="section-title">From The Speedy Blog</h2>
     <p class="section-sub" style="margin-bottom:40px">Stay informed with the latest insurance tips, news, and guides from our team of experts in the Inland Empire.</p>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
+    <div class="blog-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
       <div style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;transition:box-shadow 0.3s" onmouseover="this.style.boxShadow='var(--shadow-lg)'" onmouseout="this.style.boxShadow='none'">
         <div style="background:var(--navy);padding:32px 24px;display:flex;align-items:center;justify-content:center">
           <i class="fas fa-file-alt" style="font-size:48px;color:var(--red-light)"></i>

@@ -30,15 +30,15 @@
   --radius:8px;--radius-lg:14px;--radius-xl:20px;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;overflow-x:hidden}
 body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-white);overflow-x:hidden}
 
 /* UTILITY */
-.container{max-width:1200px;margin:0 auto;padding:0 24px}
+.container{max-width:1200px;margin:0 auto;padding:0 24px;width:100%}
 .section{padding:80px 0}
 .section-label{font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--red);margin-bottom:12px;display:inline-block}
 .section-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(32px,5vw,52px);color:var(--navy);letter-spacing:2px;line-height:1.05;margin-bottom:16px}
-.section-sub{font-size:16px;color:var(--gray-500);line-height:1.6;max-width:520px}
+.section-sub{font-size:16px;color:var(--gray-500);line-height:1.6;max-width:520px;width:100%;box-sizing:border-box}
 
 /* ANIMATIONS */
 @keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
@@ -325,14 +325,14 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   .trust-bar .container{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .trust-item{flex:0 0 auto;padding:10px 14px;font-size:11px}
   .services-grid{grid-template-columns:1fr 1fr}
-  .quote-inner{grid-template-columns:1fr}
-  .quote-left{display:block;width:100%;overflow:hidden}
-  .quote-left .section-sub,.quote-left p,.quote-left span{max-width:100%;word-wrap:break-word}
-  .quote-form{width:100%}
+  .quote-inner{grid-template-columns:1fr;overflow:hidden;width:100%}
+  .quote-left{display:block;width:100%;overflow:hidden;box-sizing:border-box}
+  .quote-left .section-sub,.quote-left p,.quote-left span{max-width:100% !important;width:100%;word-wrap:break-word;overflow-wrap:break-word;box-sizing:border-box}
+  .quote-form{width:100%;box-sizing:border-box}
   .reviews-grid{grid-template-columns:1fr}
   .cta-inner{flex-direction:column;text-align:center}
   .loc-grid{grid-template-columns:1fr 1fr}
-  .section-sub{max-width:100%}
+  .section-sub{max-width:100% !important;width:100%;overflow-wrap:break-word}
   .team-grid{grid-template-columns:1fr 1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
   .agent-popup{width:calc(100vw - 32px);right:16px;bottom:90px}

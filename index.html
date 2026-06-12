@@ -136,7 +136,9 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 .quote-section{background:var(--navy);padding:70px 0;position:relative;overflow:hidden}
 .quote-section::before{content:'';position:absolute;top:0;right:0;width:50%;height:100%;background:radial-gradient(circle at 80% 50%,rgba(26,79,160,0.1),transparent 70%)}
 .quote-inner{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
-.quote-left{position:relative;z-index:2}
+.quote-left{position:relative;z-index:2;max-width:100%}
+.quote-left .section-sub{max-width:100%}
+.quote-left p{max-width:100%}
 .quote-form{background:white;border:1px solid var(--gray-200);border-radius:var(--radius-xl);padding:32px;position:relative;z-index:2;box-shadow:var(--shadow-md)}
 .quote-form-title{font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--navy);letter-spacing:2px;margin-bottom:4px}
 .quote-form-sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
@@ -324,10 +326,13 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   .trust-item{flex:0 0 auto;padding:10px 14px;font-size:11px}
   .services-grid{grid-template-columns:1fr 1fr}
   .quote-inner{grid-template-columns:1fr}
-  .quote-left{display:block}
+  .quote-left{display:block;width:100%;overflow:hidden}
+  .quote-left .section-sub,.quote-left p,.quote-left span{max-width:100%;word-wrap:break-word}
+  .quote-form{width:100%}
   .reviews-grid{grid-template-columns:1fr}
   .cta-inner{flex-direction:column;text-align:center}
   .loc-grid{grid-template-columns:1fr 1fr}
+  .section-sub{max-width:100%}
   .team-grid{grid-template-columns:1fr 1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
   .agent-popup{width:calc(100vw - 32px);right:16px;bottom:90px}

@@ -560,7 +560,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       <p class="branch-modal-sub" id="modalSub">4 agents ready to help</p>
     </div>
     <div class="branch-modal-agents" id="modalAgents"></div>
-    <div class="branch-modal-map" id="modalMap" style="height:160px;background:var(--gray-100);border-bottom:1px solid var(--gray-200)"></div>
+    <div class="branch-modal-map" id="modalMap"></div>
     <div class="branch-modal-actions">
       <a class="branch-action call" id="modalCall" href="tel:">
         <div class="branch-action-icon"><i class="fas fa-phone"></i></div>
@@ -973,7 +973,8 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 const BRANCHES = [
   {
     id:'mv', name:'Moreno Valley', phone:'(951) 472-0927', phonePlain:'9514720927',
-    address:'Moreno Valley, CA',
+    address:'12625 Frederick St #i-1, Moreno Valley, CA 92553',
+    mapsUrl:'https://maps.google.com/?q=12625+Frederick+St+Moreno+Valley+CA+92553',
     mapQuery:'Speedy+Insurance+Moreno+Valley+CA',
     color:'#D42B2B', bg:'#FEF2F2', headerBg:'linear-gradient(135deg,#D42B2B,#a81f1f)',
     agents:[
@@ -984,8 +985,9 @@ const BRANCHES = [
     ]
   },
   {
-    id:'r1', name:'Riverside 01', phone:'(951) 695-1500', phonePlain:'9516951500',
-    address:'Riverside, CA',
+    id:'r1', name:'Van Buren, Riverside', phone:'(951) 695-1500', phonePlain:'9516951500',
+    address:'2955 Van Buren Blvd Ste A7, Riverside, CA 92503',
+    mapsUrl:'https://maps.google.com/?q=2955+Van+Buren+Blvd+Riverside+CA+92503',
     mapQuery:'Speedy+Insurance+Riverside+CA',
     color:'#1A4FA0', bg:'#EFF6FF', headerBg:'linear-gradient(135deg,#1A4FA0,#153d7a)',
     agents:[
@@ -995,8 +997,9 @@ const BRANCHES = [
     ]
   },
   {
-    id:'r2', name:'Riverside 02', phone:'(951) 977-9400', phonePlain:'9519779400',
-    address:'Riverside, CA',
+    id:'r2', name:'Magnolia, Riverside', phone:'(951) 977-9400', phonePlain:'9519779400',
+    address:'7010 Magnolia Ave, Riverside, CA 92504',
+    mapsUrl:'https://maps.google.com/?q=7010+Magnolia+Ave+Riverside+CA+92504',
     mapQuery:'Speedy+Insurance+Agency+Riverside+CA',
     color:'#7C3AED', bg:'#F5F3FF', headerBg:'linear-gradient(135deg,#7C3AED,#5B21B6)',
     agents:[
@@ -1007,7 +1010,8 @@ const BRANCHES = [
   },
   {
     id:'le', name:'Lake Elsinore', phone:'(951) 579-4095', phonePlain:'9515794095',
-    address:'Lake Elsinore, CA',
+    address:'31948 Mission Trail Ste B, Lake Elsinore, CA 92530',
+    mapsUrl:'https://maps.google.com/?q=31948+Mission+Trail+Lake+Elsinore+CA+92530',
     mapQuery:'Speedy+Insurance+Lake+Elsinore+CA',
     color:'#059669', bg:'#ECFDF5', headerBg:'linear-gradient(135deg,#059669,#047857)',
     agents:[
@@ -1059,7 +1063,22 @@ function openBranchModal(branchId){
   document.getElementById('modalAgents').innerHTML = b.agents.map(a => `
     <div class="modal-agent-pill"><div class="modal-agent-av" style="background:${a.color}">${a.initials}</div>${a.name}</div>
   `).join('');
-  document.getElementById('modalMap').innerHTML = `<iframe src="https://maps.google.com/maps?q=${b.mapQuery}&output=embed&z=14" width="100%" height="160" style="border:0;display:block" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+  document.getElementById('modalMap').innerHTML = `
+    <div style="background:linear-gradient(135deg,var(--navy) 0%,#0d1f38 100%);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid var(--red)">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="width:42px;height:42px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">
+          <i class="fas fa-map-marker-alt" style="color:white;font-size:18px"></i>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:4px">Branch Address</div>
+          <div style="font-size:14px;font-weight:600;color:white;line-height:1.4">${b.address}</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px"><i class="fas fa-clock" style="margin-right:5px"></i>Mon–Sun 9am–8pm</div>
+        </div>
+      </div>
+      <a href="${b.mapsUrl}" target="_blank" rel="noopener" style="flex-shrink:0;background:var(--red);color:white;text-decoration:none;padding:12px 18px;border-radius:10px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:8px;transition:all 0.2s;white-space:nowrap" onmouseover="this.style.background='#b51f1f'" onmouseout="this.style.background='var(--red)'">
+        <i class="fas fa-directions" style="font-size:14px"></i> Get Directions
+      </a>
+    </div>`;
   document.getElementById('branchChatBox').style.display = 'none';
   document.getElementById('chatMessages').innerHTML = `<div class="chat-msg bot"><div class="chat-bubble">Hi! 👋 Welcome to Speedy Insurance ${b.name}. How can we help you today?</div></div>`;
   document.getElementById('branchModal').classList.add('open');

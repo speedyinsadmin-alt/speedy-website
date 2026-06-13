@@ -461,7 +461,17 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 </div>
 
 <!-- OUR BRANCHES -->
-<section class="team section" id="locations" style="background:var(--cream);padding:80px 0">
+<section class="quote-section" id="locations">
+  <div class="container">
+    <div class="section-label" style="color:var(--red-light)">Our 4 Branches</div>
+    <h2 class="section-title" style="color:white">Talk To Our Team</h2>
+    <p class="section-sub" style="color:rgba(255,255,255,0.5)">Pick your nearest branch — call, text, or chat. Walk-ins welcome. All agents in the branch are ready to help you.</p>
+    <div class="team-grid" id="teamGrid"></div>
+  </div>
+</section>
+
+<!-- QUOTE FORM -->
+<section class="team section" id="quote" style="background:var(--cream);padding:80px 0">
   <div class="container">
     <div class="quote-inner">
       <div class="quote-left">
@@ -540,15 +550,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   </div>
 </section>
 
-<!-- QUOTE FORM -->
-<section class="quote-section" id="quote">
-  <div class="container">
-    <div class="section-label" style="color:var(--red-light)">Our 4 Branches</div>
-    <h2 class="section-title" style="color:white">Talk To Our Team</h2>
-    <p class="section-sub" style="color:rgba(255,255,255,0.5)">Pick your nearest branch — call, text, or chat. Walk-ins welcome. All agents in the branch are ready to help you.</p>
-    <div class="team-grid" id="teamGrid"></div>
-  </div>
-</section>
+
 
 <!-- BRANCH CONTACT MODAL -->
 <div class="branch-modal-overlay" id="branchModal" onclick="if(event.target===this)closeBranchModal()">
@@ -1275,7 +1277,7 @@ function openArticle(index) {
   const a = ARTICLES[index];
   document.getElementById('articleTag').textContent = a.tag;
   document.getElementById('articleTitle').textContent = a.title;
-  document.getElementById('articleMeta').innerHTML = \`<span><i class="fas fa-clock" style="margin-right:4px;color:rgba(255,255,255,0.3)"></i>\${a.read}</span><span style="color:rgba(255,255,255,0.2)">·</span><span><i class="fas fa-calendar" style="margin-right:4px;color:rgba(255,255,255,0.3)"></i>\${a.date}</span><span style="color:rgba(255,255,255,0.2)">·</span><span>Speedy Insurance Team</span>\`;
+  document.getElementById('articleMeta').innerHTML = '<span><i class="fas fa-clock" style="margin-right:4px;color:rgba(255,255,255,0.3)"></i>' + a.read + '</span><span style="color:rgba(255,255,255,0.2)"> &middot; </span><span><i class="fas fa-calendar" style="margin-right:4px;color:rgba(255,255,255,0.3)"></i>' + a.date + '</span><span style="color:rgba(255,255,255,0.2)"> &middot; </span><span>Speedy Insurance Team</span>';
   document.getElementById('articleBody').innerHTML = a.body;
   const overlay = document.getElementById('articleOverlay');
   overlay.style.display = 'block';

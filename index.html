@@ -974,7 +974,7 @@ const BRANCHES = [
   {
     id:'mv', name:'Moreno Valley', phone:'(951) 472-0927', phonePlain:'9514720927',
     address:'12625 Frederick St #i-1, Moreno Valley, CA 92553',
-    mapsUrl:'https://maps.google.com/?q=12625+Frederick+St+Moreno+Valley+CA+92553',
+    mapsUrl:'https://maps.google.com/maps/search/?api=1&query=12625+Frederick+St+Moreno+Valley+CA+92553',
     mapQuery:'Speedy+Insurance+Moreno+Valley+CA',
     color:'#D42B2B', bg:'#FEF2F2', headerBg:'linear-gradient(135deg,#D42B2B,#a81f1f)',
     agents:[
@@ -987,7 +987,7 @@ const BRANCHES = [
   {
     id:'r1', name:'Van Buren, Riverside', phone:'(951) 695-1500', phonePlain:'9516951500',
     address:'2955 Van Buren Blvd Ste A7, Riverside, CA 92503',
-    mapsUrl:'https://maps.google.com/?q=2955+Van+Buren+Blvd+Riverside+CA+92503',
+    mapsUrl:'https://maps.google.com/maps/search/?api=1&query=2955+Van+Buren+Blvd+Riverside+CA+92503',
     mapQuery:'Speedy+Insurance+Riverside+CA',
     color:'#1A4FA0', bg:'#EFF6FF', headerBg:'linear-gradient(135deg,#1A4FA0,#153d7a)',
     agents:[
@@ -999,7 +999,7 @@ const BRANCHES = [
   {
     id:'r2', name:'Magnolia, Riverside', phone:'(951) 977-9400', phonePlain:'9519779400',
     address:'7010 Magnolia Ave, Riverside, CA 92504',
-    mapsUrl:'https://maps.google.com/?q=7010+Magnolia+Ave+Riverside+CA+92504',
+    mapsUrl:'https://maps.google.com/maps/search/?api=1&query=7010+Magnolia+Ave+Riverside+CA+92504',
     mapQuery:'Speedy+Insurance+Agency+Riverside+CA',
     color:'#7C3AED', bg:'#F5F3FF', headerBg:'linear-gradient(135deg,#7C3AED,#5B21B6)',
     agents:[
@@ -1011,7 +1011,7 @@ const BRANCHES = [
   {
     id:'le', name:'Lake Elsinore', phone:'(951) 579-4095', phonePlain:'9515794095',
     address:'31948 Mission Trail Ste B, Lake Elsinore, CA 92530',
-    mapsUrl:'https://maps.google.com/?q=31948+Mission+Trail+Lake+Elsinore+CA+92530',
+    mapsUrl:'https://maps.google.com/maps/search/?api=1&query=31948+Mission+Trail+Lake+Elsinore+CA+92530',
     mapQuery:'Speedy+Insurance+Lake+Elsinore+CA',
     color:'#059669', bg:'#ECFDF5', headerBg:'linear-gradient(135deg,#059669,#047857)',
     agents:[
@@ -1076,7 +1076,7 @@ function openBranchModal(branchId){
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div style="font-size:11px;color:rgba(255,255,255,0.4)"><i class="fas fa-clock" style="margin-right:4px"></i>Mon–Sun 9am–8pm</div>
-        <a href="${b.mapsUrl}" target="_blank" rel="noopener" style="background:var(--red);color:white;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:6px;white-space:nowrap">
+        <a href="${b.mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:var(--red);color:white;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:6px;white-space:nowrap">
           <i class="fas fa-directions"></i> Get Directions
         </a>
       </div>

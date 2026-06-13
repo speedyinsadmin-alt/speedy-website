@@ -760,44 +760,109 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   <div class="container">
     <div class="section-label">Insurance Tips &amp; News</div>
     <h2 class="section-title">From The Speedy Blog</h2>
-    <p class="section-sub" style="margin-bottom:40px">Stay informed with the latest insurance tips, news, and guides from our team of experts in the Inland Empire.</p>
+    <p class="section-sub" style="margin-bottom:40px">Real advice from your local Inland Empire insurance team. No fluff — just what you need to know.</p>
     <div class="blog-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
-      <div style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;transition:box-shadow 0.3s" onmouseover="this.style.boxShadow='var(--shadow-lg)'" onmouseout="this.style.boxShadow='none'">
-        <div style="background:var(--navy);padding:32px 24px;display:flex;align-items:center;justify-content:center">
-          <i class="fas fa-file-alt" style="font-size:48px;color:var(--red-light)"></i>
+
+      <!-- Article 1 -->
+      <div onclick="openArticle(0)" style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:box-shadow 0.3s,transform 0.2s" onmouseover="this.style.boxShadow='var(--shadow-lg)';this.style.transform='translateY(-4px)'" onmouseout="this.style.boxShadow='none';this.style.transform='translateY(0)'">
+        <div style="background:linear-gradient(135deg,var(--navy),#1a2f4f);padding:28px 24px;display:flex;align-items:center;justify-content:space-between">
+          <i class="fas fa-file-certificate" style="font-size:40px;color:var(--red-light)"></i>
+          <span style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3)">5 min read</span>
         </div>
         <div style="padding:24px">
-          <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">SR-22</div>
-          <h3 style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:10px">What Is an SR-22 and Who Needs One?</h3>
-          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">An SR-22 is a form filed with the California DMV that verifies you carry the state-required auto liability insurance. It's required after a DUI, suspended license, or driving without insurance. Speedy files instantly.</p>
-          <a href="#sr22" style="font-size:12px;font-weight:700;color:var(--red);text-decoration:none;text-transform:uppercase;letter-spacing:1px">Learn More <i class="fas fa-arrow-right"></i></a>
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">SR-22</div>
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:10px;line-height:1.3">What Is SR-22 Insurance in California &amp; How Much Does It Cost?</h3>
+          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Everything you need to know about SR-22 filings — who needs one, how long it lasts, and what it actually costs in California.</p>
+          <span style="font-size:12px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:1px">Read Article <i class="fas fa-arrow-right"></i></span>
         </div>
       </div>
-      <div style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;transition:box-shadow 0.3s" onmouseover="this.style.boxShadow='var(--shadow-lg)'" onmouseout="this.style.boxShadow='none'">
-        <div style="background:var(--navy);padding:32px 24px;display:flex;align-items:center;justify-content:center">
-          <i class="fas fa-car-crash" style="font-size:48px;color:var(--red-light)"></i>
+
+      <!-- Article 2 -->
+      <div onclick="openArticle(1)" style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:box-shadow 0.3s,transform 0.2s" onmouseover="this.style.boxShadow='var(--shadow-lg)';this.style.transform='translateY(-4px)'" onmouseout="this.style.boxShadow='none';this.style.transform='translateY(0)'">
+        <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);padding:28px 24px;display:flex;align-items:center;justify-content:space-between">
+          <i class="fas fa-car-burst" style="font-size:40px;color:var(--red-light)"></i>
+          <span style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3)">6 min read</span>
         </div>
         <div style="padding:24px">
-          <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">Auto Insurance</div>
-          <h3 style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:10px">In an Accident? Here Are the Steps to Follow</h3>
-          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Do not leave the scene. Exchange information with all drivers involved. Take photos of all damage. File a police report if there are injuries. Contact your insurance agent immediately — even if the accident is minor or you are not at fault.</p>
-          <a href="#quote" style="font-size:12px;font-weight:700;color:var(--red);text-decoration:none;text-transform:uppercase;letter-spacing:1px">Get Covered <i class="fas fa-arrow-right"></i></a>
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">Auto Insurance</div>
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:10px;line-height:1.3">How to Get Cheap Car Insurance After a DUI in the Inland Empire</h3>
+          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">A DUI doesn't have to mean unaffordable insurance. Here's how to find real coverage at reasonable rates in Moreno Valley, Riverside, and Lake Elsinore.</p>
+          <span style="font-size:12px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:1px">Read Article <i class="fas fa-arrow-right"></i></span>
         </div>
       </div>
-      <div style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;transition:box-shadow 0.3s" onmouseover="this.style.boxShadow='var(--shadow-lg)'" onmouseout="this.style.boxShadow='none'">
-        <div style="background:var(--navy);padding:32px 24px;display:flex;align-items:center;justify-content:center">
-          <i class="fas fa-id-card" style="font-size:48px;color:var(--red-light)"></i>
+
+      <!-- Article 3 -->
+      <div onclick="openArticle(2)" style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:box-shadow 0.3s,transform 0.2s" onmouseover="this.style.boxShadow='var(--shadow-lg)';this.style.transform='translateY(-4px)'" onmouseout="this.style.boxShadow='none';this.style.transform='translateY(0)'">
+        <div style="background:linear-gradient(135deg,#0d2137,#163350);padding:28px 24px;display:flex;align-items:center;justify-content:space-between">
+          <i class="fas fa-shield-halved" style="font-size:40px;color:var(--red-light)"></i>
+          <span style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3)">4 min read</span>
         </div>
         <div style="padding:24px">
-          <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">DMV Services</div>
-          <h3 style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:10px">Skip the DMV Line — We Handle Your Registration</h3>
-          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Did you know you can renew your registration, transfer your title, get replacement stickers, and handle out-of-state transfers — all without visiting the DMV? Come into any Speedy branch, no appointment necessary.</p>
-          <a href="#services" style="font-size:12px;font-weight:700;color:var(--red);text-decoration:none;text-transform:uppercase;letter-spacing:1px">See DMV Services <i class="fas fa-arrow-right"></i></a>
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">Auto Insurance</div>
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:10px;line-height:1.3">California Minimum Auto Insurance Requirements in 2025</h3>
+          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">California raised its minimum coverage limits in 2025. Find out what the new requirements are and whether your current policy still meets the law.</p>
+          <span style="font-size:12px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:1px">Read Article <i class="fas fa-arrow-right"></i></span>
         </div>
       </div>
+
+      <!-- Article 4 -->
+      <div onclick="openArticle(3)" style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:box-shadow 0.3s,transform 0.2s" onmouseover="this.style.boxShadow='var(--shadow-lg)';this.style.transform='translateY(-4px)'" onmouseout="this.style.boxShadow='none';this.style.transform='translateY(0)'">
+        <div style="background:linear-gradient(135deg,#1c1c2e,#2d1b4e);padding:28px 24px;display:flex;align-items:center;justify-content:space-between">
+          <i class="fas fa-id-card" style="font-size:40px;color:var(--red-light)"></i>
+          <span style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3)">5 min read</span>
+        </div>
+        <div style="padding:24px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">DMV Services</div>
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:10px;line-height:1.3">How to Renew Your Car Registration in California Without Going to the DMV</h3>
+          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Skip the 2-hour DMV wait. Speedy Insurance handles registration renewals, title transfers, and replacement stickers — walk in and walk out in minutes.</p>
+          <span style="font-size:12px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:1px">Read Article <i class="fas fa-arrow-right"></i></span>
+        </div>
+      </div>
+
+      <!-- Article 5 -->
+      <div onclick="openArticle(4)" style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:box-shadow 0.3s,transform 0.2s" onmouseover="this.style.boxShadow='var(--shadow-lg)';this.style.transform='translateY(-4px)'" onmouseout="this.style.boxShadow='none';this.style.transform='translateY(0)'">
+        <div style="background:linear-gradient(135deg,#0f1923,#1a2f4f);padding:28px 24px;display:flex;align-items:center;justify-content:space-between">
+          <i class="fas fa-car" style="font-size:40px;color:var(--red-light)"></i>
+          <span style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3)">4 min read</span>
+        </div>
+        <div style="padding:24px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">SR-22</div>
+          <h3 style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:10px;line-height:1.3">Non-Owner SR-22 Insurance: What It Is &amp; Who Needs It in California</h3>
+          <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Don't own a car but need an SR-22? You're not stuck. Non-owner SR-22 policies are affordable and available — Speedy can file the same day.</p>
+          <span style="font-size:12px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:1px">Read Article <i class="fas fa-arrow-right"></i></span>
+        </div>
+      </div>
+
+      <!-- CTA card -->
+      <div onclick="document.getElementById('quote').scrollIntoView({behavior:'smooth'})" style="border:2px dashed var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.3s;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;background:var(--gray-100)" onmouseover="this.style.borderColor='var(--red)';this.style.background='#FEF2F2'" onmouseout="this.style.borderColor='var(--gray-200)';this.style.background='var(--gray-100)'">
+        <div style="width:60px;height:60px;background:var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+          <i class="fas fa-comments-dollar" style="font-size:24px;color:white"></i>
+        </div>
+        <h3 style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:8px">Have a Question?</h3>
+        <p style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Our agents are ready to answer your insurance questions and find you the best rate.</p>
+        <span style="font-size:12px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:1px">Get a Free Quote <i class="fas fa-arrow-right"></i></span>
+      </div>
+
     </div>
   </div>
 </section>
+
+<!-- ARTICLE MODAL -->
+<div id="articleOverlay" onclick="if(event.target===this)closeArticle()" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:2000;overflow-y:auto;padding:40px 20px">
+  <div style="max-width:760px;margin:0 auto;background:white;border-radius:var(--radius-xl);overflow:hidden;position:relative">
+    <div id="articleHero" style="background:var(--navy);padding:48px 40px 40px">
+      <div id="articleTag" style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red-light);margin-bottom:12px"></div>
+      <h2 id="articleTitle" style="font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,4vw,42px);color:white;letter-spacing:2px;line-height:1.1;margin-bottom:16px"></h2>
+      <div id="articleMeta" style="font-size:12px;color:rgba(255,255,255,0.4);display:flex;gap:16px;align-items:center"></div>
+    </div>
+    <div id="articleBody" style="padding:40px;font-size:15px;color:var(--gray-700);line-height:1.8"></div>
+    <div style="padding:32px 40px;background:var(--navy);text-align:center">
+      <p style="color:rgba(255,255,255,0.7);margin-bottom:16px;font-size:15px">Ready to get covered? Our agents are standing by.</p>
+      <a href="#quote" onclick="closeArticle()" style="background:var(--red);color:white;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;display:inline-block">Get My Free Quote &rarr;</a>
+    </div>
+    <button onclick="closeArticle()" style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,0.1);border:none;color:white;font-size:20px;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">&times;</button>
+  </div>
+</div>
 
 <!-- PRIVACY POLICY -->
 <section class="section" id="privacy" style="background:white">
@@ -987,6 +1052,244 @@ document.addEventListener('DOMContentLoaded', function() {
   if (el) el.textContent = SITE_CONFIG.hours.short;
   el = document.getElementById('aboutHours');
   if (el) el.textContent = SITE_CONFIG.hours.long;
+});
+
+// ARTICLE DATA
+const ARTICLES = [
+  {
+    tag: 'SR-22',
+    title: 'What Is SR-22 Insurance in California & How Much Does It Cost?',
+    read: '5 min read',
+    date: 'June 2025',
+    body: `
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:0 0 12px">What Exactly Is an SR-22?</h3>
+      <p>An SR-22 is not actually an insurance policy — it is a certificate of financial responsibility that your insurance company files directly with the California DMV on your behalf. It proves to the state that you carry at least the minimum required liability coverage.</p>
+      <p style="margin-top:16px">Think of it as a monitoring tool. When you have an SR-22 on file, the DMV is automatically notified if your policy lapses, is cancelled, or drops below the required limits. If that happens, your license is immediately suspended again.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Who Needs an SR-22 in California?</h3>
+      <p>You may be required to file an SR-22 if you have been convicted of or cited for any of the following:</p>
+      <ul style="margin:12px 0 12px 20px;line-height:2">
+        <li>Driving under the influence (DUI) or driving while intoxicated (DWI)</li>
+        <li>Driving without insurance</li>
+        <li>Reckless driving</li>
+        <li>Driving with a suspended or revoked license</li>
+        <li>Three or more at-fault accidents or moving violations within a short period</li>
+        <li>Failure to pay court-ordered child support (in some cases)</li>
+      </ul>
+      <p>The court or the DMV will notify you that an SR-22 is required. You cannot legally drive in California until the SR-22 is on file and your license is reinstated.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">How Long Do You Need an SR-22?</h3>
+      <p>In most cases in California, you are required to maintain an SR-22 for <strong>three years</strong> from the date of your conviction or the date your license was suspended. However, the exact duration depends on the offense:</p>
+      <ul style="margin:12px 0 12px 20px;line-height:2">
+        <li><strong>DUI first offense:</strong> 3 years</li>
+        <li><strong>DUI second offense or hit-and-run:</strong> up to 5 years</li>
+        <li><strong>Driving without insurance:</strong> 3 years</li>
+      </ul>
+      <p>If your policy lapses at any point during the required period, the clock resets. It is critical to maintain continuous coverage.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">How Much Does SR-22 Insurance Cost in California?</h3>
+      <p>The SR-22 filing fee itself is typically <strong>$15 to $35</strong> — a one-time charge your insurer passes on. The bigger cost is your auto insurance premium, which will increase because you are now classified as a high-risk driver.</p>
+      <p style="margin-top:16px">In California, drivers with an SR-22 typically pay anywhere from <strong>$150 to $400 per month</strong> depending on the offense, your driving history, your vehicle, and the insurer. At Speedy Insurance, we shop over 20 carriers to find you the most competitive rate available — even with an SR-22 on file.</p>
+
+      <div style="background:#FEF2F2;border-left:4px solid var(--red);padding:20px 24px;border-radius:8px;margin:28px 0">
+        <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Speedy Tip</p>
+        <p style="margin:0;color:var(--gray-700)">Speedy Insurance files your SR-22 the same day — often within hours. Walk into any of our 4 Inland Empire locations and our bilingual agents will handle everything for you.</p>
+      </div>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Do You Need a Car to Get an SR-22?</h3>
+      <p>No. If you do not own a vehicle but still need to drive occasionally (a borrowed car, a rental, etc.), you can get a <strong>non-owner SR-22 policy</strong>. This is typically much cheaper than a standard policy and still satisfies the DMV requirement. Speedy offers non-owner SR-22 coverage at all four branches.</p>
+    `
+  },
+  {
+    tag: 'Auto Insurance',
+    title: 'How to Get Cheap Car Insurance After a DUI in the Inland Empire',
+    read: '6 min read',
+    date: 'May 2025',
+    body: `
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:0 0 12px">First, the Hard Truth</h3>
+      <p>After a DUI conviction in California, your car insurance rates will go up — sometimes significantly. Insurers view DUI drivers as high-risk, and that is reflected in your premium. But "higher" does not have to mean "unaffordable." With the right approach, you can find real coverage at a price that works for your budget.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Why Your Rate Increases After a DUI</h3>
+      <p>Insurance companies use your driving record to calculate risk. A DUI signals to them that you are statistically more likely to be involved in a future accident. As a result, most standard insurers will either raise your rates dramatically or cancel your policy outright.</p>
+      <p style="margin-top:16px">This is where <strong>non-standard insurance carriers</strong> come in. These are companies that specialize in covering high-risk drivers, and they compete for your business. Independent agencies like Speedy Insurance have access to these carriers — big-name carriers often do not.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Steps to Get the Best Rate After a DUI</h3>
+      <ul style="margin:12px 0 12px 20px;line-height:2.2">
+        <li><strong>Act quickly.</strong> Your license reinstatement depends on having active coverage and an SR-22 on file. The longer you wait, the longer your suspension lasts.</li>
+        <li><strong>Shop multiple carriers.</strong> Rates vary wildly between insurers for high-risk drivers. One company might quote you $350/month; another might offer $180. Never accept the first quote.</li>
+        <li><strong>Work with an independent agent.</strong> Unlike captive agents (State Farm, Allstate, etc.) who can only offer one company's products, independent agents like Speedy shop dozens of carriers on your behalf simultaneously.</li>
+        <li><strong>Consider a higher deductible.</strong> If you rarely file claims, raising your deductible from $500 to $1,000 can meaningfully lower your monthly premium.</li>
+        <li><strong>Maintain a clean record going forward.</strong> Every year without an incident improves your rate. Most DUI surcharges phase out after 3–5 years.</li>
+      </ul>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">What to Expect to Pay</h3>
+      <p>In the Inland Empire (Moreno Valley, Riverside, Lake Elsinore), drivers with a DUI typically pay between <strong>$150 and $400 per month</strong> for minimum liability coverage, depending on their specific history and the carrier. Full coverage will cost more. At Speedy, we regularly find rates on the lower end of that range for our clients because of our carrier network.</p>
+
+      <div style="background:#FEF2F2;border-left:4px solid var(--red);padding:20px 24px;border-radius:8px;margin:28px 0">
+        <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Speedy Tip</p>
+        <p style="margin:0;color:var(--gray-700)">Speedy Insurance specializes in DUI and non-standard drivers. We accept every driver — no judgment, no runaround. Walk in, get quoted, and drive covered the same day.</p>
+      </div>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Do Not Drive Uninsured While Waiting</h3>
+      <p>Driving without insurance after a DUI — even once — can result in additional charges, a longer license suspension, and a second SR-22 requirement. The risk is never worth it. If coverage feels too expensive, talk to a Speedy agent about minimum-liability-only options to get you legally covered while you rebuild your record.</p>
+    `
+  },
+  {
+    tag: 'Auto Insurance',
+    title: 'California Minimum Auto Insurance Requirements in 2025',
+    read: '4 min read',
+    date: 'January 2025',
+    body: `
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:0 0 12px">California Raised Its Minimums — Here's What Changed</h3>
+      <p>On January 1, 2025, California's minimum auto insurance requirements increased for the first time in over 50 years. If your policy was purchased before that date, you may no longer meet the legal minimum — and you could face fines, license suspension, or worse if you are involved in an accident.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">The New 2025 Minimum Coverage Requirements</h3>
+      <div style="overflow-x:auto;margin:16px 0 24px">
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead>
+            <tr style="background:var(--navy);color:white">
+              <th style="padding:12px 16px;text-align:left;font-weight:600">Coverage Type</th>
+              <th style="padding:12px 16px;text-align:center;font-weight:600">Old Minimum (pre-2025)</th>
+              <th style="padding:12px 16px;text-align:center;font-weight:600">New Minimum (2025)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--gray-200)">
+              <td style="padding:12px 16px;font-weight:600;color:var(--navy)">Bodily Injury — per person</td>
+              <td style="padding:12px 16px;text-align:center;color:var(--gray-500)">$15,000</td>
+              <td style="padding:12px 16px;text-align:center;font-weight:700;color:var(--red)">$30,000</td>
+            </tr>
+            <tr style="background:var(--gray-100);border-bottom:1px solid var(--gray-200)">
+              <td style="padding:12px 16px;font-weight:600;color:var(--navy)">Bodily Injury — per accident</td>
+              <td style="padding:12px 16px;text-align:center;color:var(--gray-500)">$30,000</td>
+              <td style="padding:12px 16px;text-align:center;font-weight:700;color:var(--red)">$60,000</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--gray-200)">
+              <td style="padding:12px 16px;font-weight:600;color:var(--navy)">Property Damage — per accident</td>
+              <td style="padding:12px 16px;text-align:center;color:var(--gray-500)">$5,000</td>
+              <td style="padding:12px 16px;text-align:center;font-weight:700;color:var(--red)">$15,000</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>These are the <em>minimums</em> required by California law. Most insurance professionals recommend carrying significantly more — especially for bodily injury — because medical costs and vehicle repair expenses can easily exceed these limits in a serious accident.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">What Happens If You're Caught Without Proper Coverage?</h3>
+      <p>Driving without the required minimum insurance in California can result in:</p>
+      <ul style="margin:12px 0 12px 20px;line-height:2">
+        <li>A fine of <strong>$100–$200</strong> for a first offense (plus court fees, typically totaling $400–$600)</li>
+        <li><strong>Vehicle impoundment</strong></li>
+        <li><strong>License suspension</strong></li>
+        <li>Personal liability for all damages if you cause an accident — which could cost hundreds of thousands of dollars</li>
+      </ul>
+
+      <div style="background:#FEF2F2;border-left:4px solid var(--red);padding:20px 24px;border-radius:8px;margin:28px 0">
+        <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Is Your Policy Up to Date?</p>
+        <p style="margin:0;color:var(--gray-700)">If you purchased your policy before January 2025, call your Speedy agent today. We will review your coverage, make sure you meet the new minimums, and check if we can find you a better rate at the same time.</p>
+      </div>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Should You Get More Than the Minimum?</h3>
+      <p>The new minimums are an improvement, but they are still relatively low by real-world standards. A single serious accident with injuries can result in medical bills, lost wages, and property damage claims that far exceed $60,000. We recommend at least <strong>100/300/100</strong> coverage for most drivers — that's $100,000 per person, $300,000 per accident for bodily injury, and $100,000 for property damage. Speedy can compare full coverage and liability-only options across 20+ carriers to find the right fit for your budget.</p>
+    `
+  },
+  {
+    tag: 'DMV Services',
+    title: 'How to Renew Your Car Registration in California Without Going to the DMV',
+    read: '5 min read',
+    date: 'April 2025',
+    body: `
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:0 0 12px">The DMV Wait Is Optional</h3>
+      <p>If you have ever spent two hours waiting at a California DMV office just to renew your registration stickers, you already know the frustration. The good news: you do not have to do that. Speedy Insurance handles DMV services at all four Inland Empire branches — no appointment, no long lines, no wasted afternoon.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">DMV Services Available at Speedy</h3>
+      <ul style="margin:12px 0 12px 20px;line-height:2.2">
+        <li><strong>Registration renewals</strong> — Get your new stickers the same day</li>
+        <li><strong>Replacement registration stickers</strong> — If yours were stolen or lost</li>
+        <li><strong>Title transfers</strong> — When buying or selling a vehicle</li>
+        <li><strong>Duplicate titles</strong> — If your original title is lost or damaged</li>
+        <li><strong>Release of liability</strong> — Protect yourself when selling a vehicle</li>
+        <li><strong>Out-of-state vehicle transfers</strong> — Registering a car from another state in California</li>
+        <li><strong>Disabled placards</strong> — Obtaining or renewing accessible parking permits</li>
+        <li><strong>Personalized plates</strong> — Custom license plate applications</li>
+      </ul>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">What to Bring</h3>
+      <p>For most registration renewals, bring:</p>
+      <ul style="margin:12px 0 12px 20px;line-height:2">
+        <li>Your renewal notice (if you received one in the mail)</li>
+        <li>Your vehicle's license plate number</li>
+        <li>Proof of insurance</li>
+        <li>Payment (cash, card, or check)</li>
+      </ul>
+      <p>For title transfers and other services, requirements vary — call your nearest Speedy branch before coming in and we'll tell you exactly what to bring.</p>
+
+      <div style="background:#FEF2F2;border-left:4px solid var(--red);padding:20px 24px;border-radius:8px;margin:28px 0">
+        <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Same-Day Service at All 4 Locations</p>
+        <p style="margin:0;color:var(--gray-700)">Walk in to any Speedy Insurance branch in Moreno Valley, Riverside (Van Buren or Magnolia), or Lake Elsinore. No appointment necessary. Most DMV transactions are completed in under 15 minutes.</p>
+      </div>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Can I Just Do It Online Instead?</h3>
+      <p>For simple registration renewals where you have already received a renewal notice, yes — the California DMV website (dmv.ca.gov) allows online renewal in many cases. However, if your registration is expired, if there are unpaid fees, if your smog certificate is missing, or if you have a complicated situation (out-of-state, lien on vehicle, etc.), online renewal often fails. That is where Speedy comes in — our DMV-licensed agents can handle edge cases that the website cannot.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">What About Smog?</h3>
+      <p>California requires a smog inspection every other year for most vehicles before registration renewal. Speedy does not perform smog checks directly, but we can direct you to a certified smog station nearby and process your registration immediately after you pass. We make the whole process seamless.</p>
+    `
+  },
+  {
+    tag: 'SR-22',
+    title: 'Non-Owner SR-22 Insurance: What It Is & Who Needs It in California',
+    read: '4 min read',
+    date: 'March 2025',
+    body: `
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:0 0 12px">You Need an SR-22 But Don't Own a Car — Now What?</h3>
+      <p>It is more common than you might think. Your license was suspended, the court or DMV requires an SR-22 to reinstate it, but you do not currently own a vehicle. Maybe you sold your car, maybe you rely on rideshares, or maybe you drive a family member's vehicle occasionally. Whatever the situation, a <strong>non-owner SR-22 policy</strong> is the answer.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">What Is a Non-Owner SR-22 Policy?</h3>
+      <p>A non-owner auto insurance policy provides liability coverage when you drive a vehicle you do not own. It covers bodily injury and property damage to others — it does not cover the vehicle itself (that is the owner's policy's job).</p>
+      <p style="margin-top:16px">When a non-owner policy includes an SR-22 filing, your insurance company notifies the California DMV that you have active, state-required coverage. This is what allows your license to be reinstated and maintained.</p>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Who Should Get a Non-Owner SR-22?</h3>
+      <ul style="margin:12px 0 12px 20px;line-height:2.2">
+        <li>Anyone required by the DMV or court to carry an SR-22 who does not own a vehicle</li>
+        <li>People who frequently borrow or rent cars</li>
+        <li>Drivers who plan to buy a vehicle in the near future and want to keep their license active in the meantime</li>
+        <li>Individuals using rideshare or public transportation but occasionally needing to drive</li>
+      </ul>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">How Much Does Non-Owner SR-22 Cost?</h3>
+      <p>Non-owner SR-22 policies are generally <strong>significantly cheaper</strong> than standard auto policies with SR-22 because there is no vehicle to insure. In California, many drivers find non-owner SR-22 coverage in the range of <strong>$50 to $120 per month</strong>, depending on their driving history and the carrier.</p>
+      <p style="margin-top:16px">At Speedy Insurance, we have access to non-standard carriers who specialize in exactly this type of policy. We can often find coverage and file your SR-22 the same day you walk in.</p>
+
+      <div style="background:#FEF2F2;border-left:4px solid var(--red);padding:20px 24px;border-radius:8px;margin:28px 0">
+        <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Important Limitation</p>
+        <p style="margin:0;color:var(--gray-700)">A non-owner policy does <em>not</em> cover a vehicle registered in your name or that you use regularly (like a household family member's car that you drive daily). In those cases, you need to be listed on the vehicle's policy instead. Talk to a Speedy agent — we will make sure you are set up correctly.</p>
+      </div>
+
+      <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">How to Get Started</h3>
+      <p>Getting a non-owner SR-22 at Speedy is straightforward. Walk into any of our four locations with your driver's license and the details of your SR-22 requirement (the offense date and case number if you have it). Our agents handle the filing electronically — the DMV is typically notified within 24 hours, and your license reinstatement process can begin immediately.</p>
+    `
+  }
+];
+
+function openArticle(index) {
+  const a = ARTICLES[index];
+  document.getElementById('articleTag').textContent = a.tag;
+  document.getElementById('articleTitle').textContent = a.title;
+  document.getElementById('articleMeta').innerHTML = \`<span><i class="fas fa-clock" style="margin-right:4px;color:rgba(255,255,255,0.3)"></i>\${a.read}</span><span style="color:rgba(255,255,255,0.2)">·</span><span><i class="fas fa-calendar" style="margin-right:4px;color:rgba(255,255,255,0.3)"></i>\${a.date}</span><span style="color:rgba(255,255,255,0.2)">·</span><span>Speedy Insurance Team</span>\`;
+  document.getElementById('articleBody').innerHTML = a.body;
+  const overlay = document.getElementById('articleOverlay');
+  overlay.style.display = 'block';
+  overlay.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+
+function closeArticle() {
+  document.getElementById('articleOverlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeArticle();
 });
 
 // BRANCH DATA

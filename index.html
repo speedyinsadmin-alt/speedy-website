@@ -1064,20 +1064,22 @@ function openBranchModal(branchId){
     <div class="modal-agent-pill"><div class="modal-agent-av" style="background:${a.color}">${a.initials}</div>${a.name}</div>
   `).join('');
   document.getElementById('modalMap').innerHTML = `
-    <div style="background:linear-gradient(135deg,var(--navy) 0%,#0d1f38 100%);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid var(--red)">
-      <div style="display:flex;align-items:flex-start;gap:14px">
-        <div style="width:42px;height:42px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">
-          <i class="fas fa-map-marker-alt" style="color:white;font-size:18px"></i>
+    <div style="background:linear-gradient(135deg,var(--navy) 0%,#0d1f38 100%);padding:16px 20px;border-bottom:3px solid var(--red)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:36px;height:36px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="fas fa-map-marker-alt" style="color:white;font-size:15px"></i>
         </div>
         <div>
-          <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:4px">Branch Address</div>
-          <div style="font-size:14px;font-weight:600;color:white;line-height:1.4">${b.address}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px"><i class="fas fa-clock" style="margin-right:5px"></i>Mon–Sun 9am–8pm</div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:2px">Branch Address</div>
+          <div style="font-size:13px;font-weight:600;color:white;line-height:1.4">${b.address}</div>
         </div>
       </div>
-      <a href="${b.mapsUrl}" target="_blank" rel="noopener" style="flex-shrink:0;background:var(--red);color:white;text-decoration:none;padding:12px 18px;border-radius:10px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:8px;transition:all 0.2s;white-space:nowrap" onmouseover="this.style.background='#b51f1f'" onmouseout="this.style.background='var(--red)'">
-        <i class="fas fa-directions" style="font-size:14px"></i> Get Directions
-      </a>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="font-size:11px;color:rgba(255,255,255,0.4)"><i class="fas fa-clock" style="margin-right:4px"></i>Mon–Sun 9am–8pm</div>
+        <a href="${b.mapsUrl}" target="_blank" rel="noopener" style="background:var(--red);color:white;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:6px;white-space:nowrap">
+          <i class="fas fa-directions"></i> Get Directions
+        </a>
+      </div>
     </div>`;
   document.getElementById('branchChatBox').style.display = 'none';
   document.getElementById('chatMessages').innerHTML = `<div class="chat-msg bot"><div class="chat-bubble">Hi! 👋 Welcome to Speedy Insurance ${b.name}. How can we help you today?</div></div>`;

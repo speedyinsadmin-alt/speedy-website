@@ -489,14 +489,14 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <div class="quote-form-title">Get Your Free Quote</div>
         <div class="quote-form-sub">No obligation · Best rates guaranteed</div>
         <div class="form-row">
-          <input class="form-input" placeholder="First name" />
-          <input class="form-input" placeholder="Last name" />
+          <input class="form-input" id="quoteFirstName" placeholder="First name" />
+          <input class="form-input" id="quoteLastName" placeholder="Last name" />
         </div>
         <div class="form-row">
-          <input class="form-input" type="tel" placeholder="Phone number" />
-          <input class="form-input" placeholder="ZIP code" />
+          <input class="form-input" id="quotePhone" type="tel" placeholder="Phone number" />
+          <input class="form-input" id="quoteZip" placeholder="ZIP code" />
         </div>
-        <select class="form-select">
+        <select class="form-select" id="quoteType">
           <option>Select insurance type</option>
           <option>Auto Insurance</option>
           <option>Home Insurance</option>
@@ -539,7 +539,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
             </a>
           </div>
         </div>
-        <button class="form-submit"><i class="fas fa-bolt"></i> Get My Free Quote</button>
+        <button class="form-submit" onclick="submitQuoteToChat(event)"><i class="fas fa-bolt"></i> Get My Free Quote</button>
         <div class="form-trust">
           <span class="form-trust-item"><i class="fas fa-lock"></i> Secure</span>
           <span class="form-trust-item"><i class="fas fa-check"></i> No spam</span>
@@ -1055,6 +1055,57 @@ document.addEventListener('DOMContentLoaded', function() {
   el = document.getElementById('aboutHours');
   if (el) el.textContent = SITE_CONFIG.hours.long;
 });
+
+
+// ============================================================
+// QUOTE FORM → TAWK.TO LIVE CHAT WIRING
+// NOTE: Replace with TurboRater embed when ready
+// ============================================================
+function submitQuoteToChat(e) {
+  e.preventDefault();
+
+  // Collect form values
+  var firstName = document.getElementById('quoteFirstName').value.trim();
+  var lastName  = document.getElementById('quoteLastName').value.trim();
+  var phone     = document.getElementById('quotePhone').value.trim();
+  var zip       = document.getElementById('quoteZip').value.trim();
+  var type      = document.getElementById('quoteType').value;
+
+  // Basic validation
+  if(!firstName || !phone || !zip || type === 'Select insurance type') {
+    alert('Please fill in your name, phone number, ZIP code, and insurance type.');
+    return;
+  }
+
+  // Build pre-filled message
+  var msg = '\uD83D\uDCCB Quote Request\n'
+    + 'Name: ' + firstName + ' ' + lastName + '\n'
+    + 'Phone: ' + phone + '\n'
+    + 'ZIP: ' + zip + '\n'
+    + 'Insurance: ' + type;
+
+  // Open Tawk.to and send the message
+  if(typeof Tawk_API !== 'undefined') {
+    Tawk_API.maximize();
+    // Wait for widget to open then send the pre-filled message
+    setTimeout(function() {
+      try {
+        Tawk_API.sendMessage(msg);
+      } catch(err) {
+        // If sendMessage not available, set visitor name and open chat
+        Tawk_API.setAttributes({
+          'name': firstName + ' ' + lastName,
+          'phone': phone,
+          'zip': zip,
+          'insurance-type': type
+        }, function(error){});
+      }
+    }, 800);
+  } else {
+    // Fallback — scroll to chat bubble and alert
+    alert('Our chat is loading. Please click the chat bubble in the bottom right corner and mention you need a ' + type + ' quote.');
+  }
+}
 
 // ARTICLE DATA
 const ARTICLES = [

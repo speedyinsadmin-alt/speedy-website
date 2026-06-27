@@ -1077,6 +1077,22 @@ function submitQuoteToChat(e) {
 
   var fullName = firstName + (lastName ? ' ' + lastName : '');
 
+  // Build SMS message with quote info
+  var smsBody = 'Hi Speedy Insurance! I would like a quote.'
+    + ' Name: ' + fullName
+    + ' | Phone: ' + phone
+    + ' | ZIP: ' + zip
+    + ' | Insurance: ' + type;
+
+  // Open SMS app pre-filled to Moreno Valley main number
+  var smsNumber = '9514720927';
+  var smsLink = 'sms:' + smsNumber + '?body=' + encodeURIComponent(smsBody);
+
+  window.location.href = smsLink;
+}
+
+  var fullName = firstName + (lastName ? ' ' + lastName : '');
+
   // Send to Formspree (email to speedyinsadmin@gmail.com)
   var formData = new FormData();
   formData.append('_subject', 'New Quote Request - ' + type + ' | ' + fullName);

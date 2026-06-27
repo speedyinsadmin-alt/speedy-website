@@ -1077,19 +1077,17 @@ function submitQuoteToChat(e) {
 
   var fullName = firstName + (lastName ? ' ' + lastName : '');
 
-  // Build SMS message with quote info
+  // Temporary: open SMS — replace with TurboRater for Websites when ready
   var smsBody = 'Hi Speedy Insurance! I would like a quote.'
     + ' Name: ' + fullName
     + ' | Phone: ' + phone
     + ' | ZIP: ' + zip
     + ' | Insurance: ' + type;
 
-  // Open SMS app pre-filled to Moreno Valley main number
-  var smsNumber = '9514720927';
-  var smsLink = 'sms:' + smsNumber + '?body=' + encodeURIComponent(smsBody);
-
-  window.location.href = smsLink;
+  window.location.href = 'sms:9514720927?body=' + encodeURIComponent(smsBody);
 }
+
+
 // ARTICLE DATA
 const ARTICLES = [
   {

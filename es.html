@@ -1070,104 +1070,20 @@ function submitQuoteToChat(e) {
   var zip       = document.getElementById('quoteZip').value.trim();
   var type      = document.getElementById('quoteType').value;
 
-  if(!firstName || !phone || !zip || type === 'Select insurance type') {
+  if(!firstName || !phone || !zip || type === 'Seleccione tipo de seguro') {
     alert('Por favor complete su nombre, teléfono, código postal y tipo de seguro.');
     return;
   }
 
   var fullName = firstName + (lastName ? ' ' + lastName : '');
 
-  // Send to Formspree (email to speedyinsadmin@gmail.com)
-  var formData = new FormData();
-  formData.append('_subject', 'New Quote Request - ' + type + ' | ' + fullName);
-  formData.append('Name', fullName);
-  formData.append('Phone', phone);
-  formData.append('ZIP', zip);
-  formData.append('Insurance Type', type);
-  formData.append('_replyto', '');
-  formData.append('Source', 'speedyins.com Quote Form');
+  var smsBody = 'Hola Speedy Insurance! Me gustaría una cotización.'
+    + ' Nombre: ' + fullName
+    + ' | Teléfono: ' + phone
+    + ' | ZIP: ' + zip
+    + ' | Seguro: ' + type;
 
-  // Show loading state on button
-  var btn = document.querySelector('.form-submit');
-  var originalText = btn.innerHTML;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-  btn.disabled = true;
-
-  fetch('https://formspree.io/f/xpwzgkqb', {
-    method: 'POST',
-    body: formData,
-    headers: {'Accept': 'application/json'}
-  })
-  .then(function(response) {
-    if(response.ok) {
-      // Success — show thank you message and open chat
-      btn.innerHTML = '<i class="fas fa-check"></i> Request Sent!';
-      btn.style.background = '#22c55e';
-
-      // Also open Tawk.to so agent can follow up live
-      setTimeout(function() {
-        if(typeof Tawk_API !== 'undefined') {
-          Tawk_API.setAttributes({'name': fullName}, function(){});
-          Tawk_API.maximize();
-        }
-        // Reset button after 4 seconds
-        setTimeout(function() {
-          btn.innerHTML = originalText;
-          btn.style.background = '';
-          btn.disabled = false;
-        }, 4000);
-      }, 1000);
-    } else {
-      throw new Error('Form submission failed');
-    }
-  })
-  .catch(function() {
-    btn.innerHTML = originalText;
-    btn.disabled = false;
-    alert('Something went wrong. Please call us directly at (951) 472-0927.');
-  });
-}
-
-  var fullName = firstName + (lastName ? ' ' + lastName : '');
-  var quoteMsg = 'Quote Request | ' + type + ' | Name: ' + fullName + ' | Phone: ' + phone + ' | ZIP: ' + zip;
-
-  // Store globally for use after chat opens
-  window._speedyQuoteMsg = quoteMsg;
-  window._speedyQuoteName = fullName;
-
-  if(typeof Tawk_API !== 'undefined') {
-    // Set visitor name visible to agent in dashboard
-    Tawk_API.setAttributes({'name': fullName}, function(){});
-
-    // Open chat widget
-    Tawk_API.maximize();
-
-    // After widget opens, inject quote info into the input field
-    setTimeout(function() {
-      try {
-        var iframes = document.querySelectorAll('iframe');
-        for(var i = 0; i < iframes.length; i++) {
-          try {
-            var doc = iframes[i].contentDocument || iframes[i].contentWindow.document;
-            // Try contenteditable div (Tawk uses this)
-            var input = doc.querySelector('[contenteditable="true"]');
-            if(!input) input = doc.querySelector('p[data-placeholder]');
-            if(!input) input = doc.querySelector('textarea');
-            if(input) {
-              input.focus();
-              input.innerText = window._speedyQuoteMsg;
-              input.dispatchEvent(new Event('input', {bubbles: true}));
-              input.dispatchEvent(new Event('change', {bubbles: true}));
-              input.dispatchEvent(new KeyboardEvent('keyup', {bubbles: true}));
-              break;
-            }
-          } catch(frameErr) {}
-        }
-      } catch(err) {}
-    }, 1500);
-  } else {
-    alert('Por favor use el chat en la esquina inferior derecha para solicitar su cotización.');
-  }
+  window.location.href = 'sms:9514720927?body=' + encodeURIComponent(smsBody);
 }
 
 // ARTICLE DATA

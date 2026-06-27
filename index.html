@@ -1416,10 +1416,18 @@ function closeBranchModal(){
 }
 
 function openBranchChat(){
-  const chatBox = document.getElementById('branchChatBox');
-  chatBox.style.display = 'block';
-  document.getElementById('chatInput').focus();
-  chatBox.scrollIntoView({behavior:'smooth',block:'end'});
+  // Close the branch modal first
+  closeBranchModal();
+  // Open Tawk.to live chat widget
+  if(typeof Tawk_API !== 'undefined'){
+    Tawk_API.maximize();
+    // Pre-fill the branch name so agent knows which branch customer is contacting
+    if(currentBranch){
+      Tawk_API.setAttributes({
+        'branch': currentBranch.name
+      }, function(error){});
+    }
+  }
 }
 
 function sendChat(){

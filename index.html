@@ -371,8 +371,8 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     </div>
     <div class="top-bar-right">
       <span class="top-bar-item"><i class="fas fa-globe"></i> Hablamos Español</span>
-      <button class="lang-btn active">EN</button>
-      <button class="lang-btn">ES</button>
+<button class="lang-btn active">EN</button>
+<a href="es.html" class="lang-btn" style="text-decoration:none;color:rgba(255,255,255,0.6)">ES</a>
     </div>
   </div>
 </div>
@@ -1077,18 +1077,14 @@ function submitQuoteToChat(e) {
 
   var fullName = firstName + (lastName ? ' ' + lastName : '');
 
-  // Build SMS message with quote info
+  // Build SMS — TEMPORARY until TurboRater for Websites is wired
   var smsBody = 'Hi Speedy Insurance! I would like a quote.'
     + ' Name: ' + fullName
     + ' | Phone: ' + phone
     + ' | ZIP: ' + zip
     + ' | Insurance: ' + type;
 
-  // Open SMS app pre-filled to Moreno Valley main number
-  var smsNumber = '9514720927';
-  var smsLink = 'sms:' + smsNumber + '?body=' + encodeURIComponent(smsBody);
-
-  window.location.href = smsLink;
+  window.location.href = 'sms:9514720927?body=' + encodeURIComponent(smsBody);
 }
 
   var fullName = firstName + (lastName ? ' ' + lastName : '');

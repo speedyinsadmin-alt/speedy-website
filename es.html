@@ -1340,6 +1340,46 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeArticle();
 });
 
+
+// ============================================================
+// RENDER TEAM GRID — populates branch cards in Talk To Our Team
+// ============================================================
+function renderTeamGrid() {
+  const grid = document.getElementById('teamGrid');
+  if (!grid) return;
+  grid.innerHTML = BRANCHES.map(b => `
+    <div class="branch-card" onclick="openBranchModal('${b.id}')">
+      <div class="branch-card-header" style="background:${b.headerBg}">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="branch-card-icon" style="background:rgba(255,255,255,0.15);width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center">
+            <i class="fas fa-map-marker-alt" style="color:white;font-size:16px"></i>
+          </div>
+          <div>
+            <div class="branch-card-name">${b.name}</div>
+            <div class="branch-card-agents">${b.agents.length} agente${b.agents.length>1?'s':''} listo${b.agents.length>1?'s':''} para ayudar</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:-6px">
+          ${b.agents.slice(0,4).map(a=>`<div class="branch-card-av" style="background:${b.color}">${a.initials}</div>`).join('')}
+        </div>
+      </div>
+      <div class="branch-card-footer">
+        <a href="tel:${b.phonePlain}" onclick="event.stopPropagation()" class="branch-action call">
+          <i class="fas fa-phone"></i> Call
+        </a>
+        <a href="sms:${b.phonePlain}" onclick="event.stopPropagation()" class="branch-action text">
+          <i class="fas fa-comment-sms"></i> Text
+        </a>
+        <button onclick="event.stopPropagation();currentBranch=BRANCHES.find(x=>x.id==='${b.id}');openBranchChat();" class="branch-action chat">
+          <i class="fas fa-comments"></i> Live Chat
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+document.addEventListener('DOMContentLoaded', renderTeamGrid);
+
 // BRANCH DATA
 const BRANCHES = [
   {
@@ -1426,7 +1466,7 @@ function openBranchModal(branchId){
   document.getElementById('modalIcon').style.background = 'rgba(255,255,255,0.2)';
   document.getElementById('modalIcon').style.color = 'white';
   document.getElementById('modalName').textContent = b.name;
-  document.getElementById('modalSub').textContent = `${b.agents.length} agent${b.agents.length>1?'s':''} ready to help`;
+  document.getElementById('modalSub').textContent = `${b.agents.length} agente${b.agents.length>1?'s':''} listo${b.agents.length>1?'s':''} para ayudar`;
   document.getElementById('modalPhone').textContent = b.phone;
   document.getElementById('modalTextNum').textContent = b.phone;
   document.getElementById('modalCall').href = `tel:${b.phonePlain}`;
@@ -1462,35 +1502,18 @@ function closeBranchModal(){
 }
 
 function openBranchChat(){
+  // Close the branch modal first
   closeBranchModal();
-  if(typeof Tawk_API === 'undefined') return;
-
-  // Map branch IDs to exact Tawk.to department names
-  var deptMap = {
-    'mv':  'Moreno Valley',
-    'vb':  'Van Buren',
-    'mag': 'Magnolia',
-    'le':  'Lake Elsinore'
-  };
-
-  var dept = currentBranch ? deptMap[currentBranch.id] : null;
-
-  // Set visitor attribute so agent sees branch name
-  if(currentBranch){
-    Tawk_API.setAttributes({
-      'name': '',
-      'branch': currentBranch.name
-    }, function(){});
+  // Open Tawk.to live chat widget
+  if(typeof Tawk_API !== 'undefined'){
+    Tawk_API.maximize();
+    // Pre-fill the branch name so agent knows which branch customer is contacting
+    if(currentBranch){
+      Tawk_API.setAttributes({
+        'branch': currentBranch.name
+      }, function(error){});
+    }
   }
-
-  // Route to correct department then open
-  if(dept){
-    try {
-      Tawk_API.setDepartment(dept);
-    } catch(e){}
-  }
-
-  Tawk_API.maximize();
 }
 
 function sendChat(){

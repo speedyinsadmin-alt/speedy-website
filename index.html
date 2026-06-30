@@ -1618,15 +1618,34 @@ function closeBranchModal(){
 function openBranchChat(){
   // Close the branch modal first
   closeBranchModal();
-  // Open Tawk.to live chat widget
-  if(typeof Tawk_API !== 'undefined'){
-    Tawk_API.maximize();
-    // Pre-fill the branch name so agent knows which branch customer is contacting
-    if(currentBranch){
-      Tawk_API.setAttributes({
-        'branch': currentBranch.name
-      }, function(error){});
-    }
+  function _openTawk(){
+    try {
+      // Pre-fill the branch name so agent knows which branch customer is contacting
+      if (window.Tawk_API && typeof Tawk_API.setAttributes === 'function' && currentBranch){
+        Tawk_API.setAttributes({ 'branch': currentBranch.name }, function(){});
+      }
+      if (window.Tawk_API && typeof Tawk_API.maximize === 'function'){
+        Tawk_API.maximize();
+        // Fallback: if maximize() was a silent no-op, force the widget open
+        setTimeout(function(){
+          try {
+            if (typeof Tawk_API.isChatMaximized === 'function' &&
+                !Tawk_API.isChatMaximized() &&
+                typeof Tawk_API.toggle === 'function'){
+              Tawk_API.toggle();
+            }
+          } catch(e){}
+        }, 300);
+      } else if (window.Tawk_API && typeof Tawk_API.toggle === 'function'){
+        Tawk_API.toggle();
+      }
+    } catch(e){ console.error('Tawk open failed:', e); }
+  }
+  // Open now if the widget is ready; otherwise run as soon as it loads
+  if (window.Tawk_API && typeof Tawk_API.maximize === 'function'){
+    _openTawk();
+  } else if (window.Tawk_API){
+    Tawk_API.onLoad = _openTawk;
   }
 }
 

@@ -1560,18 +1560,35 @@ function closeBranchModal(){
 }
 
 function openBranchChat(){
-  // Close the branch modal first
   closeBranchModal();
-  // Open Tawk.to live chat widget
-  if(typeof Tawk_API !== 'undefined'){
-    Tawk_API.maximize();
-    // Pre-fill the branch name so agent knows which branch customer is contacting
-    if(currentBranch){
-      Tawk_API.setAttributes({
-        'branch': currentBranch.name
-      }, function(error){});
-    }
+  if(typeof Tawk_API === 'undefined') return;
+
+  // Map branch IDs to exact Tawk.to department names
+  var deptMap = {
+    'mv':  'Moreno Valley',
+    'vb':  'Van Buren',
+    'mag': 'Magnolia',
+    'le':  'Lake Elsinore'
+  };
+
+  var dept = currentBranch ? deptMap[currentBranch.id] : null;
+
+  // Set visitor attribute so agent sees branch name
+  if(currentBranch){
+    Tawk_API.setAttributes({
+      'name': '',
+      'branch': currentBranch.name
+    }, function(){});
   }
+
+  // Route to correct department then open
+  if(dept){
+    try {
+      Tawk_API.setDepartment(dept);
+    } catch(e){}
+  }
+
+  Tawk_API.maximize();
 }
 
 function sendChat(){

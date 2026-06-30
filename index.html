@@ -105,17 +105,12 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 .hero-logo-wrap img{width:280px;height:auto;filter:drop-shadow(0 20px 40px rgba(0,0,0,0.3))}
 
 /* TRUST BAR */
-.trust-bar{background:var(--red);padding:0;overflow:hidden}
-.trust-bar .container{display:flex;align-items:center;gap:0;padding:0}
 @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.trust-ticker{display:inline-flex;animation:ticker 22s linear infinite;will-change:transform}
+.trust-bar{background:var(--red);padding:0;overflow:hidden;line-height:0;font-size:0}
+.trust-ticker{display:inline-flex;animation:ticker 24s linear infinite;white-space:nowrap}
 .trust-ticker:hover{animation-play-state:paused}
-.trust-item{display:inline-flex;align-items:center;padding:11px 20px;font-size:12px;font-weight:600;color:white;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;border-right:1px solid rgba(255,255,255,0.15);flex-shrink:0}
+.trust-item{display:inline-flex;align-items:center;padding:11px 22px;font-size:12px;font-weight:600;color:white;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;border-right:1px solid rgba(255,255,255,0.2);line-height:1;flex-shrink:0}
 .trust-item i{margin-right:7px;font-size:13px}
-.trust-item{flex:1;padding:12px 16px;text-align:center;font-size:12px;font-weight:600;color:white;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;border-right:1px solid rgba(255,255,255,0.15);transition:background 0.2s}
-.trust-item:last-child{border-right:none}
-.trust-item:hover{background:rgba(0,0,0,0.1)}
-.trust-item i{margin-right:6px;font-size:13px}
 
 /* SERVICES */
 .services{background:var(--cream)}
@@ -454,11 +449,11 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 </section>
 
 <!-- TRUST BAR -->
-<div class="trust-bar" style="background:var(--red);padding:0;overflow:hidden;white-space:nowrap">
-  <div class="trust-ticker" style="display:inline-flex;animation:ticker 20s linear infinite">
+<div class="trust-bar">
+  <div class="trust-ticker">
     <div class="trust-item"><i class="fas fa-car"></i>Auto Insurance</div>
     <div class="trust-item"><i class="fas fa-home"></i>Home Insurance</div>
-    <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22</div>
+    <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22 Insurance</div>
     <div class="trust-item"><i class="fas fa-building"></i>Commercial</div>
     <div class="trust-item"><i class="fas fa-id-card"></i>DMV Services</div>
     <div class="trust-item"><i class="fas fa-ship"></i>Boat · RV · Moto</div>
@@ -466,10 +461,9 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="trust-item"><i class="fas fa-shield-alt"></i>All Drivers Accepted</div>
     <div class="trust-item"><i class="fas fa-bolt"></i>Same Day SR-22</div>
     <div class="trust-item"><i class="fas fa-star"></i>4.9★ Google Rating</div>
-    <!-- Duplicate for seamless loop -->
     <div class="trust-item"><i class="fas fa-car"></i>Auto Insurance</div>
     <div class="trust-item"><i class="fas fa-home"></i>Home Insurance</div>
-    <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22</div>
+    <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22 Insurance</div>
     <div class="trust-item"><i class="fas fa-building"></i>Commercial</div>
     <div class="trust-item"><i class="fas fa-id-card"></i>DMV Services</div>
     <div class="trust-item"><i class="fas fa-ship"></i>Boat · RV · Moto</div>
@@ -477,14 +471,6 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="trust-item"><i class="fas fa-shield-alt"></i>All Drivers Accepted</div>
     <div class="trust-item"><i class="fas fa-bolt"></i>Same Day SR-22</div>
     <div class="trust-item"><i class="fas fa-star"></i>4.9★ Google Rating</div>
-  </div>
-</div>
-    <div class="trust-item"><i class="fas fa-home"></i>Home Insurance</div>
-    <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22</div>
-    <div class="trust-item"><i class="fas fa-building"></i>Commercial</div>
-    <div class="trust-item"><i class="fas fa-id-card"></i>DMV Services</div>
-    <div class="trust-item"><i class="fas fa-ship"></i>Boat · RV · Moto</div>
-    <div class="trust-item"><i class="fas fa-globe-americas"></i>Hablamos Español</div>
   </div>
 </div>
 

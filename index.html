@@ -418,6 +418,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <a href="#terms" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Terms &amp; Conditions</a>
     <a href="#contact" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Contact</a>
     <a href="#quote" class="nav-cta" onclick="document.getElementById('mobileMenu').classList.remove('open')">Free Quote</a>
+<div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.1);margin-top:4px"><button class="lang-btn active">EN</button><a href="es.html" class="lang-btn" style="text-decoration:none;color:rgba(255,255,255,0.6)">ES</a></div>
   </div>
 </nav>
 
@@ -448,9 +449,31 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 </section>
 
 <!-- TRUST BAR -->
-<div class="trust-bar">
-  <div class="container">
+<div class="trust-bar" style="background:var(--red);padding:0;overflow:hidden;white-space:nowrap">
+  <div class="trust-ticker" style="display:inline-flex;animation:ticker 20s linear infinite">
     <div class="trust-item"><i class="fas fa-car"></i>Auto Insurance</div>
+    <div class="trust-item"><i class="fas fa-home"></i>Home Insurance</div>
+    <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22</div>
+    <div class="trust-item"><i class="fas fa-building"></i>Commercial</div>
+    <div class="trust-item"><i class="fas fa-id-card"></i>DMV Services</div>
+    <div class="trust-item"><i class="fas fa-ship"></i>Boat · RV · Moto</div>
+    <div class="trust-item"><i class="fas fa-globe-americas"></i>Hablamos Español</div>
+    <div class="trust-item"><i class="fas fa-shield-alt"></i>All Drivers Accepted</div>
+    <div class="trust-item"><i class="fas fa-bolt"></i>Same Day SR-22</div>
+    <div class="trust-item"><i class="fas fa-star"></i>4.9★ Google Rating</div>
+    <!-- Duplicate for seamless loop -->
+    <div class="trust-item"><i class="fas fa-car"></i>Auto Insurance</div>
+    <div class="trust-item"><i class="fas fa-home"></i>Home Insurance</div>
+    <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22</div>
+    <div class="trust-item"><i class="fas fa-building"></i>Commercial</div>
+    <div class="trust-item"><i class="fas fa-id-card"></i>DMV Services</div>
+    <div class="trust-item"><i class="fas fa-ship"></i>Boat · RV · Moto</div>
+    <div class="trust-item"><i class="fas fa-globe-americas"></i>Hablamos Español</div>
+    <div class="trust-item"><i class="fas fa-shield-alt"></i>All Drivers Accepted</div>
+    <div class="trust-item"><i class="fas fa-bolt"></i>Same Day SR-22</div>
+    <div class="trust-item"><i class="fas fa-star"></i>4.9★ Google Rating</div>
+  </div>
+</div>
     <div class="trust-item"><i class="fas fa-home"></i>Home Insurance</div>
     <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22</div>
     <div class="trust-item"><i class="fas fa-building"></i>Commercial</div>

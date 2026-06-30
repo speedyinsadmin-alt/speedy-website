@@ -1477,6 +1477,7 @@ function renderTeamGrid() {
 }
 
 document.addEventListener('DOMContentLoaded', renderTeamGrid);
+if(document.readyState !== 'loading') renderTeamGrid();
 
 
 // BRANCH DATA

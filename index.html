@@ -1445,38 +1445,52 @@ document.addEventListener('keydown', function(e) {
 function renderTeamGrid() {
   const grid = document.getElementById('teamGrid');
   if (!grid) return;
-  grid.innerHTML = BRANCHES.map(b => `
-    <div class="branch-card" onclick="openBranchModal('${b.id}')">
-      <div class="branch-card-header" style="background:${b.headerBg}">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="branch-card-icon" style="background:rgba(255,255,255,0.15);width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center">
-            <i class="fas fa-map-marker-alt" style="color:white;font-size:16px"></i>
-          </div>
-          <div>
-            <div class="branch-card-name">${b.name}</div>
-            <div class="branch-card-agents">${b.agents.length} agent${b.agents.length>1?'s':''} ready to help</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:-6px">
-          ${b.agents.slice(0,4).map(a=>`<div class="branch-card-av" style="background:${b.color}">${a.initials}</div>`).join('')}
-        </div>
+
+  // Dept map for Tawk.to routing
+  var deptMap = {
+    'mv':  'Moreno Valley',
+    'vb':  'Van Buren',
+    'r1':  'Van Buren',
+    'mag': 'Magnolia',
+    'r2':  'Magnolia',
+    'le':  'Lake Elsinore'
+  };
+
+  grid.innerHTML = BRANCHES.map(b => {
+    const dept = deptMap[b.id] || b.name;
+    return `
+    <div class="branch-card" onclick="openBranchModal('${b.id}')" style="cursor:pointer;position:relative">
+      <div class="branch-card-icon" style="background:${b.color}">
+        <i class="fas fa-map-marker-alt"></i>
       </div>
-      <div class="branch-card-footer">
+      <div class="branch-card-name">${b.name}</div>
+      <div class="branch-card-agents">${b.agents.length} agent${b.agents.length>1?'s':''} &middot; <i class="fas fa-map-marker-alt" style="font-size:10px"></i> ${b.address.split(',')[0]}</div>
+      <div class="branch-card-avatars">
+        ${b.agents.slice(0,4).map(a=>`<div class="branch-card-av" style="background:${a.color}">${a.initials}</div>`).join('')}
+      </div>
+      <div class="branch-card-phone">
+        <i class="fas fa-phone"></i> ${b.phone}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
         <a href="tel:${b.phonePlain}" onclick="event.stopPropagation()" class="branch-action call">
-          <i class="fas fa-phone"></i> Call
+          <div class="branch-action-icon"><i class="fas fa-phone"></i></div>
+          <div><span class="branch-action-label">Call Now</span><span class="branch-action-num">${b.phone}</span></div>
         </a>
-        <a href="sms:${b.phonePlain}" onclick="event.stopPropagation()" class="branch-action text">
-          <i class="fas fa-comment-sms"></i> Text
+        <a href="sms:${b.phonePlain}" onclick="event.stopPropagation()" class="branch-action text" id="modalText">
+          <div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div>
+          <div><span class="branch-action-label">Send Text</span><span class="branch-action-num">${b.phone}</span></div>
         </a>
-        <button onclick="event.stopPropagation();currentBranch=BRANCHES.find(x=>x.id==='${b.id}');openBranchChat();" class="branch-action chat">
-          <i class="fas fa-comments"></i> Live Chat
+        <button onclick="event.stopPropagation();currentBranch=BRANCHES.find(x=>x.id==='${b.id}');openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left">
+          <div class="branch-action-icon"><i class="fas fa-comments"></i></div>
+          <div><span class="branch-action-label">Live Chat</span><span class="branch-action-num">Chat with ${dept} team</span></div>
         </button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 document.addEventListener('DOMContentLoaded', renderTeamGrid);
+
 
 // BRANCH DATA
 const BRANCHES = [

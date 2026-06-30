@@ -480,7 +480,79 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="section-label" style="color:var(--red-light)">Our 4 Branches</div>
     <h2 class="section-title" style="color:white">Talk To Our Team</h2>
     <p class="section-sub" style="color:rgba(255,255,255,0.5)">Pick your nearest branch — call, text, or chat. Walk-ins welcome. All agents in the branch are ready to help you.</p>
-    <div class="team-grid" id="teamGrid"></div>
+    <div class="team-grid" id="teamGrid">
+      <!-- Moreno Valley -->
+      <div class="branch-card" onclick="openBranchModal('mv')" style="cursor:pointer;position:relative">
+        <div class="branch-card-icon" style="background:#D42B2B"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="branch-card-name">Moreno Valley</div>
+        <div class="branch-card-agents">4 agents &middot; 12625 Frederick St #i-1</div>
+        <div class="branch-card-avatars">
+          <div class="branch-card-av" style="background:#D42B2B">SR</div>
+          <div class="branch-card-av" style="background:#1A4FA0">LF</div>
+          <div class="branch-card-av" style="background:#7C3AED">YH</div>
+          <div class="branch-card-av" style="background:#059669">JR</div>
+        </div>
+        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 472-0927</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <a href="tel:9514720927" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Call Now</span><span class="branch-action-num">(951) 472-0927</span></div></a>
+          <a href="sms:9514720927" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Send Text</span><span class="branch-action-num">(951) 472-0927</span></div></a>
+          <button onclick="event.stopPropagation();currentBranch=BRANCHES[0];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Live Chat</span><span class="branch-action-num">Chat with Moreno Valley team</span></div></button>
+        </div>
+      </div>
+
+      <!-- Van Buren -->
+      <div class="branch-card" onclick="openBranchModal('r1')" style="cursor:pointer;position:relative">
+        <div class="branch-card-icon" style="background:#1A4FA0"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="branch-card-name">Riverside — Van Buren</div>
+        <div class="branch-card-agents">3 agents &middot; 2955 Van Buren Blvd Ste A7</div>
+        <div class="branch-card-avatars">
+          <div class="branch-card-av" style="background:#D42B2B">YA</div>
+          <div class="branch-card-av" style="background:#1A4FA0">FS</div>
+          <div class="branch-card-av" style="background:#7C3AED">JV</div>
+        </div>
+        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 695-1500</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <a href="tel:9516951500" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Call Now</span><span class="branch-action-num">(951) 695-1500</span></div></a>
+          <a href="sms:9516951500" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Send Text</span><span class="branch-action-num">(951) 695-1500</span></div></a>
+          <button onclick="event.stopPropagation();currentBranch=BRANCHES[1];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Live Chat</span><span class="branch-action-num">Chat with Van Buren team</span></div></button>
+        </div>
+      </div>
+
+      <!-- Magnolia -->
+      <div class="branch-card" onclick="openBranchModal('r2')" style="cursor:pointer;position:relative">
+        <div class="branch-card-icon" style="background:#7C3AED"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="branch-card-name">Riverside — Magnolia</div>
+        <div class="branch-card-agents">3 agents &middot; 7010 Magnolia Ave</div>
+        <div class="branch-card-avatars">
+          <div class="branch-card-av" style="background:#D42B2B">AS</div>
+          <div class="branch-card-av" style="background:#1A4FA0">EH</div>
+          <div class="branch-card-av" style="background:#7C3AED">IH</div>
+        </div>
+        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 977-9400</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <a href="tel:9519779400" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Call Now</span><span class="branch-action-num">(951) 977-9400</span></div></a>
+          <a href="sms:9519779400" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Send Text</span><span class="branch-action-num">(951) 977-9400</span></div></a>
+          <button onclick="event.stopPropagation();currentBranch=BRANCHES[2];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Live Chat</span><span class="branch-action-num">Chat with Magnolia team</span></div></button>
+        </div>
+      </div>
+
+      <!-- Lake Elsinore -->
+      <div class="branch-card" onclick="openBranchModal('le')" style="cursor:pointer;position:relative">
+        <div class="branch-card-icon" style="background:#059669"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="branch-card-name">Lake Elsinore</div>
+        <div class="branch-card-agents">1 agent &middot; 31948 Mission Trail Ste B</div>
+        <div class="branch-card-avatars">
+          <div class="branch-card-av" style="background:#059669">CA</div>
+        </div>
+        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 579-4095</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <a href="tel:9515794095" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Call Now</span><span class="branch-action-num">(951) 579-4095</span></div></a>
+          <a href="sms:9515794095" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Send Text</span><span class="branch-action-num">(951) 579-4095</span></div></a>
+          <button onclick="event.stopPropagation();currentBranch=BRANCHES[3];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Live Chat</span><span class="branch-action-num">Chat with Lake Elsinore team</span></div></button>
+        </div>
+      </div>
+
+    </div>
   </div>
 </section>
 
@@ -1477,7 +1549,6 @@ function renderTeamGrid() {
 }
 
 document.addEventListener('DOMContentLoaded', renderTeamGrid);
-if(document.readyState !== 'loading') renderTeamGrid();
 
 
 // BRANCH DATA

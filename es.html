@@ -191,8 +191,8 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 .loc-phone:hover{color:white}
 
 /* TEAM / BRANCHES */
-.equipo{background:var(--cream) !important}
-.equipo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px}
+.team{background:var(--cream) !important}
+.team-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px}
 .branch-card{background:rgba(255,255,255,0.05);border-radius:var(--radius-xl);padding:28px;border:1.5px solid rgba(255,255,255,0.1);text-align:center;transition:all 0.3s;cursor:pointer;position:relative;overflow:hidden}
 .branch-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;transition:transform 0.3s;transform:scaleX(0);transform-origin:left}
 .branch-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(0,0,0,0.3);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.1)}
@@ -333,7 +333,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
   .cta-inner{flex-direction:column;text-align:center}
   .loc-grid{grid-template-columns:1fr 1fr}
   .section-sub{max-width:100% !important;width:100%;overflow-wrap:break-word}
-  .equipo-grid{grid-template-columns:1fr 1fr}
+  .team-grid{grid-template-columns:1fr 1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
   .agent-popup{width:calc(100vw - 32px);right:16px;bottom:90px}
   .section{padding:50px 0}
@@ -345,7 +345,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 @media(max-width:480px){
   .services-grid{grid-template-columns:1fr}
   .loc-grid{grid-template-columns:1fr}
-  .equipo-grid{grid-template-columns:1fr}
+  .team-grid{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr}
   .form-row{grid-template-columns:1fr}
   .hero-stats{flex-wrap:wrap;gap:20px}
@@ -480,12 +480,12 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="section-label" style="color:var(--red-light)">Nuestras 4 Sucursales</div>
     <h2 class="section-title" style="color:white">Hable Con Nuestro Equipo</h2>
     <p class="section-sub" style="color:rgba(255,255,255,0.5)">Elija la sucursal más cercana — llame, envíe un mensaje o chatee. Aceptamos visitas sin cita. Todos los agentes están listos para ayudarle.</p>
-    <div class="equipo-grid" id="equipoGrid"></div>
+    <div class="team-grid" id="teamGrid"></div>
   </div>
 </section>
 
 <!-- QUOTE FORM -->
-<section class="equipo section" id="quote" style="background:var(--cream);padding:80px 0">
+<section class="team section" id="quote" style="background:var(--cream);padding:80px 0">
   <div class="container">
     <div class="quote-inner">
       <div class="quote-left">
@@ -726,13 +726,13 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
           Speedy Insurance Agency has delivered insurance coverage to satisfied clients for over 20 years. We research and review rates from hundreds of companies to find our customers the best rates available — we want each client to have the cheapest rates with quality coverage.
         </p>
         <p style="font-size:16px;color:var(--gray-500);line-height:1.7;margin-bottom:16px">
-          Our services include auto, motorcycle, home, recreational vehicles, general liability, DMV services, SR-22 filings, bonds, and commercial insurance. Our equipo of licensed and dedicated professional agents are committed above all to customer trust.
+          Our services include auto, motorcycle, home, recreational vehicles, general liability, DMV services, SR-22 filings, bonds, and commercial insurance. Our team of licensed and dedicated professional agents are committed above all to customer trust.
         </p>
         <p style="font-size:16px;color:var(--gray-500);line-height:1.7;margin-bottom:16px">
           We love helping new clients explore their options and match policies to their personal needs. Our top priority is confident, satisfied customers. Speedy Insurance Agency was founded — and is still fueled by — a vision to educate and assist clients navigating the complex world of insurance. <strong>Insurance shopping doesn't have to be difficult.</strong>
         </p>
         <p style="font-size:16px;color:var(--gray-500);line-height:1.7;margin-bottom:24px">
-          Our bilingual equipo speaks English and Spanish. We are open <span id="aboutHours">Lun–Vie 9am–7pm, Sáb 9am–5pm</span>, across 4 locations in Moreno Valley, Riverside, and Lake Elsinore.
+          Our bilingual team speaks English and Spanish. We are open <span id="aboutHours">Lun–Vie 9am–7pm, Sáb 9am–5pm</span>, across 4 locations in Moreno Valley, Riverside, and Lake Elsinore.
         </p>
         <a href="#quote" class="btn-primary"><i class="fas fa-bolt"></i> Cotización Gratis</a>
       </div>
@@ -1345,50 +1345,37 @@ document.addEventListener('keydown', function(e) {
 // RENDER TEAM GRID — populates branch cards in Talk To Our Team
 // ============================================================
 function renderTeamGrid() {
-  const grid = document.getElementById('equipoGrid');
+  var grid = document.getElementById('teamGrid');
   if (!grid) return;
 
-  // Dept map for Tawk.to routing
   var deptMap = {
-    'mv':  'Moreno Valley',
-    'vb':  'Van Buren',
-    'r1':  'Van Buren',
-    'mag': 'Magnolia',
-    'r2':  'Magnolia',
-    'le':  'Lake Elsinore'
+    'mv': 'Moreno Valley',
+    'r1': 'Van Buren',
+    'r2': 'Magnolia',
+    'le': 'Lake Elsinore'
   };
 
-  grid.innerHTML = BRANCHES.map(b => {
-    const dept = deptMap[b.id] || b.name;
-    return `
-    <div class="branch-card" onclick="openBranchModal('${b.id}')" style="cursor:pointer;position:relative">
-      <div class="branch-card-icon" style="background:${b.color}">
-        <i class="fas fa-map-marker-alt"></i>
-      </div>
-      <div class="branch-card-name">${b.name}</div>
-      <div class="branch-card-agents">${b.agents.length} agente${b.agents.length>1?'s':''} &middot; <i class="fas fa-map-marker-alt" style="font-size:10px"></i> ${b.address.split(',')[0]}</div>
-      <div class="branch-card-avatars">
-        ${b.agents.slice(0,4).map(a=>`<div class="branch-card-av" style="background:${a.color}">${a.initials}</div>`).join('')}
-      </div>
-      <div class="branch-card-phone">
-        <i class="fas fa-phone"></i> ${b.phone}
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-        <a href="tel:${b.phonePlain}" onclick="event.stopPropagation()" class="branch-action call">
-          <div class="branch-action-icon"><i class="fas fa-phone"></i></div>
-          <div><span class="branch-action-label">Llamar Ahora</span><span class="branch-action-num">${b.phone}</span></div>
-        </a>
-        <a href="sms:${b.phonePlain}" onclick="event.stopPropagation()" class="branch-action text" id="modalText">
-          <div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div>
-          <div><span class="branch-action-label">Enviar Texto</span><span class="branch-action-num">${b.phone}</span></div>
-        </a>
-        <button onclick="event.stopPropagation();currentBranch=BRANCHES.find(x=>x.id==='${b.id}');openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left">
-          <div class="branch-action-icon"><i class="fas fa-comments"></i></div>
-          <div><span class="branch-action-label">Chat en Vivo</span><span class="branch-action-num">Chatear con ${dept} equipo</span></div>
-        </button>
-      </div>
-    </div>`;
-  }).join('');
+  var cards = '';
+  for (var i = 0; i < BRANCHES.length; i++) {
+    var b = BRANCHES[i];
+    var dept = deptMap[b.id] || b.name;
+    var avatars = '';
+    for (var j = 0; j < Math.min(b.agents.length, 4); j++) {
+      avatars += '<div class="branch-card-av" style="background:' + b.agents[j].color + '">' + b.agents[j].initials + '</div>';
+    }
+    cards += '<div class="branch-card" onclick="openBranchModal(\'' + b.id + '\')" style="cursor:pointer;position:relative">'
+      + '<div class="branch-card-icon" style="background:' + b.color + '"><i class="fas fa-map-marker-alt"></i></div>'
+      + '<div class="branch-card-name">' + b.name + '</div>'
+      + '<div class="branch-card-agents">' + b.agents.length + ' agente' + (b.agents.length > 1 ? 's' : '') + ' &middot; ' + b.address.split(',')[0] + '</div>'
+      + '<div class="branch-card-avatars">' + avatars + '</div>'
+      + '<div class="branch-card-phone"><i class="fas fa-phone"></i> ' + b.phone + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">'
+      + '<a href="tel:' + b.phonePlain + '" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Llamar Ahora</span><span class="branch-action-num">' + b.phone + '</span></div></a>'
+      + '<a href="sms:' + b.phonePlain + '" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Enviar Texto</span><span class="branch-action-num">' + b.phone + '</span></div></a>'
+      + '<button onclick="event.stopPropagation();currentBranch=BRANCHES[' + i + '];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Chat en Vivo</span><span class="branch-action-num">Chatear con ' + dept + ' equipo</span></div></button>'
+      + '</div></div>';
+  }
+  grid.innerHTML = cards;
 }
 
 document.addEventListener('DOMContentLoaded', renderTeamGrid);
@@ -1449,13 +1436,13 @@ let currentBranch = null;
 
 // Render branch cards
 function renderBranches(){
-  const grid = document.getElementById('equipoGrid');
+  const grid = document.getElementById('teamGrid');
   grid.innerHTML = BRANCHES.map(b => `
     <div class="branch-card" onclick="openBranchModal('${b.id}')" style="--bc:${b.color}">
       <div style="position:absolute;top:0;left:0;right:0;height:4px;background:${b.color};transform:scaleX(0);transition:transform 0.3s" class="branch-card-bar"></div>
       <div class="branch-card-icon" style="background:rgba(255,255,255,0.08);color:${b.color}"><i class="fas fa-building"></i></div>
       <div class="branch-card-name">${b.name}</div>
-      <div class="branch-card-agents">${b.agents.length} agente${b.agents.length>1?'s':''} · <i class="fas fa-map-marker-alt" style="font-size:10px"></i> ${b.address}</div>
+      <div class="branch-card-agents">${b.agents.length} agent${b.agents.length>1?'s':''} · <i class="fas fa-map-marker-alt" style="font-size:10px"></i> ${b.address}</div>
       <div class="branch-card-avatars">
         ${b.agents.map(a => `<div class="branch-card-av" style="background:${a.color}">${a.initials}</div>`).join('')}
       </div>

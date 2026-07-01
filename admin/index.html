@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Speedy Admin — Site Health</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --red:#D42B2B; --red-light:#ff4d4d; --navy:#0B1829; --navy-2:#12233b;
+    --blue:#1A4FA0; --blue-light:#2E6BD4; --white:#fff; --mute:#8aa0bd;
+    --success:#22C55E; --warning:#F59E0B; --line:rgba(255,255,255,.09);
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Outfit',sans-serif;background:var(--navy);color:#e8eef7;
+    min-height:100vh;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue-light);text-decoration:none}
+  .display{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px;line-height:.95}
+
+  /* ---------- Lock screen ---------- */
+  #lock{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1200px 600px at 50% -10%,#16345c 0%,var(--navy) 60%);z-index:50;padding:24px}
+  #lock .card{width:100%;max-width:380px;text-align:center}
+  #lock img{width:210px;max-width:70%;height:auto;margin:0 auto 26px;display:block}
+  #lock h1{font-size:30px;color:#fff;margin-bottom:6px}
+  #lock p{color:var(--mute);font-size:14px;margin-bottom:22px}
+  #lock input{width:100%;padding:14px 16px;border-radius:10px;border:1px solid var(--line);
+    background:var(--navy-2);color:#fff;font-size:16px;font-family:'Outfit';outline:none}
+  #lock input:focus{border-color:var(--blue-light)}
+  #lock button{width:100%;margin-top:12px;padding:14px;border:none;border-radius:10px;cursor:pointer;
+    background:var(--red);color:#fff;font-weight:700;font-size:16px;letter-spacing:.3px}
+  #lock button:hover{background:var(--red-light)}
+  #lockErr{color:var(--red-light);font-size:13px;margin-top:12px;min-height:18px}
+
+  /* ---------- App ---------- */
+  #app{display:none;max-width:1040px;margin:0 auto;padding:28px 20px 80px}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:26px;flex-wrap:wrap}
+  header.top img{height:40px;width:auto}
+  header.top .r{display:flex;align-items:center;gap:14px}
+  .btn{background:var(--navy-2);border:1px solid var(--line);color:#cfe0f5;
+    padding:9px 15px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit'}
+  .btn:hover{border-color:var(--blue-light);color:#fff}
+
+  /* verdict banner */
+  .verdict{border-radius:var(--radius);padding:22px 24px;margin-bottom:26px;
+    display:flex;align-items:center;gap:18px;border:1px solid var(--line);background:var(--navy-2)}
+  .verdict .dot{width:16px;height:16px;border-radius:50%;flex:none;box-shadow:0 0 0 6px rgba(255,255,255,.05)}
+  .verdict h2{font-size:34px;color:#fff}
+  .verdict small{color:var(--mute);font-size:13px;display:block;margin-top:2px}
+  .v-ok .dot{background:var(--success)} .v-warn .dot{background:var(--warning)}
+  .v-bad .dot{background:var(--red-light)} .v-load .dot{background:var(--mute)}
+
+  .eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--mute);
+    font-weight:700;margin:30px 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+
+  .check{background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 18px;display:flex;gap:14px;align-items:flex-start}
+  .check .ico{width:34px;height:34px;border-radius:9px;flex:none;display:flex;align-items:center;
+    justify-content:center;font-weight:800;font-size:15px}
+  .check .body{flex:1;min-width:0}
+  .check .title{font-weight:700;color:#fff;font-size:15px;display:flex;justify-content:space-between;gap:8px}
+  .check .detail{color:var(--mute);font-size:13px;margin-top:3px;word-break:break-word}
+  .pill{font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 9px;border-radius:20px;flex:none;text-transform:uppercase}
+  .s-ok{background:rgba(34,197,94,.15);color:#4ade80} .s-ok .ico{background:rgba(34,197,94,.15);color:#4ade80}
+  .s-warn{background:rgba(245,158,11,.15);color:#fbbf24} .s-warn .ico{background:rgba(245,158,11,.15);color:#fbbf24}
+  .s-bad{background:rgba(212,43,43,.18);color:#ff6b6b} .s-bad .ico{background:rgba(212,43,43,.18);color:#ff6b6b}
+  .s-load{background:rgba(138,160,189,.15);color:var(--mute)} .s-load .ico{background:rgba(138,160,189,.12);color:var(--mute)}
+
+  /* action items */
+  .task{background:var(--navy-2);border:1px solid var(--line);border-left:3px solid var(--warning);
+    border-radius:10px;padding:14px 16px;margin-bottom:10px}
+  .task.done{border-left-color:var(--success)}
+  .task .h{display:flex;justify-content:space-between;gap:10px;align-items:center}
+  .task .h b{color:#fff;font-size:14.5px}
+  .task p{color:var(--mute);font-size:13px;margin-top:5px;line-height:1.5}
+
+  /* quick links */
+  .links{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+  .links a{background:var(--navy-2);border:1px solid var(--line);border-radius:10px;padding:13px 15px;
+    color:#cfe0f5;font-weight:600;font-size:13.5px;display:flex;justify-content:space-between;align-items:center}
+  .links a:hover{border-color:var(--blue-light);color:#fff}
+  .links a span{color:var(--mute);font-size:16px}
+  footer{color:var(--mute);font-size:12px;margin-top:36px;text-align:center;line-height:1.7}
+  @media(max-width:560px){.verdict h2{font-size:26px}}
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div id="lock">
+  <div class="card">
+    <img src="/assets/logo.png" alt="Speedy Insurance">
+    <h1 class="display">Admin Access</h1>
+    <p>Site health &amp; operations — staff only</p>
+    <input id="pw" type="password" placeholder="Enter password" autocomplete="off">
+    <button onclick="tryUnlock()">Unlock</button>
+    <div id="lockErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="top">
+    <img src="/assets/logo.png" alt="Speedy">
+    <div class="r">
+      <button class="btn" onclick="runChecks()">↻ Re-run checks</button>
+      <button class="btn" onclick="lockNow()">Lock</button>
+    </div>
+  </header>
+
+  <div id="verdict" class="verdict v-load">
+    <div class="dot"></div>
+    <div>
+      <h2 class="display" id="verdictText">Checking site…</h2>
+      <small id="verdictSub">Running live health checks</small>
+    </div>
+  </div>
+
+  <div class="eyebrow">Live checks</div>
+  <div class="grid" id="checks"></div>
+
+  <div class="eyebrow">Supabase backend</div>
+  <div class="grid" id="supabase"></div>
+
+  <div class="eyebrow">Open items &amp; next steps</div>
+  <div id="tasks"></div>
+
+  <div class="eyebrow">Quick links</div>
+  <div class="links" id="links"></div>
+
+  <footer>
+    Speedy Insurance Agency — internal admin. Last checked: <span id="ts">—</span><br>
+    This page is client-side only; the password is light protection, not a secure login.
+  </footer>
+</div>
+
+<script>
+/* ===== CONFIG — change the password here ===== */
+const ADMIN_PW = "speedyadmin2024";
+
+/* ---------- Lock ---------- */
+if (sessionStorage.getItem('spadmin') === '1') showApp();
+function tryUnlock(){
+  const v = document.getElementById('pw').value;
+  if (v === ADMIN_PW){ sessionStorage.setItem('spadmin','1'); showApp(); }
+  else { document.getElementById('lockErr').textContent = 'Incorrect password. Try again.'; }
+}
+document.getElementById('pw').addEventListener('keydown',e=>{ if(e.key==='Enter') tryUnlock(); });
+function showApp(){ document.getElementById('lock').style.display='none';
+  document.getElementById('app').style.display='block'; runChecks(); }
+function lockNow(){ sessionStorage.removeItem('spadmin'); location.reload(); }
+
+/* ---------- Health checks ---------- */
+const CHECKS = [
+  { id:'home',  name:'Homepage (index.html)', type:'page', url:'/' },
+  { id:'es',    name:'Spanish page (es.html)', type:'page', url:'/es.html' },
+  { id:'logo',  name:'Logo asset', type:'asset', url:'/assets/logo.png' },
+  { id:'chat',  name:'Live chat (Tawk.to)', type:'script', url:'https://embed.tawk.to/6a40444c35bb181d4aa8c06f/1js5glj4a' },
+];
+
+function card(state, name, detail, label){
+  return `<div class="check s-${state}">
+    <div class="ico">${label||'…'}</div>
+    <div class="body">
+      <div class="title">${name}<span class="pill s-${state}">${
+        state==='ok'?'OK':state==='warn'?'Check':state==='bad'?'Down':'…'}</span></div>
+      <div class="detail">${detail}</div>
+    </div></div>`;
+}
+
+async function checkPage(c){
+  const t0=performance.now();
+  try{
+    const r = await fetch(c.url,{cache:'no-store'});
+    const ms = Math.round(performance.now()-t0);
+    if(!r.ok) return {state:'bad', detail:`Returned HTTP ${r.status}. Page not loading — check the deploy.`, label:r.status};
+    const txt = await r.text();
+    const kb = Math.round(new Blob([txt]).size/1024);
+    const heavy = kb>800;
+    return { state: heavy?'warn':'ok',
+      detail:`HTTP 200 · ${kb} KB · ${ms} ms${heavy?' — page is large, consider trimming assets.':' — loads fast.'}`,
+      label:'200' };
+  }catch(e){ return {state:'bad', detail:'Could not reach the page (network/deploy error).', label:'✕'}; }
+}
+async function checkAsset(c){
+  return new Promise(res=>{
+    const img=new Image(); const t0=performance.now();
+    img.onload=()=>res({state:'ok',detail:`Loaded in ${Math.round(performance.now()-t0)} ms · ${img.naturalWidth}×${img.naturalHeight}px.`,label:'✓'});
+    img.onerror=()=>res({state:'bad',detail:'Asset failed to load — the logo path may be broken.',label:'✕'});
+    img.src=c.url+'?t='+Date.now();
+  });
+}
+async function checkScript(c){
+  return new Promise(res=>{
+    const s=document.createElement('script'); s.async=true; const t0=performance.now();
+    s.onload=()=>{ res({state:'ok',detail:`Widget script reachable in ${Math.round(performance.now()-t0)} ms. Chat is live.`,label:'✓'}); s.remove(); };
+    s.onerror=()=>{ res({state:'warn',detail:'Tawk.to script did not load — live chat may be offline.',label:'!'}); s.remove(); };
+    s.src=c.url;
+  });
+}
+
+async function runChecks(){
+  const box=document.getElementById('checks');
+  box.innerHTML = CHECKS.map(c=>card('load',c.name,'Checking…')).join('');
+  const results=[];
+  for(let i=0;i<CHECKS.length;i++){
+    const c=CHECKS[i];
+    const r = c.type==='page'?await checkPage(c):c.type==='asset'?await checkAsset(c):await checkScript(c);
+    results[i]=r;
+    box.children[i].outerHTML = card(r.state,c.name,r.detail,r.label);
+  }
+  setVerdict(results);
+  document.getElementById('ts').textContent = new Date().toLocaleString();
+  renderTasks(); renderLinks(); renderSupabase();
+}
+
+/* ---------- Supabase backend panel (data via /api/supabase) ---------- */
+function statTile(state,big,label){
+  return `<div class="check s-${state}"><div class="ico">${state==='ok'?'✓':state==='warn'?'!':state==='bad'?'✕':'…'}</div>
+    <div class="body"><div class="title" style="font-size:17px">${big}</div><div class="detail">${label}</div></div></div>`;
+}
+function fmtBytes(b){ if(b==null||isNaN(b)) return '—'; return b>=1e9?(b/1e9).toFixed(2)+' GB':b>=1e6?(b/1e6).toFixed(1)+' MB':(b/1e3).toFixed(0)+' KB'; }
+async function renderSupabase(){
+  const box=document.getElementById('supabase');
+  box.innerHTML = statTile('load','Loading…','Fetching project status');
+  try{
+    const r = await fetch('/api/supabase',{cache:'no-store'});
+    const d = await r.json();
+    if(!r.ok || d.ok===false){ box.innerHTML = statTile('bad', d.error||('HTTP '+r.status), 'Supabase — could not load'); return; }
+    const stOk = d.status && /active|healthy|ACTIVE_HEALTHY/i.test(d.status);
+    const tiles = [
+      ['ok',   (d.tier||'Free')+(d.tierInferred?' *':''), 'Plan / tier'],
+      ['ok',   d.computeSize||'—', 'Compute size'],
+      ['ok',   d.cpu||'—', 'CPU'],
+      ['ok',   d.ram||'—', 'RAM'],
+      ['ok',   fmtBytes(d.dbSizeBytes), 'Database size (used)'],
+      ['ok',   d.region||'—', 'Region'],
+      ['ok',   d.pgVersion?('Postgres '+d.pgVersion):'—', 'Version'],
+      [stOk?'ok':'warn', (d.status||'—').replace(/_/g,' '), 'Status'],
+    ];
+    box.innerHTML = tiles.map(t=>statTile(t[0],t[1],t[2])).join('');
+    if(d.tierInferred){ box.innerHTML += `<div class="check s-load" style="grid-column:1/-1"><div class="ico">*</div><div class="body"><div class="detail">Plan inferred from compute size (org plan not reported by API).</div></div></div>`; }
+    if(d.errors && d.errors.length){
+      box.innerHTML += `<div class="check s-warn" style="grid-column:1/-1"><div class="ico">!</div><div class="body"><div class="title">Some data unavailable</div><div class="detail">${d.errors.join(' · ')}</div></div></div>`;
+    }
+  }catch(e){ box.innerHTML = statTile('bad','Backend unreachable', '/api/supabase — '+e.message); }
+}
+
+function setVerdict(results){
+  const el=document.getElementById('verdict');
+  const t=document.getElementById('verdictText'), s=document.getElementById('verdictSub');
+  const bad = results.filter(r=>r.state==='bad').length;
+  const warn = results.filter(r=>r.state==='warn').length;
+  el.className='verdict '+(bad?'v-bad':warn?'v-warn':'v-ok');
+  if(bad){ t.textContent='Site has a problem'; s.textContent=`${bad} check(s) failing — see red items below.`; }
+  else if(warn){ t.textContent='Site is up — needs attention'; s.textContent=`${warn} item(s) to review below.`; }
+  else { t.textContent='Site is healthy'; s.textContent='All live checks passed.'; }
+}
+
+/* ---------- Open items (update as things get done) ---------- */
+const TASKS = [
+  { done:false, t:'Quote form → TurboRater', p:'The homepage quote form is temporarily wired to open the live chat / SMS. Rewire it to TurboRater for Websites ($145/mo) once the ITC embed code is obtained.' },
+  { done:false, t:'Live chat per-branch routing', p:'Each branch "Live Chat" button currently opens one shared widget and only tags a branch label. To route to each branch\'s own agents, create 4 Tawk widgets (one per branch) and switch widgets per button.' },
+  { done:false, t:'Google Business Profile — Owner role', p:'Manager access held on all Speedy profiles; still need the Owner-role upgrade on each.' },
+  { done:false, t:'Wix subscription audit', p:'Confirm nothing active (email lists, automations) is running on Wix Ascend, then cancel Ascend + Premium Core + App Site Booster.' },
+];
+function renderTasks(){
+  document.getElementById('tasks').innerHTML = TASKS.map(x=>`
+    <div class="task ${x.done?'done':''}">
+      <div class="h"><b>${x.t}</b><span class="pill ${x.done?'s-ok':'s-warn'}">${x.done?'Done':'Pending'}</span></div>
+      <p>${x.p}</p>
+    </div>`).join('');
+}
+
+/* ---------- Quick links ---------- */
+const LINKS = [
+  ['Live site','https://speedyins.com'],
+  ['Spanish site','https://speedyins.com/es.html'],
+  ['Ops dashboard','https://speedy-dashboard-tau.vercel.app'],
+  ['Agent Hub','https://speedy-hub.vercel.app'],
+  ['Tawk.to inbox','https://dashboard.tawk.to'],
+  ['Vercel project','https://vercel.com'],
+  ['GitHub repo','https://github.com/speedyinsadmin-alt/speedy-website'],
+  ['Book a call','https://calendly.com/speedyinsadmin/30min'],
+];
+function renderLinks(){
+  document.getElementById('links').innerHTML = LINKS.map(([n,u])=>
+    `<a href="${u}" target="_blank" rel="noopener">${n}<span>↗</span></a>`).join('');
+}
+</script>
+</body>
+</html>

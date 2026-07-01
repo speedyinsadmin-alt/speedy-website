@@ -196,27 +196,34 @@ async function checkAsset(c){
   });
 }
 async function checkScript(c){
-  return new Promise(res=>{
-    const s=document.createElement('script'); s.async=true; const t0=performance.now();
-    s.onload=()=>{ res({state:'ok',detail:`Widget script reachable in ${Math.round(performance.now()-t0)} ms. Chat is live.`,label:'✓'}); s.remove(); };
-    s.onerror=()=>{ res({state:'warn',detail:'Tawk.to script did not load — live chat may be offline.',label:'!'}); s.remove(); };
-    s.src=c.url;
-  });
+  const t0=performance.now();
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),7000);
+  try{
+    await fetch(c.url,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});
+    clearTimeout(timer);
+    return {state:'ok',detail:`Reachable in ${Math.round(performance.now()-t0)} ms · chat script is live.`,label:'✓'};
+  }catch(e){
+    clearTimeout(timer);
+    return {state:'warn',detail:'Could not confirm the chat script (blocked or timed out); chat may still be fine.',label:'!'};
+  }
 }
 
 async function runChecks(){
+  renderTasks(); renderLinks(); renderSupabase();   // independent — render immediately
   const box=document.getElementById('checks');
   box.innerHTML = CHECKS.map(c=>card('load',c.name,'Checking…')).join('');
   const results=[];
   for(let i=0;i<CHECKS.length;i++){
     const c=CHECKS[i];
-    const r = c.type==='page'?await checkPage(c):c.type==='asset'?await checkAsset(c):await checkScript(c);
+    let r;
+    try{ r = c.type==='page'?await checkPage(c):c.type==='asset'?await checkAsset(c):await checkScript(c); }
+    catch(e){ r={state:'bad',detail:'Check failed: '+e.message,label:'✕'}; }
     results[i]=r;
     box.children[i].outerHTML = card(r.state,c.name,r.detail,r.label);
   }
   setVerdict(results);
   document.getElementById('ts').textContent = new Date().toLocaleString();
-  renderTasks(); renderLinks(); renderSupabase();
 }
 
 /* ---------- Supabase backend panel (data via /api/supabase) ---------- */

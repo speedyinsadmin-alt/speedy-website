@@ -210,7 +210,8 @@ async function checkScript(c){
 }
 
 async function runChecks(){
-  renderTasks(); renderLinks(); renderSupabase();   // independent — render immediately
+  renderTasks(); renderLinks();
+  const sbPromise = renderSupabase();   // runs in parallel, result feeds the verdict
   const box=document.getElementById('checks');
   box.innerHTML = CHECKS.map(c=>card('load',c.name,'Checking…')).join('');
   const results=[];
@@ -222,6 +223,8 @@ async function runChecks(){
     results[i]=r;
     box.children[i].outerHTML = card(r.state,c.name,r.detail,r.label);
   }
+  try{ const sb = await sbPromise; if(sb) results.push(sb); }
+  catch(e){ results.push({state:'bad', detail:'Supabase check failed'}); }
   setVerdict(results);
   document.getElementById('ts').textContent = new Date().toLocaleString();
 }
@@ -238,8 +241,8 @@ async function renderSupabase(){
   try{
     const r = await fetch('/api/supabase',{cache:'no-store'});
     const d = await r.json();
-    if(!r.ok || d.ok===false){ box.innerHTML = statTile('bad', d.error||('HTTP '+r.status), 'Supabase — could not load'); return; }
-    const stOk = d.status && /active|healthy|ACTIVE_HEALTHY/i.test(d.status);
+    if(!r.ok || d.ok===false){ box.innerHTML = statTile('bad', d.error||('HTTP '+r.status), 'Supabase — could not load'); return {state:'bad'}; }
+    const stOk = d.status && /active|healthy|ACTIVE_HEALTHY/i.test(d.status) && !/inactive|paused|removed/i.test(d.status);
     const tiles = [
       ['ok',   (d.tier||'Free')+(d.tierInferred?' *':''), 'Plan / tier'],
       ['ok',   d.computeSize||'—', 'Compute size'],
@@ -248,14 +251,19 @@ async function renderSupabase(){
       ['ok',   fmtBytes(d.dbSizeBytes), 'Database size (used)'],
       ['ok',   d.region||'—', 'Region'],
       ['ok',   d.pgVersion?('Postgres '+d.pgVersion):'—', 'Version'],
-      [stOk?'ok':'warn', (d.status||'—').replace(/_/g,' '), 'Status'],
+      [stOk?'ok':'warn', (d.status||'—').replace(/_/g,' '), stOk?'Status':'Status — backend paused'],
     ];
     box.innerHTML = tiles.map(t=>statTile(t[0],t[1],t[2])).join('');
     if(d.tierInferred){ box.innerHTML += `<div class="check s-load" style="grid-column:1/-1"><div class="ico">*</div><div class="body"><div class="detail">Plan inferred from compute size (org plan not reported by API).</div></div></div>`; }
     if(d.errors && d.errors.length){
       box.innerHTML += `<div class="check s-warn" style="grid-column:1/-1"><div class="ico">!</div><div class="body"><div class="title">Some data unavailable</div><div class="detail">${d.errors.join(' · ')}</div></div></div>`;
     }
-  }catch(e){ box.innerHTML = statTile('bad','Backend unreachable', '/api/supabase — '+e.message); }
+    if(!stOk){
+      box.innerHTML += `<div class="check s-warn" style="grid-column:1/-1"><div class="ico">!</div><div class="body"><div class="title">Backend is paused</div><div class="detail">Supabase free tier auto-pauses after 7 days of inactivity. Unpause at supabase.com/dashboard/project/huvpitgappdqgavrqbud — data is safe, restore available for 90 days.</div></div></div>`;
+      return {state:'warn'};
+    }
+    return {state: (d.errors && d.errors.length) ? 'warn' : 'ok'};
+  }catch(e){ box.innerHTML = statTile('bad','Backend unreachable', '/api/supabase — '+e.message); return {state:'bad'}; }
 }
 
 function setVerdict(results){
@@ -265,8 +273,8 @@ function setVerdict(results){
   const warn = results.filter(r=>r.state==='warn').length;
   el.className='verdict '+(bad?'v-bad':warn?'v-warn':'v-ok');
   if(bad){ t.textContent='Site has a problem'; s.textContent=`${bad} check(s) failing — see red items below.`; }
-  else if(warn){ t.textContent='Site is up — needs attention'; s.textContent=`${warn} item(s) to review below.`; }
-  else { t.textContent='Site is healthy'; s.textContent='All live checks passed.'; }
+  else if(warn){ t.textContent='Site is up — needs attention'; s.textContent=`${warn} item(s) to review below (site pages are fine; see yellow items).`; }
+  else { t.textContent='Site is healthy'; s.textContent='All live checks passed — website and backend.'; }
 }
 
 /* ---------- Open items (update as things get done) ---------- */

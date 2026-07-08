@@ -255,6 +255,7 @@ async function renderSupabase(){
     ];
     box.innerHTML = tiles.map(t=>statTile(t[0],t[1],t[2])).join('');
     if(d.tierInferred){ box.innerHTML += `<div class="check s-load" style="grid-column:1/-1"><div class="ico">*</div><div class="body"><div class="detail">Plan inferred from compute size (org plan not reported by API).</div></div></div>`; }
+    box.innerHTML += `<div class="check s-ok" style="grid-column:1/-1"><div class="ico">✓</div><div class="body"><div class="title">Pro plan — active since Jul 8, 2026</div><div class="detail">$25/mo flat · spend cap ON · Micro compute (covered by $10/mo plan credit) · daily backups, 7-day retention · no auto-pause · billing under speedyinsadmin-alt's Org → Billing.</div></div></div>`;
     if(d.errors && d.errors.length){
       box.innerHTML += `<div class="check s-warn" style="grid-column:1/-1"><div class="ico">!</div><div class="body"><div class="title">Some data unavailable</div><div class="detail">${d.errors.join(' · ')}</div></div></div>`;
     }
@@ -279,6 +280,7 @@ function setVerdict(results){
 
 /* ---------- Open items (update as things get done) ---------- */
 const TASKS = [
+  { done:true, t:'Supabase upgraded to Pro \u2014 backend pause fixed permanently', p:'Free tier auto-paused the project Jul 8 after 7 days idle. Restored same day and upgraded org to Pro: $25/mo flat with spend cap ON, compute bumped Nano \u2192 Micro (covered by the $10/mo plan credit), daily backups included. Free tier can no longer pause us.' },
   { done:true, t:'Yolanda added to Tawk Moreno Valley department', p:'Invite accepted and department assignment completed (7/7/2026). All four branch departments now fully staffed: Moreno Valley \u2014 Sammy, Laura, Jorge, Yolanda.' },
   { done:false, t:'GoTo Connect \u2014 awaiting vendor reply', p:'Email sent (7/7/2026) to Sutton Talbott and Sky Hunt requesting GoTo lead the HawkSoft vendor conversation on the screen-pop issue. Waiting on response; screen pop remains a deal breaker.' },
   { done:false, t:'T8 renewal template \u2014 agent testing', p:'Agents are testing the Renewal Coverage Summary template in HawkSoft. Collect feedback and verify merge fields for the bracketed vehicle/premium placeholders.' },

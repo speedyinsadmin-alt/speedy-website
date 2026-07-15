@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Speedy Admin — HawkSoft API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --red:#D42B2B; --red-light:#ff4d4d; --navy:#0B1829; --navy-2:#12233b;
+    --blue:#1A4FA0; --blue-light:#2E6BD4; --white:#fff; --mute:#8aa0bd;
+    --success:#22C55E; --warning:#F59E0B; --line:rgba(255,255,255,.09);
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Outfit',sans-serif;background:var(--navy);color:#e8eef7;
+    min-height:100vh;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue-light);text-decoration:none}
+  .display{font-family:'Bebas Neue',sans-serif;letter-spacing:.5px;line-height:.95}
+
+  #lock{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1200px 600px at 50% -10%,#16345c 0%,var(--navy) 60%);z-index:50;padding:24px}
+  #lock .card{width:100%;max-width:380px;text-align:center}
+  #lock img{width:210px;max-width:70%;height:auto;margin:0 auto 26px;display:block}
+  #lock h1{font-size:30px;color:#fff;margin-bottom:6px}
+  #lock p{color:var(--mute);font-size:14px;margin-bottom:22px}
+  #lock input{width:100%;padding:14px 16px;border-radius:10px;border:1px solid var(--line);
+    background:var(--navy-2);color:#fff;font-size:16px;font-family:'Outfit';outline:none}
+  #lock input:focus{border-color:var(--blue-light)}
+  #lock button{width:100%;margin-top:12px;padding:14px;border:none;border-radius:10px;cursor:pointer;
+    background:var(--red);color:#fff;font-weight:700;font-size:16px;letter-spacing:.3px}
+  #lock button:hover{background:var(--red-light)}
+  #lockErr{color:var(--red-light);font-size:13px;margin-top:12px;min-height:18px}
+
+  #app{display:none;max-width:1040px;margin:0 auto;padding:28px 20px 80px}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:26px;flex-wrap:wrap}
+  header.top img{height:40px;width:auto}
+  header.top .r{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .btn{background:var(--navy-2);border:1px solid var(--line);color:#cfe0f5;
+    padding:9px 15px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit'}
+  .btn:hover{border-color:var(--blue-light);color:#fff}
+
+  .verdict{border-radius:var(--radius);padding:22px 24px;margin-bottom:26px;
+    display:flex;align-items:center;gap:18px;border:1px solid var(--line);background:var(--navy-2)}
+  .verdict .dot{width:16px;height:16px;border-radius:50%;flex:none;box-shadow:0 0 0 6px rgba(255,255,255,.05)}
+  .verdict h2{font-size:34px;color:#fff}
+  .verdict small{color:var(--mute);font-size:13px;display:block;margin-top:2px}
+  .v-ok .dot{background:var(--success)} .v-warn .dot{background:var(--warning)}
+  .v-bad .dot{background:var(--red-light)} .v-load .dot{background:var(--mute)}
+
+  .eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--mute);
+    font-weight:700;margin:30px 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+
+  .stat{background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px}
+  .stat .n{font-family:'Bebas Neue';font-size:44px;color:#fff;line-height:1}
+  .stat .l{color:var(--mute);font-size:13px;margin-top:6px;font-weight:600}
+
+  .check{background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 18px;display:flex;gap:14px;align-items:flex-start}
+  .check .ico{width:34px;height:34px;border-radius:9px;flex:none;display:flex;align-items:center;
+    justify-content:center;font-weight:800;font-size:15px}
+  .check .body{flex:1;min-width:0}
+  .check .title{font-weight:700;color:#fff;font-size:15px;display:flex;justify-content:space-between;gap:8px}
+  .check .detail{color:var(--mute);font-size:13px;margin-top:3px;word-break:break-word}
+  .pill{font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 9px;border-radius:20px;flex:none;text-transform:uppercase}
+  .s-ok{background:rgba(34,197,94,.15);color:#4ade80} .s-ok .ico{background:rgba(34,197,94,.15);color:#4ade80}
+  .s-warn{background:rgba(245,158,11,.15);color:#fbbf24} .s-warn .ico{background:rgba(245,158,11,.15);color:#fbbf24}
+  .s-bad{background:rgba(212,43,43,.18);color:#ff6b6b} .s-bad .ico{background:rgba(212,43,43,.18);color:#ff6b6b}
+  .s-load{background:rgba(138,160,189,.15);color:var(--mute)} .s-load .ico{background:rgba(138,160,189,.12);color:var(--mute)}
+
+  .note{background:var(--navy-2);border:1px solid var(--line);border-left:3px solid var(--blue-light);
+    border-radius:10px;padding:14px 16px;color:var(--mute);font-size:13px;line-height:1.6;margin-top:26px}
+  .note b{color:#cfe0f5}
+  footer{color:var(--mute);font-size:12px;margin-top:36px;text-align:center;line-height:1.7}
+  @media(max-width:560px){.verdict h2{font-size:26px}}
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div id="lock">
+  <div class="card">
+    <img src="/assets/logo.png" alt="Speedy Insurance">
+    <h1 class="display">HawkSoft API</h1>
+    <p>Live Partner API dashboard — staff only</p>
+    <input id="pw" type="password" placeholder="Enter password" autocomplete="off">
+    <button onclick="tryUnlock()">Unlock</button>
+    <div id="lockErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="top">
+    <img src="/assets/logo.png" alt="Speedy">
+    <div class="r">
+      <a class="btn" href="/admin/">← Site health</a>
+      <button class="btn" onclick="load()">↻ Refresh</button>
+      <button class="btn" onclick="lockNow()">Lock</button>
+    </div>
+  </header>
+
+  <div id="verdict" class="verdict v-load">
+    <div class="dot"></div>
+    <div>
+      <h2 class="display" id="verdictText">Connecting to HawkSoft…</h2>
+      <small id="verdictSub">Calling the Partner API (v4.0)</small>
+    </div>
+  </div>
+
+  <div class="eyebrow">Book of business</div>
+  <div class="grid3" id="stats">
+    <div class="stat"><div class="n">—</div><div class="l">Loading…</div></div>
+  </div>
+
+  <div class="eyebrow">Connection &amp; scopes</div>
+  <div class="grid" id="conn"></div>
+
+  <div class="eyebrow">Offices in HawkSoft</div>
+  <div class="grid" id="offices"></div>
+
+  <div class="note">
+    <b>What this page shows:</b> live, non-client data from the HawkSoft Partner API — connection status,
+    enabled scopes, office configuration, and client counts. By design it shows <b>no client names, contacts,
+    or policy details</b>; client-level views will only be added behind real server-side authentication.
+    "Changed" counts include new and updated client records.
+  </div>
+
+  <footer>
+    Speedy Insurance Agency — internal admin. Agency ID 15112 · API v4.0 · Last checked: <span id="ts">—</span><br>
+    This page is client-side only; the password is light protection, not a secure login.
+  </footer>
+</div>
+
+<script>
+/* ===== CONFIG — same password as the main admin page ===== */
+const ADMIN_PW = "speedyadmin2024";
+
+/* ---------- Lock (shares the session with /admin) ---------- */
+if (sessionStorage.getItem('spadmin') === '1') showApp();
+function tryUnlock(){
+  const v = document.getElementById('pw').value;
+  if (v === ADMIN_PW){ sessionStorage.setItem('spadmin','1'); showApp(); }
+  else { document.getElementById('lockErr').textContent = 'Incorrect password. Try again.'; }
+}
+document.getElementById('pw').addEventListener('keydown',e=>{ if(e.key==='Enter') tryUnlock(); });
+function showApp(){ document.getElementById('lock').style.display='none';
+  document.getElementById('app').style.display='block'; load(); }
+function lockNow(){ sessionStorage.removeItem('spadmin'); location.reload(); }
+
+/* ---------- Rendering helpers ---------- */
+const fmt = n => (n==null ? '—' : n.toLocaleString('en-US'));
+function card(state, name, detail, label){
+  return `<div class="check s-${state}">
+    <div class="ico">${label||'…'}</div>
+    <div class="body">
+      <div class="title">${name}<span class="pill s-${state}">${
+        state==='ok'?'OK':state==='warn'?'Check':state==='bad'?'Down':'…'}</span></div>
+      <div class="detail">${detail}</div>
+    </div></div>`;
+}
+const SCOPE_NAMES = {
+  'client-read':'Read Client/Policy Data',
+  'create-log-attachment-task':'Create Logs, Attachments & Tasks',
+  'client-create':'Create Clients & Policies',
+  'receipts':'Receipts (accounting)',
+  'invoices':'Invoices (accounting)',
+};
+/* Branches we EXPECT to exist as offices in HawkSoft */
+const EXPECTED_BRANCHES = ['Moreno Valley','Van Buren / Riverside 1','Magnolia / Riverside 2','Lake Elsinore'];
+
+/* ---------- Load ---------- */
+async function load(){
+  const verdict=document.getElementById('verdict');
+  const vt=document.getElementById('verdictText'), vs=document.getElementById('verdictSub');
+  verdict.className='verdict v-load'; vt.textContent='Connecting to HawkSoft…'; vs.textContent='Calling the Partner API (v4.0)';
+  document.getElementById('ts').textContent = new Date().toLocaleString('en-US',{timeZone:'America/Los_Angeles'});
+
+  let d;
+  try{
+    const r = await fetch('/api/hawksoft',{cache:'no-store'});
+    d = await r.json();
+  }catch(e){
+    verdict.className='verdict v-bad'; vt.textContent='API unreachable';
+    vs.textContent='/api/hawksoft — '+e.message;
+    return;
+  }
+
+  /* Verdict */
+  if(d.ok && d.subscribed){
+    const warn = (d.errors && d.errors.length) || !hasAllOffices(d);
+    verdict.className='verdict '+(warn?'v-warn':'v-ok');
+    vt.textContent = warn ? 'API connected — items to review' : 'HawkSoft API is live';
+    vs.textContent = `Agency ${d.agencyId} · ${ (d.scopes||[]).length } scopes enabled` + (d.errors && d.errors.length ? ' · '+d.errors.join(' · ') : '');
+  }else{
+    verdict.className='verdict v-bad'; vt.textContent='API problem';
+    vs.textContent = (d.errors && d.errors.join(' · ')) || 'Not subscribed or credentials rejected. Check Vercel env vars HAWKSOFT_CLIENT_ID / HAWKSOFT_SECRET.';
+  }
+
+  /* Stats */
+  const c = d.clients || {};
+  document.getElementById('stats').innerHTML =
+    `<div class="stat"><div class="n">${fmt(c.total)}</div><div class="l">Total clients in HawkSoft</div></div>
+     <div class="stat"><div class="n">${fmt(c.changedToday)}</div><div class="l">Clients changed today</div></div>
+     <div class="stat"><div class="n">${fmt(c.changedLast7Days)}</div><div class="l">Clients changed — last 7 days</div></div>`;
+
+  /* Connection & scopes */
+  let conn = '';
+  conn += card(d.subscribed?'ok':'bad','Subscription',
+    d.subscribed ? 'Speedy Insurance Agency (Private API Access) — subscribed and sharing data.' :
+    'Agency 15112 not returned by the API — check Marketplace subscription.', d.subscribed?'✓':'✕');
+  const scopes = d.scopes || [];
+  conn += card(scopes.length?'ok':'bad','Enabled scopes',
+    scopes.length ? scopes.map(s=>SCOPE_NAMES[s]||s).join(' · ') : 'No scopes returned.', scopes.length);
+  const hasAccounting = scopes.some(s=>/receipt|invoice|accounting/i.test(s));
+  conn += card(hasAccounting?'ok':'warn','Accounting scope',
+    hasAccounting ? 'Read/Write Accounting enabled.' :
+    'Intentionally OFF until the Clover/RevitPay payment integration is built. Toggle in Marketplace → Manage Scopes when ready.', hasAccounting?'✓':'!');
+  document.getElementById('conn').innerHTML = conn;
+
+  /* Offices */
+  let off = '';
+  (d.offices||[]).forEach(o=>{
+    off += card('ok', `${o.name}${o.primary?' · primary':''}`, `Office ID ${o.id} — ${o.address||'no address on file'}`, o.id);
+  });
+  if(!hasLakeElsinore(d)){
+    off += card('warn','Lake Elsinore — missing from HawkSoft',
+      'Not configured as an office (31948 Mission Trail Ste B). Add it in HawkSoft Setup → Offices, or that branch can never be attributed in any integration.','!');
+  }
+  if(hasVanBurenMismatch(d)){
+    off += card('warn','Van Buren address — confirm street number',
+      'HawkSoft shows 2995 Van Buren Blvd; agency records say 2955. Confirm the correct number and fix whichever is wrong (affects GBP, website, mail).','!');
+  }
+  document.getElementById('offices').innerHTML = off || card('warn','No offices returned','The offices endpoint returned no data.','!');
+}
+
+function hasLakeElsinore(d){
+  return (d.offices||[]).some(o=>/elsinore/i.test(o.name)||/mission trail/i.test(o.address||''));
+}
+function hasVanBurenMismatch(d){
+  return (d.offices||[]).some(o=>/van buren/i.test(o.address||'') && /2995/.test(o.address||''));
+}
+function hasAllOffices(d){ return hasLakeElsinore(d) && !hasVanBurenMismatch(d); }
+</script>
+</body>
+</html>

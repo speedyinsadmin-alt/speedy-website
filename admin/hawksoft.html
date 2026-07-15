@@ -124,6 +124,29 @@
   <div class="eyebrow">Offices in HawkSoft</div>
   <div class="grid" id="offices"></div>
 
+  <div class="eyebrow">Test Lab — write actions (API key required)</div>
+  <div id="lab" style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <input id="labKey" type="password" placeholder="Admin API key" autocomplete="off"
+        style="flex:1;min-width:200px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="labClient" type="number" placeholder="Client # (for log/lookup)"
+        style="width:190px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" onclick="lab('create_test_client')">🧪 Create TEST client</button>
+      <button class="btn" onclick="lab('add_log')">📝 Add log note</button>
+      <button class="btn" onclick="lab('add_log',{withTask:true})">📋 Add log + task (CSR)</button>
+      <button class="btn" onclick="lab('lookup_client')">🔍 Lookup client (masked)</button>
+    </div>
+    <pre id="labOut" style="margin-top:14px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
+      padding:14px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto;display:none"></pre>
+    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
+      Actions run server-side and require the admin API key (checked against Vercel env — never stored in this page).
+      The test client is named <b style="color:#cfe0f5">ZZTEST DELETE ME - API TEST</b> and lands in Moreno Valley as a Lead.
+      Lookup returns a <b style="color:#cfe0f5">masked</b> field map (letters→X, digits→#) — structure and formats, no readable PII.
+    </div>
+  </div>
+
   <div class="note">
     <b>What this page shows:</b> live, non-client data from the HawkSoft Partner API — connection status,
     enabled scopes, office configuration, and client counts. By design it shows <b>no client names, contacts,
@@ -246,6 +269,43 @@ function hasVanBurenMismatch(d){
   return (d.offices||[]).some(o=>/van buren/i.test(o.address||'') && /2995/.test(o.address||''));
 }
 function hasAllOffices(d){ return hasLakeElsinore(d) && !hasVanBurenMismatch(d); }
+
+/* ---------- Test Lab ---------- */
+if (sessionStorage.getItem('splabkey')) {
+  window.addEventListener('DOMContentLoaded', ()=>{ document.getElementById('labKey').value = sessionStorage.getItem('splabkey'); });
+}
+async function lab(action, extra){
+  const key = document.getElementById('labKey').value.trim();
+  const out = document.getElementById('labOut');
+  out.style.display='block';
+  if(!key){ out.textContent = '⚠ Enter the admin API key first.'; return; }
+  sessionStorage.setItem('splabkey', key);
+
+  const body = { action, ...(extra||{}) };
+  if(action==='add_log' || action==='lookup_client'){
+    const cid = document.getElementById('labClient').value.trim();
+    if(!cid){ out.textContent = '⚠ Enter a client # first (use the number returned by Create TEST client).'; return; }
+    body.clientId = cid;
+  }
+  if(action==='create_test_client' && !confirm('Create a TEST client (ZZTEST DELETE ME) in HawkSoft — Moreno Valley, status Lead?')) return;
+
+  out.textContent = '⏳ Running '+action+'…';
+  try{
+    const r = await fetch('/api/hawksoft',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-admin-key':key},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    let head = d.ok ? '✅ Success' : '❌ Failed';
+    if(d.httpStatus) head += ' — HawkSoft HTTP '+d.httpStatus;
+    if(action==='create_test_client' && d.ok && d.result && d.result.clientNumber!=null){
+      head += '\n🎯 New client number: '+d.result.clientNumber+' (auto-filled below — open HawkSoft and search ZZTEST)';
+      document.getElementById('labClient').value = d.result.clientNumber;
+    }
+    out.textContent = head + '\n\n' + JSON.stringify(d.result ?? d, null, 2);
+  }catch(e){ out.textContent = '❌ Request error: '+e.message; }
+}
 </script>
 </body>
 </html>

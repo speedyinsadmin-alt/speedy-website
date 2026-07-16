@@ -101,6 +101,50 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, httpStatus: 200, result: mask(r.body) });
     }
 
+    if (action === 'search_policy') {
+      const pol = String((req.body || {}).policyNumber || '').trim();
+      if (!pol) return res.status(400).json({ ok: false, error: 'policyNumber required' });
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/clients/search?version=4.0&policyNumber=${encodeURIComponent(pol)}&include=Details`, {});
+      if (r.status !== 200) return res.status(200).json({ ok: false, httpStatus: r.status, result: r.body });
+      const matches = Array.isArray(r.body) ? r.body : [];
+      // Return only client numbers + office — no PII.
+      return res.status(200).json({
+        ok: true, httpStatus: 200,
+        result: { matches: matches.length, clients: matches.map(c => ({ clientNumber: c.clientNumber, officeId: c.details && c.details.officeId })) },
+      });
+    }
+
+    if (action === 'attach_file') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      if (!clientId) return res.status(400).json({ ok: false, error: 'clientId required' });
+      const ext = String(b.fileExt || '').toLowerCase().replace(/^\./, '');
+      if (!['pdf', 'jpg', 'jpeg', 'png', 'mp3'].includes(ext)) {
+        return res.status(400).json({ ok: false, error: 'File type must be pdf, jpg, jpeg, png, or mp3' });
+      }
+      if (!b.data) return res.status(400).json({ ok: false, error: 'File data missing' });
+      const buf = Buffer.from(b.data, 'base64');
+      if (buf.length > 5 * 1024 * 1024) return res.status(400).json({ ok: false, error: 'File exceeds HawkSoft 5 MB limit' });
+      const name = String(b.fileName || 'upload').replace(/\.[^.]+$/, '').slice(0, 100) || 'upload';
+      const desc = String(b.desc || 'Uploaded via Speedy admin drop zone').slice(0, 200);
+      const b64 = s => Buffer.from(s, 'utf8').toString('base64');
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          RefId: crypto.randomUUID(),
+          TS: new Date().toISOString(),
+          Desc: b64(desc),
+          LogNote: b64(`File "${name}.${ext}" uploaded via Speedy admin drop zone. ${desc}`),
+          FileName: b64(name),
+          FileExt: ext,
+          Channel: '31', // Online From Agency Staff
+        },
+        body: buf,
+      });
+      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, result: r.body });
+    }
+
     return res.status(400).json({ ok: false, error: 'Unknown action' });
   }
 

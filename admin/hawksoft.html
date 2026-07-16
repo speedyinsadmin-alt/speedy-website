@@ -147,6 +147,32 @@
     </div>
   </div>
 
+  <div class="eyebrow">Send a file to a client — drop zone</div>
+  <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div id="dz" style="border:2px dashed rgba(255,255,255,.2);border-radius:12px;padding:26px;text-align:center;color:var(--mute);
+      font-size:14px;cursor:pointer;transition:border-color .15s" onclick="document.getElementById('dzFile').click()">
+      📄 Drop a file here or tap to choose<br>
+      <span style="font-size:12px">pdf · jpg · png · mp3 — up to ~3 MB</span>
+      <div id="dzName" style="margin-top:8px;color:#cfe0f5;font-weight:600"></div>
+    </div>
+    <input id="dzFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.mp3" style="display:none">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+      <input id="dzPolicy" placeholder="Policy # (find client)" style="flex:1;min-width:160px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <button class="btn" onclick="dzSearch()">Find client</button>
+      <input id="dzClient" type="number" placeholder="Client #" style="width:140px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+      <input id="dzDesc" placeholder="Description (e.g. Dec page 2026 renewal)" style="flex:1;min-width:200px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <button class="btn" style="background:var(--red);border-color:var(--red);color:#fff" onclick="dzSend()">⬆ Send to HawkSoft</button>
+    </div>
+    <pre id="dzOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
+      padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
+    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
+      Uses the same admin API key from the Test Lab above. Enter a client # directly, or type a policy # and hit
+      <b style="color:#cfe0f5">Find client</b>. The file lands in the client's Attachments tab with a log note.
+    </div>
+  </div>
+
   <div class="note">
     <b>What this page shows:</b> live, non-client data from the HawkSoft Partner API — connection status,
     enabled scopes, office configuration, and client counts. By design it shows <b>no client names, contacts,
@@ -305,6 +331,75 @@ async function lab(action, extra){
     }
     out.textContent = head + '\n\n' + JSON.stringify(d.result ?? d, null, 2);
   }catch(e){ out.textContent = '❌ Request error: '+e.message; }
+}
+
+/* ---------- Drop zone ---------- */
+let dzPicked = null;
+const dzEl = document.getElementById('dz');
+document.getElementById('dzFile').addEventListener('change', e=>{ dzSet(e.target.files[0]); });
+dzEl.addEventListener('dragover', e=>{ e.preventDefault(); dzEl.style.borderColor='var(--blue-light)'; });
+dzEl.addEventListener('dragleave', ()=>{ dzEl.style.borderColor='rgba(255,255,255,.2)'; });
+dzEl.addEventListener('drop', e=>{ e.preventDefault(); dzEl.style.borderColor='rgba(255,255,255,.2)'; dzSet(e.dataTransfer.files[0]); });
+function dzSet(f){
+  if(!f) return;
+  const ext = (f.name.split('.').pop()||'').toLowerCase();
+  const okTypes = ['pdf','jpg','jpeg','png','mp3'];
+  const out = document.getElementById('dzOut');
+  if(!okTypes.includes(ext)){ out.style.display='block'; out.textContent='⚠ '+ext+' not supported — pdf, jpg, png, or mp3 only.'; return; }
+  if(f.size > 3.2*1024*1024){ out.style.display='block'; out.textContent='⚠ File is '+(f.size/1048576).toFixed(1)+' MB — over the ~3 MB upload limit. Compress it first.'; return; }
+  dzPicked = f;
+  document.getElementById('dzName').textContent = '✓ '+f.name+' ('+(f.size/1024).toFixed(0)+' KB)';
+}
+async function dzApi(body){
+  const key = document.getElementById('labKey').value.trim();
+  if(!key) throw new Error('Enter the admin API key in the Test Lab section above first.');
+  sessionStorage.setItem('splabkey', key);
+  const r = await fetch('/api/hawksoft',{method:'POST',
+    headers:{'Content-Type':'application/json','x-admin-key':key}, body: JSON.stringify(body)});
+  return r.json();
+}
+async function dzSearch(){
+  const out = document.getElementById('dzOut'); out.style.display='block';
+  const pol = document.getElementById('dzPolicy').value.trim();
+  if(!pol){ out.textContent='⚠ Enter a policy # first.'; return; }
+  out.textContent='⏳ Searching…';
+  try{
+    const d = await dzApi({action:'search_policy', policyNumber:pol});
+    if(d.ok && d.result && d.result.matches===1){
+      document.getElementById('dzClient').value = d.result.clients[0].clientNumber;
+      out.textContent='✅ Found — client #'+d.result.clients[0].clientNumber+' (office '+d.result.clients[0].officeId+'). Ready to send.';
+    }else if(d.ok && d.result && d.result.matches>1){
+      out.textContent='⚠ '+d.result.matches+' clients match that policy #: '+d.result.clients.map(c=>'#'+c.clientNumber).join(', ')+' — enter the right one manually.';
+    }else if(d.ok){
+      out.textContent='❌ No client found with that policy # (exact match only).';
+    }else{
+      out.textContent='❌ Search failed — HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d,null,2);
+    }
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
+async function dzSend(){
+  const out = document.getElementById('dzOut'); out.style.display='block';
+  const cid = document.getElementById('dzClient').value.trim();
+  if(!dzPicked){ out.textContent='⚠ Pick a file first.'; return; }
+  if(!cid){ out.textContent='⚠ Enter a client # (or use Find client with a policy #).'; return; }
+  out.textContent='⏳ Uploading '+dzPicked.name+' to client #'+cid+'…';
+  try{
+    const b64 = await new Promise((res,rej)=>{
+      const r = new FileReader();
+      r.onload = ()=>res(r.result.split(',')[1]);
+      r.onerror = ()=>rej(new Error('Could not read file'));
+      r.readAsDataURL(dzPicked);
+    });
+    const d = await dzApi({action:'attach_file', clientId:cid,
+      fileName:dzPicked.name, fileExt:dzPicked.name.split('.').pop(),
+      desc:document.getElementById('dzDesc').value.trim(), data:b64});
+    if(d.ok){
+      out.textContent='✅ Sent — HawkSoft HTTP '+d.httpStatus+(d.httpStatus===202?' (queued; appears next time the agency syncs to cloud)':'')+'\nCheck client #'+cid+' → Attachments tab.';
+      dzPicked=null; document.getElementById('dzName').textContent=''; document.getElementById('dzFile').value='';
+    }else{
+      out.textContent='❌ Upload failed — HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2);
+    }
+  }catch(e){ out.textContent='❌ '+e.message; }
 }
 </script>
 </body>

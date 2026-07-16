@@ -125,6 +125,9 @@ export default async function handler(req, res) {
       if (!b.data) return res.status(400).json({ ok: false, error: 'File data missing' });
       const buf = Buffer.from(b.data, 'base64');
       if (buf.length > 5 * 1024 * 1024) return res.status(400).json({ ok: false, error: 'File exceeds HawkSoft 5 MB limit' });
+      // HawkSoft's endpoint gzip-decompresses the body (undocumented — learned from their stack trace).
+      const { gzipSync } = await import('node:zlib');
+      const gz = gzipSync(buf);
       const name = String(b.fileName || 'upload').replace(/\.[^.]+$/, '').slice(0, 100) || 'upload';
       const desc = String(b.desc || 'Uploaded via Speedy admin drop zone').slice(0, 200);
       const b64 = s => Buffer.from(s, 'utf8').toString('base64');
@@ -140,7 +143,7 @@ export default async function handler(req, res) {
           FileExt: ext,
           Channel: '31', // Online From Agency Staff
         },
-        body: buf,
+        body: gz,
       });
       return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, result: r.body });
     }

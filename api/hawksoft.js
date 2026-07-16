@@ -350,10 +350,41 @@ export default async function handler(req, res) {
         refId: crypto.randomUUID(),
         ts: now.toISOString(),
         channel: 31,
-        note: 'SMART INTAKE (TEST) — Dec page received and filed. Extracted: Carrier: Kemper Auto | Policy #: ZZT-PA-2026-0001 | LOB: Personal Auto | Named insured: ZZTEST DELETE ME - API TEST | Term: 08/01/2026–02/01/2027 (6 mo) | Premium: $1,842.00 | Vehicle: 2018 Toyota Camry LE | BI 25/50, PD 25k, UM 25/50, Comp/Coll $500 ded. PDF attached to this client. Values below are ready to enter in CMS.',
+        note: 'SMART INTAKE (TEST) \u2014 Dec page received, filed to attachments.\n'
+          + 'EXTRACTED VALUES \u2014 double-click a value to copy:\n'
+          + '\n'
+          + 'Policy #: ZZT-PA-2026-0001\n'
+          + 'Carrier: Kemper Auto\n'
+          + 'LOB: Personal Auto\n'
+          + 'Effective: 08/01/2026\n'
+          + 'Expiration: 02/01/2027\n'
+          + 'Term: 6 months\n'
+          + 'Premium: 1842.00\n'
+          + 'Named insured: ZZTEST DELETE ME - API TEST\n'
+          + 'Vehicle: 2018 Toyota Camry LE\n'
+          + 'VIN: 4T1B11HK5JU999999\n'
+          + 'BI: 25/50\n'
+          + 'PD: 25000\n'
+          + 'UM: 25/50\n'
+          + 'Comp ded: 500\n'
+          + 'Coll ded: 500',
         task: {
           title: 'Enter policy from attached dec (TEST)',
-          description: 'TEST of the smart-intake pipeline — no real policy exists.\n\nEnter in CMS from the attached dec page:\n• Carrier: Kemper Auto\n• Policy #: ZZT-PA-2026-0001\n• LOB: Personal Auto\n• Effective: 08/01/2026  Expires: 02/01/2027\n• Premium (6 mo): $1,842.00\n• Vehicle: 2018 Toyota Camry LE, VIN 4T1B11HK5JU999999\n• BI 25/50 | PD 25k | UM 25/50 | Comp/Coll $500 ded\n\nWhen live, these values arrive pre-extracted from any carrier\u2019s dec page automatically.',
+          description: 'TEST of the smart-intake pipeline \u2014 no real policy exists.\n'
+            + 'Enter in CMS \u2014 one value per line, ready to copy:\n'
+            + '\n'
+            + 'Policy #: ZZT-PA-2026-0001\n'
+            + 'Carrier: Kemper Auto\n'
+            + 'LOB: Personal Auto\n'
+            + 'Effective: 08/01/2026\n'
+            + 'Expiration: 02/01/2027\n'
+            + 'Premium: 1842.00\n'
+            + 'Vehicle: 2018 Toyota Camry LE\n'
+            + 'VIN: 4T1B11HK5JU999999\n'
+            + 'BI: 25/50 | PD: 25000 | UM: 25/50\n'
+            + 'Comp/Coll ded: 500\n'
+            + '\n'
+            + 'Dec page PDF is in the client\u2019s Attachments tab.',
           dueDate: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
           assignedToRole: 'SpecifiedUser',
           assignedToEmail: email,

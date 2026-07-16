@@ -148,6 +148,55 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, result: r.body });
     }
 
+    if (action === 'clover_payments') {
+      const MID = process.env.CLOVER_MERCHANT_ID;
+      const CTOK = process.env.CLOVER_API_TOKEN;
+      if (!MID || !CTOK) return res.status(500).json({ ok: false, error: 'Missing CLOVER_MERCHANT_ID or CLOVER_API_TOKEN env var' });
+      const limit = Math.min(parseInt((req.body || {}).limit, 10) || 10, 25);
+      const r = await fetch(
+        `https://api.clover.com/v3/merchants/${MID}/payments?limit=${limit}&orderBy=createdTime%20DESC&expand=employee,order,tender`,
+        { headers: { Authorization: `Bearer ${CTOK}` } }
+      );
+      const body = await r.json().catch(() => null);
+      if (!r.ok) return res.status(200).json({ ok: false, httpStatus: r.status, result: body });
+      const payments = ((body && body.elements) || []).map(p => ({
+        id: p.id,
+        amount: (p.amount || 0) / 100,
+        currency: p.currency || 'USD',
+        created: p.createdTime ? new Date(p.createdTime).toISOString() : null,
+        result: p.result,
+        device: p.device && p.device.id || null,
+        employee: p.employee && (p.employee.name || p.employee.id) || null,
+        orderId: p.order && p.order.id || null,
+        tender: p.tender && (p.tender.label || p.tender.labelKey) || null,
+        note: p.note || null,
+      }));
+      return res.status(200).json({ ok: true, httpStatus: 200, result: { count: payments.length, payments } });
+    }
+
+    if (action === 'create_receipt') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      const amount = parseFloat(b.amount);
+      if (!clientId) return res.status(400).json({ ok: false, error: 'clientId required' });
+      if (!amount || amount <= 0 || amount > 10000) return res.status(400).json({ ok: false, error: 'amount must be between 0.01 and 10000' });
+      const note = String(b.note || '').slice(0, 500) || `Payment receipt recorded via Speedy admin (${amount.toFixed(2)} USD)`;
+      const payload = [{
+        refId: crypto.randomUUID(),
+        ts: new Date().toISOString(),
+        policyId: null,
+        officeId: b.officeId ? parseInt(b.officeId, 10) : null,
+        channel: 21, // Walk In From Insured — typical counter payment
+        payMethod: b.payMethod || undefined,
+        logNote: note,
+        total: amount,
+      }];
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      return res.status(200).json({ ok: r.status === 200, httpStatus: r.status, result: r.body });
+    }
+
     return res.status(400).json({ ok: false, error: 'Unknown action' });
   }
 

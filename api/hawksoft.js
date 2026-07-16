@@ -396,6 +396,93 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, result: r.body });
     }
 
+    if (action === 'create_client') {
+      const b = req.body || {};
+      const first = String(b.firstName || '').trim().slice(0, 14);
+      const last = String(b.lastName || '').trim().slice(0, 24);
+      if (!first || !last) return res.status(400).json({ ok: false, error: 'firstName and lastName required' });
+      const officeId = parseInt(b.officeId, 10);
+      if (!officeId && officeId !== 0) return res.status(400).json({ ok: false, error: 'officeId required' });
+      const contacts = [];
+      if (b.phone) contacts.push({ type: 'CellPhone', value: String(b.phone).trim().slice(0, 128) });
+      if (b.email) contacts.push({ type: 'HomeEmail', value: String(b.email).trim().slice(0, 128) });
+      const payload = {
+        officeId,
+        status: ['Active', 'Lead', 'Prospect'].includes(b.status) ? b.status : 'Lead',
+        source: String(b.source || 'Speedy Intake').trim().slice(0, 14),
+        people: [{
+          firstName: first,
+          lastName: last,
+          mainContactType: 'First',
+          ...(b.dob ? { dateOfBirth: String(b.dob).trim() } : {}),
+          ...(contacts.length ? { contacts } : {}),
+        }],
+        ...(b.address1 ? {
+          mailingAddress: {
+            address1: String(b.address1).trim().slice(0, 40),
+            city: String(b.city || '').trim().slice(0, 19),
+            state: String(b.state || 'CA').trim().slice(0, 2),
+            zip: String(b.zip || '').trim().slice(0, 10),
+          },
+        } : {}),
+        ...(b.policyNumber ? {
+          policy: {
+            applicationType: ['Personal', 'Commercial', 'Life', 'Health'].includes(b.applicationType) ? b.applicationType : 'Personal',
+            policyNumber: String(b.policyNumber).trim().slice(0, 25),
+            ...(b.effectiveDate ? { effectiveDate: String(b.effectiveDate).trim() } : {}),
+            ...(b.lob ? { LOBs: [String(b.lob).trim()] } : {}),
+            state: 'CA',
+          },
+        } : {}),
+        log: {
+          channel: 31,
+          note: 'Client created via Speedy admin intake' + (b.policyNumber ? ` with policy shell ${String(b.policyNumber).trim().slice(0, 25)}` : '') + '. Complete policy details in CMS from the dec page.',
+          ts: new Date().toISOString(),
+        },
+      };
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client?version=4.0`, {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      return res.status(200).json({ ok: r.status === 200, httpStatus: r.status, result: r.body });
+    }
+
+    if (action === 'intake_task') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      const email = String(b.assignedToEmail || '').trim();
+      if (!clientId) return res.status(400).json({ ok: false, error: 'clientId required' });
+      if (!email) return res.status(400).json({ ok: false, error: 'assignedToEmail required' });
+      const f = b.fields || {};
+      const order = [
+        ['policyNumber', 'Policy #'], ['carrier', 'Carrier'], ['lob', 'LOB'],
+        ['effective', 'Effective'], ['expiration', 'Expiration'], ['premium', 'Premium'],
+        ['vehicle', 'Vehicle'], ['vin', 'VIN'], ['coverages', 'Coverages'], ['notes', 'Notes'],
+      ];
+      const lines = order
+        .filter(([k]) => f[k] && String(f[k]).trim())
+        .map(([k, label]) => `${label}: ${String(f[k]).trim().slice(0, 120)}`);
+      if (!lines.length) return res.status(400).json({ ok: false, error: 'At least one extracted field required' });
+      const block = lines.join('\n');
+      const now = new Date();
+      const payload = {
+        refId: crypto.randomUUID(),
+        ts: now.toISOString(),
+        channel: 31,
+        note: 'SMART INTAKE \u2014 Dec page received, filed to attachments.\nEXTRACTED VALUES \u2014 one per line, ready to copy:\n\n' + block,
+        task: {
+          title: 'Enter policy from attached dec',
+          description: 'Enter in CMS \u2014 one value per line, ready to copy:\n\n' + block + '\n\nDec page PDF is in the client\u2019s Attachments tab.',
+          dueDate: new Date(now.getTime() + 24 * 3600 * 1000).toISOString(),
+          assignedToRole: 'SpecifiedUser',
+          assignedToEmail: email,
+        },
+      };
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, result: r.body });
+    }
+
     return res.status(400).json({ ok: false, error: 'Unknown action' });
   }
 

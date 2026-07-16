@@ -173,6 +173,22 @@
     </div>
   </div>
 
+  <div class="eyebrow">Clover payments — live from the merchant account</div>
+  <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn" onclick="cloverLoad()">💳 Load recent payments</button>
+      <button class="btn" style="background:var(--red);border-color:var(--red);color:#fff" onclick="testReceipt()">🧪 Post $1.00 TEST receipt → ZZTEST #26081</button>
+    </div>
+    <div id="cvList" style="margin-top:14px"></div>
+    <pre id="cvOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
+      padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
+    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
+      Payments are read-only from Clover (merchant 1K7NR5V6K1ER1 — all 4 branches). The TEST receipt writes to the
+      ZZTEST fixture only, via the accounting scope. Uses the admin API key from the Test Lab above.
+      Real payment→receipt automation stays OFF until approved by Tony.
+    </div>
+  </div>
+
   <div class="note">
     <b>What this page shows:</b> live, non-client data from the HawkSoft Partner API — connection status,
     enabled scopes, office configuration, and client counts. By design it shows <b>no client names, contacts,
@@ -400,6 +416,43 @@ async function dzSend(){
       out.textContent='❌ Upload failed — HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2);
     }
   }catch(e){ out.textContent='❌ '+e.message; }
+}
+
+/* ---------- Clover payments ---------- */
+async function cloverLoad(){
+  const out = document.getElementById('cvOut'); const list = document.getElementById('cvList');
+  out.style.display='block'; out.textContent='\u23f3 Loading payments from Clover\u2026'; list.innerHTML='';
+  try{
+    const d = await dzApi({action:'clover_payments', limit:10});
+    if(!d.ok){ out.textContent='\u274c Clover error \u2014 HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2); return; }
+    const ps = d.result.payments||[];
+    if(!ps.length){ out.textContent='No payments returned.'; return; }
+    out.style.display='none';
+    list.innerHTML = ps.map(p=>{
+      const when = p.created ? new Date(p.created).toLocaleString('en-US',{timeZone:'America/Los_Angeles'}) : '\u2014';
+      return `<div class="check s-${p.result==='SUCCESS'?'ok':'warn'}" style="margin-bottom:8px">
+        <div class="ico">$</div>
+        <div class="body">
+          <div class="title">$${p.amount.toFixed(2)} \u2014 ${p.tender||'card'}<span class="pill s-${p.result==='SUCCESS'?'ok':'warn'}">${p.result||'?'}</span></div>
+          <div class="detail">${when} \u00b7 ${p.employee?('by '+p.employee):'employee n/a'}${p.note?(' \u00b7 note: '+p.note):''}</div>
+        </div></div>`;
+    }).join('');
+  }catch(e){ out.textContent='\u274c '+e.message; }
+}
+async function testReceipt(){
+  const out = document.getElementById('cvOut'); out.style.display='block';
+  if(!confirm('Post a $1.00 TEST receipt to ZZTEST #26081 in HawkSoft accounting?')) { out.textContent='Cancelled.'; return; }
+  out.textContent='\u23f3 Posting $1.00 TEST receipt to ZZTEST #26081\u2026';
+  try{
+    const d = await dzApi({action:'create_receipt', clientId:26081, amount:1.00,
+      note:'TEST RECEIPT \u2014 $1.00 posted via Speedy admin Payments panel to validate the Clover\u2192HawkSoft receipt pipeline. Safe to void.'});
+    if(d.ok){
+      out.textContent='\u2705 Receipt posted \u2014 HawkSoft HTTP '+d.httpStatus+'\nCheck ZZTEST #26081 \u2192 accounting/receipts + Logs tab.\n\n'+JSON.stringify(d.result,null,2);
+    }else{
+      out.textContent='\u274c Receipt failed \u2014 HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2)+
+        (d.httpStatus===403?'\n\nA 403 here usually means the accounting scope has not propagated yet \u2014 wait a few minutes and retry.':'');
+    }
+  }catch(e){ out.textContent='\u274c '+e.message; }
 }
 </script>
 </body>

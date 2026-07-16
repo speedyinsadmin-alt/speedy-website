@@ -205,6 +205,68 @@
     </div>
   </div>
 
+  <div class="eyebrow">New client intake — REAL (creates a live HawkSoft client)</div>
+  <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
+      <input id="ncFirst" maxlength="14" placeholder="First name (max 14)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncLast" maxlength="24" placeholder="Last name (max 24)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncPhone" placeholder="Cell phone" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncEmail" placeholder="Email" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncAddr" maxlength="40" placeholder="Street address" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncCity" maxlength="19" placeholder="City" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncZip" maxlength="10" placeholder="ZIP" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <select id="ncOffice" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+        <option value="1">Office: Moreno Valley</option>
+        <option value="2">Office: Riverside 1 (Van Buren)</option>
+        <option value="3">Office: Riverside 2 (Magnolia)</option>
+        <option value="0">Office: Primary (0)</option>
+      </select>
+      <select id="ncStatus" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+        <option value="Active">Status: Active (policy sold)</option>
+        <option value="Lead">Status: Lead</option>
+        <option value="Prospect">Status: Prospect</option>
+      </select>
+      <input id="ncSource" maxlength="14" placeholder="Source (max 14)" value="Walk-in" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncPolicy" maxlength="25" placeholder="Policy # (optional shell)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncLob" placeholder="LOB (e.g. Personal Auto)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="ncEff" type="date" title="Effective date" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn" style="background:var(--red);border-color:var(--red);color:#fff" onclick="ncCreate()">➕ Create REAL client in HawkSoft</button>
+    </div>
+    <pre id="ncOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
+      padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
+    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
+      ⚠️ This creates a real client record. Policy # adds a policy SHELL (number/LOB/date) — premium, carrier and coverages are entered by the agent in CMS.
+      On success the new client # auto-fills the Test Lab and drop-zone fields for the next steps. Uses the admin API key above.
+    </div>
+  </div>
+
+  <div class="eyebrow">Smart intake — extracted values → log + task (REAL)</div>
+  <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
+      <input id="siPolicy" placeholder="Policy #" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siCarrier" placeholder="Carrier" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siLob" placeholder="LOB" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siEff" placeholder="Effective (MM/DD/YYYY)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siExp" placeholder="Expiration (MM/DD/YYYY)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siPrem" placeholder="Premium (e.g. 1842.00)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siVeh" placeholder="Vehicle (year make model)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siVin" placeholder="VIN" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siCov" placeholder="Coverages (BI/PD/UM/ded)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="siNotes" placeholder="Notes (optional)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn" onclick="siWrite()">📝 Write intake log + task (uses Client # and assignee email above)</button>
+    </div>
+    <pre id="siOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
+      padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
+    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
+      Type the values read from the dec page — only filled fields are written. Creates a copy-paste-ready log note and a task
+      assigned to the email in the Test Lab section. Later, AI extraction fills this form automatically.
+    </div>
+  </div>
+
   <div class="note">
     <b>What this page shows:</b> live, non-client data from the HawkSoft Partner API — connection status,
     enabled scopes, office configuration, and client counts. By design it shows <b>no client names, contacts,
@@ -451,6 +513,74 @@ async function dzSend(){
     }else{
       out.textContent='❌ Upload failed — HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2);
     }
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
+
+/* ---------- Real intake ---------- */
+async function ncCreate(){
+  const out = document.getElementById('ncOut'); out.style.display='block';
+  const key = document.getElementById('labKey').value.trim();
+  if(!key){ out.textContent='⚠ Enter the admin API key in the Test Lab first.'; return; }
+  const first = document.getElementById('ncFirst').value.trim();
+  const last = document.getElementById('ncLast').value.trim();
+  if(!first || !last){ out.textContent='⚠ First and last name are required.'; return; }
+  const officeName = document.getElementById('ncOffice').selectedOptions[0].textContent;
+  if(!confirm('Create a REAL client: '+first+' '+last+' — '+officeName+'? This writes to live HawkSoft.')) return;
+  sessionStorage.setItem('splabkey', key);
+  out.textContent='⏳ Creating client…';
+  try{
+    const r = await fetch('/api/hawksoft',{method:'POST',
+      headers:{'Content-Type':'application/json','x-admin-key':key},
+      body: JSON.stringify({action:'create_client',
+        firstName:first, lastName:last,
+        phone:document.getElementById('ncPhone').value.trim(),
+        email:document.getElementById('ncEmail').value.trim(),
+        address1:document.getElementById('ncAddr').value.trim(),
+        city:document.getElementById('ncCity').value.trim(),
+        state:'CA', zip:document.getElementById('ncZip').value.trim(),
+        officeId:document.getElementById('ncOffice').value,
+        status:document.getElementById('ncStatus').value,
+        source:document.getElementById('ncSource').value.trim(),
+        policyNumber:document.getElementById('ncPolicy').value.trim(),
+        lob:document.getElementById('ncLob').value.trim(),
+        effectiveDate:document.getElementById('ncEff').value,
+        applicationType:'Personal'})});
+    const d = await r.json();
+    if(d.ok && d.result && d.result.clientNumber!=null){
+      document.getElementById('labClient').value = d.result.clientNumber;
+      document.getElementById('dzClient').value = d.result.clientNumber;
+      out.textContent='✅ Client created — #'+d.result.clientNumber+' ('+officeName.replace('Office: ','')+')\nClient # auto-filled in Test Lab and drop zone.\nNext: drop the dec page in the drop zone, then fill Smart intake below.';
+    }else{
+      out.textContent='❌ Failed — HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2);
+    }
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
+async function siWrite(){
+  const out = document.getElementById('siOut'); out.style.display='block';
+  const key = document.getElementById('labKey').value.trim();
+  if(!key){ out.textContent='⚠ Enter the admin API key in the Test Lab first.'; return; }
+  const cid = document.getElementById('labClient').value.trim();
+  if(!cid){ out.textContent='⚠ Client # missing (Test Lab field).'; return; }
+  const email = document.getElementById('labEmail').value.trim();
+  if(!email){ out.textContent='⚠ Enter the assignee HawkSoft user email (Test Lab field).'; return; }
+  sessionStorage.setItem('splabkey', key);
+  out.textContent='⏳ Writing intake log + task to client #'+cid+'…';
+  try{
+    const r = await fetch('/api/hawksoft',{method:'POST',
+      headers:{'Content-Type':'application/json','x-admin-key':key},
+      body: JSON.stringify({action:'intake_task', clientId:cid, assignedToEmail:email, fields:{
+        policyNumber:document.getElementById('siPolicy').value,
+        carrier:document.getElementById('siCarrier').value,
+        lob:document.getElementById('siLob').value,
+        effective:document.getElementById('siEff').value,
+        expiration:document.getElementById('siExp').value,
+        premium:document.getElementById('siPrem').value,
+        vehicle:document.getElementById('siVeh').value,
+        vin:document.getElementById('siVin').value,
+        coverages:document.getElementById('siCov').value,
+        notes:document.getElementById('siNotes').value}})});
+    const d = await r.json();
+    out.textContent=(d.ok?'✅ Intake written — HawkSoft HTTP ':'❌ Failed — HawkSoft HTTP ')+(d.httpStatus||'?')+(d.ok?'\nCheck the client: Logs (extracted values) + Tasks (assigned to '+email+').':'\n'+JSON.stringify(d.result??d,null,2));
   }catch(e){ out.textContent='❌ '+e.message; }
 }
 

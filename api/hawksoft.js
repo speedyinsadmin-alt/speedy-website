@@ -8,6 +8,37 @@
 const AGENCY_ID = 15112;
 const BASE = 'https://integration.hawksoft.app';
 
+// Map human LOB names to HawkSoft LOB codes (v4 spec enumeration).
+const HS_LOB_CODES = new Set(['ACCT','AGENT','AGLIA','AGPP','AGPR','ANUTY','APKGE','ARCH','AUTOB','AUTOP','BANDM','BLDRK','BMSBP','BOAT','BOP','BOPGL','BOPPR','CFIRE','CGL','COMAR','CONTR','CPKGE','CPL','CRIM','CROP','CUMBR','CYBER','CYCLE','DFIRE','DO','EDP','ELIAB','EO','EPLI','EQ','EQLIA','FIDUC','FINAR','FLOOD','FRBD','GARAG','GLASS','HEALTH','HOME','INMRC','INMRP','INTER','KIDRA','LAW','LIFE','LL','LMORT','MEDIA','MHOME','MMAL','MOPRO','MPL','MTRCR','MTRTK','OCMRC','OPCAR','OTHER','PHYS','PL','PLMSC','PPKGE','PROP','PUMBR','RECV','RRPRL','SCHPR','SFRNC','SIGNS','SMP','SURE','TRANS','TRKRS','ULIFE','VALP','WIND','WORK','WORKV','YACHT','RTRMT','SUPPL','GPMED','GPDEN','GPVIS','GPLIF','GPACC','GPDIS','GPCRI','GPOTH']);
+function mapLob(input) {
+  const raw = String(input || '').trim();
+  const up = raw.toUpperCase();
+  if (HS_LOB_CODES.has(up)) return up;
+  const s = up.replace(/[^A-Z ]/g, ' ');
+  if (/PERSONAL AUTO|PRIVATE PASSENGER|(^| )AUTO( |$)|PPA/.test(s)) return 'AUTOP';
+  if (/COMMERCIAL AUTO|BUSINESS AUTO/.test(s)) return 'AUTOB';
+  if (/HOMEOWNER|(^| )HOME( |$)|HO\d/.test(s)) return 'HOME';
+  if (/RENTER/.test(s)) return 'HOME';
+  if (/MOBILE HOME|MANUFACTURED/.test(s)) return 'MHOME';
+  if (/DWELLING|FIRE POLICY|LANDLORD/.test(s)) return 'DFIRE';
+  if (/MOTORCYCLE|MOTOR CYCLE/.test(s)) return 'CYCLE';
+  if (/(^| )RV( |$)|RECREATIONAL/.test(s)) return 'RECV';
+  if (/BOAT|WATERCRAFT/.test(s)) return 'BOAT';
+  if (/PERSONAL UMBRELLA/.test(s)) return 'PUMBR';
+  if (/COMMERCIAL UMBRELLA/.test(s)) return 'CUMBR';
+  if (/UMBRELLA/.test(s)) return 'PUMBR';
+  if (/FLOOD/.test(s)) return 'FLOOD';
+  if (/EARTHQUAKE/.test(s)) return 'EQ';
+  if (/GENERAL LIABILITY|(^| )GL( |$)/.test(s)) return 'CGL';
+  if (/BUSINESS OWNER|(^| )BOP( |$)/.test(s)) return 'BOP';
+  if (/WORKERS? COMP/.test(s)) return 'WORK';
+  if (/COMMERCIAL PROPERTY/.test(s)) return 'PROP';
+  if (/COMMERCIAL PACKAGE/.test(s)) return 'CPKGE';
+  if (/LIFE/.test(s)) return 'LIFE';
+  if (/HEALTH|MEDICAL/.test(s)) return 'HEALTH';
+  return 'OTHER';
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -430,7 +461,7 @@ export default async function handler(req, res) {
             applicationType: ['Personal', 'Commercial', 'Life', 'Health'].includes(b.applicationType) ? b.applicationType : 'Personal',
             policyNumber: String(b.policyNumber).trim().slice(0, 25),
             ...(b.effectiveDate ? { effectiveDate: String(b.effectiveDate).trim() } : {}),
-            ...(b.lob ? { LOBs: [String(b.lob).trim()] } : {}),
+            ...(b.lob ? { LOBs: [mapLob(b.lob)] } : {}),
             state: 'CA',
           },
         } : {}),

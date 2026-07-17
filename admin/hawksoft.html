@@ -124,34 +124,19 @@
   <div class="eyebrow">Offices in HawkSoft</div>
   <div class="grid" id="offices"></div>
 
-  <div class="eyebrow">Test Lab — write actions (API key required)</div>
-  <div id="lab" style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-      <input id="labKey" type="password" placeholder="Admin API key" autocomplete="off"
-        style="flex:1;min-width:200px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
-      <input id="labClient" type="number" placeholder="Client # (for log/lookup)"
-        style="width:190px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+    <div class="eyebrow">Credentials — used by every action below</div>
+  <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="labKey" type="password" placeholder="Admin API key" autocomplete="off" style="flex:1;min-width:200px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="labEmail" placeholder="Task assignee — HawkSoft user email" style="flex:1;min-width:220px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <input id="labClient" type="number" placeholder="Client # (auto-fills)" style="width:170px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn" onclick="lab('create_test_client')">🧪 Create TEST client</button>
-      <button class="btn" onclick="lab('add_log')">📝 Add log note</button>
-      <button class="btn" onclick="lab('add_log',{withTask:true})">📋 Add log + task (CSR)</button>
-      <button class="btn" onclick="lab('lookup_client')">🔍 Lookup client (masked)</button>
-    </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-      <input id="labEmail" placeholder="HawkSoft user email (task assignee)" style="flex:1;min-width:220px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
-      <button class="btn" onclick="smartTask()">📄 Smart-intake test (log + task)</button>
-    </div>
-    <pre id="labOut" style="margin-top:14px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
-      padding:14px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto;display:none"></pre>
     <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
-      Actions run server-side and require the admin API key (checked against Vercel env — never stored in this page).
-      The test client is named <b style="color:#cfe0f5">ZZTEST DELETE ME - API TEST</b> and lands in Moreno Valley as a Lead.
-      Lookup returns a <b style="color:#cfe0f5">masked</b> field map (letters→X, digits→#) — structure and formats, no readable PII.
+      Enter these once. The <b style="color:#cfe0f5">admin key</b> authorizes every action; the <b style="color:#cfe0f5">assignee email</b> is who receives intake tasks; <b style="color:#cfe0f5">Client #</b> fills in automatically after you create or find a client.
     </div>
   </div>
 
-  <div class="eyebrow">Send a file to a client — drop zone</div>
+<div class="eyebrow">Step 1 · Document — drop, extract, send</div>
   <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
     <div id="dz" style="border:2px dashed rgba(255,255,255,.2);border-radius:12px;padding:26px;text-align:center;color:var(--mute);
       font-size:14px;cursor:pointer;transition:border-color .15s" onclick="document.getElementById('dzFile').click()">
@@ -173,40 +158,12 @@
     <pre id="dzOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
       padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
     <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
-      Uses the same admin API key from the Test Lab above. Enter a client # directly, or type a policy # and hit
+      Uses the admin key above. Enter a client # directly, or type a policy # and hit
       <b style="color:#cfe0f5">Find client</b>. The file lands in the client's Attachments tab with a log note.
     </div>
   </div>
 
-  <div class="eyebrow">Payments — Clover ↔ HawkSoft (test)</div>
-  <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn" onclick="cloverLoad()">💳 Load recent Clover payments</button>
-      <button class="btn" onclick="receiptTest()">🧪 Post $1.00 TEST receipt → ZZTEST #26081</button>
-    </div>
-    <div id="cvTable" style="margin-top:14px;display:none;overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="color:var(--mute);text-align:left">
-          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Time (PT)</th>
-          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Amount</th>
-          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Employee</th>
-          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Tender</th>
-          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Note</th>
-          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Result</th>
-        </tr></thead>
-        <tbody id="cvBody"></tbody>
-      </table>
-    </div>
-    <pre id="cvOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
-      padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
-    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
-      Payments are read-only from Clover (merchant 1K7NR5V6K1ER1 — all 4 branches; no card numbers shown).
-      The TEST receipt writes a $1.00 accounting entry to the ZZTEST fixture only — check ZZTEST's receipts in HawkSoft after.
-      Real Clover→HawkSoft posting stays OFF until matching rules are approved by Tony. Uses the admin API key from the Test Lab.
-    </div>
-  </div>
-
-  <div class="eyebrow">New client intake — REAL (creates a live HawkSoft client)</div>
+  <div class="eyebrow">Step 2 · New client — REAL (review AI values, then create)</div>
   <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
       <input id="ncFirst" maxlength="14" placeholder="First name (max 14)" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
@@ -243,7 +200,7 @@
     </div>
   </div>
 
-  <div class="eyebrow">Smart intake — extracted values → log + task (REAL)</div>
+  <div class="eyebrow">Step 3 · Intake log + task — REAL (review AI values, then write)</div>
   <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
       <input id="siPolicy" placeholder="Policy #" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
@@ -264,7 +221,7 @@
       padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
     <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
       Type the values read from the dec page — only filled fields are written. Creates a copy-paste-ready log note and a task
-      assigned to the email in the Test Lab section. Later, AI extraction fills this form automatically.
+      assigned to the assignee email above. Later, AI extraction fills this form automatically.
     </div>
   </div>
 
@@ -659,4 +616,52 @@ async function receiptTest(){
 }
 </script>
 </body>
-</html>
+</html><div class="eyebrow">Payments — Clover ↔ HawkSoft (test)</div>
+  <div style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" onclick="cloverLoad()">💳 Load recent Clover payments</button>
+      <button class="btn" onclick="receiptTest()">🧪 Post $1.00 TEST receipt → ZZTEST #26081</button>
+    </div>
+    <div id="cvTable" style="margin-top:14px;display:none;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="color:var(--mute);text-align:left">
+          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Time (PT)</th>
+          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Amount</th>
+          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Employee</th>
+          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Tender</th>
+          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Note</th>
+          <th style="padding:7px 10px;border-bottom:1px solid var(--line)">Result</th>
+        </tr></thead>
+        <tbody id="cvBody"></tbody>
+      </table>
+    </div>
+    <pre id="cvOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
+      padding:12px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;display:none"></pre>
+    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
+      Payments are read-only from Clover (merchant 1K7NR5V6K1ER1 — all 4 branches; no card numbers shown).
+      The TEST receipt writes a $1.00 accounting entry to the ZZTEST fixture only — check ZZTEST's receipts in HawkSoft after.
+      Real Clover→HawkSoft posting stays OFF until matching rules are approved by Tony. Uses the admin key above.
+    </div>
+  </div>
+
+  <div class="eyebrow">Test Lab — ZZTEST tools (safe sandbox)</div>
+  <div id="lab" style="background:var(--navy-2);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" onclick="lab('create_test_client')">🧪 Create TEST client</button>
+      <button class="btn" onclick="lab('add_log')">📝 Add log note</button>
+      <button class="btn" onclick="lab('add_log',{withTask:true})">📋 Add log + task (CSR)</button>
+      <button class="btn" onclick="lab('lookup_client')">🔍 Lookup client (masked)</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn" onclick="smartTask()">📄 Smart-intake test (log + task)</button>
+    </div>
+    <pre id="labOut" style="margin-top:14px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
+      padding:14px;color:#cfe0f5;font-size:12.5px;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto;display:none"></pre>
+    <div style="color:var(--mute);font-size:12.5px;margin-top:10px;line-height:1.6">
+      Actions run server-side and require the admin API key (checked against Vercel env — never stored in this page).
+      The test client is named <b style="color:#cfe0f5">ZZTEST DELETE ME - API TEST</b> and lands in Moreno Valley as a Lead.
+      Lookup returns a <b style="color:#cfe0f5">masked</b> field map (letters→X, digits→#) — structure and formats, no readable PII.
+    </div>
+  </div>
+
+  

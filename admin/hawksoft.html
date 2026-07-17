@@ -167,6 +167,7 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
       <input id="dzDesc" placeholder="Description (e.g. Dec page 2026 renewal)" style="flex:1;min-width:200px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
+      <button class="btn" style="background:var(--blue);border-color:var(--blue);color:#fff" onclick="aiExtract()">⚡ Extract with AI</button>
       <button class="btn" style="background:var(--red);border-color:var(--red);color:#fff" onclick="dzSend()">⬆ Send to HawkSoft</button>
     </div>
     <pre id="dzOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
@@ -513,6 +514,39 @@ async function dzSend(){
     }else{
       out.textContent='❌ Upload failed — HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2);
     }
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
+
+/* ---------- AI extraction ---------- */
+function setVal(id, v){ if(v!=null && String(v).trim() && String(v).toLowerCase()!=='null'){ document.getElementById(id).value = String(v).trim(); return 1;} return 0; }
+async function aiExtract(){
+  const out = document.getElementById('dzOut'); out.style.display='block';
+  const key = document.getElementById('labKey').value.trim();
+  if(!key){ out.textContent='⚠ Enter the admin API key in the Test Lab first.'; return; }
+  if(!dzPicked){ out.textContent='⚠ Pick or drop the document first.'; return; }
+  const ext = dzPicked.name.split('.').pop().toLowerCase();
+  if(!['pdf','jpg','jpeg','png'].includes(ext)){ out.textContent='⚠ Extraction supports pdf, jpg, or png.'; return; }
+  sessionStorage.setItem('splabkey', key);
+  out.textContent='⚡ Reading '+dzPicked.name+' with AI… (5–15 seconds)';
+  try{
+    const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=()=>rej(new Error('read fail')); r.readAsDataURL(dzPicked); });
+    const r = await fetch('/api/intake',{method:'POST', headers:{'Content-Type':'application/json','x-admin-key':key},
+      body: JSON.stringify({action:'extract', fileExt:ext, data:b64})});
+    const d = await r.json();
+    if(!d.ok){ out.textContent='❌ Extraction failed: '+(d.error||'')+'\n'+(d.detail||''); return; }
+    const f = d.fields||{}, ins=f.insured||{}, pol=f.policy||{}, veh=f.vehicle||{};
+    let n = 0;
+    n+=setVal('ncFirst', ins.firstName); n+=setVal('ncLast', ins.lastName);
+    n+=setVal('ncPhone', ins.phone); n+=setVal('ncEmail', ins.email);
+    n+=setVal('ncAddr', ins.address1); n+=setVal('ncCity', ins.city); n+=setVal('ncZip', ins.zip);
+    n+=setVal('ncPolicy', pol.policyNumber); n+=setVal('ncLob', pol.lob);
+    if(pol.effectiveDate){ const m=String(pol.effectiveDate).match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m){ document.getElementById('ncEff').value = m[3]+'-'+m[1]+'-'+m[2]; n++; } }
+    n+=setVal('siPolicy', pol.policyNumber); n+=setVal('siCarrier', pol.carrier); n+=setVal('siLob', pol.lob);
+    n+=setVal('siEff', pol.effectiveDate); n+=setVal('siExp', pol.expirationDate); n+=setVal('siPrem', pol.premium);
+    n+=setVal('siVeh', veh.description); n+=setVal('siVin', veh.vin);
+    n+=setVal('siCov', f.coverages); n+=setVal('siNotes', f.notes);
+    out.textContent='✅ Extracted ('+(f.docType||'document')+') — '+n+' fields filled.\n\n👀 REVIEW the two forms below — fix anything the AI got wrong, then:\n  1. If NEW client: check office/status → ➕ Create REAL client\n  2. ⬆ Send the document to that client\n  3. 📝 Write intake log + task';
+    document.querySelector('.eyebrow + div #ncFirst') && null;
   }catch(e){ out.textContent='❌ '+e.message; }
 }
 

@@ -1,0 +1,23 @@
+path:: c:\haw\launchhawksoft.exe
+userid::
+pwd::
+ratestate::CA
+bzpname::launchhawksoft.exe
+bzpdatetime::1/1/1753 12:00:00 AM
+producercode::
+insured::TEDDY WILLIAMS
+exportdatetime::7/16/2026 7:52:59 PM
+rateproductnum::57597
+testtransaction::0
+icebaseurl::https://autorating.turborater.com/ice/
+integrationbaseurl::https://autorating.turborater.com/integration/
+agencyuserguid::f0f449ac-b3bc-4fbb-8e39-6eb82a96568c
+agencylocationguid::349d3eab-38a0-4a0d-ba8e-7bf0184daaf0
+iceclientversionapiurl::https://www.itcratingservices.com/webservices/versioncheckapi/api/IceClientVersion
+defaultoutputdirectory::c:\haw\transfer
+defaultoutputfilename::Transfer
+defaultoutputextension::XML
+autoexecute::True
+ext::.XML
+bridgedata::
+<?xml version="1.0" encoding="utf-8"?>

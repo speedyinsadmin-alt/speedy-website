@@ -153,6 +153,7 @@
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
       <input id="dzDesc" placeholder="Description (e.g. Dec page 2026 renewal)" style="flex:1;min-width:200px;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
       <button class="btn" style="background:var(--blue);border-color:var(--blue);color:#fff" onclick="aiExtract()">⚡ Extract with AI</button>
+      <button class="btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff" onclick="buildBridge()">⬇ Build HawkSoft file</button>
       <button class="btn" style="background:var(--red);border-color:var(--red);color:#fff" onclick="dzSend()">⬆ Send to HawkSoft</button>
     </div>
     <pre id="dzOut" style="margin-top:12px;background:var(--navy);border:1px solid var(--line);border-radius:9px;
@@ -471,6 +472,35 @@ async function dzSend(){
     }else{
       out.textContent='❌ Upload failed — HTTP '+(d.httpStatus||'?')+'\n'+JSON.stringify(d.result??d.error??d,null,2);
     }
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
+
+/* ---------- HawkSoft import file (bridge) ---------- */
+async function buildBridge(){
+  const out = document.getElementById('dzOut'); out.style.display='block';
+  const key = document.getElementById('labKey').value.trim();
+  if(!key){ out.textContent='⚠ Enter the admin API key above first.'; return; }
+  // Assemble fields from the review forms (nc* = client, si* = policy/vehicle)
+  const g = id => (document.getElementById(id)?.value||'').trim();
+  const fields = {
+    insured:{ firstName:g('ncFirst'), lastName:g('ncLast'), phone:g('ncPhone'), email:g('ncEmail'),
+              address1:g('ncAddr'), city:g('ncCity'), zip:g('ncZip'), state:'CA' },
+    policy:{ policyNumber:g('siPolicy'), effectiveDate:g('siEff'), expirationDate:g('siExp') },
+    vehicle:{ description:g('siVeh'), vin:g('siVin') }
+  };
+  if(!fields.insured.firstName || !fields.insured.lastName){ out.textContent='⚠ Need at least first and last name (review the form above).'; return; }
+  sessionStorage.setItem('splabkey', key);
+  out.textContent='⏳ Building HawkSoft import file…';
+  try{
+    const r = await fetch('/api/bridge',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':key},
+      body: JSON.stringify({fields})});
+    const d = await r.json();
+    if(!d.ok){ out.textContent='❌ '+(d.error||'Build failed'); return; }
+    const blob = new Blob([d.fileText], {type:'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=d.filename; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+    out.textContent='✅ Downloaded '+d.filename+'\n\nNext: drag this file onto HawkSoft 6 → Importer opens → New (or match Existing) → review → Finish.\nThis creates a FULL policy (client, drivers, vehicle, coverages) — v1 covers Personal Auto.';
   }catch(e){ out.textContent='❌ '+e.message; }
 }
 

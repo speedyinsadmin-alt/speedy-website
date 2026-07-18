@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.6 · instant lookup on sign-in</div>
+    <div class="ver">v2.7 · client-# priority</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -168,10 +168,10 @@ function showSignedIn(){
 }
 function onCred(resp){
   gToken = resp.credential; showSignedIn();
-  // fields may already be flooded by HawkLink — look the client up immediately
+  // fields may already be flooded by HawkLink — client # wins, policy # is fallback
+  if (digits(idval()).length >= 4) { verify(); return; }
   const pol = document.getElementById('hsPolicyNumber').value.trim();
-  if (pol.length >= 5) { polLookup(pol); return; }
-  if (digits(idval()).length >= 4) { verify(); }
+  if (pol.length >= 5) { polLookup(pol); }
 }
 function signOut(){ gToken = null; showSignedIn(); }
 window.addEventListener('load', ()=>{
@@ -199,9 +199,11 @@ setInterval(()=>{ const v=idval(); if(v!==lastSeen){ lastSeen=v; if(digits(v).le
 
 /* policy # → find client automatically (HawkLink floods policy number) */
 let lastPol='', pt=null;
-setInterval(()=>{ const p=document.getElementById('hsPolicyNumber').value.trim();
+setInterval(()=>{ if(digits(idval()).length>=4) return; // client # known — policy lookup unnecessary
+  const p=document.getElementById('hsPolicyNumber').value.trim();
   if(p!==lastPol){ lastPol=p; if(p.length>=5){ clearTimeout(pt); pt=setTimeout(()=>polLookup(p), 700); } } }, 500);
 async function polLookup(pol){
+  if (digits(idval()).length >= 4) return; // client # already known
   const box = document.getElementById('matchbox');
   if(!gToken && !akey.value.trim()){ box.innerHTML = warnCard('Sign in first','Sign in above, then the policy # can find the client.'); return; }
   box.innerHTML = '<div class="hint">Finding client from policy '+esc(pol)+'…</div>';
@@ -235,6 +237,7 @@ async function verify(){
   const id = parseInt(digits(idval()),10);
   if(!gToken && !akey.value.trim()){ box.innerHTML = warnCard('Sign in first','Sign in with your @speedyins.com account above (or admin fallback).'); return; }
   if(!id){ box.innerHTML = warnCard('No client #','HawkLink should fill the client # — or type it.'); return; }
+  clearTimeout(pt); lastPol = document.getElementById('hsPolicyNumber').value.trim();
   box.innerHTML = '<div class="hint">Checking HawkSoft…</div>';
   document.getElementById('chargecard').classList.add('hide');
   confirmed = null;

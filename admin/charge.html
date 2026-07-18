@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.4 · one-step sign-in</div>
+    <div class="ver">v2.5 · sign-in pops on open</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -172,8 +172,9 @@ window.addEventListener('load', ()=>{
   if(GOOGLE_CLIENT_ID.startsWith('PASTE_')){
     document.getElementById('gsihint').textContent = 'Google Sign-In not connected yet — waiting for the OAuth Client ID. Use Admin fallback below for now.';
   } else if (window.google) {
-    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred });
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false, cancel_on_tap_outside: false });
     google.accounts.id.renderButton(document.getElementById('gsibtn'), { theme:'filled_blue', size:'large', shape:'pill', text:'signin_with' });
+    google.accounts.id.prompt(); // One Tap: account chooser pops up on page open
   }
   showSignedIn();
 });
@@ -277,7 +278,7 @@ async function testLog(){
     out.textContent = JSON.stringify(j,null,2);
     if(j.ok){
       out.textContent += '\n\n✓ Posted to HawkSoft. Signing you out — next charge needs a fresh sign-in.';
-      setTimeout(()=>{ signOut(); window.scrollTo({top:0,behavior:'smooth'}); }, 1500);
+      setTimeout(()=>{ signOut(); window.scrollTo({top:0,behavior:'smooth'}); if(window.google) google.accounts.id.prompt(); }, 1500);
     }
   }catch(e){ out.textContent = 'Error: '+e; }
 }

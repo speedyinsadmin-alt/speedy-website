@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Charge Client — Speedy Insurance</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
@@ -83,17 +84,31 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v1 · HawkLink test build</div>
+    <div class="ver">v2 · Google Sign-In + HawkLink</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
 
-  <!-- Settings (test phase) -->
-  <div class="card">
-    <div class="eyebrow">Setup — this computer</div>
-    <label>Admin API key (saved on this computer only)</label>
-    <input type="password" id="akey" placeholder="Paste ADMIN_API_KEY" autocomplete="off">
-    <div class="hint">Test phase only — agent PINs replace this before rollout.</div>
+  <!-- Sign in -->
+  <div class="card" id="authcard">
+    <div class="eyebrow">Who's charging</div>
+    <div id="signedout">
+      <div id="gsibtn" style="display:flex;justify-content:center;margin:6px 0"></div>
+      <div class="hint" id="gsihint" style="text-align:center">Sign in with your @speedyins.com account — every action is logged under your name.</div>
+    </div>
+    <div id="signedin" class="hide">
+      <div class="match" style="margin-top:0;padding:12px 16px">
+        <div class="tag"><span class="dot"></span> Signed in</div>
+        <h2 style="font-size:16px" id="whoName">—</h2>
+        <div class="meta"><span class="chip" id="whoEmail">—</span><span class="chip b" id="whoBranch"></span></div>
+        <button class="btn btn-ghost" style="margin-top:10px;padding:9px" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+    <details style="margin-top:12px">
+      <summary style="font-size:12px;color:var(--mute);cursor:pointer">Admin fallback (Saif only)</summary>
+      <label>Admin API key</label>
+      <input type="password" id="akey" placeholder="Paste ADMIN_API_KEY" autocomplete="off">
+    </details>
   </div>
 
   <!-- Client fields: HawkLink mapping targets -->
@@ -129,8 +144,6 @@
       <button type="button" onclick="pick(this)">Endorsement</button>
       <button type="button" onclick="pick(this)">Other</button>
     </div>
-    <label>Your initials (until PINs)</label>
-    <input type="text" id="agent" placeholder="e.g. SA" maxlength="6" autocomplete="off">
     <div class="note"><b>Test build:</b> no money moves here yet — Clover secure card fields are the next phase.
       The button below proves the write path: it posts a log note to the client file in HawkSoft
       (allowed on <b>ZZTEST #26081 only</b> in this phase).</div>
@@ -141,7 +154,41 @@
 
 <script>
 const API = '/api/hawksoft';
-let confirmed = null, purpose = 'Down payment';
+const GOOGLE_CLIENT_ID = 'PASTE_CLIENT_ID.apps.googleusercontent.com'; // ← replace after OAuth setup
+let confirmed = null, purpose = 'Down payment', gToken = sessionStorage.getItem('cg_gt') || null;
+
+const STAFF_UI = {
+  'sammy@speedyins.com':['Samuel Rodriguez','Moreno Valley'],'yolanda@speedyins.com':['Yolanda Hernandez','Moreno Valley'],
+  'jorge@speedyins.com':['Jorge Ramos','Moreno Valley'],'lfigueroa@speedyins.com':['Laura Figueroa','Moreno Valley'],
+  'chris@speedyins.com':['Christian Aguilar','Lake Elsinore'],'yasmin@speedyins.com':['Yasmin Alfaro','Riverside Van Buren'],
+  'fernando@speedyins.com':['Fernando Salgado','Riverside Van Buren'],'jesus@speedyins.com':['Jesus Velarde','Riverside Van Buren'],
+  'alejandra@speedyins.com':['Alejandra Salas','Riverside Magnolia'],'esmeralda@speedyins.com':['Esmeralda Ayala Hernandez','Riverside Magnolia'],
+  'irene@speedyins.com':['Irene Ayala Hernandez','Riverside Magnolia'],'tony@speedyins.com':['Tony Dabouqi','All branches'],
+  'lana@speedyins.com':['Lana D.','All branches']};
+
+function jwtEmail(tok){ try{ return JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email.toLowerCase(); }catch{ return null; } }
+function showSignedIn(){
+  const em = gToken && jwtEmail(gToken);
+  document.getElementById('signedout').classList.toggle('hide', !!em);
+  document.getElementById('signedin').classList.toggle('hide', !em);
+  if(em){
+    const s = STAFF_UI[em] || [em.split('@')[0], ''];
+    document.getElementById('whoName').textContent = s[0];
+    document.getElementById('whoEmail').textContent = em;
+    document.getElementById('whoBranch').textContent = s[1];
+  }
+}
+function onCred(resp){ gToken = resp.credential; sessionStorage.setItem('cg_gt', gToken); showSignedIn(); }
+function signOut(){ gToken = null; sessionStorage.removeItem('cg_gt'); showSignedIn(); }
+window.addEventListener('load', ()=>{
+  if(GOOGLE_CLIENT_ID.startsWith('PASTE_')){
+    document.getElementById('gsihint').textContent = 'Google Sign-In not connected yet — waiting for the OAuth Client ID. Use Admin fallback below for now.';
+  } else if (window.google) {
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred });
+    google.accounts.id.renderButton(document.getElementById('gsibtn'), { theme:'filled_blue', size:'large', shape:'pill', text:'signin_with' });
+  }
+  showSignedIn();
+});
 
 /* gate — same light protection as the HawkSoft dashboard */
 function unlock(){
@@ -167,16 +214,18 @@ function idval(){ return document.getElementById('hsClientNumber').value.trim();
 function digits(s){ return (s||'').replace(/\D/g,''); }
 
 async function post(body){
-  const r = await fetch(API, {method:'POST',
-    headers:{'Content-Type':'application/json','x-admin-key':akey.value.trim()},
-    body: JSON.stringify(body)});
+  const h = {'Content-Type':'application/json'};
+  if (gToken) h['x-user-token'] = gToken;
+  if (akey.value.trim()) h['x-admin-key'] = akey.value.trim();
+  const r = await fetch(API, {method:'POST', headers:h, body: JSON.stringify(body)});
+  if (r.status === 401 && gToken){ signOut(); }
   return r.json();
 }
 
 async function verify(){
   const box = document.getElementById('matchbox');
   const id = parseInt(digits(idval()),10);
-  if(!akey.value.trim()){ box.innerHTML = warnCard('Admin key missing','Paste the ADMIN_API_KEY in the setup box first.'); return; }
+  if(!gToken && !akey.value.trim()){ box.innerHTML = warnCard('Sign in first','Sign in with your @speedyins.com account above (or admin fallback).'); return; }
   if(!id){ box.innerHTML = warnCard('No client #','HawkLink should fill the client # — or type it.'); return; }
   box.innerHTML = '<div class="hint">Checking HawkSoft…</div>';
   document.getElementById('chargecard').classList.add('hide');
@@ -223,8 +272,7 @@ async function testLog(){
   out.style.display='block'; out.textContent='Writing log note…';
   try{
     const j = await post({action:'charge_log', clientId: confirmed.clientNumber,
-      amount: document.getElementById('amount').value||'0.00', purpose,
-      agent: document.getElementById('agent').value||'unknown'});
+      amount: document.getElementById('amount').value||'0.00', purpose});
     out.textContent = JSON.stringify(j,null,2);
     if(j.ok) out.textContent += '\n\n✓ Open ZZTEST #26081 in HawkSoft → Log tab. The note should be there.';
   }catch(e){ out.textContent = 'Error: '+e; }

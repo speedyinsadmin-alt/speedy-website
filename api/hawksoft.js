@@ -109,7 +109,7 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
 
     // Google-authenticated users may only use charge-page actions
-    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy'].includes(action)) {
+    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -136,6 +136,43 @@ export default async function handler(req, res) {
         clientNumber: b.clientNumber || clientId, name: name || '(no name on file)',
         phones, officeId, status,
       }});
+    }
+
+    /* ---------- Charge page: create a new client (charge-first workflow) ---------- */
+    if (action === 'charge_create_client') {
+      const b = req.body || {};
+      const first = String(b.firstName || '').trim().slice(0, 14);
+      const last = String(b.lastName || '').trim().slice(0, 24);
+      const phone = String(b.phone || '').replace(/\D/g, '');
+      const officeId = parseInt(b.officeId, 10);
+      if (!first || !last) return res.status(400).json({ ok: false, error: 'First and last name required' });
+      if (phone.length !== 10) return res.status(400).json({ ok: false, error: 'Phone must be 10 digits' });
+      if (![1, 2, 3].includes(officeId)) return res.status(400).json({ ok: false, error: 'Pick a branch' });
+      const who = userEmail
+        ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
+        : 'admin key';
+      const payload = {
+        officeId,
+        status: 'Active',
+        source: 'Charge Page',
+        people: [{
+          firstName: first, lastName: last, mainContactType: 'First',
+          contacts: [{ type: 'CellPhone', value: `(${phone.slice(0,3)})${phone.slice(3,6)}-${phone.slice(6)}` }],
+        }],
+        log: {
+          channel: 31,
+          note: `Client created from the Charge page by ${who} (charge-first workflow). Complete details in CMS.`,
+          ts: new Date().toISOString(),
+        },
+      };
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client?version=4.0`, {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      let clientNumber = null;
+      if (r.body && typeof r.body === 'object') {
+        clientNumber = r.body.clientNumber || r.body.clientId || r.body.id || null;
+      }
+      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, clientNumber, result: r.body });
     }
 
     /* ---------- Charge page: test write — restricted to ZZTEST #26081 in this phase ---------- */

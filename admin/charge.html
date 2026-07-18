@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.7 · client-# priority</div>
+    <div class="ver">v2.8 · new-client path</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -119,6 +119,33 @@
     <button class="btn btn-red" id="verifyBtn" onclick="verify()">Verify in HawkSoft</button>
     <div class="hint">HawkLink mapping: open a client in HawkSoft → open this page → HawkLink icon → double-click each HawkSoft field onto the boxes above → save mapping.</div>
     <div id="matchbox"></div>
+  </div>
+
+  <!-- New client (charge-first workflow) -->
+  <div class="card hide" id="newclient">
+    <div class="eyebrow">New client — created in HawkSoft, then charged</div>
+    <div class="grid2">
+      <div>
+        <label for="ncFirst">First name (or business)</label>
+        <input type="text" id="ncFirst" maxlength="14" autocomplete="off">
+      </div>
+      <div>
+        <label for="ncLast">Last name</label>
+        <input type="text" id="ncLast" maxlength="24" autocomplete="off">
+      </div>
+    </div>
+    <label for="ncPhone">Cell phone (10 digits)</label>
+    <input type="tel" id="ncPhone" placeholder="951 555 1234" autocomplete="off">
+    <label for="ncOffice">Branch</label>
+    <select id="ncOffice" style="width:100%;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;color:var(--ink);font-size:16px;padding:12px 14px;font-family:inherit">
+      <option value="1">Moreno Valley</option>
+      <option value="2">Riverside — Van Buren</option>
+      <option value="3">Riverside — Magnolia</option>
+    </select>
+    <div class="hint">Lake Elsinore isn't configured as an office in HawkSoft yet — use the closest branch until Tony adds it (Setup → Offices).</div>
+    <button class="btn btn-red" onclick="createClient()">Create client & continue</button>
+    <button class="btn btn-ghost" onclick="document.getElementById('newclient').classList.add('hide')">Cancel</button>
+    <pre id="ncOut"></pre>
   </div>
 
   <!-- Amount + test write -->
@@ -214,7 +241,7 @@ async function polLookup(pol){
       document.getElementById('hsClientNumber').value = String(cl[0].clientNumber);
       // watcher picks it up and runs verify
     } else if(cl.length === 0){
-      box.innerHTML = warnCard('Policy not found','No client holds policy '+esc(pol)+'. Type the client # instead.');
+      box.innerHTML = warnCard('Policy not found','No client holds policy '+esc(pol)+'. Type the client # — or create them now.', true);
     } else {
       box.innerHTML = warnCard('Multiple matches','Policy '+esc(pol)+' matches '+cl.length+' clients: '+cl.map(x=>'#'+x.clientNumber).join(', ')+'. Type the right client #.');
     }
@@ -243,7 +270,7 @@ async function verify(){
   confirmed = null;
   try{
     const j = await post({action:'charge_lookup', clientId:id});
-    if(!j.ok){ box.innerHTML = warnCard('Not found', 'No client #'+id+' in HawkSoft. Check the number, or create the client first.'); return; }
+    if(!j.ok){ box.innerHTML = warnCard('Not found', 'No client #'+id+' in HawkSoft. Check the number — or create them now.', true); return; }
     const c = j.result;
     // cross-check the HawkLink-filled name against the API name
     const typed = (document.getElementById('hsFirstName').value+' '+document.getElementById('hsLastName').value).trim().toUpperCase();
@@ -269,7 +296,38 @@ async function verify(){
     box.innerHTML = warnCard('Connection error', String(e));
   }
 }
-function warnCard(t,d){ return `<div class="match warn"><div class="tag"><span class="dot"></span> ${t}</div><div class="hint">${esc(d)}</div></div>`; }
+function warnCard(t,d,offerNew){ return `<div class="match warn"><div class="tag"><span class="dot"></span> ${t}</div><div class="hint">${esc(d)}</div>${offerNew?'<button class="btn btn-red" onclick="showNewClient()">+ New client — create & charge</button>':''}</div>`; }
+function showNewClient(){
+  document.getElementById('newclient').classList.remove('hide');
+  // pre-fill from HawkLink-flooded name fields if present
+  document.getElementById('ncFirst').value = document.getElementById('hsFirstName').value.trim();
+  document.getElementById('ncLast').value  = document.getElementById('hsLastName').value.trim();
+  document.getElementById('ncPhone').value = document.getElementById('hsPhone').value.trim();
+  document.getElementById('newclient').scrollIntoView({behavior:'smooth'});
+}
+async function createClient(){
+  const out = document.getElementById('ncOut');
+  out.style.display='block'; out.textContent='Creating client in HawkSoft…';
+  try{
+    const j = await post({action:'charge_create_client',
+      firstName: document.getElementById('ncFirst').value,
+      lastName:  document.getElementById('ncLast').value,
+      phone:     document.getElementById('ncPhone').value,
+      officeId:  document.getElementById('ncOffice').value});
+    if(j.ok){
+      out.textContent = j.clientNumber
+        ? '✓ Created — client #'+j.clientNumber+'. Verifying…'
+        : '✓ Created. Response had no client # — check HawkSoft and type it above.';
+      if(j.clientNumber){
+        document.getElementById('hsClientNumber').value = String(j.clientNumber);
+        document.getElementById('newclient').classList.add('hide');
+        verify();
+      }
+    } else {
+      out.textContent = '✗ ' + (j.error || JSON.stringify(j));
+    }
+  }catch(e){ out.textContent = 'Error: '+e; }
+}
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function resetMatch(){ document.getElementById('matchbox').innerHTML=''; document.getElementById('chargecard').classList.add('hide'); confirmed=null; }
 function confirmClient(n){

@@ -8,7 +8,7 @@
 const AGENCY_ID = 15112;
 
 /* ---------- Google Sign-In (charge page) ---------- */
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'NOT_CONFIGURED';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 const STAFF = {
   'sammy@speedyins.com':     ['Samuel Rodriguez', 'Moreno Valley'],
   'yolanda@speedyins.com':   ['Yolanda Hernandez', 'Moreno Valley'],

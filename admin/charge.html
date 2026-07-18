@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Charge Client — Speedy Insurance</title>
+<style>
+  :root{
+    --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
+    --red:#e03131; --red-d:#c22424; --blue:#4d7cfe; --green:#2fbf71; --amber:#f5a623;
+    --ink:#f2f5ff; --mute:#8f9ac4; --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--navy);color:var(--ink);font:15px/1.45 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       min-height:100vh;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:460px;padding:18px 16px 60px}
+  .top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px}
+  .brand{font-style:italic;font-weight:800}
+  .brand .s{color:var(--blue)} .brand .i{color:var(--red)}
+  .ver{font-size:11px;color:var(--mute)}
+  h1{font-size:21px;font-weight:800;margin:14px 0 2px}
+  .sub{color:var(--mute);font-size:13px;margin-bottom:16px}
+  .card{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+  .eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:10px}
+  label{font-size:12px;color:var(--mute);display:block;margin:12px 0 6px;font-weight:600}
+  input{width:100%;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;
+    color:var(--ink);font-size:16px;padding:12px 14px;outline:none;font-family:inherit}
+  input:focus{border-color:var(--blue)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .btn{display:block;width:100%;border:none;border-radius:11px;padding:14px;font-size:15.5px;font-weight:800;
+       cursor:pointer;margin-top:14px;font-family:inherit}
+  .btn-red{background:var(--red);color:#fff}
+  .btn-red:active{background:var(--red-d)}
+  .btn-ghost{background:transparent;color:var(--mute);border:1.5px solid var(--line);font-weight:600}
+  .btn:disabled{opacity:.35;cursor:default}
+  .hint{font-size:12px;color:var(--mute);margin-top:10px}
+  .match{border:1.5px solid var(--green);border-radius:var(--radius);background:linear-gradient(180deg,rgba(47,191,113,.10),rgba(47,191,113,.02));
+         padding:16px;margin-top:14px;animation:pop .25s ease}
+  @keyframes pop{from{transform:scale(.97);opacity:0}to{transform:scale(1);opacity:1}}
+  .match .tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.1em;
+              text-transform:uppercase;margin-bottom:9px;color:var(--green)}
+  .match .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+  .match h2{font-size:19px;font-weight:800;line-height:1.25}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:var(--navy);border:1px solid var(--line)}
+  .chip.b{color:var(--blue);border-color:rgba(77,124,254,.4)}
+  .warn{border-color:var(--amber);background:linear-gradient(180deg,rgba(245,166,35,.10),rgba(245,166,35,.02))}
+  .warn .tag{color:var(--amber)} .warn .dot{background:var(--amber)}
+  .amt{display:flex;align-items:center;background:var(--navy);border:1.5px solid var(--line);border-radius:12px;padding:4px 14px;margin-top:2px}
+  .amt span{font-size:24px;font-weight:800;color:var(--mute);margin-right:6px}
+  .amt input{border:none;background:transparent;font-size:30px;font-weight:800;padding:8px 0;font-variant-numeric:tabular-nums}
+  .purpose{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .purpose button{background:var(--navy);border:1.5px solid var(--line);color:var(--ink);border-radius:10px;
+                  padding:11px 8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  .purpose button.sel{border-color:var(--red);background:rgba(224,49,49,.15)}
+  .note{border:1.5px dashed rgba(77,124,254,.45);border-radius:10px;background:rgba(77,124,254,.06);
+        padding:12px 14px;font-size:12.5px;color:var(--mute);margin-top:14px}
+  .note b{color:var(--blue)}
+  pre{background:#0a1027;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:11.5px;
+      color:#9fe8bf;white-space:pre-wrap;word-break:break-word;margin-top:12px;display:none}
+  .hide{display:none}
+  .ok{color:var(--green);font-weight:800}
+  #gate{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:50}
+  .gatebox{width:90%;max-width:340px;text-align:center}
+  .gatebox h2{font-size:17px;margin:14px 0 4px}
+  .gatebox p{color:var(--mute);font-size:12.5px;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="gatebox">
+    <div class="brand" style="font-size:20px"><span class="s">SPEEDY</span> <span class="i">INSURANCE AGENCY</span></div>
+    <h2>Charge Client</h2>
+    <p>Staff only</p>
+    <input type="password" id="gpw" placeholder="Enter password">
+    <button class="btn btn-red" onclick="unlock()">Unlock</button>
+    <div id="gerr" class="hint" style="color:var(--red);display:none">Incorrect password. Try again.</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
+    <div class="ver">v1 · HawkLink test build</div>
+  </div>
+  <h1>Charge client</h1>
+  <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
+
+  <!-- Settings (test phase) -->
+  <div class="card">
+    <div class="eyebrow">Setup — this computer</div>
+    <label>Admin API key (saved on this computer only)</label>
+    <input type="password" id="akey" placeholder="Paste ADMIN_API_KEY" autocomplete="off">
+    <div class="hint">Test phase only — agent PINs replace this before rollout.</div>
+  </div>
+
+  <!-- Client fields: HawkLink mapping targets -->
+  <div class="card">
+    <div class="eyebrow">Client — HawkLink fills these</div>
+    <label for="hsClientNumber">HawkSoft client #</label>
+    <input type="text" id="hsClientNumber" name="hsClientNumber" placeholder="e.g. 26081" inputmode="numeric" autocomplete="off">
+    <div class="grid2">
+      <div>
+        <label for="hsFirstName">First name (or business)</label>
+        <input type="text" id="hsFirstName" name="hsFirstName" autocomplete="off">
+      </div>
+      <div>
+        <label for="hsLastName">Last name</label>
+        <input type="text" id="hsLastName" name="hsLastName" autocomplete="off">
+      </div>
+    </div>
+    <label for="hsPhone">Phone</label>
+    <input type="tel" id="hsPhone" name="hsPhone" placeholder="(951) 555-1234" autocomplete="off">
+    <button class="btn btn-red" id="verifyBtn" onclick="verify()">Verify in HawkSoft</button>
+    <div class="hint">HawkLink mapping: open a client in HawkSoft → open this page → HawkLink icon → double-click each HawkSoft field onto the boxes above → save mapping.</div>
+    <div id="matchbox"></div>
+  </div>
+
+  <!-- Amount + test write -->
+  <div class="card hide" id="chargecard">
+    <div class="eyebrow">Amount</div>
+    <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00" value="1.00"></div>
+    <label>Payment for</label>
+    <div class="purpose" id="purp">
+      <button class="sel" type="button" onclick="pick(this)">Down payment</button>
+      <button type="button" onclick="pick(this)">Renewal</button>
+      <button type="button" onclick="pick(this)">Endorsement</button>
+      <button type="button" onclick="pick(this)">Other</button>
+    </div>
+    <label>Your initials (until PINs)</label>
+    <input type="text" id="agent" placeholder="e.g. SA" maxlength="6" autocomplete="off">
+    <div class="note"><b>Test build:</b> no money moves here yet — Clover secure card fields are the next phase.
+      The button below proves the write path: it posts a log note to the client file in HawkSoft
+      (allowed on <b>ZZTEST #26081 only</b> in this phase).</div>
+    <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST log note to client file</button>
+    <pre id="out"></pre>
+  </div>
+</div>
+
+<script>
+const API = '/api/hawksoft';
+let confirmed = null, purpose = 'Down payment';
+
+/* gate — same light protection as the HawkSoft dashboard */
+function unlock(){
+  if(document.getElementById('gpw').value === 'speedyadmin2024'){
+    document.getElementById('gate').style.display='none';
+    sessionStorage.setItem('cg_ok','1');
+  } else { document.getElementById('gerr').style.display='block'; }
+}
+if(sessionStorage.getItem('cg_ok')==='1') document.getElementById('gate').style.display='none';
+document.getElementById('gpw').addEventListener('keydown',e=>{if(e.key==='Enter')unlock()});
+
+/* admin key persistence (this computer) */
+const akey = document.getElementById('akey');
+akey.value = localStorage.getItem('cg_key') || '';
+akey.addEventListener('change', ()=>localStorage.setItem('cg_key', akey.value.trim()));
+
+/* auto-verify when HawkLink floods the client # (fires input events) */
+let vt=null;
+document.getElementById('hsClientNumber').addEventListener('input', ()=>{
+  clearTimeout(vt); vt=setTimeout(()=>{ if(digits(idval()).length>=4) verify(); }, 700);
+});
+function idval(){ return document.getElementById('hsClientNumber').value.trim(); }
+function digits(s){ return (s||'').replace(/\D/g,''); }
+
+async function post(body){
+  const r = await fetch(API, {method:'POST',
+    headers:{'Content-Type':'application/json','x-admin-key':akey.value.trim()},
+    body: JSON.stringify(body)});
+  return r.json();
+}
+
+async function verify(){
+  const box = document.getElementById('matchbox');
+  const id = parseInt(digits(idval()),10);
+  if(!akey.value.trim()){ box.innerHTML = warnCard('Admin key missing','Paste the ADMIN_API_KEY in the setup box first.'); return; }
+  if(!id){ box.innerHTML = warnCard('No client #','HawkLink should fill the client # — or type it.'); return; }
+  box.innerHTML = '<div class="hint">Checking HawkSoft…</div>';
+  document.getElementById('chargecard').classList.add('hide');
+  confirmed = null;
+  try{
+    const j = await post({action:'charge_lookup', clientId:id});
+    if(!j.ok){ box.innerHTML = warnCard('Not found', 'No client #'+id+' in HawkSoft. Check the number, or create the client first.'); return; }
+    const c = j.result;
+    // cross-check the HawkLink-filled name against the API name
+    const typed = (document.getElementById('hsFirstName').value+' '+document.getElementById('hsLastName').value).trim().toUpperCase();
+    const apiName = String(c.name||'').toUpperCase();
+    const mismatch = typed.length>3 && apiName.length>3 &&
+        !apiName.includes(typed.split(' ')[0]) && !typed.includes(apiName.split(' ')[0]);
+    box.innerHTML = `
+      <div class="match ${mismatch?'warn':''}">
+        <div class="tag"><span class="dot"></span> ${mismatch?'Name mismatch — check!':'Matched in HawkSoft'}</div>
+        <h2>${esc(c.name)}</h2>
+        <div class="meta">
+          <span class="chip">Client #${c.clientNumber}</span>
+          ${c.officeId?`<span class="chip b">Office ${c.officeId}</span>`:''}
+          ${(c.phones||[]).map(p=>`<span class="chip">${esc(p)}</span>`).join('')}
+          ${c.status?`<span class="chip">${esc(c.status)}</span>`:''}
+        </div>
+        ${mismatch?`<div class="hint" style="color:var(--amber)">HawkLink sent “${esc(typed)}” but HawkSoft #${c.clientNumber} is “${esc(c.name)}”. Make sure the right client file was open.</div>`:''}
+        <button class="btn btn-red" onclick="confirmClient(${c.clientNumber})">✓ Yes — this is the client</button>
+        <button class="btn btn-ghost" onclick="resetMatch()">Not them — clear</button>
+      </div>`;
+    confirmed = c;
+  }catch(e){
+    box.innerHTML = warnCard('Connection error', String(e));
+  }
+}
+function warnCard(t,d){ return `<div class="match warn"><div class="tag"><span class="dot"></span> ${t}</div><div class="hint">${esc(d)}</div></div>`; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function resetMatch(){ document.getElementById('matchbox').innerHTML=''; document.getElementById('chargecard').classList.add('hide'); confirmed=null; }
+function confirmClient(n){
+  document.getElementById('chargecard').classList.remove('hide');
+  window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+}
+function pick(b){document.querySelectorAll('#purp button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');purpose=b.textContent}
+
+async function testLog(){
+  const out = document.getElementById('out');
+  out.style.display='block'; out.textContent='Writing log note…';
+  try{
+    const j = await post({action:'charge_log', clientId: confirmed.clientNumber,
+      amount: document.getElementById('amount').value||'0.00', purpose,
+      agent: document.getElementById('agent').value||'unknown'});
+    out.textContent = JSON.stringify(j,null,2);
+    if(j.ok) out.textContent += '\n\n✓ Open ZZTEST #26081 in HawkSoft → Log tab. The note should be there.';
+  }catch(e){ out.textContent = 'Error: '+e; }
+}
+</script>
+</body>
+</html>

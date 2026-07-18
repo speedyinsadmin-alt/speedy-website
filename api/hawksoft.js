@@ -109,7 +109,7 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
 
     // Google-authenticated users may only use charge-page actions
-    if (!isAdmin && !['charge_lookup', 'charge_log'].includes(action)) {
+    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 

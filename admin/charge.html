@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.5 · sign-in pops on open</div>
+    <div class="ver">v2.6 · instant lookup on sign-in</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -166,7 +166,13 @@ function showSignedIn(){
     document.getElementById('whoBranch').textContent = s[1];
   }
 }
-function onCred(resp){ gToken = resp.credential; showSignedIn(); }
+function onCred(resp){
+  gToken = resp.credential; showSignedIn();
+  // fields may already be flooded by HawkLink — look the client up immediately
+  const pol = document.getElementById('hsPolicyNumber').value.trim();
+  if (pol.length >= 5) { polLookup(pol); return; }
+  if (digits(idval()).length >= 4) { verify(); }
+}
 function signOut(){ gToken = null; showSignedIn(); }
 window.addEventListener('load', ()=>{
   if(GOOGLE_CLIENT_ID.startsWith('PASTE_')){

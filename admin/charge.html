@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.8 · new-client path</div>
+    <div class="ver">v2.9 · new-client always visible</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -117,6 +117,7 @@
     <label for="hsPhone">Phone</label>
     <input type="tel" id="hsPhone" name="hsPhone" placeholder="(951) 555-1234" autocomplete="off">
     <button class="btn btn-red" id="verifyBtn" onclick="verify()">Verify in HawkSoft</button>
+    <button class="btn btn-ghost" onclick="showNewClient()">+ New client (not in HawkSoft yet)</button>
     <div class="hint">HawkLink mapping: open a client in HawkSoft → open this page → HawkLink icon → double-click each HawkSoft field onto the boxes above → save mapping.</div>
     <div id="matchbox"></div>
   </div>

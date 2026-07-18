@@ -70,6 +70,51 @@ export default async function handler(req, res) {
 
     const { action } = req.body || {};
 
+    /* ---------- Charge page: real-name lookup (minimal fields, no policy/PII dump) ---------- */
+    if (action === 'charge_lookup') {
+      const clientId = parseInt((req.body || {}).clientId, 10);
+      if (!clientId) return res.status(400).json({ ok: false, error: 'clientId required' });
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=Details,People,Contacts`, {});
+      if (r.status !== 200) return res.status(200).json({ ok: false, httpStatus: r.status, error: 'Client not found' });
+      const b = r.body || {};
+      // Defensive extraction — v4 shapes vary
+      let name = '';
+      const people = b.people || b.People || [];
+      if (people.length) {
+        const p = people[0] || {};
+        name = [p.businessName, [p.firstName, p.lastName].filter(Boolean).join(' ')].filter(Boolean)[0] || '';
+      }
+      if (!name) name = b.businessName || b.name || '';
+      const raw = JSON.stringify(b);
+      const phones = [...new Set((raw.match(/\(\d{3}\)\s?\d{3}-\d{4}/g) || []))].slice(0, 3);
+      const officeId = b.officeId || (b.details && b.details.officeId) || b.OfficeId || null;
+      const status = b.status || (b.details && b.details.status) || '';
+      return res.status(200).json({ ok: true, result: {
+        clientNumber: b.clientNumber || clientId, name: name || '(no name on file)',
+        phones, officeId, status,
+      }});
+    }
+
+    /* ---------- Charge page: test write — restricted to ZZTEST #26081 in this phase ---------- */
+    if (action === 'charge_log') {
+      const clientId = parseInt((req.body || {}).clientId, 10);
+      if (!clientId) return res.status(400).json({ ok: false, error: 'clientId required' });
+      if (clientId !== 26081) {
+        return res.status(400).json({ ok: false, error: 'Charge-page test writes are limited to ZZTEST client #26081 in this phase.' });
+      }
+      const { amount, purpose, agent } = req.body || {};
+      const payload = {
+        refId: crypto.randomUUID(),
+        ts: new Date().toISOString(),
+        channel: 29,
+        note: `CHARGE PAGE TEST — $${String(amount || '0.00')} · ${String(purpose || 'Payment')} · by ${String(agent || 'unknown')}. HawkLink launch test — no money moved. Safe to ignore.`,
+      };
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, result: r.body });
+    }
+
     if (action === 'create_test_client') {
       const now = new Date().toISOString();
       const payload = {

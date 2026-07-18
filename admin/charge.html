@@ -84,7 +84,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.2 · policy-# lookup</div>
+    <div class="ver">v2.3 · sign-in per charge</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -157,7 +157,7 @@
 <script>
 const API = '/api/hawksoft';
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-let confirmed = null, purpose = 'Down payment', gToken = sessionStorage.getItem('cg_gt') || null;
+let confirmed = null, purpose = 'Down payment', gToken = null; // memory only — sign-in required every launch
 
 const STAFF_UI = {
   'sammy@speedyins.com':['Samuel Rodriguez','Moreno Valley'],'yolanda@speedyins.com':['Yolanda Hernandez','Moreno Valley'],
@@ -180,8 +180,8 @@ function showSignedIn(){
     document.getElementById('whoBranch').textContent = s[1];
   }
 }
-function onCred(resp){ gToken = resp.credential; sessionStorage.setItem('cg_gt', gToken); showSignedIn(); }
-function signOut(){ gToken = null; sessionStorage.removeItem('cg_gt'); showSignedIn(); }
+function onCred(resp){ gToken = resp.credential; showSignedIn(); }
+function signOut(){ gToken = null; showSignedIn(); }
 window.addEventListener('load', ()=>{
   if(GOOGLE_CLIENT_ID.startsWith('PASTE_')){
     document.getElementById('gsihint').textContent = 'Google Sign-In not connected yet — waiting for the OAuth Client ID. Use Admin fallback below for now.';
@@ -298,7 +298,10 @@ async function testLog(){
     const j = await post({action:'charge_log', clientId: confirmed.clientNumber,
       amount: document.getElementById('amount').value||'0.00', purpose});
     out.textContent = JSON.stringify(j,null,2);
-    if(j.ok) out.textContent += '\n\n✓ Open ZZTEST #26081 in HawkSoft → Log tab. The note should be there.';
+    if(j.ok){
+      out.textContent += '\n\n✓ Posted to HawkSoft. Signing you out — next charge needs a fresh sign-in.';
+      setTimeout(()=>{ signOut(); window.scrollTo({top:0,behavior:'smooth'}); }, 1500);
+    }
   }catch(e){ out.textContent = 'Error: '+e; }
 }
 </script>

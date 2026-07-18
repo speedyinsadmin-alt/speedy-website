@@ -84,7 +84,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.1 · flood-aware verify</div>
+    <div class="ver">v2.2 · policy-# lookup</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -114,7 +114,9 @@
   <!-- Client fields: HawkLink mapping targets -->
   <div class="card">
     <div class="eyebrow">Client — HawkLink fills these</div>
-    <label for="hsClientNumber">HawkSoft client #</label>
+    <label for="hsPolicyNumber">Policy # (HawkLink floods this)</label>
+    <input type="text" id="hsPolicyNumber" name="hsPolicyNumber" placeholder="e.g. GSP90680187" autocomplete="off">
+    <label for="hsClientNumber">HawkSoft client # (or type it)</label>
     <input type="text" id="hsClientNumber" name="hsClientNumber" placeholder="e.g. 26081" inputmode="numeric" autocomplete="off">
     <div class="grid2">
       <div>
@@ -210,6 +212,28 @@ let vt=null, lastSeen='';
 function queueVerify(){ clearTimeout(vt); vt=setTimeout(()=>{ if(digits(idval()).length>=4) verify(); }, 700); }
 document.getElementById('hsClientNumber').addEventListener('input', queueVerify);
 setInterval(()=>{ const v=idval(); if(v!==lastSeen){ lastSeen=v; if(digits(v).length>=4) queueVerify(); } }, 500);
+
+/* policy # → find client automatically (HawkLink floods policy number) */
+let lastPol='', pt=null;
+setInterval(()=>{ const p=document.getElementById('hsPolicyNumber').value.trim();
+  if(p!==lastPol){ lastPol=p; if(p.length>=5){ clearTimeout(pt); pt=setTimeout(()=>polLookup(p), 700); } } }, 500);
+async function polLookup(pol){
+  const box = document.getElementById('matchbox');
+  if(!gToken && !akey.value.trim()){ box.innerHTML = warnCard('Sign in first','Sign in above, then the policy # can find the client.'); return; }
+  box.innerHTML = '<div class="hint">Finding client from policy '+esc(pol)+'…</div>';
+  try{
+    const j = await post({action:'search_policy', policyNumber: pol});
+    const cl = (j.ok && j.result && j.result.clients) || [];
+    if(cl.length === 1){
+      document.getElementById('hsClientNumber').value = String(cl[0].clientNumber);
+      // watcher picks it up and runs verify
+    } else if(cl.length === 0){
+      box.innerHTML = warnCard('Policy not found','No client holds policy '+esc(pol)+'. Type the client # instead.');
+    } else {
+      box.innerHTML = warnCard('Multiple matches','Policy '+esc(pol)+' matches '+cl.length+' clients: '+cl.map(x=>'#'+x.clientNumber).join(', ')+'. Type the right client #.');
+    }
+  }catch(e){ box.innerHTML = warnCard('Connection error', String(e)); }
+}
 function idval(){ return document.getElementById('hsClientNumber').value.trim(); }
 function digits(s){ return (s||'').replace(/\D/g,''); }
 

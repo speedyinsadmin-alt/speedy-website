@@ -6,6 +6,37 @@
 //        Actions: create_test_client, add_log, lookup_client (returns MASKED field shapes only).
 
 const AGENCY_ID = 15112;
+
+/* ---------- Google Sign-In (charge page) ---------- */
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'NOT_CONFIGURED';
+const STAFF = {
+  'sammy@speedyins.com':     ['Samuel Rodriguez', 'Moreno Valley'],
+  'yolanda@speedyins.com':   ['Yolanda Hernandez', 'Moreno Valley'],
+  'jorge@speedyins.com':     ['Jorge Ramos', 'Moreno Valley'],
+  'lfigueroa@speedyins.com': ['Laura Figueroa', 'Moreno Valley'],
+  'chris@speedyins.com':     ['Christian Aguilar', 'Lake Elsinore'],
+  'yasmin@speedyins.com':    ['Yasmin Alfaro', 'Riverside Van Buren'],
+  'fernando@speedyins.com':  ['Fernando Salgado', 'Riverside Van Buren'],
+  'jesus@speedyins.com':     ['Jesus Velarde', 'Riverside Van Buren'],
+  'alejandra@speedyins.com': ['Alejandra Salas', 'Riverside Magnolia'],
+  'esmeralda@speedyins.com': ['Esmeralda Ayala Hernandez', 'Riverside Magnolia'],
+  'irene@speedyins.com':     ['Irene Ayala Hernandez', 'Riverside Magnolia'],
+  'tony@speedyins.com':      ['Tony Dabouqi', 'All branches'],
+  'lana@speedyins.com':      ['Lana D.', 'All branches'],
+};
+async function verifyGoogleToken(idToken) {
+  if (!idToken || GOOGLE_CLIENT_ID === 'NOT_CONFIGURED') return null;
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken));
+    if (r.status !== 200) return null;
+    const t = await r.json();
+    if (t.aud !== GOOGLE_CLIENT_ID) return null;
+    if (String(t.email_verified) !== 'true') return null;
+    const email = String(t.email || '').toLowerCase();
+    if (!email.endsWith('@speedyins.com')) return null;
+    return email;
+  } catch { return null; }
+}
 const BASE = 'https://integration.hawksoft.app';
 
 // Map human LOB names to HawkSoft LOB codes (v4 spec enumeration).
@@ -64,11 +95,23 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const KEY = process.env.ADMIN_API_KEY;
     if (!KEY) return res.status(500).json({ ok: false, error: 'ADMIN_API_KEY env var not set in Vercel' });
-    if ((req.headers['x-admin-key'] || '') !== KEY) {
-      return res.status(401).json({ ok: false, error: 'Invalid or missing API key' });
+    const isAdmin = (req.headers['x-admin-key'] || '') === KEY;
+    let userEmail = null;
+    if (!isAdmin) {
+      userEmail = await verifyGoogleToken(req.headers['x-user-token']);
+      if (!userEmail) {
+        return res.status(401).json({ ok: false, error: GOOGLE_CLIENT_ID === 'NOT_CONFIGURED'
+          ? 'Sign-in not configured yet (GOOGLE_CLIENT_ID env var missing) — use admin key.'
+          : 'Sign in with your @speedyins.com Google account, or use the admin key.' });
+      }
     }
 
     const { action } = req.body || {};
+
+    // Google-authenticated users may only use charge-page actions
+    if (!isAdmin && !['charge_lookup', 'charge_log'].includes(action)) {
+      return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
+    }
 
     /* ---------- Charge page: real-name lookup (minimal fields, no policy/PII dump) ---------- */
     if (action === 'charge_lookup') {
@@ -107,7 +150,12 @@ export default async function handler(req, res) {
         refId: crypto.randomUUID(),
         ts: new Date().toISOString(),
         channel: 29,
-        note: `CHARGE PAGE TEST — $${String(amount || '0.00')} · ${String(purpose || 'Payment')} · by ${String(agent || 'unknown')}. HawkLink launch test — no money moved. Safe to ignore.`,
+        note: (() => {
+          const who = userEmail
+            ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail}) — ${STAFF[userEmail][1]}` : userEmail)
+            : `admin key${agent ? ' — ' + String(agent) : ''}`;
+          return `CHARGE PAGE TEST — $${String(amount || '0.00')} · ${String(purpose || 'Payment')} · by ${who}. HawkLink launch test — no money moved. Safe to ignore.`;
+        })(),
       };
       const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify(payload),

@@ -62,29 +62,15 @@
       color:#9fe8bf;white-space:pre-wrap;word-break:break-word;margin-top:12px;display:none}
   .hide{display:none}
   .ok{color:var(--green);font-weight:800}
-  #gate{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:50}
-  .gatebox{width:90%;max-width:340px;text-align:center}
-  .gatebox h2{font-size:17px;margin:14px 0 4px}
-  .gatebox p{color:var(--mute);font-size:12.5px;margin-bottom:14px}
 </style>
 </head>
 <body>
 
-<div id="gate">
-  <div class="gatebox">
-    <div class="brand" style="font-size:20px"><span class="s">SPEEDY</span> <span class="i">INSURANCE AGENCY</span></div>
-    <h2>Charge Client</h2>
-    <p>Staff only</p>
-    <input type="password" id="gpw" placeholder="Enter password">
-    <button class="btn btn-red" onclick="unlock()">Unlock</button>
-    <div id="gerr" class="hint" style="color:var(--red);display:none">Incorrect password. Try again.</div>
-  </div>
-</div>
 
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.3 · sign-in per charge</div>
+    <div class="ver">v2.4 · one-step sign-in</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -192,15 +178,6 @@ window.addEventListener('load', ()=>{
   showSignedIn();
 });
 
-/* gate — same light protection as the HawkSoft dashboard */
-function unlock(){
-  if(document.getElementById('gpw').value === 'speedyadmin2024'){
-    document.getElementById('gate').style.display='none';
-    sessionStorage.setItem('cg_ok','1');
-  } else { document.getElementById('gerr').style.display='block'; }
-}
-if(sessionStorage.getItem('cg_ok')==='1') document.getElementById('gate').style.display='none';
-document.getElementById('gpw').addEventListener('keydown',e=>{if(e.key==='Enter')unlock()});
 
 /* admin key persistence (this computer) */
 const akey = document.getElementById('akey');

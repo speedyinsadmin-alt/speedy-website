@@ -24,6 +24,27 @@ const STAFF = {
   'tony@speedyins.com':      ['Tony Dabouqi', 'All branches'],
   'lana@speedyins.com':      ['Lana D.', 'All branches'],
 };
+/* ---------- Independent audit log (Vercel Blob) — survives HawkSoft outages ---------- */
+async function audit(event) {
+  const tok = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!tok) return false;
+  try {
+    const ts = new Date().toISOString();
+    const path = `audit/${ts.slice(0, 10)}/${ts.replace(/[:.]/g, '-')}_${event.action || 'event'}.json`;
+    const r = await fetch(`https://blob.vercel-storage.com/${path}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${tok}`,
+        'x-api-version': '7',
+        'content-type': 'application/json',
+        'x-add-random-suffix': '0',
+      },
+      body: JSON.stringify({ ts, ...event }),
+    });
+    return r.status === 200;
+  } catch { return false; }
+}
+
 async function verifyGoogleToken(idToken) {
   if (!idToken || GOOGLE_CLIENT_ID === 'NOT_CONFIGURED') return null;
   try {
@@ -172,7 +193,8 @@ export default async function handler(req, res) {
       if (r.body && typeof r.body === 'object') {
         clientNumber = r.body.clientNumber || r.body.clientId || r.body.id || null;
       }
-      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, clientNumber, result: r.body });
+      const auditSaved = await audit({ action: 'charge_create_client', who, officeId, clientNumber, httpStatus: r.status });
+      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, clientNumber, result: r.body, auditSaved });
     }
 
     /* ---------- Channel probe — labeled logs on ZZTEST to map channel numbers to UI wording ---------- */
@@ -280,7 +302,8 @@ export default async function handler(req, res) {
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 
-      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId });
+      const auditSaved = await audit({ action: 'charge_full_test', who, clientId, amount: total, purpose, txnId, hawksoft: out });
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, auditSaved });
     }
 
     /* ---------- Charge page: test write — restricted to ZZTEST #26081 in this phase ---------- */

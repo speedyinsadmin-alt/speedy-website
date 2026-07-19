@@ -249,7 +249,7 @@ export default async function handler(req, res) {
         headers: {
           'Content-Type': 'application/octet-stream',
           RefId: crypto.randomUUID(), TS: now.toISOString(),
-          Desc: b64h(`TEST receipt PDF — $${total.toFixed(2)} ${purpose}, txn ${txnId}`),
+          Desc: b64h(`Clover receipt $${total.toFixed(2)} (TEST)`.slice(0, 41)),
           LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge (TEST). Charged by ${who}.`),
           FileName: b64h(fname), FileExt: 'pdf', Channel: '31',
         },

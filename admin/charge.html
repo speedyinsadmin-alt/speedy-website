@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.12 · full receipt trail test</div>
+    <div class="ver">v2.13 · attachment fix</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -164,9 +164,9 @@
       <label for="otherText">What's this payment for?</label>
       <input type="text" id="otherText" maxlength="60" placeholder="e.g. DMV service, broker fee, reinstatement" autocomplete="off">
     </div>
-    <div class="note"><b>Test build:</b> no money moves here yet — Clover secure card fields are the next phase.
-      The button below proves the write path: it posts a log note to the client file in HawkSoft
-      (allowed on <b>ZZTEST #26081 only</b> in this phase).</div>
+    <div class="note"><b>Test build:</b> no money moves yet — Clover card fields are the next phase.
+      The button posts the full payment trail to HawkSoft: accounting receipt + receipt PDF in
+      Attachments + log note (<b>ZZTEST #26081 only</b>, capped at $10).</div>
     <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST)</button>
     <pre id="out"></pre>
   </div>

@@ -234,7 +234,7 @@ export default async function handler(req, res) {
 
       // 1) Accounting receipt
       const receipt = [{
-        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21,
+        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
         payMethod: 'CreditCard', total,
         logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose} · by ${who} · txn ${txnId}. TEST — safe to void.`,
       }];
@@ -288,7 +288,7 @@ export default async function handler(req, res) {
           RefId: crypto.randomUUID(), TS: now.toISOString(),
           Desc: b64h(`Clover receipt $${total.toFixed(2)} (TEST)`.slice(0, 41)),
           LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge (TEST). Charged by ${who}.`),
-          FileName: b64h(fname), FileExt: 'pdf', Channel: '31',
+          FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
         },
         body: gzipSync(pdfBuf),
       });
@@ -297,7 +297,7 @@ export default async function handler(req, res) {
       // 3) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
-          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29,
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32, // Online From 3rd Party — the bridge
           note: `CHARGE PAGE full-trail TEST — $${total.toFixed(2)} · ${purpose} · by ${who} · txn ${txnId}. Receipt posted + PDF attached. No money moved.`,
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };

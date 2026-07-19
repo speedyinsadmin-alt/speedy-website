@@ -210,7 +210,7 @@ export default async function handler(req, res) {
       const lines = [
         ['SPEEDY INSURANCE AGENCY', 16, 1, 720],
         ['PAYMENT RECEIPT  (TEST)', 12, 1, 695],
-        [`$${total.toFixed(2)}  —  APPROVED`, 22, 1, 660],
+        [`$${total.toFixed(2)}  -  APPROVED`, 22, 1, 660],
         [`Date/Time: ${stamp} PT`, 10, 0, 625],
         [`Client: ZZTEST DELETE ME - API TEST   (#26081, Moreno Valley)`, 10, 0, 610],
         [`Payment for: ${purpose}`, 10, 0, 595],

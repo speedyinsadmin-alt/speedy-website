@@ -243,7 +243,7 @@ export default async function handler(req, res) {
 
       const { gzipSync } = await import('node:zlib');
       const b64h = s => Buffer.from(s, 'utf8').toString('base64');
-      const fname = `Clover_Receipt_TEST_${now.toISOString().slice(0, 10)}_${total.toFixed(2)}`;
+      const fname = `Clover_Receipt_TEST_${now.toISOString().slice(0, 10)}_${String(total.toFixed(2)).replace('.', '-')}usd`;
       const r2 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
         method: 'POST',
         headers: {
@@ -255,7 +255,7 @@ export default async function handler(req, res) {
         },
         body: gzipSync(pdfBuf),
       });
-      out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status };
+      out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
 
       // 3) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {

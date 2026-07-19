@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.13 · attachment fix</div>
+    <div class="ver">v2.14 · channel probe</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -168,6 +168,7 @@
       The button posts the full payment trail to HawkSoft: accounting receipt + receipt PDF in
       Attachments + log note (<b>ZZTEST #26081 only</b>, capped at $10).</div>
     <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST)</button>
+    <button class="btn btn-ghost" onclick="probeChannels()" style="font-size:13px;padding:10px">🔬 Probe log channels on ZZTEST (find "From Other")</button>
     <pre id="out"></pre>
   </div>
 </div>
@@ -347,6 +348,13 @@ function purposeText(){
   const t=document.getElementById('otherText').value.trim();
   return t ? 'Other: '+t : 'Other';}
 
+async function probeChannels(){
+  const out = document.getElementById('out');
+  out.style.display='block'; out.textContent='Posting 10 labeled probe logs to ZZTEST…';
+  try{ const j = await post({action:'probe_channels'});
+    out.textContent = JSON.stringify(j,null,2) + '\n\nNow open ZZTEST → Log tab: each PROBE row shows its channel wording. Tell Claude which number shows From > Other.';
+  }catch(e){ out.textContent='Error: '+e; }
+}
 async function testLog(){
   const out = document.getElementById('out');
   out.style.display='block'; out.textContent='Writing log note…';

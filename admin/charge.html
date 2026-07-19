@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.9 · new-client always visible</div>
+    <div class="ver">v2.10 · branch names</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -284,7 +284,7 @@ async function verify(){
         <h2>${esc(c.name)}</h2>
         <div class="meta">
           <span class="chip">Client #${c.clientNumber}</span>
-          ${c.officeId?`<span class="chip b">Office ${c.officeId}</span>`:''}
+          ${c.officeId?`<span class="chip b">${({1:'Moreno Valley',2:'Riverside — Van Buren',3:'Riverside — Magnolia'})[c.officeId]||('Office '+c.officeId)}</span>`:''}
           ${(c.phones||[]).map(p=>`<span class="chip">${esc(p)}</span>`).join('')}
           ${c.status?`<span class="chip">${esc(c.status)}</span>`:''}
         </div>

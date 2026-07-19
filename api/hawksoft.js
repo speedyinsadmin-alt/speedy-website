@@ -109,7 +109,7 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
 
     // Google-authenticated users may only use charge-page actions
-    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test'].includes(action)) {
+    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -173,6 +173,21 @@ export default async function handler(req, res) {
         clientNumber = r.body.clientNumber || r.body.clientId || r.body.id || null;
       }
       return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, clientNumber, result: r.body });
+    }
+
+    /* ---------- Channel probe — labeled logs on ZZTEST to map channel numbers to UI wording ---------- */
+    if (action === 'probe_channels') {
+      const results = [];
+      for (const ch of [25, 26, 27, 28, 30, 32, 33, 34, 35, 36]) {
+        const r = await hs(`/vendor/agency/${AGENCY_ID}/client/26081/log?version=4.0`, {
+          method: 'POST', body: JSON.stringify({
+            refId: crypto.randomUUID(), ts: new Date().toISOString(), channel: ch,
+            note: `CHANNEL PROBE — this is channel ${ch}. Look at the Online/Walkin + From columns for this row.`,
+          }) });
+        results.push({ channel: ch, status: r.status });
+      }
+      return res.status(200).json({ ok: true, results,
+        hint: 'Open ZZTEST Log tab — each probe row shows how its channel number renders. Find the one that says From > Other.' });
     }
 
     /* ---------- Charge page: FULL trail test — receipt + PDF attachment + log, ZZTEST only ---------- */

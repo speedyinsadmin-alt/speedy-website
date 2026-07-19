@@ -109,7 +109,7 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
 
     // Google-authenticated users may only use charge-page actions
-    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client'].includes(action)) {
+    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -173,6 +173,99 @@ export default async function handler(req, res) {
         clientNumber = r.body.clientNumber || r.body.clientId || r.body.id || null;
       }
       return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, clientNumber, result: r.body });
+    }
+
+    /* ---------- Charge page: FULL trail test — receipt + PDF attachment + log, ZZTEST only ---------- */
+    if (action === 'charge_full_test') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      if (clientId !== 26081) {
+        return res.status(400).json({ ok: false, error: 'Full-trail test is limited to ZZTEST client #26081.' });
+      }
+      const total = Math.round(parseFloat(b.amount || '1') * 100) / 100;
+      if (!total || total <= 0 || total > 10) {
+        return res.status(400).json({ ok: false, error: 'Test amounts capped at $10.00' });
+      }
+      const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const who = userEmail
+        ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
+        : 'admin key';
+      const now = new Date();
+      const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+      const txnId = 'TEST-' + crypto.randomUUID().slice(0, 12).toUpperCase();
+      const out = {};
+
+      // 1) Accounting receipt
+      const receipt = [{
+        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21,
+        payMethod: 'CreditCard', total,
+        logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose} · by ${who} · txn ${txnId}. TEST — safe to void.`,
+      }];
+      const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+        method: 'POST', body: JSON.stringify(receipt) });
+      out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
+
+      // 2) Receipt PDF -> Attachments (minimal PDF, no deps)
+      const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+      const lines = [
+        ['SPEEDY INSURANCE AGENCY', 16, 1, 720],
+        ['PAYMENT RECEIPT  (TEST)', 12, 1, 695],
+        [`$${total.toFixed(2)}  —  APPROVED`, 22, 1, 660],
+        [`Date/Time: ${stamp} PT`, 10, 0, 625],
+        [`Client: ZZTEST DELETE ME - API TEST   (#26081, Moreno Valley)`, 10, 0, 610],
+        [`Payment for: ${purpose}`, 10, 0, 595],
+        [`Card: VISA **** 4242   Entry: Chip (EMV)`, 10, 0, 580],
+        ['--- CLOVER / FISERV TRANSACTION RECORD (SIMULATED) ---', 10, 1, 550],
+        [`Transaction ID: ${txnId}`, 10, 0, 535],
+        [`Merchant ID: 1K7NR5V6K1ER1`, 10, 0, 520],
+        [`Charged by: ${who}`, 10, 0, 505],
+        ['Filed automatically to the HawkSoft client record by the Speedy payment bridge.', 8, 0, 470],
+      ];
+      let content = '';
+      for (const [t, size, bold, y] of lines) {
+        content += `BT /F${bold ? '2' : '1'} ${size} Tf 60 ${y} Td (${esc(t)}) Tj ET\n`;
+      }
+      const objs = [
+        '<< /Type /Catalog /Pages 2 0 R >>',
+        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
+        `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`,
+      ];
+      let pdf = '%PDF-1.4\n'; const offsets = [];
+      objs.forEach((o, i) => { offsets.push(Buffer.byteLength(pdf)); pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+      const xref = Buffer.byteLength(pdf);
+      pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+      offsets.forEach(o => { pdf += String(o).padStart(10, '0') + ' 00000 n \n'; });
+      pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+      const pdfBuf = Buffer.from(pdf, 'utf8');
+
+      const { gzipSync } = await import('node:zlib');
+      const b64h = s => Buffer.from(s, 'utf8').toString('base64');
+      const fname = `Clover_Receipt_TEST_${now.toISOString().slice(0, 10)}_${total.toFixed(2)}`;
+      const r2 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          RefId: crypto.randomUUID(), TS: now.toISOString(),
+          Desc: b64h(`TEST receipt PDF — $${total.toFixed(2)} ${purpose}, txn ${txnId}`),
+          LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge (TEST). Charged by ${who}.`),
+          FileName: b64h(fname), FileExt: 'pdf', Channel: '31',
+        },
+        body: gzipSync(pdfBuf),
+      });
+      out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status };
+
+      // 3) Summary log note
+      const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+        method: 'POST', body: JSON.stringify({
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29,
+          note: `CHARGE PAGE full-trail TEST — $${total.toFixed(2)} · ${purpose} · by ${who} · txn ${txnId}. Receipt posted + PDF attached. No money moved.`,
+        }) });
+      out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
+
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId });
     }
 
     /* ---------- Charge page: test write — restricted to ZZTEST #26081 in this phase ---------- */

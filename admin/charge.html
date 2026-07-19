@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.10 · branch names</div>
+    <div class="ver">v2.11 · other w/ detail</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -159,6 +159,10 @@
       <button type="button" onclick="pick(this)">Renewal</button>
       <button type="button" onclick="pick(this)">Endorsement</button>
       <button type="button" onclick="pick(this)">Other</button>
+    </div>
+    <div id="otherWrap" class="hide">
+      <label for="otherText">What's this payment for?</label>
+      <input type="text" id="otherText" maxlength="60" placeholder="e.g. DMV service, broker fee, reinstatement" autocomplete="off">
     </div>
     <div class="note"><b>Test build:</b> no money moves here yet — Clover secure card fields are the next phase.
       The button below proves the write path: it posts a log note to the client file in HawkSoft
@@ -335,14 +339,20 @@ function confirmClient(n){
   document.getElementById('chargecard').classList.remove('hide');
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
-function pick(b){document.querySelectorAll('#purp button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');purpose=b.textContent}
+function pick(b){document.querySelectorAll('#purp button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');purpose=b.textContent;
+  document.getElementById('otherWrap').classList.toggle('hide', purpose!=='Other');
+  if(purpose==='Other') document.getElementById('otherText').focus();}
+function purposeText(){
+  if(purpose!=='Other') return purpose;
+  const t=document.getElementById('otherText').value.trim();
+  return t ? 'Other: '+t : 'Other';}
 
 async function testLog(){
   const out = document.getElementById('out');
   out.style.display='block'; out.textContent='Writing log note…';
   try{
     const j = await post({action:'charge_log', clientId: confirmed.clientNumber,
-      amount: document.getElementById('amount').value||'0.00', purpose});
+      amount: document.getElementById('amount').value||'0.00', purpose: purposeText()});
     out.textContent = JSON.stringify(j,null,2);
     if(j.ok){
       out.textContent += '\n\n✓ Posted to HawkSoft. Signing you out — next charge needs a fresh sign-in.';

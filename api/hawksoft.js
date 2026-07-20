@@ -224,6 +224,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Test amounts capped at $10.00' });
       }
       const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
       const who = userEmail
         ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
         : 'admin key';
@@ -236,7 +237,7 @@ export default async function handler(req, res) {
       const receipt = [{
         refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
         payMethod: 'CreditCard', total,
-        logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose} · by ${who} · txn ${txnId}. TEST — safe to void.`,
+        logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · txn ${txnId}. TEST — safe to void.`,
       }];
       const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
         method: 'POST', body: JSON.stringify(receipt) });
@@ -277,6 +278,7 @@ export default async function handler(req, res) {
       row('Client', 'ZZTEST DELETE ME - API TEST', true);
       row('Client #', '26081');
       row('Payment for', purpose.slice(0, 38));
+      if (policyNumber) row('Policy #', policyNumber, true);
       y -= 4; dash(y); y -= 14;
       row('Card', 'VISA **** 4242 (TEST)');
       row('Entry method', 'Chip (EMV)');
@@ -314,7 +316,7 @@ export default async function handler(req, res) {
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32, // Online From 3rd Party — the bridge
-          note: `CHARGE PAGE full-trail TEST — $${total.toFixed(2)} · ${purpose} · by ${who} · txn ${txnId}. Receipt posted + PDF attached. No money moved.`,
+          note: `CHARGE PAGE full-trail TEST — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · txn ${txnId}. Receipt posted + PDF attached. No money moved.`,
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 

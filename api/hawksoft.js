@@ -242,41 +242,57 @@ export default async function handler(req, res) {
         method: 'POST', body: JSON.stringify(receipt) });
       out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
 
-      // 2) Receipt PDF -> Attachments (minimal PDF, no deps)
-      const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-      const lines = [
-        ['SPEEDY INSURANCE AGENCY', 16, 1, 720],
-        ['PAYMENT RECEIPT  (TEST)', 12, 1, 695],
-        [`$${total.toFixed(2)}  -  APPROVED`, 22, 1, 660],
-        [`Date/Time: ${stamp} PT`, 10, 0, 625],
-        [`Client: ZZTEST DELETE ME - API TEST   (#26081, Moreno Valley)`, 10, 0, 610],
-        [`Payment for: ${purpose}`, 10, 0, 595],
-        [`Card: VISA **** 4242   Entry: Chip (EMV)`, 10, 0, 580],
-        ['--- CLOVER / FISERV TRANSACTION RECORD (SIMULATED) ---', 10, 1, 550],
-        [`Transaction ID: ${txnId}`, 10, 0, 535],
-        [`Merchant ID: 1K7NR5V6K1ER1`, 10, 0, 520],
-        [`Charged by: ${who}`, 10, 0, 505],
-        ['Filed automatically to the HawkSoft client record by the Speedy payment bridge.', 8, 0, 470],
-      ];
-      let content = '';
-      for (const [t, size, bold, y] of lines) {
-        content += `BT /F${bold ? '2' : '1'} ${size} Tf 60 ${y} Td (${esc(t)}) Tj ET\n`;
+      // 2) Receipt PDF -> Attachments (branded design — ported from the approved sample)
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+      const doc = await PDFDocument.create();
+      const W = 306, H = 590; // 4.25in x 8.2in receipt
+      const page = doc.addPage([W, H]);
+      const helv = await doc.embedFont(StandardFonts.Helvetica);
+      const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+      const boldObl = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+      const obl = await doc.embedFont(StandardFonts.HelveticaOblique);
+      const RED = rgb(0.83, 0.17, 0.17), NAVY = rgb(0.10, 0.14, 0.34), GRAY = rgb(0.4, 0.4, 0.4),
+            LIGHT = rgb(0.6, 0.6, 0.6), GREEN = rgb(0.13, 0.63, 0.35), BLACK = rgb(0, 0, 0),
+            LINE = rgb(0.8, 0.8, 0.8);
+      const ctr = (t, y, f, s, c) => page.drawText(t, { x: (W - f.widthOfTextAtSize(t, s)) / 2, y, font: f, size: s, color: c });
+      const dash = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE, dashArray: [2, 2] });
+      const solid = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE });
+      let y = H - 32;
+      ctr('SPEEDY', y, boldObl, 15, NAVY); y -= 19;
+      ctr('INSURANCE AGENCY', y, boldObl, 17, RED); y -= 15;
+      ctr(b.branchName || 'Speedy Insurance Agency', y, helv, 8, GRAY); y -= 11;
+      ctr('(951) 472-0927  ·  speedyins.com', y, helv, 8, GRAY); y -= 16;
+      dash(y); y -= 20;
+      ctr('PAYMENT RECEIPT (TEST)', y, bold, 11, NAVY); y -= 26;
+      ctr(`$${total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
+      ctr('APPROVED', y, bold, 9, GREEN); y -= 22;
+      const row = (label, value, isBold) => {
+        page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
+        const f = isBold ? bold : helv;
+        const vw = f.widthOfTextAtSize(value, 8.5);
+        page.drawText(value, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
+        y -= 12;
+      };
+      row('Date / Time', stamp + ' PT');
+      row('Client', 'ZZTEST DELETE ME - API TEST', true);
+      row('Client #', '26081');
+      row('Payment for', purpose.slice(0, 38));
+      y -= 4; dash(y); y -= 14;
+      row('Card', 'VISA **** 4242 (TEST)');
+      row('Entry method', 'Chip (EMV)');
+      row('Cardholder verification', 'Signature captured on device');
+      y -= 4; solid(y); y -= 14;
+      page.drawText('CLOVER / FISERV TRANSACTION RECORD', { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
+      row('Clover transaction ID', txnId);
+      row('Merchant ID', '1K7NR5V6K1ER1');
+      row('Charged by', who.slice(0, 42));
+      y -= 4; solid(y); y -= 16;
+      for (const t of ['All fields above are drawn from the Clover/Fiserv', 'transaction record and tie 1:1 to the processor\u2019s', 'system of record (transaction ID + auth code).', '', 'Filed automatically to the HawkSoft client record', 'by the Speedy payment bridge.  (TEST — no money moved)']) {
+        if (t) ctr(t, y, obl, 7, LIGHT); y -= 9;
       }
-      const objs = [
-        '<< /Type /Catalog /Pages 2 0 R >>',
-        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
-        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
-        `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`,
-      ];
-      let pdf = '%PDF-1.4\n'; const offsets = [];
-      objs.forEach((o, i) => { offsets.push(Buffer.byteLength(pdf)); pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; });
-      const xref = Buffer.byteLength(pdf);
-      pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
-      offsets.forEach(o => { pdf += String(o).padStart(10, '0') + ' 00000 n \n'; });
-      pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-      const pdfBuf = Buffer.from(pdf, 'utf8');
+      y -= 6;
+      ctr('Thank you for choosing Speedy Insurance!', y, bold, 8, NAVY);
+      const pdfBuf = Buffer.from(await doc.save());
 
       const { gzipSync } = await import('node:zlib');
       const b64h = s => Buffer.from(s, 'utf8').toString('base64');

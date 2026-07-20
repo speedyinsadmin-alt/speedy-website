@@ -228,12 +228,12 @@ export default async function handler(req, res) {
       if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
       const b = req.body || {};
       const clientId = parseInt(b.clientId, 10);
-      if (clientId !== 26081) {
-        return res.status(400).json({ ok: false, error: 'Live charges are limited to ZZTEST client #26081 in this phase.' });
+      if (!clientId || clientId < 1) {
+        return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
       }
       const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
-      if (!total || total < 0.5 || total > 1.0) {
-        return res.status(400).json({ ok: false, error: 'Live validation amounts must be between $0.50 and $1.00 in this phase.' });
+      if (!total || total < 0.5 || total > 1000) {
+        return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
       }
       const source = String(b.source || '');
       if (!source.startsWith('clv_')) {
@@ -254,7 +254,7 @@ export default async function handler(req, res) {
         headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
           'idempotency-key': crypto.randomUUID() },
         body: JSON.stringify({ amount: Math.round(total * 100), currency: 'usd', source,
-          description: `Speedy Insurance — ${purpose} — ZZTEST live validation` }),
+          description: `Speedy Insurance — ${purpose} — client ${clientId}` }),
       });
       const ctext = await cr.text();
       let cbody = null; try { cbody = ctext ? JSON.parse(ctext) : null; } catch { cbody = ctext; }
@@ -275,7 +275,7 @@ export default async function handler(req, res) {
       const receipt = [{
         refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
         payMethod: 'CreditCard', total,
-        logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. LIVE validation charge.`,
+        logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Charged via Speedy payment bridge.`,
       }];
       const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
         method: 'POST', body: JSON.stringify(receipt) });

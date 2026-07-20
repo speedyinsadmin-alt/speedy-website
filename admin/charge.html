@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.19 · cash + pay links</div>
+    <div class="ver">v2.20 · invoice auto-apply</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -218,6 +218,7 @@
     <div id="resultbox"></div>
     <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Admin test tools</summary>
     <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST only)</button>
+    <button class="btn btn-ghost" onclick="probeInvoices()">Probe invoices (current client)</button>
     <button class="btn btn-ghost" onclick="probeChannels()" style="font-size:13px;padding:10px">🔬 Probe log channels on ZZTEST (find "From Other")</button>
     </details>
     <pre id="out"></pre>
@@ -462,6 +463,7 @@ async function chargeLive(){
         <div class="kv"><span>Card</span><b>${esc(ch.brand||'CARD')} \u2022\u2022\u2022\u2022 ${esc(ch.last4||'')}</b></div>
         <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||j.txnId||'')}</b></div>
         ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
+        ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
         <div class="foot">Receipt, branded PDF and log note filed to the HawkSoft client record. Signing out\u2026</div>
       </div>`;
       rb.scrollIntoView({behavior:'smooth'});
@@ -505,6 +507,7 @@ async function chargeCash(){
         <div class="kv"><span>Client</span><b>${esc(confirmed.name||'')} \u00b7 #${confirmed.clientNumber}</b></div>
         <div class="kv"><span>For</span><b>${esc(purposeText())}</b></div>
         <div class="kv"><span>Reference</span><b>${esc(j.ref||'')}</b></div>
+        ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
         <div class="foot">Receipt, branded PDF and log note filed to HawkSoft. Signing out\u2026</div></div>`;
       rb.scrollIntoView({behavior:'smooth'});
       setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
@@ -542,6 +545,14 @@ async function createLink(){
   }catch(e){ btn.disabled = false; lo.innerHTML = '<div class="result bad"><div class="foot">'+esc(String(e))+'</div></div>'; }
 }
 function copyTxt(t, b){ navigator.clipboard.writeText(t).then(()=>{ if(b){ const o=b.textContent; b.textContent='Copied \u2713'; setTimeout(()=>b.textContent=o,1200); } },()=>{}); }
+async function probeInvoices(){
+  const out = document.getElementById('out');
+  if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm a client first.'; return; }
+  out.style.display='block'; out.textContent='Fetching invoices\u2026';
+  try{ const j = await post({action:'probe_invoices', clientId: confirmed.clientNumber});
+    out.textContent = JSON.stringify(j, null, 2);
+  }catch(e){ out.textContent = 'Error: '+e; }
+}
 async function probeChannels(){
   const out = document.getElementById('out');
   out.style.display='block'; out.textContent='Posting 10 labeled probe logs to ZZTEST…';

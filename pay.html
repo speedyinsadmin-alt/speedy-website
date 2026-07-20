@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Secure Payment — Speedy Insurance Agency</title>
+<script src="https://checkout.clover.com/sdk.js"></script>
+<style>
+:root{--navy:#0B1829;--navy2:#122036;--red:#D42B2B;--ink:#F2F5FA;--line:rgba(255,255,255,.14)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--navy);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;min-height:100vh}
+.wrap{max-width:460px;margin:0 auto;padding:26px 18px 90px}
+.brand{text-align:center;margin:6px 0 18px}
+.brand b{font-style:italic;font-size:22px;letter-spacing:.5px}
+.brand b .r{color:var(--red)}
+.card{background:var(--navy2);border:1.5px solid var(--line);border-radius:16px;padding:18px}
+.amt{font-size:34px;font-weight:800;text-align:center;margin:4px 0}
+.sub{text-align:center;opacity:.75;font-size:14px;margin-bottom:6px}
+.kv{display:flex;justify-content:space-between;font-size:13.5px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.kv span:first-child{opacity:.6}
+label{display:block;font-size:13px;opacity:.8;margin:14px 0 4px}
+.cfield{background:#fff;border-radius:10px;height:48px;padding:2px 10px;margin:6px 0;overflow:hidden}
+.cfield iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
+.cfrow{display:flex;gap:8px}.cfrow .cfield{flex:1}
+.btn{width:100%;border:0;border-radius:12px;padding:15px;font-size:17px;font-weight:800;cursor:pointer;margin-top:14px;background:var(--red);color:#fff}
+.btn:disabled{opacity:.5}
+.hint{font-size:12px;opacity:.65;margin-top:8px;text-align:center}
+.result{border-radius:14px;padding:16px;margin-top:14px;border:1.5px solid}
+.result.good{background:rgba(19,120,60,.14);border-color:#1f9d55}
+.result.bad{background:rgba(212,43,43,.12);border-color:var(--red)}
+.result h3{margin:0 0 6px;font-size:17px}
+.hide{display:none}
+.clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
+.clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><b>SPEEDY <span class="r">INSURANCE AGENCY</span></b><div style="font-size:12px;opacity:.6">(951) 472-0927 · speedyins.com</div></div>
+  <div class="card" id="paycard">
+    <div id="loading" class="sub">Loading your payment…</div>
+    <div id="payui" class="hide">
+      <div class="sub">Secure payment for</div>
+      <div class="amt" id="pAmt">$0.00</div>
+      <div class="kv"><span>Name</span><b id="pName">—</b></div>
+      <div class="kv"><span>For</span><b id="pPurp">—</b></div>
+      <label>Card details</label>
+      <div id="cardNumber" class="cfield"></div>
+      <div class="cfrow">
+        <div id="cardDate" class="cfield"></div>
+        <div id="cardCvv" class="cfield"></div>
+        <div id="cardZip" class="cfield"></div>
+      </div>
+      <button class="btn" id="payBtn" onclick="payNow()">PAY NOW</button>
+      <div class="hint">Your card details go directly to Clover, our payment processor — Speedy Insurance never sees or stores them.</div>
+    </div>
+    <div id="resultbox"></div>
+  </div>
+</div>
+<script>
+const API = '/api/hawksoft';
+const T = new URLSearchParams(location.search).get('t') || '';
+let clover = null, amt = 0;
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function post(body){
+  const r = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+function fail(msg){
+  document.getElementById('loading').classList.add('hide');
+  document.getElementById('payui').classList.add('hide');
+  document.getElementById('resultbox').innerHTML =
+    '<div class="result bad"><h3>Unable to load payment</h3><div style="font-size:14px">'+esc(msg)+'</div></div>';
+}
+async function init(){
+  if(!T) return fail('This link is missing its security code. Please ask your agent to resend it.');
+  try{
+    const j = await post({action:'paylink_info', t:T});
+    if(!j.ok) return fail(j.error || 'This payment link is invalid or has expired.');
+    if(!j.pk) return fail('Payments are temporarily unavailable — please call us at (951) 472-0927.');
+    amt = parseFloat(j.amount);
+    document.getElementById('pAmt').textContent = '$' + amt.toFixed(2);
+    document.getElementById('pName').textContent = j.name || '—';
+    document.getElementById('pPurp').textContent = j.purpose || 'Payment';
+    clover = new Clover(j.pk, { merchantId: j.merchantId });
+    const elements = clover.elements();
+    const styles = { body:{fontSize:'16px'}, input:{fontSize:'16px',color:'#111827',height:'44px',lineHeight:'44px',padding:'0'}, '::placeholder':{color:'#9ca3af'} };
+    elements.create('CARD_NUMBER', styles).mount('#cardNumber');
+    elements.create('CARD_DATE', styles).mount('#cardDate');
+    elements.create('CARD_CVV', styles).mount('#cardCvv');
+    elements.create('CARD_POSTAL_CODE', styles).mount('#cardZip');
+    document.getElementById('loading').classList.add('hide');
+    document.getElementById('payui').classList.remove('hide');
+  }catch(e){ fail('Connection problem — please try again in a moment.'); }
+}
+async function payNow(){
+  const btn = document.getElementById('payBtn');
+  const rb = document.getElementById('resultbox');
+  rb.innerHTML = ''; btn.disabled = true; btn.textContent = 'Processing…';
+  try{
+    const tk = await clover.createToken();
+    if(tk && tk.errors && Object.keys(tk.errors).length){
+      rb.innerHTML = '<div class="result bad"><h3>Check your card details</h3><div style="font-size:14px">'+esc(Object.values(tk.errors).join(' · '))+'</div></div>';
+      btn.disabled = false; btn.textContent = 'PAY NOW'; return;
+    }
+    if(!tk || !tk.token){ rb.innerHTML = '<div class="result bad"><h3>Check your card details</h3></div>'; btn.disabled=false; btn.textContent='PAY NOW'; return; }
+    const j = await post({action:'paylink_charge', t:T, source: tk.token});
+    if(j.ok){
+      const ch = (j.results && j.results.charge) || {};
+      document.getElementById('payui').classList.add('hide');
+      rb.innerHTML = `<div class="result good"><h3>✓ Payment approved — thank you!</h3>
+        <div class="amt">$${amt.toFixed(2)}</div>
+        <div class="kv"><span>Card</span><b>${esc(ch.brand||'CARD')} •••• ${esc(ch.last4||'')}</b></div>
+        <div class="kv"><span>Confirmation</span><b>${esc(ch.id||j.txnId||'')}</b></div>
+        <div class="hint" style="opacity:.85">A record of this payment has been filed with your Speedy Insurance account. You can close this page.</div></div>`;
+    } else {
+      rb.innerHTML = '<div class="result bad"><h3>Payment not completed</h3><div style="font-size:14px">'+esc(j.error||'Your card was not charged twice — please try again or use another card.')+'</div></div>';
+      btn.disabled = false; btn.textContent = 'PAY NOW';
+    }
+  }catch(e){
+    rb.innerHTML = '<div class="result bad"><h3>Connection problem</h3><div style="font-size:14px">'+esc(String(e))+'</div></div>';
+    btn.disabled = false; btn.textContent = 'PAY NOW';
+  }
+}
+init();
+</script>
+</body>
+</html>

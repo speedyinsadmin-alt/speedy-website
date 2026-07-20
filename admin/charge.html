@@ -63,7 +63,8 @@
       color:#9fe8bf;white-space:pre-wrap;word-break:break-word;margin-top:12px;display:none}
   .hide{display:none}
   .ok{color:var(--green);font-weight:800}
-.cfield{background:#fff;border-radius:10px;min-height:44px;padding:4px 10px;margin:6px 0}
+.cfield{background:#fff;border-radius:10px;height:48px;padding:2px 10px;margin:6px 0;overflow:hidden}
+.cfield iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
 .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
 .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
 .cfrow{display:flex;gap:8px}.cfrow .cfield{flex:1}
@@ -75,7 +76,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.16b · live card charge (ZZTEST $1)</div>
+    <div class="ver">v2.16c · live card charge (ZZTEST $1)</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -373,7 +374,7 @@ async function initClover(){
     if(!window.Clover){ hint.textContent = 'Clover SDK failed to load — check the network and refresh.'; return false; }
     cloverSDK = new Clover(cfg.pk, { merchantId: cfg.merchantId });
     const elements = cloverSDK.elements();
-    const styles = { body:{fontSize:'16px'}, input:{fontSize:'16px',color:'#111827'} };
+    const styles = { body:{fontSize:'16px'}, input:{fontSize:'16px',color:'#111827',height:'44px',lineHeight:'44px',padding:'0'}, '::placeholder':{color:'#9ca3af'} };
     elements.create('CARD_NUMBER', styles).mount('#cardNumber');
     elements.create('CARD_DATE', styles).mount('#cardDate');
     elements.create('CARD_CVV', styles).mount('#cardCvv');

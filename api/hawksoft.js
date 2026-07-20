@@ -7,6 +7,18 @@
 
 const AGENCY_ID = 15112;
 
+/* Clover branch registry — confirmed with Saif 7/20/2026.
+   Each branch = its own Clover business/merchant + one counter terminal.
+   Used by the terminal-charging phase (REST Pay Display: X-Clover-Device-Id per charge).
+   Ecommerce tokens currently exist for Moreno Valley (main) only.
+   Excluded legacy businesses (not in service): VEX5X0YZBMVB1, 5G1JARVY3MP91. */
+const CLOVER_BRANCHES = {
+  1: { branch: 'Moreno Valley',        merchantId: '1K7NR5V6K1ER1', device: 'C045UT33351057', model: 'Flex 3' },
+  2: { branch: 'Riverside — Van Buren', merchantId: 'YQK002AEVXRF1', device: 'C042UQ93960695', model: 'Flex'   },
+  3: { branch: 'Riverside — Magnolia',  merchantId: '9SQRE50EMSDF1', device: 'C045UT32440358', model: 'Flex 3' },
+  4: { branch: 'Lake Elsinore',         merchantId: 'RC02YN4Q370Z1', device: 'C046UG50362404', model: 'Flex 4' },
+};
+
 /* ---------- Google Sign-In (charge page) ---------- */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 const STAFF = {

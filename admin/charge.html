@@ -68,6 +68,14 @@
 .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
 .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
 .cfrow{display:flex;gap:8px}.cfrow .cfield{flex:1}
+.result{border-radius:14px;padding:16px;margin-top:12px;border:1.5px solid}
+.result.good{background:rgba(19,120,60,.12);border-color:#1f9d55}
+.result.bad{background:rgba(212,43,43,.10);border-color:var(--red,#D42B2B)}
+.result h3{margin:0 0 6px;font-size:17px}
+.result .big{font-size:26px;font-weight:800;margin:2px 0 8px}
+.result .kv{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.12)}
+.result .kv span:first-child{opacity:.65}
+.result .foot{font-size:12px;opacity:.7;margin-top:8px}
 </style>
 </head>
 <body>
@@ -76,7 +84,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.16c · live card charge (ZZTEST $1)</div>
+    <div class="ver">v2.17 · agent release</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -158,7 +166,7 @@
   <!-- Amount + test write -->
   <div class="card hide" id="chargecard">
     <div class="eyebrow">Amount</div>
-    <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00" value="1.00"></div>
+    <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00"></div>
     <label>Payment for</label>
     <div class="purpose" id="purp">
       <button class="sel" type="button" onclick="pick(this)">Down payment</button>
@@ -170,9 +178,7 @@
       <label for="otherText">What's this payment for?</label>
       <input type="text" id="otherText" maxlength="60" placeholder="e.g. DMV service, broker fee, reinstatement" autocomplete="off">
     </div>
-    <div class="note"><b>Test build:</b> no money moves yet — Clover card fields are the next phase.
-      The button posts the full payment trail to HawkSoft: accounting receipt + receipt PDF in
-      Attachments + log note (<b>ZZTEST #26081 only</b>, capped at $10).</div>
+    
     <label style="margin-top:14px;display:block">Card — secure Clover fields</label>
     <div id="cardNumber" class="cfield"></div>
     <div class="cfrow">
@@ -181,9 +187,12 @@
       <div id="cardZip" class="cfield"></div>
     </div>
     <div class="hint" id="cardHint">Card data goes straight from this browser to Clover — it never touches our server.</div>
-    <button class="btn btn-red" id="liveBtn" onclick="chargeLive()">CHARGE — LIVE ($1 max · ZZTEST only)</button>
-    <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST)</button>
+    <button class="btn btn-red" id="liveBtn" onclick="chargeLive()">CHARGE</button>
+    <div id="resultbox"></div>
+    <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Admin test tools</summary>
+    <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST only)</button>
     <button class="btn btn-ghost" onclick="probeChannels()" style="font-size:13px;padding:10px">🔬 Probe log channels on ZZTEST (find "From Other")</button>
+    </details>
     <pre id="out"></pre>
   </div>
 </div>
@@ -387,7 +396,8 @@ async function chargeLive(){
   const btn = document.getElementById('liveBtn');
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.textContent = 'Verify and confirm the client first.'; return; }
-  if(parseFloat(amt) > 1.001){ out.textContent = 'Live validation is capped at $1.00 in this phase.'; return; }
+  if(parseFloat(amt) > 1000){ out.textContent = 'Charges are capped at $1,000.00 \u2014 for larger amounts split the payment or call Saif.'; return; }
+  document.getElementById('resultbox').innerHTML = '';
   if(!cloverSDK){ out.textContent = 'Card fields not ready — tap the client confirm again or refresh.'; return; }
   btn.disabled = true;
   out.textContent = 'Securing card with Clover\u2026';
@@ -401,12 +411,32 @@ async function chargeLive(){
     const j = await post({action:'charge_live', clientId: confirmed.clientNumber,
       clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
       source: tk.token, policyNumber: document.getElementById('hsPolicyNumber').value.trim()});
-    out.textContent = JSON.stringify(j, null, 2);
+    out.style.display='none'; out.textContent='';
+    const rb = document.getElementById('resultbox');
     if(j.ok){
-      out.textContent += '\n\n\u2713 LIVE charge complete \u2014 money moved. Verify: (1) Clover dashboard shows the payment, (2) HawkSoft ZZTEST has receipt + branded PDF + log, (3) then REFUND it in the Clover dashboard. Signing you out.';
-      setTimeout(()=>{ signOut(); window.scrollTo({top:0,behavior:'smooth'}); if(window.google) google.accounts.id.prompt(); }, 2500);
-    } else { btn.disabled = false; }
-  }catch(e){ out.textContent = 'Error: ' + e; btn.disabled = false; }
+      const ch = (j.results && j.results.charge) || {};
+      rb.innerHTML = `<div class="result good">
+        <h3>\u2713 Payment approved</h3>
+        <div class="big">$${parseFloat(amt).toFixed(2)}</div>
+        <div class="kv"><span>Client</span><b>${esc(confirmed.name||'')} \u00b7 #${confirmed.clientNumber}</b></div>
+        <div class="kv"><span>For</span><b>${esc(purposeText())}</b></div>
+        <div class="kv"><span>Card</span><b>${esc(ch.brand||'CARD')} \u2022\u2022\u2022\u2022 ${esc(ch.last4||'')}</b></div>
+        <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||j.txnId||'')}</b></div>
+        ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
+        <div class="foot">Receipt, branded PDF and log note filed to the HawkSoft client record. Signing out\u2026</div>
+      </div>`;
+      rb.scrollIntoView({behavior:'smooth'});
+      setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
+    } else {
+      rb.innerHTML = `<div class="result bad"><h3>Payment not completed</h3>
+        <div class="foot" style="font-size:14px;opacity:1">${esc(j.error||'The charge did not go through. The card was not billed twice \u2014 try again or use another card.')}</div></div>`;
+      btn.disabled = false;
+    }
+  }catch(e){
+    out.style.display='none';
+    document.getElementById('resultbox').innerHTML = '<div class="result bad"><h3>Connection problem</h3><div class="foot" style="font-size:14px;opacity:1">'+esc(String(e))+'</div></div>';
+    btn.disabled = false;
+  }
 }
 async function probeChannels(){
   const out = document.getElementById('out');

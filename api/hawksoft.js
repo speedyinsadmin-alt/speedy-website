@@ -271,10 +271,23 @@ export default async function handler(req, res) {
       const last4 = String((cbody.source && cbody.source.last4) || '????');
       const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum } };
 
+      // Resolve the policy GUID so the whole trail files under the exact policy (fail-soft to client level)
+      let policyGuid = null;
+      if (policyNumber) {
+        try {
+          const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0`);
+          const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+          const want = policyNumber.toUpperCase();
+          const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
+          if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+        } catch { policyGuid = null; }
+      }
+      out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
+
       // 2) Accounting receipt
       const receipt = [{
         refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
-        payMethod: 'CreditCard', total,
+        payMethod: 'CreditCard', total, policyId: policyGuid,
         logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Charged via Speedy payment bridge.`,
       }];
       const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
@@ -348,6 +361,7 @@ export default async function handler(req, res) {
           Desc: b64h(`Clover receipt $${total.toFixed(2)}`.slice(0, 41)),
           LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. Charged by ${who}. Clover ${txnId}.`),
           FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
+          ...(policyGuid ? { PolicyId: policyGuid } : {}),
         },
         body: gzipSync(pdfBuf),
       });
@@ -357,6 +371,7 @@ export default async function handler(req, res) {
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32, // Online From 3rd Party — the bridge
+          policyId: policyGuid,
           note: `CHARGE PAGE LIVE — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Receipt posted + branded PDF attached.`,
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };

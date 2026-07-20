@@ -22,12 +22,23 @@ const CLOVER_BRANCHES = {
 
 /* Signed pay-link tokens (HMAC-SHA256, keyed on ADMIN_API_KEY) */
 const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const makeToken = (obj, key) => { const pl = b64u(JSON.stringify(obj)); return pl + '.' + b64u(createHmac('sha256', key).update(pl).digest()); };
+const makeToken = (obj, key) => { const pl = b64u(JSON.stringify(obj)); return pl + '.' + b64u(createHmac('sha256', key).update(pl).digest()).slice(0, 22); };
+const clientNameFrom = (b) => {
+  let name = '';
+  const people = (b && (b.people || b.People)) || [];
+  if (people.length) {
+    const pp = people[0] || {};
+    name = [pp.businessName, [pp.firstName, pp.lastName].filter(Boolean).join(' ')].filter(Boolean)[0] || '';
+  }
+  if (!name) name = (b && (b.businessName || b.name)) || '';
+  return name;
+};
 const readToken = (t, key) => {
   try {
     const [pl, sig] = String(t || '').split('.');
     if (!pl || !sig) return null;
-    if (sig !== b64u(createHmac('sha256', key).update(pl).digest())) return null;
+    const full = b64u(createHmac('sha256', key).update(pl).digest());
+    if (sig !== full && sig !== full.slice(0, 22)) return null;
     const o = JSON.parse(Buffer.from(pl.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
     if (!o.exp || Date.now() > o.exp) return null;
     return o;
@@ -291,7 +302,8 @@ export default async function handler(req, res) {
         purpose = String(tok.p || 'Payment').slice(0, 80);
         policyNumber = String(tok.pol || '').trim().slice(0, 25);
         clientName = String(tok.n || '').slice(0, 40);
-        who = `Client — secure link (sent by ${String(tok.by || 'agent').slice(0, 40)})`;
+        const byFull = String(tok.by || 'agent').includes('@') ? String(tok.by) : String(tok.by || 'agent') + '@speedyins.com';
+        who = `Client — secure link (sent by ${byFull.slice(0, 40)})`;
       } else {
         clientId = parseInt(b.clientId, 10);
         total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
@@ -349,6 +361,7 @@ export default async function handler(req, res) {
           if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
+        if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
       } catch { policyGuid = null; }
       out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
       out.invoiceApply = invPick.how;
@@ -588,21 +601,35 @@ export default async function handler(req, res) {
       const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
       if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
+      const byShort = String(userEmail || 'admin').replace('@speedyins.com', '');
       const tok = makeToken({
-        c: clientId, n: String(b.clientName || '').slice(0, 40),
-        a: total, p: String(b.purpose || 'Payment').slice(0, 80),
+        c: clientId, a: total, p: String(b.purpose || 'Payment').slice(0, 40),
         pol: String(b.policyNumber || '').trim().slice(0, 25),
-        by: who, exp: Date.now() + 72 * 3600 * 1000,
+        by: byShort, exp: Date.now() + 72 * 3600 * 1000,
       }, KEY);
-      await audit({ action: 'paylink_create', who, clientId, amount: total, purpose: b.purpose });
-      return res.status(200).json({ ok: true, url: `https://www.speedyins.com/pay.html?t=${tok}`, hours: 72 });
+      // Auto-log the link creation to the client file
+      const expStr = new Date(Date.now() + 72 * 3600 * 1000).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+      const lg = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+        method: 'POST', body: JSON.stringify({
+          refId: crypto.randomUUID(), ts: new Date().toISOString(), channel: 32,
+          note: `PAYMENT LINK created — $${total.toFixed(2)} for ${String(b.purpose || 'Payment').slice(0, 40)}${b.policyNumber ? ' · policy ' + String(b.policyNumber).trim() : ''} · by ${who} · expires ${expStr} PT. Client pays online; trail files automatically when paid.`,
+        }) });
+      await audit({ action: 'paylink_create', who, clientId, amount: total, purpose: b.purpose, logged: lg.status });
+      return res.status(200).json({ ok: true, url: `https://www.speedyins.com/pay.html?t=${tok}`, hours: 72, logged: lg.status === 200 || lg.status === 202 });
     }
 
     /* ---------- Public (token-auth): pay page bootstrap ---------- */
     if (action === 'paylink_info') {
       const tok = readToken((req.body || {}).t, KEY);
       if (!tok) return res.status(400).json({ ok: false, error: 'This payment link is invalid or has expired. Please ask your agent for a new one.' });
-      return res.status(200).json({ ok: true, name: tok.n || '', amount: tok.a, purpose: tok.p || 'Payment',
+      let name = tok.n || '';
+      if (!name) {
+        try {
+          const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${parseInt(tok.c, 10)}?version=4.0&include=Details,People`);
+          name = clientNameFrom(r.body);
+        } catch { name = ''; }
+      }
+      return res.status(200).json({ ok: true, name, amount: tok.a, purpose: tok.p || 'Payment',
         pk: process.env.CLOVER_ECOMM_PUBLIC || null, merchantId: '1K7NR5V6K1ER1' });
     }
 

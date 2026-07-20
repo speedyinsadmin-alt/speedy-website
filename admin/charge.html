@@ -68,6 +68,12 @@
 .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
 .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
 .cfrow{display:flex;gap:8px}.cfrow .cfield{flex:1}
+.tgl{position:relative;display:inline-block;width:46px;height:26px;flex:none}
+.tgl input{opacity:0;width:0;height:0}
+.tgl .sl{position:absolute;inset:0;background:rgba(255,255,255,.18);border-radius:26px;transition:.2s;cursor:pointer}
+.tgl .sl:before{content:"";position:absolute;height:20px;width:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.tgl input:checked + .sl{background:#1f9d55}
+.tgl input:checked + .sl:before{transform:translateX(20px)}
 .result{border-radius:14px;padding:16px;margin-top:12px;border:1.5px solid}
 .result.good{background:rgba(19,120,60,.12);border-color:#1f9d55}
 .result.bad{background:rgba(212,43,43,.10);border-color:var(--red,#D42B2B)}
@@ -84,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.17 · agent release</div>
+    <div class="ver">v2.18 · policy toggle</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -179,6 +185,10 @@
       <input type="text" id="otherText" maxlength="60" placeholder="e.g. DMV service, broker fee, reinstatement" autocomplete="off">
     </div>
     
+    <div id="polToggleWrap" class="hide" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px">
+      <span class="hint" id="polToggleLabel" style="margin:0">Include policy # on receipt</span>
+      <label class="tgl"><input type="checkbox" id="polToggle" checked><span class="sl"></span></label>
+    </div>
     <label style="margin-top:14px;display:block">Card — secure Clover fields</label>
     <div id="cardNumber" class="cfield"></div>
     <div class="cfrow">
@@ -250,7 +260,7 @@ akey.addEventListener('change', ()=>localStorage.setItem('cg_key', akey.value.tr
 
 /* auto-verify when the client # changes — typed OR flooded programmatically by HawkLink */
 let vt=null, lastSeen='';
-function queueVerify(){ clearTimeout(vt); vt=setTimeout(()=>{ if(digits(idval()).length>=4) verify(); }, 700); }
+function queueVerify(){ clearTimeout(vt); vt=setTimeout(()=>{ if(digits(idval()).length>=4) verify(); }, 700); try{updatePolToggle();}catch(e){} }
 document.getElementById('hsClientNumber').addEventListener('input', queueVerify);
 setInterval(()=>{ const v=idval(); if(v!==lastSeen){ lastSeen=v; if(digits(v).length>=4) queueVerify(); } }, 500);
 
@@ -363,7 +373,19 @@ function resetMatch(){ document.getElementById('matchbox').innerHTML=''; documen
 function confirmClient(n){
   document.getElementById('chargecard').classList.remove('hide');
   initClover();
+  updatePolToggle();
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+}
+function updatePolToggle(){
+  const pol = document.getElementById('hsPolicyNumber').value.trim();
+  const w = document.getElementById('polToggleWrap');
+  if(pol){ w.classList.remove('hide');
+    document.getElementById('polToggleLabel').textContent = 'Include policy ' + pol + ' on receipt'; }
+  else { w.classList.add('hide'); }
+}
+function effPolicy(){
+  const pol = document.getElementById('hsPolicyNumber').value.trim();
+  return (pol && document.getElementById('polToggle').checked) ? pol : '';
 }
 function pick(b){document.querySelectorAll('#purp button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');purpose=b.textContent;
   document.getElementById('otherWrap').classList.toggle('hide', purpose!=='Other');
@@ -410,7 +432,7 @@ async function chargeLive(){
     out.textContent = 'Charging card\u2026';
     const j = await post({action:'charge_live', clientId: confirmed.clientNumber,
       clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
-      source: tk.token, policyNumber: document.getElementById('hsPolicyNumber').value.trim()});
+      source: tk.token, policyNumber: effPolicy()});
     out.style.display='none'; out.textContent='';
     const rb = document.getElementById('resultbox');
     if(j.ok){

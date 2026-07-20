@@ -70,7 +70,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.14 · channel probe</div>
+    <div class="ver">v2.15 · policy on receipt</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -360,7 +360,8 @@ async function testLog(){
   out.style.display='block'; out.textContent='Writing log note…';
   try{
     const j = await post({action:'charge_full_test', clientId: confirmed.clientNumber,
-      amount: document.getElementById('amount').value||'0.00', purpose: purposeText()});
+      amount: document.getElementById('amount').value||'0.00', purpose: purposeText(),
+      policyNumber: document.getElementById('hsPolicyNumber').value.trim()});
     out.textContent = JSON.stringify(j,null,2);
     if(j.ok){
       out.textContent += '\n\n✓ All three posted: accounting receipt + PDF in Attachments + log note. Check ZZTEST in HawkSoft. Signing you out.';

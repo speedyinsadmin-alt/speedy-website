@@ -34,6 +34,30 @@ const readToken = (t, key) => {
   } catch { return null; }
 };
 
+/* Pick the invoice(s) a payment should apply to (requires Accounting/Invoices scope, enabled 7/20/2026).
+   Conservative: exact amount on the policy -> exact amount anywhere -> oldest open on the policy covering it -> none. */
+function pickInvoices(clientBody, total, policyGuid) {
+  const raw = (clientBody && (clientBody.invoices || clientBody.Invoices)) || [];
+  const cents = x => Math.round(Number(x) * 100);
+  const inv = raw.map(i => ({
+    id: i.id || i.invoiceId || i.guid || i.Id || null,
+    bal: Number(i.balance ?? i.balanceDue ?? i.amountDue ?? i.due ?? i.remaining ?? i.amount ?? NaN),
+    pol: i.policyId || i.policyGuid || i.PolicyId || null,
+    dueDate: i.dueDate || i.DueDate || '',
+    num: i.invoiceNumber || i.number || i.InvoiceNumber || '',
+  })).filter(i => i.id && isFinite(i.bal) && i.bal > 0);
+  let hit = policyGuid ? inv.find(i => i.pol === policyGuid && cents(i.bal) === cents(total)) : null;
+  let how = hit ? 'applied — exact match on policy' : '';
+  if (!hit) { hit = inv.find(i => cents(i.bal) === cents(total)) || null; if (hit) how = 'applied — exact amount match'; }
+  if (!hit && policyGuid) {
+    const cands = inv.filter(i => i.pol === policyGuid && i.bal >= total)
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    hit = cands[0] || null; if (hit) how = 'applied — oldest open invoice on policy';
+  }
+  if (!hit) return { invoices: null, how: raw.length ? 'no matching open invoice — left unapplied' : 'no invoices on file' };
+  return { invoices: [{ invoiceId: hit.id, amount: total }], how: how + (hit.num ? ` (${hit.num})` : '') };
+}
+
 /* ---------- Google Sign-In (charge page) ---------- */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 const STAFF = {
@@ -161,7 +185,7 @@ export default async function handler(req, res) {
     if (!isAdmin && !userEmail && !PUBLIC_PAY.includes(action)) {
       return res.status(401).json({ ok: false, error: 'Sign in required.' });
     }
-    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create'].includes(action)) {
+    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create', 'probe_invoices'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -314,23 +338,26 @@ export default async function handler(req, res) {
       const last4 = String((cbody.source && cbody.source.last4) || '????');
       const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum } };
 
-      // Resolve the policy GUID so the whole trail files under the exact policy (fail-soft to client level)
-      let policyGuid = null;
-      if (policyNumber) {
-        try {
-          const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0`);
+      // Resolve policy GUID + matching open invoice (fail-soft on both)
+      let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
+      try {
+        const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
+        if (policyNumber) {
           const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
           if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
-        } catch { policyGuid = null; }
-      }
+        }
+        invPick = pickInvoices(pc.body, total, policyGuid);
+      } catch { policyGuid = null; }
       out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
+      out.invoiceApply = invPick.how;
 
       // 2) Accounting receipt
       const receipt = [{
         refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
         payMethod: 'CreditCard', total, policyId: policyGuid,
+        ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
         logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Charged via Speedy payment bridge.`,
       }];
       const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
@@ -423,6 +450,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 
+    /* ---------- Diagnostics: raw invoice list for a client ---------- */
+    if (action === 'probe_invoices') {
+      const cid = parseInt((req.body || {}).clientId, 10);
+      if (!cid) return res.status(400).json({ ok: false, error: 'clientId required' });
+      const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${cid}?version=4.0&include=details,invoices`);
+      const denied = null;
+      return res.status(200).json({ ok: true, status: pc.status,
+        invoices: (pc.body && (pc.body.invoices || pc.body.Invoices)) || [],
+        keys: pc.body ? Object.keys(pc.body) : [] });
+    }
+
     /* ---------- Charge page: record a CASH payment (no card, full HawkSoft trail) ---------- */
     if (action === 'charge_cash') {
       const b = req.body || {};
@@ -439,20 +477,23 @@ export default async function handler(req, res) {
       const ref = 'CASH-' + crypto.randomUUID().slice(0, 10).toUpperCase();
       const out = {};
 
-      let policyGuid = null;
-      if (policyNumber) {
-        try {
-          const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0`);
+      let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
+      try {
+        const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
+        if (policyNumber) {
           const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
           if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
-        } catch { policyGuid = null; }
-      }
+        }
+        invPick = pickInvoices(pc.body, total, policyGuid);
+      } catch { policyGuid = null; }
+      out.invoiceApply = invPick.how;
 
       const receipt = [{
         refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured
         payMethod: 'Cash', total, policyId: policyGuid,
+        ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
         logNote: `CHARGE PAGE cash — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
       }];
       const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {

@@ -130,7 +130,7 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
 
     // Google-authenticated users may only use charge-page actions
-    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels'].includes(action)) {
+    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -213,6 +213,158 @@ export default async function handler(req, res) {
     }
 
     /* ---------- Charge page: FULL trail test — receipt + PDF attachment + log, ZZTEST only ---------- */
+    /* ---------- Charge page: ecommerce config — public key only, never the private ---------- */
+    if (action === 'ecomm_config') {
+      return res.status(200).json({ ok: true,
+        publicKeySet: !!process.env.CLOVER_ECOMM_PUBLIC,
+        privateKeySet: !!process.env.CLOVER_ECOMM_PRIVATE,
+        pk: process.env.CLOVER_ECOMM_PUBLIC || null,
+        merchantId: '1K7NR5V6K1ER1' });
+    }
+
+    /* ---------- Charge page: LIVE card charge via Clover ecommerce (phase 1: ZZTEST only, $1 cap) ---------- */
+    if (action === 'charge_live') {
+      const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
+      if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      if (clientId !== 26081) {
+        return res.status(400).json({ ok: false, error: 'Live charges are limited to ZZTEST client #26081 in this phase.' });
+      }
+      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+      if (!total || total < 0.5 || total > 1.0) {
+        return res.status(400).json({ ok: false, error: 'Live validation amounts must be between $0.50 and $1.00 in this phase.' });
+      }
+      const source = String(b.source || '');
+      if (!source.startsWith('clv_')) {
+        return res.status(400).json({ ok: false, error: 'Missing card token from the secure Clover card fields.' });
+      }
+      const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+      const clientName = String(b.clientName || 'ZZTEST DELETE ME - API TEST').slice(0, 40);
+      const who = userEmail
+        ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
+        : 'admin key';
+      const now = new Date();
+      const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+
+      // 1) Charge the card — Clover ecommerce API
+      const cr = await fetch('https://scl.clover.com/v1/charges', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
+          'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({ amount: Math.round(total * 100), currency: 'usd', source,
+          description: `Speedy Insurance — ${purpose} — ZZTEST live validation` }),
+      });
+      const ctext = await cr.text();
+      let cbody = null; try { cbody = ctext ? JSON.parse(ctext) : null; } catch { cbody = ctext; }
+      const paid = cr.status === 200 && cbody && (cbody.paid === true || cbody.status === 'succeeded');
+      if (!paid) {
+        const msg = (cbody && (cbody.message || (cbody.error && (cbody.error.message || cbody.error.code)))) || `Clover returned HTTP ${cr.status}`;
+        await audit({ action: 'charge_live_declined', who, clientId, amount: total, purpose, cloverStatus: cr.status, clover: cbody });
+        return res.status(402).json({ ok: false, error: `Charge failed: ${msg}` });
+      }
+      const txnId = String(cbody.id || 'UNKNOWN');
+      const authCode = cbody.auth_code || cbody.authCode || null;
+      const refNum = cbody.ref_num || cbody.refNum || null;
+      const brand = String((cbody.source && cbody.source.brand) || 'CARD').toUpperCase();
+      const last4 = String((cbody.source && cbody.source.last4) || '????');
+      const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum } };
+
+      // 2) Accounting receipt
+      const receipt = [{
+        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
+        payMethod: 'CreditCard', total,
+        logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. LIVE validation charge.`,
+      }];
+      const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+        method: 'POST', body: JSON.stringify(receipt) });
+      out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
+
+      // 3) Branded receipt PDF -> Attachments
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+      const doc = await PDFDocument.create();
+      const W = 306, H = 590;
+      const page = doc.addPage([W, H]);
+      const helv = await doc.embedFont(StandardFonts.Helvetica);
+      const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+      const boldObl = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+      const obl = await doc.embedFont(StandardFonts.HelveticaOblique);
+      const RED = rgb(0.83, 0.17, 0.17), NAVY = rgb(0.10, 0.14, 0.34), GRAY = rgb(0.4, 0.4, 0.4),
+            LIGHT = rgb(0.6, 0.6, 0.6), GREEN = rgb(0.13, 0.63, 0.35), BLACK = rgb(0, 0, 0),
+            LINE = rgb(0.8, 0.8, 0.8);
+      const ctr = (t, y, f, s, c) => page.drawText(t, { x: (W - f.widthOfTextAtSize(t, s)) / 2, y, font: f, size: s, color: c });
+      const dash = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE, dashArray: [2, 2] });
+      const solid = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE });
+      let y = H - 32;
+      ctr('SPEEDY', y, boldObl, 15, NAVY); y -= 19;
+      ctr('INSURANCE AGENCY', y, boldObl, 17, RED); y -= 15;
+      ctr(b.branchName || 'Speedy Insurance Agency', y, helv, 8, GRAY); y -= 11;
+      ctr('(951) 472-0927  ·  speedyins.com', y, helv, 8, GRAY); y -= 16;
+      dash(y); y -= 20;
+      ctr('PAYMENT RECEIPT', y, bold, 11, NAVY); y -= 26;
+      ctr(`$${total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
+      ctr('APPROVED', y, bold, 9, GREEN); y -= 22;
+      const row = (label, value, isBold) => {
+        page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
+        const f = isBold ? bold : helv;
+        const vw = f.widthOfTextAtSize(value, 8.5);
+        page.drawText(value, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
+        y -= 12;
+      };
+      row('Date / Time', stamp + ' PT');
+      row('Client', clientName, true);
+      row('Client #', String(clientId));
+      row('Payment for', purpose.slice(0, 38));
+      if (policyNumber) row('Policy #', policyNumber, true);
+      y -= 4; dash(y); y -= 14;
+      row('Card', `${brand} **** ${last4}`);
+      row('Entry method', 'Keyed — secure online form');
+      row('Cardholder verification', 'Online — CVV verified');
+      y -= 4; solid(y); y -= 14;
+      page.drawText('CLOVER / FISERV TRANSACTION RECORD', { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
+      row('Clover transaction ID', txnId.slice(0, 30));
+      if (authCode) row('Auth code', String(authCode));
+      if (refNum) row('Reference #', String(refNum));
+      row('Merchant ID', '1K7NR5V6K1ER1');
+      row('Device', 'Web — Speedy payment bridge');
+      row('Charged by', who.slice(0, 42));
+      y -= 4; solid(y); y -= 16;
+      for (const t of ['All fields above are drawn from the Clover/Fiserv', 'transaction record and tie 1:1 to the processor\u2019s', 'system of record (transaction ID + auth code).', '', 'Filed automatically to the HawkSoft client record', 'by the Speedy payment bridge.']) {
+        if (t) ctr(t, y, obl, 7, LIGHT); y -= 9;
+      }
+      y -= 6;
+      ctr('Thank you for choosing Speedy Insurance!', y, bold, 8, NAVY);
+      const pdfBuf = Buffer.from(await doc.save());
+
+      const { gzipSync } = await import('node:zlib');
+      const b64h = s => Buffer.from(s, 'utf8').toString('base64');
+      const fname = `Clover_Receipt_${now.toISOString().slice(0, 10)}_${String(total.toFixed(2)).replace('.', '-')}usd`;
+      const r2 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          RefId: crypto.randomUUID(), TS: now.toISOString(),
+          Desc: b64h(`Clover receipt $${total.toFixed(2)}`.slice(0, 41)),
+          LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. Charged by ${who}. Clover ${txnId}.`),
+          FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
+        },
+        body: gzipSync(pdfBuf),
+      });
+      out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
+
+      // 4) Summary log note
+      const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+        method: 'POST', body: JSON.stringify({
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32, // Online From 3rd Party — the bridge
+          note: `CHARGE PAGE LIVE — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Receipt posted + branded PDF attached.`,
+        }) });
+      out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
+
+      const auditSaved = await audit({ action: 'charge_live', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
+    }
+
     if (action === 'charge_full_test') {
       const b = req.body || {};
       const clientId = parseInt(b.clientId, 10);

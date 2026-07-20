@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 // /api/hawksoft — server-side proxy to the HawkSoft Partner API (v4.0).
 // Reads HAWKSOFT_CLIENT_ID + HAWKSOFT_SECRET from Vercel env vars.
 //
@@ -17,6 +18,20 @@ const CLOVER_BRANCHES = {
   2: { branch: 'Riverside — Van Buren', merchantId: 'YQK002AEVXRF1', device: 'C042UQ93960695', model: 'Flex'   },
   3: { branch: 'Riverside — Magnolia',  merchantId: '9SQRE50EMSDF1', device: 'C045UT32440358', model: 'Flex 3' },
   4: { branch: 'Lake Elsinore',         merchantId: 'RC02YN4Q370Z1', device: 'C046UG50362404', model: 'Flex 4' },
+};
+
+/* Signed pay-link tokens (HMAC-SHA256, keyed on ADMIN_API_KEY) */
+const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const makeToken = (obj, key) => { const pl = b64u(JSON.stringify(obj)); return pl + '.' + b64u(createHmac('sha256', key).update(pl).digest()); };
+const readToken = (t, key) => {
+  try {
+    const [pl, sig] = String(t || '').split('.');
+    if (!pl || !sig) return null;
+    if (sig !== b64u(createHmac('sha256', key).update(pl).digest())) return null;
+    const o = JSON.parse(Buffer.from(pl.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    if (!o.exp || Date.now() > o.exp) return null;
+    return o;
+  } catch { return null; }
 };
 
 /* ---------- Google Sign-In (charge page) ---------- */
@@ -129,8 +144,9 @@ export default async function handler(req, res) {
     const KEY = process.env.ADMIN_API_KEY;
     if (!KEY) return res.status(500).json({ ok: false, error: 'ADMIN_API_KEY env var not set in Vercel' });
     const isAdmin = (req.headers['x-admin-key'] || '') === KEY;
+    const PUBLIC_PAY = ['paylink_info', 'paylink_charge']; // authenticated by signed token, used by pay.html
     let userEmail = null;
-    if (!isAdmin) {
+    if (!isAdmin && !PUBLIC_PAY.includes((req.body || {}).action)) {
       userEmail = await verifyGoogleToken(req.headers['x-user-token']);
       if (!userEmail) {
         return res.status(401).json({ ok: false, error: GOOGLE_CLIENT_ID === 'NOT_CONFIGURED'
@@ -142,7 +158,10 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
 
     // Google-authenticated users may only use charge-page actions
-    if (!isAdmin && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live'].includes(action)) {
+    if (!isAdmin && !userEmail && !PUBLIC_PAY.includes(action)) {
+      return res.status(401).json({ ok: false, error: 'Sign in required.' });
+    }
+    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -235,28 +254,40 @@ export default async function handler(req, res) {
     }
 
     /* ---------- Charge page: LIVE card charge via Clover ecommerce (phase 1: ZZTEST only, $1 cap) ---------- */
-    if (action === 'charge_live') {
+    if (action === 'charge_live' || action === 'paylink_charge') {
       const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
       if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
       const b = req.body || {};
-      const clientId = parseInt(b.clientId, 10);
+      let clientId, total, purpose, policyNumber, clientName, who;
+      if (action === 'paylink_charge') {
+        const tok = readToken(b.t, KEY);
+        if (!tok) return res.status(400).json({ ok: false, error: 'This payment link is invalid or has expired. Please ask your agent for a new one.' });
+        clientId = parseInt(tok.c, 10);
+        total = Math.round(parseFloat(tok.a || '0') * 100) / 100;
+        purpose = String(tok.p || 'Payment').slice(0, 80);
+        policyNumber = String(tok.pol || '').trim().slice(0, 25);
+        clientName = String(tok.n || '').slice(0, 40);
+        who = `Client — secure link (sent by ${String(tok.by || 'agent').slice(0, 40)})`;
+      } else {
+        clientId = parseInt(b.clientId, 10);
+        total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+        purpose = String(b.purpose || 'Down payment').slice(0, 80);
+        policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+        clientName = String(b.clientName || '').slice(0, 40);
+        who = userEmail
+          ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
+          : 'admin key';
+      }
       if (!clientId || clientId < 1) {
         return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
       }
-      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
       if (!total || total < 0.5 || total > 1000) {
         return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
       }
       const source = String(b.source || '');
       if (!source.startsWith('clv_')) {
-        return res.status(400).json({ ok: false, error: 'Missing card token from the secure Clover card fields.' });
+        return res.status(400).json({ ok: false, error: 'Missing card token from the secure card fields.' });
       }
-      const purpose = String(b.purpose || 'Down payment').slice(0, 80);
-      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
-      const clientName = String(b.clientName || 'ZZTEST DELETE ME - API TEST').slice(0, 40);
-      const who = userEmail
-        ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
-        : 'admin key';
       const now = new Date();
       const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
 
@@ -338,7 +369,7 @@ export default async function handler(req, res) {
         y -= 12;
       };
       row('Date / Time', stamp + ' PT');
-      row('Client', clientName, true);
+      row('Client', clientName || ('Client #' + clientId), true);
       row('Client #', String(clientId));
       row('Payment for', purpose.slice(0, 38));
       if (policyNumber) row('Policy #', policyNumber, true);
@@ -390,6 +421,148 @@ export default async function handler(req, res) {
 
       const auditSaved = await audit({ action: 'charge_live', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
+    }
+
+    /* ---------- Charge page: record a CASH payment (no card, full HawkSoft trail) ---------- */
+    if (action === 'charge_cash') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
+      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+      if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
+      const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+      const clientName = String(b.clientName || '').slice(0, 40);
+      const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
+      const now = new Date();
+      const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+      const ref = 'CASH-' + crypto.randomUUID().slice(0, 10).toUpperCase();
+      const out = {};
+
+      let policyGuid = null;
+      if (policyNumber) {
+        try {
+          const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0`);
+          const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+          const want = policyNumber.toUpperCase();
+          const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
+          if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+        } catch { policyGuid = null; }
+      }
+
+      const receipt = [{
+        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured
+        payMethod: 'Cash', total, policyId: policyGuid,
+        logNote: `CHARGE PAGE cash — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
+      }];
+      const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+        method: 'POST', body: JSON.stringify(receipt) });
+      out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
+
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+      const doc = await PDFDocument.create();
+      const W = 306, H = 590;
+      const page = doc.addPage([W, H]);
+      const helv = await doc.embedFont(StandardFonts.Helvetica);
+      const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+      const boldObl = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+      const obl = await doc.embedFont(StandardFonts.HelveticaOblique);
+      const RED = rgb(0.83, 0.17, 0.17), NAVY = rgb(0.10, 0.14, 0.34), GRAY = rgb(0.4, 0.4, 0.4),
+            LIGHT = rgb(0.6, 0.6, 0.6), GREEN = rgb(0.13, 0.63, 0.35), BLACK = rgb(0, 0, 0),
+            LINE = rgb(0.8, 0.8, 0.8);
+      const ctr = (t, y, f, s, c) => page.drawText(t, { x: (W - f.widthOfTextAtSize(t, s)) / 2, y, font: f, size: s, color: c });
+      const dash = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE, dashArray: [2, 2] });
+      const solid = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE });
+      let y = H - 32;
+      ctr('SPEEDY', y, boldObl, 15, NAVY); y -= 19;
+      ctr('INSURANCE AGENCY', y, boldObl, 17, RED); y -= 15;
+      ctr('Speedy Insurance Agency', y, helv, 8, GRAY); y -= 11;
+      ctr('(951) 472-0927  ·  speedyins.com', y, helv, 8, GRAY); y -= 16;
+      dash(y); y -= 20;
+      ctr('PAYMENT RECEIPT', y, bold, 11, NAVY); y -= 26;
+      ctr(`$${total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
+      ctr('RECEIVED — CASH', y, bold, 9, GREEN); y -= 22;
+      const row = (label, value, isBold) => {
+        page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
+        const f = isBold ? bold : helv;
+        const vw = f.widthOfTextAtSize(value, 8.5);
+        page.drawText(value, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
+        y -= 12;
+      };
+      row('Date / Time', stamp + ' PT');
+      row('Client', clientName || ('Client #' + clientId), true);
+      row('Client #', String(clientId));
+      row('Payment for', purpose.slice(0, 38));
+      if (policyNumber) row('Policy #', policyNumber, true);
+      y -= 4; dash(y); y -= 14;
+      row('Method', 'Cash');
+      row('Entry', 'In person — counter');
+      y -= 4; solid(y); y -= 14;
+      page.drawText('PAYMENT RECORD', { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
+      row('Reference', ref);
+      row('Device', 'Web — Speedy payment bridge');
+      row('Received by', who.slice(0, 42));
+      y -= 4; solid(y); y -= 16;
+      for (const t of ['Cash payment received at the agency counter and', 'recorded to the HawkSoft client record by the', 'Speedy payment bridge.']) {
+        ctr(t, y, obl, 7, LIGHT); y -= 9;
+      }
+      y -= 6;
+      ctr('Thank you for choosing Speedy Insurance!', y, bold, 8, NAVY);
+      const pdfBuf = Buffer.from(await doc.save());
+
+      const { gzipSync } = await import('node:zlib');
+      const b64h = s => Buffer.from(s, 'utf8').toString('base64');
+      const fname = `Cash_Receipt_${now.toISOString().slice(0, 10)}_${String(total.toFixed(2)).replace('.', '-')}usd`;
+      const r2 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          RefId: crypto.randomUUID(), TS: now.toISOString(),
+          Desc: b64h(`Cash receipt $${total.toFixed(2)}`.slice(0, 41)),
+          LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. Cash received by ${who}. Ref ${ref}.`),
+          FileName: b64h(fname), FileExt: 'pdf', Channel: '32',
+          ...(policyGuid ? { PolicyId: policyGuid } : {}),
+        },
+        body: gzipSync(pdfBuf),
+      });
+      out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
+
+      const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+        method: 'POST', body: JSON.stringify({
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32,
+          policyId: policyGuid,
+          note: `CHARGE PAGE CASH — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Receipt posted + branded PDF attached.`,
+        }) });
+      out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
+
+      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose, ref, hawksoft: out });
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved });
+    }
+
+    /* ---------- Charge page: create a secure pay-by-link (72h, amount locked) ---------- */
+    if (action === 'paylink_create') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
+      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+      if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
+      const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
+      const tok = makeToken({
+        c: clientId, n: String(b.clientName || '').slice(0, 40),
+        a: total, p: String(b.purpose || 'Payment').slice(0, 80),
+        pol: String(b.policyNumber || '').trim().slice(0, 25),
+        by: who, exp: Date.now() + 72 * 3600 * 1000,
+      }, KEY);
+      await audit({ action: 'paylink_create', who, clientId, amount: total, purpose: b.purpose });
+      return res.status(200).json({ ok: true, url: `https://www.speedyins.com/pay.html?t=${tok}`, hours: 72 });
+    }
+
+    /* ---------- Public (token-auth): pay page bootstrap ---------- */
+    if (action === 'paylink_info') {
+      const tok = readToken((req.body || {}).t, KEY);
+      if (!tok) return res.status(400).json({ ok: false, error: 'This payment link is invalid or has expired. Please ask your agent for a new one.' });
+      return res.status(200).json({ ok: true, name: tok.n || '', amount: tok.a, purpose: tok.p || 'Payment',
+        pk: process.env.CLOVER_ECOMM_PUBLIC || null, merchantId: '1K7NR5V6K1ER1' });
     }
 
     if (action === 'charge_full_test') {

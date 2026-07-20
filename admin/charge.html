@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Charge Client — Speedy Insurance</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://checkout.clover.com/sdk.js"></script>
 <style>
   :root{
     --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
@@ -62,6 +63,8 @@
       color:#9fe8bf;white-space:pre-wrap;word-break:break-word;margin-top:12px;display:none}
   .hide{display:none}
   .ok{color:var(--green);font-weight:800}
+.cfield{background:#fff;border-radius:10px;min-height:44px;padding:4px 10px;margin:6px 0}
+.cfrow{display:flex;gap:8px}.cfrow .cfield{flex:1}
 </style>
 </head>
 <body>
@@ -70,7 +73,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.15 · policy on receipt</div>
+    <div class="ver">v2.16 · live card charge (ZZTEST $1)</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -167,6 +170,15 @@
     <div class="note"><b>Test build:</b> no money moves yet — Clover card fields are the next phase.
       The button posts the full payment trail to HawkSoft: accounting receipt + receipt PDF in
       Attachments + log note (<b>ZZTEST #26081 only</b>, capped at $10).</div>
+    <label style="margin-top:14px;display:block">Card — secure Clover fields</label>
+    <div id="cardNumber" class="cfield"></div>
+    <div class="cfrow">
+      <div id="cardDate" class="cfield"></div>
+      <div id="cardCvv" class="cfield"></div>
+      <div id="cardZip" class="cfield"></div>
+    </div>
+    <div class="hint" id="cardHint">Card data goes straight from this browser to Clover — it never touches our server.</div>
+    <button class="btn btn-red" id="liveBtn" onclick="chargeLive()">CHARGE — LIVE ($1 max · ZZTEST only)</button>
     <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST)</button>
     <button class="btn btn-ghost" onclick="probeChannels()" style="font-size:13px;padding:10px">🔬 Probe log channels on ZZTEST (find "From Other")</button>
     <pre id="out"></pre>
@@ -338,6 +350,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;'
 function resetMatch(){ document.getElementById('matchbox').innerHTML=''; document.getElementById('chargecard').classList.add('hide'); confirmed=null; }
 function confirmClient(n){
   document.getElementById('chargecard').classList.remove('hide');
+  initClover();
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 function pick(b){document.querySelectorAll('#purp button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');purpose=b.textContent;
@@ -348,6 +361,50 @@ function purposeText(){
   const t=document.getElementById('otherText').value.trim();
   return t ? 'Other: '+t : 'Other';}
 
+let cloverSDK = null;
+async function initClover(){
+  if(cloverSDK) return true;
+  const hint = document.getElementById('cardHint');
+  try{
+    const cfg = await post({action:'ecomm_config'});
+    if(!cfg.ok || !cfg.pk){ hint.textContent = 'Card fields unavailable — CLOVER_ECOMM keys not set in Vercel.'; return false; }
+    if(!window.Clover){ hint.textContent = 'Clover SDK failed to load — check the network and refresh.'; return false; }
+    cloverSDK = new Clover(cfg.pk, { merchantId: cfg.merchantId });
+    const elements = cloverSDK.elements();
+    const styles = { body:{fontSize:'16px'}, input:{fontSize:'16px',color:'#111827'} };
+    elements.create('CARD_NUMBER', styles).mount('#cardNumber');
+    elements.create('CARD_DATE', styles).mount('#cardDate');
+    elements.create('CARD_CVV', styles).mount('#cardCvv');
+    elements.create('CARD_POSTAL_CODE', styles).mount('#cardZip');
+    return true;
+  }catch(e){ hint.textContent = 'Card fields failed to load: ' + e; return false; }
+}
+async function chargeLive(){
+  const out = document.getElementById('out'); out.style.display='block';
+  const btn = document.getElementById('liveBtn');
+  const amt = document.getElementById('amount').value || '0';
+  if(!confirmed){ out.textContent = 'Verify and confirm the client first.'; return; }
+  if(parseFloat(amt) > 1.001){ out.textContent = 'Live validation is capped at $1.00 in this phase.'; return; }
+  if(!cloverSDK){ out.textContent = 'Card fields not ready — tap the client confirm again or refresh.'; return; }
+  btn.disabled = true;
+  out.textContent = 'Securing card with Clover\u2026';
+  try{
+    const tk = await cloverSDK.createToken();
+    if(tk && tk.errors && Object.keys(tk.errors).length){
+      out.textContent = 'Card error: ' + Object.values(tk.errors).join(' \u00b7 '); btn.disabled = false; return;
+    }
+    if(!tk || !tk.token){ out.textContent = 'Could not tokenize the card — check the fields.'; btn.disabled = false; return; }
+    out.textContent = 'Charging card\u2026';
+    const j = await post({action:'charge_live', clientId: confirmed.clientNumber,
+      clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
+      source: tk.token, policyNumber: document.getElementById('hsPolicyNumber').value.trim()});
+    out.textContent = JSON.stringify(j, null, 2);
+    if(j.ok){
+      out.textContent += '\n\n\u2713 LIVE charge complete \u2014 money moved. Verify: (1) Clover dashboard shows the payment, (2) HawkSoft ZZTEST has receipt + branded PDF + log, (3) then REFUND it in the Clover dashboard. Signing you out.';
+      setTimeout(()=>{ signOut(); window.scrollTo({top:0,behavior:'smooth'}); if(window.google) google.accounts.id.prompt(); }, 2500);
+    } else { btn.disabled = false; }
+  }catch(e){ out.textContent = 'Error: ' + e; btn.disabled = false; }
+}
 async function probeChannels(){
   const out = document.getElementById('out');
   out.style.display='block'; out.textContent='Posting 10 labeled probe logs to ZZTEST…';

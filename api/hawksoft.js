@@ -204,7 +204,7 @@ export default async function handler(req, res) {
     if (action === 'charge_lookup') {
       const clientId = parseInt((req.body || {}).clientId, 10);
       if (!clientId) return res.status(400).json({ ok: false, error: 'clientId required' });
-      const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=Details,People,Contacts`, {});
+      const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=Details,People,Contacts,Policies,Invoices`, {});
       if (r.status !== 200) return res.status(200).json({ ok: false, httpStatus: r.status, error: 'Client not found' });
       const b = r.body || {};
       // Defensive extraction — v4 shapes vary
@@ -220,9 +220,22 @@ export default async function handler(req, res) {
       const emails = [...new Set((raw.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []))].slice(0, 2);
       const officeId = b.officeId || (b.details && b.details.officeId) || b.OfficeId || null;
       const status = b.status || (b.details && b.details.status) || '';
+      // Open invoices (requires Invoices scope) — lets the page prefill amount for guaranteed auto-apply
+      const polNumById = {};
+      for (const pl of (b.policies || b.Policies || [])) {
+        const gid = pl.id || pl.policyId || pl.guid || pl.Id;
+        if (gid) polNumById[gid] = pl.policyNumber || pl.PolicyNumber || '';
+      }
+      const openInvoices = ((b.invoices || b.Invoices || []).map(i => ({
+        id: i.id || i.invoiceId || i.guid || i.Id || null,
+        num: i.invoiceNumber || i.number || i.InvoiceNumber || '',
+        bal: Number(i.balance ?? i.balanceDue ?? i.amountDue ?? i.due ?? i.remaining ?? i.amount ?? NaN),
+        dueDate: String(i.dueDate || i.DueDate || '').slice(0, 10),
+        policyNumber: polNumById[i.policyId || i.policyGuid || i.PolicyId] || '',
+      })).filter(i => i.id && isFinite(i.bal) && i.bal > 0)).slice(0, 6);
       return res.status(200).json({ ok: true, result: {
         clientNumber: b.clientNumber || clientId, name: name || '(no name on file)',
-        phones, emails, officeId, status,
+        phones, emails, officeId, status, openInvoices,
       }});
     }
 

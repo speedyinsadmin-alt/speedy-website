@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.23 · branded Gmail email</div>
+    <div class="ver">v2.24 · open-invoice picker</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -171,6 +171,7 @@
 
   <!-- Amount + test write -->
   <div class="card hide" id="chargecard">
+    <div id="invList"></div>
     <div class="eyebrow">Amount</div>
     <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00"></div>
     <label>Payment for</label>
@@ -392,7 +393,30 @@ function confirmClient(n){
   document.getElementById('chargecard').classList.remove('hide');
   initClover();
   updatePolToggle();
+  renderInvList();
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+}
+function renderInvList(){
+  const el = document.getElementById('invList');
+  const list = (confirmed && confirmed.openInvoices) || [];
+  if(!list.length){ el.innerHTML=''; return; }
+  el.innerHTML = '<div class="eyebrow" style="color:#7ee2a8">Open invoices — tap to charge the exact amount</div>'
+    + '<div class="purpose" style="margin-bottom:14px">'
+    + list.map((iv,i) => `<button type="button" style="text-align:left" onclick="pickInvoice(${i}, this)">
+        <b>$${iv.bal.toFixed(2)}</b> \u00b7 ${esc(iv.num || 'Invoice')}${iv.policyNumber ? '<br><span style="opacity:.65;font-size:12px">policy ' + esc(iv.policyNumber) + '</span>' : ''}${iv.dueDate ? '<br><span style="opacity:.5;font-size:11.5px">due ' + esc(iv.dueDate) + '</span>' : ''}
+      </button>`).join('')
+    + '</div>';
+}
+function pickInvoice(i, btn){
+  const iv = confirmed.openInvoices[i];
+  document.getElementById('amount').value = iv.bal.toFixed(2);
+  if(iv.policyNumber){
+    document.getElementById('hsPolicyNumber').value = iv.policyNumber;
+    document.getElementById('polToggle').checked = true;
+    updatePolToggle();
+  }
+  document.querySelectorAll('#invList button').forEach(x=>x.classList.remove('sel'));
+  btn.classList.add('sel');
 }
 function updatePolToggle(){
   const pol = document.getElementById('hsPolicyNumber').value.trim();

@@ -179,7 +179,7 @@ export default async function handler(req, res) {
     const KEY = process.env.ADMIN_API_KEY;
     if (!KEY) return res.status(500).json({ ok: false, error: 'ADMIN_API_KEY env var not set in Vercel' });
     const isAdmin = (req.headers['x-admin-key'] || '') === KEY;
-    const PUBLIC_PAY = ['paylink_info', 'paylink_charge']; // authenticated by signed token, used by pay.html
+    const PUBLIC_PAY = ['paylink_info', 'paylink_name', 'paylink_charge']; // authenticated by signed token, used by pay.html
     let userEmail = null;
     if (!isAdmin && !PUBLIC_PAY.includes((req.body || {}).action)) {
       userEmail = await verifyGoogleToken(req.headers['x-user-token']);
@@ -636,6 +636,15 @@ export default async function handler(req, res) {
     if (action === 'paylink_info') {
       const tok = readToken((req.body || {}).t, KEY);
       if (!tok) return res.status(400).json({ ok: false, error: 'This payment link is invalid or has expired. Please ask your agent for a new one.' });
+      // Fast path: no HawkSoft call here — the page fetches the name separately in parallel
+      return res.status(200).json({ ok: true, name: tok.n || '', amount: tok.a, purpose: tok.p || 'Payment',
+        pk: process.env.CLOVER_ECOMM_PUBLIC || null, merchantId: '1K7NR5V6K1ER1' });
+    }
+
+    /* ---------- Public (token-auth): client display name, fetched async by pay.html ---------- */
+    if (action === 'paylink_name') {
+      const tok = readToken((req.body || {}).t, KEY);
+      if (!tok) return res.status(400).json({ ok: false });
       let name = tok.n || '';
       if (!name) {
         try {
@@ -643,8 +652,7 @@ export default async function handler(req, res) {
           name = clientNameFrom(r.body);
         } catch { name = ''; }
       }
-      return res.status(200).json({ ok: true, name, amount: tok.a, purpose: tok.p || 'Payment',
-        pk: process.env.CLOVER_ECOMM_PUBLIC || null, merchantId: '1K7NR5V6K1ER1' });
+      return res.status(200).json({ ok: true, name });
     }
 
     if (action === 'charge_full_test') {

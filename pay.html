@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex">
 <title>Secure Payment — Speedy Insurance Agency</title>
 <script src="https://checkout.clover.com/sdk.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{--navy:#0B1829;--navy2:#122036;--red:#D42B2B;--ink:#F2F5FA;--line:rgba(255,255,255,.14)}
 *{box-sizing:border-box}
@@ -52,6 +53,10 @@ label{display:block;font-size:13px;opacity:.8;margin:14px 0 4px}
         <div id="gpayBtn" style="width:100%;max-width:300px;height:44px;margin:0 auto"></div>
       </div>
       <div id="walletHint" class="hint hide" style="margin-top:10px;text-align:center">or pay with card below</div>
+      <div id="qrWrap" class="hide" style="margin-top:16px;text-align:center;border:1px dashed var(--line);border-radius:12px;padding:14px">
+        <div style="font-size:13.5px;margin-bottom:10px;opacity:.85">Prefer your phone? Scan to open this payment there — Apple&nbsp;Pay appears on iPhone.</div>
+        <div id="qrBox" style="display:inline-block;background:#fff;padding:10px;border-radius:10px"></div>
+      </div>
       <label>Card details</label>
       <div id="cardNumber" class="cfield"></div>
       <div class="cfrow">
@@ -151,6 +156,14 @@ async function init(){
       document.getElementById('gpayWrap').classList.remove('hide');
       document.getElementById('walletHint').classList.remove('hide');
     }catch(e){ /* Google Pay unavailable — card fields still work */ }
+    // Desktop: offer a QR handoff to the phone (where Apple Pay is available)
+    try{
+      const isDesktop = window.matchMedia && matchMedia('(pointer:fine)').matches && window.innerWidth >= 700;
+      if (isDesktop && window.QRCode){
+        new QRCode(document.getElementById('qrBox'), { text: location.href, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
+        document.getElementById('qrWrap').classList.remove('hide');
+      }
+    }catch(e){}
     document.getElementById('loading').classList.add('hide');
     document.getElementById('payui').classList.remove('hide');
   }catch(e){ fail('Connection problem — please try again in a moment.'); }

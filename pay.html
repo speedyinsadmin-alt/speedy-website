@@ -7,6 +7,8 @@
 <title>Secure Payment — Speedy Insurance Agency</title>
 <link rel="preconnect" href="https://checkout.clover.com">
 <link rel="dns-prefetch" href="https://checkout.clover.com">
+<link rel="preconnect" href="https://pay.google.com">
+<link rel="preconnect" href="https://www.gstatic.com">
 <script src="https://checkout.clover.com/sdk.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -87,40 +89,7 @@ function fail(msg){
   document.getElementById('resultbox').innerHTML =
     '<div class="result bad"><h3>Unable to load payment</h3><div style="font-size:14px">'+esc(msg)+'</div></div>';
 }
-async function init(){
-  if(!T) return fail('This link is missing its security code. Please ask your agent to resend it.');
-  // Instant paint from the link itself (display only — the server re-verifies everything before charging)
-  try{
-    const o = JSON.parse(atob(T.split('.')[0].replace(/-/g,'+').replace(/_/g,'/')));
-    const a0 = parseFloat(o.a);
-    if(a0 > 0){
-      amt = a0;
-      document.getElementById('pAmt').textContent = '$' + a0.toFixed(2);
-      document.getElementById('pPurp').textContent = o.p || 'Payment';
-      document.getElementById('pName').textContent = o.n || '…';
-      document.getElementById('loading').classList.add('hide');
-      document.getElementById('payui').classList.remove('hide');
-    }
-  }catch(e){}
-  // Name arrives in parallel — never blocks the page
-  post({action:'paylink_name', t:T}).then(r => {
-    if(r && r.ok && r.name) document.getElementById('pName').textContent = r.name;
-  }).catch(()=>{});
-  try{
-    const j = await post({action:'paylink_info', t:T});
-    if(!j.ok) return fail(j.error || 'This payment link is invalid or has expired.');
-    if(!j.pk) return fail('Payments are temporarily unavailable — please call us at (951) 472-0927.');
-    amt = parseFloat(j.amount);
-    document.getElementById('pAmt').textContent = '$' + amt.toFixed(2);
-    if(j.name) document.getElementById('pName').textContent = j.name;
-    document.getElementById('pPurp').textContent = j.purpose || 'Payment';
-    clover = new Clover(j.pk, { merchantId: j.merchantId });
-    const elements = clover.elements();
-    const styles = { body:{fontSize:'16px'}, input:{fontSize:'16px',color:'#111827',height:'44px',lineHeight:'44px',padding:'0'}, '::placeholder':{color:'#9ca3af'} };
-    elements.create('CARD_NUMBER', styles).mount('#cardNumber');
-    elements.create('CARD_DATE', styles).mount('#cardDate');
-    elements.create('CARD_CVV', styles).mount('#cardCvv');
-    elements.create('CARD_POSTAL_CODE', styles).mount('#cardZip');
+function mountWallets(j, elements){
     // Apple Pay (only shows on Apple devices/Safari that support it)
     try{
       if (window.ApplePaySession && ApplePaySession.canMakePayments && ApplePaySession.canMakePayments()){
@@ -175,6 +144,43 @@ async function init(){
       document.getElementById('gpayWrap').classList.remove('hide');
       document.getElementById('walletHint').classList.remove('hide');
     }catch(e){ /* Google Pay unavailable — card fields still work */ }
+}
+async function init(){
+  if(!T) return fail('This link is missing its security code. Please ask your agent to resend it.');
+  // Instant paint from the link itself (display only — the server re-verifies everything before charging)
+  try{
+    const o = JSON.parse(atob(T.split('.')[0].replace(/-/g,'+').replace(/_/g,'/')));
+    const a0 = parseFloat(o.a);
+    if(a0 > 0){
+      amt = a0;
+      document.getElementById('pAmt').textContent = '$' + a0.toFixed(2);
+      document.getElementById('pPurp').textContent = o.p || 'Payment';
+      document.getElementById('pName').textContent = o.n || '…';
+      document.getElementById('loading').classList.add('hide');
+      document.getElementById('payui').classList.remove('hide');
+    }
+  }catch(e){}
+  // Name arrives in parallel — never blocks the page
+  post({action:'paylink_name', t:T}).then(r => {
+    if(r && r.ok && r.name) document.getElementById('pName').textContent = r.name;
+  }).catch(()=>{});
+  try{
+    const j = await post({action:'paylink_info', t:T});
+    if(!j.ok) return fail(j.error || 'This payment link is invalid or has expired.');
+    if(!j.pk) return fail('Payments are temporarily unavailable — please call us at (951) 472-0927.');
+    amt = parseFloat(j.amount);
+    document.getElementById('pAmt').textContent = '$' + amt.toFixed(2);
+    if(j.name) document.getElementById('pName').textContent = j.name;
+    document.getElementById('pPurp').textContent = j.purpose || 'Payment';
+    clover = new Clover(j.pk, { merchantId: j.merchantId });
+    const elements = clover.elements();
+    const styles = { body:{fontSize:'16px'}, input:{fontSize:'16px',color:'#111827',height:'44px',lineHeight:'44px',padding:'0'}, '::placeholder':{color:'#9ca3af'} };
+    mountWallets(j, elements);
+    elements.create('CARD_NUMBER', styles).mount('#cardNumber');
+    elements.create('CARD_DATE', styles).mount('#cardDate');
+    elements.create('CARD_CVV', styles).mount('#cardCvv');
+    elements.create('CARD_POSTAL_CODE', styles).mount('#cardZip');
+
     // Desktop: offer a QR handoff to the phone (where Apple Pay is available)
     try{
       const isDesktop = window.matchMedia && matchMedia('(pointer:fine)').matches && window.innerWidth >= 700;

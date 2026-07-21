@@ -217,11 +217,12 @@ export default async function handler(req, res) {
       if (!name) name = b.businessName || b.name || '';
       const raw = JSON.stringify(b);
       const phones = [...new Set((raw.match(/\(\d{3}\)\s?\d{3}-\d{4}/g) || []))].slice(0, 3);
+      const emails = [...new Set((raw.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []))].slice(0, 2);
       const officeId = b.officeId || (b.details && b.details.officeId) || b.OfficeId || null;
       const status = b.status || (b.details && b.details.status) || '';
       return res.status(200).json({ ok: true, result: {
         clientNumber: b.clientNumber || clientId, name: name || '(no name on file)',
-        phones, officeId, status,
+        phones, emails, officeId, status,
       }});
     }
 

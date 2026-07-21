@@ -321,8 +321,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
       }
       const source = String(b.source || '');
-      if (!source.startsWith('clv_')) {
-        return res.status(400).json({ ok: false, error: 'Missing card token from the secure card fields.' });
+      if (!source || source.length < 8) {
+        return res.status(400).json({ ok: false, error: 'Missing payment token from the secure payment fields.' });
       }
       const now = new Date();
       const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });

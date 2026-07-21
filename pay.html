@@ -47,8 +47,11 @@ label{display:block;font-size:13px;opacity:.8;margin:14px 0 4px}
       <div class="kv"><span>For</span><b id="pPurp">—</b></div>
       <div id="applePayWrap" class="hide" style="margin-top:16px;text-align:center">
         <div id="applePayBtn" style="width:100%;max-width:300px;height:44px;margin:0 auto"></div>
-        <div class="hint" style="margin-top:10px">or pay with card below</div>
       </div>
+      <div id="gpayWrap" class="hide" style="margin-top:10px;text-align:center">
+        <div id="gpayBtn" style="width:100%;max-width:300px;height:44px;margin:0 auto"></div>
+      </div>
+      <div id="walletHint" class="hint hide" style="margin-top:10px;text-align:center">or pay with card below</div>
       <label>Card details</label>
       <div id="cardNumber" class="cfield"></div>
       <div class="cfrow">
@@ -120,7 +123,34 @@ async function init(){
         });
         window.addEventListener('paymentMethodEnd', () => { charging = false; });
       }
+      document.getElementById('walletHint').classList.remove('hide');
     }catch(e){ /* Apple Pay unavailable — card fields still work */ }
+    // Google Pay (renders where the browser supports it; no domain setup needed)
+    try{
+      const gReq = { total: { label: 'Speedy Insurance', amount: Math.round(amt * 100) },
+        options: { button: { buttonType: 'short' } } };
+      const gBtn = elements.create('PAYMENT_REQUEST_BUTTON', { paymentReqData: gReq });
+      gBtn.mount('#gpayBtn');
+      gBtn.addEventListener('paymentMethod', async (tokenData) => {
+        if (charging) return; charging = true;
+        try{
+          const d = tokenData || {};
+          let source = '';
+          if (typeof d === 'string') source = d;
+          else source = (d.token && (d.token.id || (typeof d.token === 'string' ? d.token : ''))) || d.id ||
+            (d.tokenRecieved && d.tokenRecieved.id) || (d.detail && d.detail.token && (d.detail.token.id || d.detail.token)) || '';
+          if (typeof source !== 'string' || source.length < 8){
+            renderChargeResult({ ok:false, error:'Google Pay did not return a payment token — please use the card fields below.' });
+          } else {
+            const j2 = await post({action:'paylink_charge', t:T, source});
+            renderChargeResult(j2);
+          }
+        }catch(e2){ renderChargeResult({ ok:false, error:'Connection problem — please try again.' }); }
+        charging = false;
+      });
+      document.getElementById('gpayWrap').classList.remove('hide');
+      document.getElementById('walletHint').classList.remove('hide');
+    }catch(e){ /* Google Pay unavailable — card fields still work */ }
     document.getElementById('loading').classList.add('hide');
     document.getElementById('payui').classList.remove('hide');
   }catch(e){ fail('Connection problem — please try again in a moment.'); }

@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.20 · invoice auto-apply</div>
+    <div class="ver">v2.21 · clean send messages</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -517,7 +517,7 @@ async function chargeCash(){
     }
   }catch(e){ out.style.display='none'; rb.innerHTML = '<div class="result bad"><h3>Connection problem</h3><div class="foot" style="font-size:14px;opacity:1">'+esc(String(e))+'</div></div>'; btn.disabled = false; }
 }
-let _plUrl='', _plMsg='';
+let _plUrl='', _plMsg='', _plEmail='';
 async function createLink(){
   const out = document.getElementById('out'); const lo = document.getElementById('linkOut');
   const btn = document.getElementById('linkBtn');
@@ -533,14 +533,27 @@ async function createLink(){
     if(!j.ok){ lo.innerHTML = '<div class="result bad"><div class="foot" style="font-size:14px;opacity:1">'+esc(j.error||'Failed')+'</div></div>'; return; }
     const first = ((confirmed.name||'').split(',').pop()||'').trim().split(' ')[0] || '';
     _plUrl = j.url;
-    _plMsg = 'Hi ' + (first||'there') + ', here is your secure payment link from Speedy Insurance \u2014 $' + parseFloat(amt).toFixed(2) + ' for ' + purposeText() + ': ' + j.url + ' (valid 72 hours)';
+    const amtStr = '$' + parseFloat(amt).toFixed(2);
+    _plMsg = 'Hi ' + (first||'there') + ' \u2014 Speedy Insurance secure payment\n'
+      + 'Amount: ' + amtStr + '\n'
+      + 'For: ' + purposeText() + '\n\n'
+      + 'Pay here (valid 72 hours):\n' + j.url;
+    _plEmail = 'Hi ' + (first||'there') + ',\n\n'
+      + 'Here is your secure payment link from Speedy Insurance Agency.\n\n'
+      + 'Amount: ' + amtStr + '\n'
+      + 'For: ' + purposeText() + '\n'
+      + 'Valid: 72 hours\n\n'
+      + 'Pay here:\n' + j.url + '\n\n'
+      + 'Your card details are entered directly with our secure payment processor \u2014 Speedy Insurance never sees or stores them. A receipt is filed to your account automatically.\n\n'
+      + 'Speedy Insurance Agency\n(951) 472-0927 \u00b7 speedyins.com';
     const phone = (confirmed.phones && confirmed.phones[0]) ? String(confirmed.phones[0]).replace(/\D/g,'') : '';
     lo.innerHTML = `<div class="result good"><h3>Payment link ready</h3>
       <div style="word-break:break-all;font-size:12.5px;opacity:.85;margin:6px 0">${esc(j.url)}</div>
       <button class="btn btn-red" onclick="copyTxt(_plUrl, this)">Copy link</button>
       <button class="btn btn-ghost" onclick="copyTxt(_plMsg, this)">Copy text message</button>
+      <button class="btn btn-ghost" onclick="copyTxt(_plEmail, this)">Copy email</button>
       ${phone?`<a class="btn btn-ghost" style="display:block;text-align:center;text-decoration:none" href="sms:${phone}?body=${encodeURIComponent(_plMsg)}">Text to ${esc(first||'client')}</a>`:''}
-      <a class="btn btn-ghost" style="display:block;text-align:center;text-decoration:none" href="mailto:?subject=${encodeURIComponent('Your Speedy Insurance payment link')}&body=${encodeURIComponent(_plMsg)}">Email to client</a>
+      <a class="btn btn-ghost" style="display:block;text-align:center;text-decoration:none" href="mailto:?subject=${encodeURIComponent('Your Speedy Insurance payment link')}&body=${encodeURIComponent(_plEmail)}">Email to client</a>
       <div class="foot">When the client pays, the receipt, branded PDF and log file to their HawkSoft record automatically \u2014 marked as sent by you.</div></div>`;
   }catch(e){ btn.disabled = false; lo.innerHTML = '<div class="result bad"><div class="foot">'+esc(String(e))+'</div></div>'; }
 }

@@ -603,6 +603,18 @@ export default async function handler(req, res) {
       if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
       const byShort = String(userEmail || 'admin').replace('@speedyins.com', '');
+      // Resolve policy GUID so the creation log files under the exact policy tab (fail-soft)
+      let linkPolicyGuid = null;
+      const linkPolicyNumber = String(b.policyNumber || '').trim();
+      if (linkPolicyNumber) {
+        try {
+          const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies`);
+          const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+          const want = linkPolicyNumber.toUpperCase();
+          const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
+          if (hit) linkPolicyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+        } catch { linkPolicyGuid = null; }
+      }
       const tok = makeToken({
         c: clientId, a: total, p: String(b.purpose || 'Payment').slice(0, 40),
         pol: String(b.policyNumber || '').trim().slice(0, 25),
@@ -613,6 +625,7 @@ export default async function handler(req, res) {
       const lg = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: new Date().toISOString(), channel: 32,
+          policyId: linkPolicyGuid,
           note: `PAYMENT LINK created — $${total.toFixed(2)} for ${String(b.purpose || 'Payment').slice(0, 40)}${b.policyNumber ? ' · policy ' + String(b.policyNumber).trim() : ''} · by ${who} · expires ${expStr} PT. Client pays online; trail files automatically when paid.`,
         }) });
       await audit({ action: 'paylink_create', who, clientId, amount: total, purpose: b.purpose, logged: lg.status });

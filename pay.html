@@ -45,6 +45,10 @@ label{display:block;font-size:13px;opacity:.8;margin:14px 0 4px}
       <div class="amt" id="pAmt">$0.00</div>
       <div class="kv"><span>Name</span><b id="pName">—</b></div>
       <div class="kv"><span>For</span><b id="pPurp">—</b></div>
+      <div id="applePayWrap" class="hide" style="margin-top:16px;text-align:center">
+        <div id="applePayBtn" style="width:100%;max-width:300px;height:44px;margin:0 auto"></div>
+        <div class="hint" style="margin-top:10px">or pay with card below</div>
+      </div>
       <label>Card details</label>
       <div id="cardNumber" class="cfield"></div>
       <div class="cfrow">
@@ -90,9 +94,52 @@ async function init(){
     elements.create('CARD_DATE', styles).mount('#cardDate');
     elements.create('CARD_CVV', styles).mount('#cardCvv');
     elements.create('CARD_POSTAL_CODE', styles).mount('#cardZip');
+    // Apple Pay (only shows on Apple devices/Safari that support it)
+    try{
+      if (window.ApplePaySession && ApplePaySession.canMakePayments && ApplePaySession.canMakePayments()){
+        const apReq = clover.createApplePaymentRequest({ amount: Math.round(amt * 100) });
+        const apBtn = elements.create('PAYMENT_REQUEST_BUTTON_APPLE_PAY', {
+          applePaymentRequest: apReq, sessionIdentifier: j.merchantId });
+        apBtn.mount('#applePayBtn');
+        document.getElementById('applePayWrap').classList.remove('hide');
+        window.addEventListener('paymentMethod', async (event) => {
+          if (charging) return; charging = true;
+          const d = (event && event.detail) || {};
+          const tok = d.tokenRecieved || d.tokenReceived || {};
+          const source = tok.id || '';
+          try{
+            if(!source){ clover.updateApplePaymentStatus('failed'); charging = false; return; }
+            const j2 = await post({action:'paylink_charge', t:T, source});
+            clover.updateApplePaymentStatus(j2.ok ? 'success' : 'failed');
+            renderChargeResult(j2);
+          }catch(e2){
+            try{ clover.updateApplePaymentStatus('failed'); }catch(_){ }
+            renderChargeResult({ ok:false, error:'Connection problem — please try again.' });
+          }
+          charging = false;
+        });
+        window.addEventListener('paymentMethodEnd', () => { charging = false; });
+      }
+    }catch(e){ /* Apple Pay unavailable — card fields still work */ }
     document.getElementById('loading').classList.add('hide');
     document.getElementById('payui').classList.remove('hide');
   }catch(e){ fail('Connection problem — please try again in a moment.'); }
+}
+let charging = false;
+function renderChargeResult(j){
+  const rb = document.getElementById('resultbox');
+  if(j.ok){
+    const ch = (j.results && j.results.charge) || {};
+    document.getElementById('payui').classList.add('hide');
+    rb.innerHTML = `<div class="result good"><h3>✓ Payment approved — thank you!</h3>
+      <div class="amt">$${amt.toFixed(2)}</div>
+      <div class="kv"><span>Card</span><b>${esc(ch.brand||'CARD')} •••• ${esc(ch.last4||'')}</b></div>
+      <div class="kv"><span>Confirmation</span><b>${esc(ch.id||j.txnId||'')}</b></div>
+      <div class="hint" style="opacity:.85">A record of this payment has been filed with your Speedy Insurance account. You can close this page.</div></div>`;
+    return true;
+  }
+  rb.innerHTML = '<div class="result bad"><h3>Payment not completed</h3><div style="font-size:14px">'+esc(j.error||'Your card was not charged twice — please try again or use another card.')+'</div></div>';
+  return false;
 }
 async function payNow(){
   const btn = document.getElementById('payBtn');
@@ -106,18 +153,7 @@ async function payNow(){
     }
     if(!tk || !tk.token){ rb.innerHTML = '<div class="result bad"><h3>Check your card details</h3></div>'; btn.disabled=false; btn.textContent='PAY NOW'; return; }
     const j = await post({action:'paylink_charge', t:T, source: tk.token});
-    if(j.ok){
-      const ch = (j.results && j.results.charge) || {};
-      document.getElementById('payui').classList.add('hide');
-      rb.innerHTML = `<div class="result good"><h3>✓ Payment approved — thank you!</h3>
-        <div class="amt">$${amt.toFixed(2)}</div>
-        <div class="kv"><span>Card</span><b>${esc(ch.brand||'CARD')} •••• ${esc(ch.last4||'')}</b></div>
-        <div class="kv"><span>Confirmation</span><b>${esc(ch.id||j.txnId||'')}</b></div>
-        <div class="hint" style="opacity:.85">A record of this payment has been filed with your Speedy Insurance account. You can close this page.</div></div>`;
-    } else {
-      rb.innerHTML = '<div class="result bad"><h3>Payment not completed</h3><div style="font-size:14px">'+esc(j.error||'Your card was not charged twice — please try again or use another card.')+'</div></div>';
-      btn.disabled = false; btn.textContent = 'PAY NOW';
-    }
+    if(!renderChargeResult(j)){ btn.disabled = false; btn.textContent = 'PAY NOW'; }
   }catch(e){
     rb.innerHTML = '<div class="result bad"><h3>Connection problem</h3><div style="font-size:14px">'+esc(String(e))+'</div></div>';
     btn.disabled = false; btn.textContent = 'PAY NOW';

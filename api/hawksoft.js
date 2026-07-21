@@ -294,7 +294,7 @@ export default async function handler(req, res) {
       const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
       if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
       const b = req.body || {};
-      let clientId, total, purpose, policyNumber, clientName, who;
+      let clientId, total, purpose, policyNumber, clientName, who, taskEmail;
       if (action === 'paylink_charge') {
         const tok = readToken(b.t, KEY);
         if (!tok) return res.status(400).json({ ok: false, error: 'This payment link is invalid or has expired. Please ask your agent for a new one.' });
@@ -305,6 +305,7 @@ export default async function handler(req, res) {
         clientName = String(tok.n || '').slice(0, 40);
         const byFull = String(tok.by || 'agent').includes('@') ? String(tok.by) : String(tok.by || 'agent') + '@speedyins.com';
         who = `Client — secure link (sent by ${byFull.slice(0, 40)})`;
+        taskEmail = byFull;
       } else {
         clientId = parseInt(b.clientId, 10);
         total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
@@ -314,6 +315,7 @@ export default async function handler(req, res) {
         who = userEmail
           ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
           : 'admin key';
+        taskEmail = userEmail || 'info@speedyins.com';
       }
       if (!clientId || clientId < 1) {
         return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
@@ -374,9 +376,25 @@ export default async function handler(req, res) {
         ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
         logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Charged via Speedy payment bridge.`,
       }];
-      const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+      if (!invPick.invoices && taskEmail) {
+        receipt[0].task = {
+          title: `Invoice needed — payment $${total.toFixed(2)}`.slice(0, 50),
+          description: `Payment of $${total.toFixed(2)} (${purpose}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply Clover ${txnId}.`,
+          dueDate: now.toISOString(),
+          assignedToRole: 'SpecifiedUser',
+          assignedToEmail: taskEmail,
+        };
+      }
+      let r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
         method: 'POST', body: JSON.stringify(receipt) });
+      if (!(r1.status === 200 || r1.status === 202) && receipt[0].task) {
+        delete receipt[0].task; // never lose the payment record over a task problem
+        r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+          method: 'POST', body: JSON.stringify(receipt) });
+        out.taskDropped = true;
+      }
       out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
+      out.followUpTask = receipt[0].task ? `assigned to ${taskEmail}` : (invPick.invoices ? 'not needed — invoice applied' : 'none');
 
       // 3) Branded receipt PDF -> Attachments
       const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
@@ -486,6 +504,7 @@ export default async function handler(req, res) {
       const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
       const clientName = String(b.clientName || '').slice(0, 40);
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
+      const taskEmail = userEmail || 'info@speedyins.com';
       const now = new Date();
       const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
       const ref = 'CASH-' + crypto.randomUUID().slice(0, 10).toUpperCase();
@@ -510,9 +529,25 @@ export default async function handler(req, res) {
         ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
         logNote: `CHARGE PAGE cash — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
       }];
-      const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+      if (!invPick.invoices && taskEmail) {
+        receipt[0].task = {
+          title: `Invoice needed — cash $${total.toFixed(2)}`.slice(0, 50),
+          description: `Cash payment of $${total.toFixed(2)} (${purpose}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply ref ${ref}.`,
+          dueDate: now.toISOString(),
+          assignedToRole: 'SpecifiedUser',
+          assignedToEmail: taskEmail,
+        };
+      }
+      let r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
         method: 'POST', body: JSON.stringify(receipt) });
+      if (!(r1.status === 200 || r1.status === 202) && receipt[0].task) {
+        delete receipt[0].task;
+        r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+          method: 'POST', body: JSON.stringify(receipt) });
+        out.taskDropped = true;
+      }
       out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
+      out.followUpTask = receipt[0].task ? `assigned to ${taskEmail}` : (invPick.invoices ? 'not needed — invoice applied' : 'none');
 
       const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
       const doc = await PDFDocument.create();

@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.21 · clean send messages</div>
+    <div class="ver">v2.22 · Gmail compose</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -553,7 +553,7 @@ async function createLink(){
       <button class="btn btn-ghost" onclick="copyTxt(_plMsg, this)">Copy text message</button>
       <button class="btn btn-ghost" onclick="copyTxt(_plEmail, this)">Copy email</button>
       ${phone?`<a class="btn btn-ghost" style="display:block;text-align:center;text-decoration:none" href="sms:${phone}?body=${encodeURIComponent(_plMsg)}">Text to ${esc(first||'client')}</a>`:''}
-      <a class="btn btn-ghost" style="display:block;text-align:center;text-decoration:none" href="mailto:?subject=${encodeURIComponent('Your Speedy Insurance payment link')}&body=${encodeURIComponent(_plEmail)}">Email to client</a>
+      <a class="btn btn-ghost" style="display:block;text-align:center;text-decoration:none" target="_blank" rel="noopener" href="https://mail.google.com/mail/?view=cm&fs=1${(confirmed.emails&&confirmed.emails[0])?('&to='+encodeURIComponent(confirmed.emails[0])):''}&su=${encodeURIComponent('Your Speedy Insurance payment link')}&body=${encodeURIComponent(_plEmail)}">Email to client (Gmail)</a>
       <div class="foot">When the client pays, the receipt, branded PDF and log file to their HawkSoft record automatically \u2014 marked as sent by you.</div></div>`;
   }catch(e){ btn.disabled = false; lo.innerHTML = '<div class="result bad"><div class="foot">'+esc(String(e))+'</div></div>'; }
 }

@@ -87,9 +87,40 @@ const STAFF = {
   'lana@speedyins.com':      ['Lana D.', 'All branches'],
 };
 /* ---------- Independent audit log (Vercel Blob) — survives HawkSoft outages ---------- */
+/* Speedy's OWN payment ledger (Supabase) — dual-write on every bridge event.
+   Foundation for reporting + eventual AMS independence. Fail-soft: never blocks a charge. */
+async function ledger(event) {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) return false;
+  try {
+    const row = {
+      kind: event.action || 'event',
+      client_id: Number.isFinite(parseInt(event.clientId, 10)) ? parseInt(event.clientId, 10) : null,
+      amount: (typeof event.amount === 'number') ? event.amount : null,
+      purpose: event.purpose ? String(event.purpose).slice(0, 120) : null,
+      agent: event.who ? String(event.who).slice(0, 120) : null,
+      txn_id: event.txnId || null,
+      auth_code: event.authCode ? String(event.authCode) : null,
+      ref: event.ref || null,
+      invoice_status: event.invoiceApply || (event.hawksoft && event.hawksoft.invoiceApply) || null,
+      extra: event,
+    };
+    const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(row),
+    });
+    return r.status === 201;
+  } catch { return false; }
+}
+
 async function audit(event) {
+  const sb = await ledger(event); // Speedy ledger first — our system of record
   const tok = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!tok) return false;
+  if (!tok) return sb;
   try {
     const ts = new Date().toISOString();
     const path = `audit/${ts.slice(0, 10)}/${ts.replace(/[:.]/g, '-')}_${event.action || 'event'}.json`;
@@ -491,7 +522,7 @@ export default async function handler(req, res) {
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 
-      const auditSaved = await audit({ action: 'charge_live', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+      const auditSaved = await audit({ action, who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 
@@ -638,7 +669,7 @@ export default async function handler(req, res) {
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 
-      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose, ref, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, hawksoft: out });
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved });
     }
 

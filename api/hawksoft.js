@@ -486,7 +486,7 @@ export default async function handler(req, res) {
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32, // Online From 3rd Party — the bridge
-          policyId: policyGuid,
+          policyId: policyGuid, PolicyId: policyGuid,
           note: `CHARGE PAGE LIVE — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Receipt posted + branded PDF attached.`,
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
@@ -633,7 +633,7 @@ export default async function handler(req, res) {
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32,
-          policyId: policyGuid,
+          policyId: policyGuid, PolicyId: policyGuid,
           note: `CHARGE PAGE CASH — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Receipt posted + branded PDF attached.`,
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
@@ -673,7 +673,7 @@ export default async function handler(req, res) {
       const lg = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: new Date().toISOString(), channel: 32,
-          policyId: linkPolicyGuid,
+          policyId: linkPolicyGuid, PolicyId: linkPolicyGuid,
           note: `PAYMENT LINK created — $${total.toFixed(2)} for ${String(b.purpose || 'Payment').slice(0, 40)}${b.policyNumber ? ' · policy ' + String(b.policyNumber).trim() : ''} · by ${who} · expires ${expStr} PT. Client pays online; trail files automatically when paid.`,
         }) });
       await audit({ action: 'paylink_create', who, clientId, amount: total, purpose: b.purpose, logged: lg.status });

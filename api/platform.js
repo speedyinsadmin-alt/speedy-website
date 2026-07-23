@@ -5,23 +5,18 @@ export const config = { maxDuration: 30 };
 // DATA:   HawkSoft Partner API (ZZTEST #26081 only — hard-locked) + Supabase (bridge_ledger, clover_tokens).
 // No writes. No PII beyond the ZZTEST fixture.
 
-const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const ALLOWLIST = ['speedyinsadmin@gmail.com']; // widen later for Tony/agents
+// ACCESS v1.1: password gate (header x-console-key must equal ADMIN_API_KEY env var).
+// Google Sign-In + allowlist returns when Saif has a @speedyins.com account (OAuth app is org-internal).
 const AGENCY_ID = 15112;
 const TEST_CLIENT = 26081; // ZZTEST — the only client this endpoint will serve
 const HS_BASE = 'https://integration.hawksoft.app';
 
-async function verifyGoogle(idToken) {
-  if (!idToken) return null;
-  try {
-    const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken));
-    if (r.status !== 200) return null;
-    const t = await r.json();
-    if (t.aud !== GOOGLE_CLIENT_ID) return null;
-    if (String(t.email_verified) !== 'true') return null;
-    const email = String(t.email || '').toLowerCase();
-    return ALLOWLIST.includes(email) ? email : null;
-  } catch { return null; }
+import { timingSafeEqual } from 'node:crypto';
+function verifyKey(key) {
+  const real = process.env.ADMIN_API_KEY || '';
+  if (!real || !key) return false;
+  const a = Buffer.from(String(key)), b = Buffer.from(real);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function sb() {
@@ -35,8 +30,8 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET only' });
 
-  const email = await verifyGoogle(req.headers['x-id-token']);
-  if (!email) return res.status(401).json({ ok: false, error: 'Not authorized' });
+  if (!verifyKey(req.headers['x-console-key'])) return res.status(401).json({ ok: false, error: 'Not authorized' });
+  const email = 'console-admin';
 
   const view = String(req.query.view || '');
 

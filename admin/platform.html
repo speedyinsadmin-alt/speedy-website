@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v2.1 -->
+<!-- build v2.2 -->
 </head>
 <body>
 <div class="wrap">
@@ -145,8 +145,11 @@ async function renderClients(el) {
   const list = r.clients || [];
   let h = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'
     + '<h2 style="margin:0">Clients — Speedy Platform (' + list.length + ')</h2>'
-    + '<button id="syncbtn" style="margin-left:auto;background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync ZZTEST from HawkSoft</button>'
-    + '</div>';
+    + '<button id="seedbtn" style="margin-left:auto;background:var(--green);border:0;color:#04220f;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer">⇊ Seed ALL clients from HawkSoft</button>'
+    + '<button id="syncbtn" style="background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync ZZTEST</button>'
+    + '</div>'
+    + '<div id="seedprog" class="muted" style="display:none;font-size:13px;margin:4px 0 10px"></div>'
+    + (list.length > 8 ? '<input id="csearch" placeholder="Search name or client #…" style="width:100%;max-width:340px;margin:6px 0 12px;padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:#0a0f26;color:var(--ink);font-size:14px">' : '');
   if (!list.length) {
     h += '<div class="muted" style="padding:18px 0">No clients in our database yet. Press <b>Sync ZZTEST</b> to pull the test client from HawkSoft — that is the first parallel-run record.</div>';
   } else {
@@ -170,6 +173,44 @@ async function renderClients(el) {
     if (res && res.ok) { render(); }
     else { $('#syncbtn').textContent = 'Sync failed — retry'; $('#syncbtn').disabled = false; }
   };
+  $('#seedbtn').onclick = () => seedAll();
+  const srch = $('#csearch');
+  if (srch) srch.oninput = () => {
+    const q = srch.value.toLowerCase();
+    document.querySelectorAll('#view table tr').forEach((tr, i) => {
+      if (!i) return; tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  };
+}
+
+async function apiPostBody(payload) {
+  try {
+    const r = await fetch('/api/platform', { method: 'POST',
+      headers: { 'x-id-token': TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload) });
+    return await r.json();
+  } catch { return null; }
+}
+
+async function seedAll() {
+  const btn = $('#seedbtn'), prog = $('#seedprog');
+  btn.disabled = true; btn.textContent = 'Fetching client list…';
+  prog.style.display = 'block'; prog.textContent = 'Asking HawkSoft for all client IDs…';
+  const idsRes = await apiPostBody({ action: 'seed_ids' });
+  if (!idsRes || !idsRes.ok) { prog.textContent = 'Could not fetch client IDs' + (idsRes && idsRes.error ? ': ' + idsRes.error : '') + '.'; btn.disabled = false; btn.textContent = '⇊ Seed ALL clients from HawkSoft'; return; }
+  const ids = idsRes.ids || [];
+  let done = 0, clients = 0, pols = 0;
+  for (let i = 0; i < ids.length; i += 25) {
+    const batch = ids.slice(i, i + 25);
+    btn.textContent = 'Seeding… ' + Math.round(100 * i / ids.length) + '%';
+    prog.textContent = 'Seeding clients ' + (i + 1) + '–' + Math.min(i + 25, ids.length) + ' of ' + ids.length + ' — ' + clients + ' saved, ' + pols + ' policies so far';
+    const r = await apiPostBody({ action: 'seed_batch', ids: batch });
+    if (r && r.ok) { clients += r.upserted; pols += r.policies; }
+    done = i + batch.length;
+  }
+  prog.textContent = 'Done — ' + clients + ' clients and ' + pols + ' policies seeded from HawkSoft (' + done + ' IDs processed).';
+  btn.textContent = '⇊ Seed ALL clients from HawkSoft'; btn.disabled = false;
+  OPEN_CLIENT = null; render();
 }
 
 async function renderOurClient(el, no) {

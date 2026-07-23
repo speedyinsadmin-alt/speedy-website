@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.24 · open-invoice picker</div>
+    <div class="ver">v2.25 · terminal charging</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -195,6 +195,7 @@
       <button type="button" class="sel" onclick="pickMethod(this,'card')">Card</button>
       <button type="button" onclick="pickMethod(this,'cash')">Cash</button>
       <button type="button" onclick="pickMethod(this,'link')">Text / Email link</button>
+      <button type="button" onclick="pickMethod(this,'terminal')">Terminal</button>
     </div>
     <div id="cardSection">
       <label style="margin-top:14px;display:block">Card — secure Clover fields</label>
@@ -210,6 +211,12 @@
     <div id="cashSection" class="hide">
       <div class="hint" style="margin-top:12px">Records the cash payment in HawkSoft — receipt, branded PDF and log note. No card involved.</div>
       <button class="btn btn-red" id="cashBtn" onclick="chargeCash()">RECORD CASH PAYMENT</button>
+    </div>
+    <div id="terminalSection" class="hide">
+      <label style="margin-top:12px;display:block">Branch terminal</label>
+      <select id="branchSel" style="width:100%;background:var(--card,#141d33);color:inherit;border:1.5px solid rgba(255,255,255,.18);border-radius:10px;padding:12px;font-size:15px"></select>
+      <div class="hint" style="margin-top:10px">Sends the amount to the branch Flex — the customer taps or inserts their card on the terminal. Keep this page open until it confirms (up to 60 seconds).</div>
+      <button class="btn btn-red" id="termBtn" onclick="chargeTerminal()">SEND TO TERMINAL</button>
     </div>
     <div id="linkSection" class="hide">
       <div class="hint" style="margin-top:12px">Creates a secure link (valid 72 hours, amount locked) the client opens to pay by card. Text it, email it, or copy it.</div>
@@ -511,6 +518,8 @@ function pickMethod(b, m){
   document.getElementById('cardSection').classList.toggle('hide', m!=='card');
   document.getElementById('cashSection').classList.toggle('hide', m!=='cash');
   document.getElementById('linkSection').classList.toggle('hide', m!=='link');
+  document.getElementById('terminalSection').classList.toggle('hide', m!=='terminal');
+  if(m==='terminal') loadTerminals();
   document.getElementById('resultbox').innerHTML='';
 }
 async function chargeCash(){
@@ -628,6 +637,51 @@ async function emailGmail(btn){
   window.open('https://mail.google.com/mail/?view=cm&fs=1' + to + '&su=' + encodeURIComponent('Your Speedy Insurance payment link'), '_blank', 'noopener');
 }
 function copyTxt(t, b){ navigator.clipboard.writeText(t).then(()=>{ if(b){ const o=b.textContent; b.textContent='Copied \u2713'; setTimeout(()=>b.textContent=o,1200); } },()=>{}); }
+let termLoaded = false;
+async function loadTerminals(){
+  if(termLoaded) return;
+  try{
+    const j = await post({action:'terminal_config'});
+    if(j.ok){
+      document.getElementById('branchSel').innerHTML = j.branches.map(b =>
+        `<option value="${b.id}">${esc(b.branch)} — ${esc(b.model)}</option>`).join('');
+      termLoaded = true;
+    }
+  }catch(e){}
+}
+async function chargeTerminal(){
+  const out = document.getElementById('out'); const rb = document.getElementById('resultbox');
+  const btn = document.getElementById('termBtn');
+  const amt = document.getElementById('amount').value || '0';
+  if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm the client first.'; return; }
+  if(!parseFloat(amt)){ out.style.display='block'; out.textContent='Enter the amount first.'; return; }
+  if(parseFloat(amt) > 1000){ out.style.display='block'; out.textContent='Capped at $1,000.00.'; return; }
+  rb.innerHTML=''; btn.disabled = true; out.style.display='block';
+  out.textContent = 'Sent to terminal \u2014 waiting for the customer\u2019s card\u2026';
+  try{
+    const j = await post({action:'terminal_charge', clientId: confirmed.clientNumber,
+      clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
+      policyNumber: effPolicy(), branchId: document.getElementById('branchSel').value});
+    out.style.display='none';
+    if(j.ok){
+      const ch = (j.results && j.results.charge) || {};
+      rb.innerHTML = `<div class="result good"><h3>\u2713 Terminal payment approved</h3>
+        <div class="big">$${parseFloat(amt).toFixed(2)}</div>
+        <div class="kv"><span>Client</span><b>${esc(confirmed.name||'')} \u00b7 #${confirmed.clientNumber}</b></div>
+        <div class="kv"><span>Terminal</span><b>${esc(ch.branch||'')}</b></div>
+        <div class="kv"><span>Card</span><b>${esc(ch.brand||'CARD')} \u2022\u2022\u2022\u2022 ${esc(ch.last4||'')}</b></div>
+        <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||'')}</b></div>
+        ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
+        ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
+        <div class="foot">Receipt and log filed to HawkSoft. Signing out\u2026</div></div>`;
+      rb.scrollIntoView({behavior:'smooth'});
+      setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
+    } else {
+      rb.innerHTML = `<div class="result bad"><h3>Terminal payment not completed</h3><div class="foot" style="font-size:14px;opacity:1">${esc(j.error||'Try again.')}</div></div>`;
+      btn.disabled = false;
+    }
+  }catch(e){ out.style.display='none'; rb.innerHTML = '<div class="result bad"><h3>Connection problem</h3><div class="foot" style="font-size:14px;opacity:1">'+esc(String(e))+'</div></div>'; btn.disabled = false; }
+}
 async function probeInvoices(){
   const out = document.getElementById('out');
   if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm a client first.'; return; }

@@ -1,3 +1,4 @@
+export const config = { maxDuration: 60 };
 import { createHmac } from 'node:crypto';
 // /api/hawksoft — server-side proxy to the HawkSoft Partner API (v4.0).
 // Reads HAWKSOFT_CLIENT_ID + HAWKSOFT_SECRET from Vercel env vars.
@@ -19,6 +20,39 @@ const CLOVER_BRANCHES = {
   3: { branch: 'Riverside — Magnolia',  merchantId: '9SQRE50EMSDF1', device: 'C045UT32440358', model: 'Flex 3' },
   4: { branch: 'Lake Elsinore',         merchantId: 'RC02YN4Q370Z1', device: 'C046UG50362404', model: 'Flex 4' },
 };
+
+/* Clover OAuth access token from our Supabase vault, auto-refreshing */
+async function getCloverToken(merchantId) {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) return { error: 'SUPABASE env vars missing' };
+  const base = url.replace(/\/$/, '');
+  const hdrs = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+  const rr = await fetch(`${base}/rest/v1/clover_tokens?merchant_id=eq.${encodeURIComponent(merchantId)}&select=*`, { headers: hdrs });
+  const rows = await rr.json().catch(() => []);
+  const row = Array.isArray(rows) && rows[0];
+  if (!row) return { error: `Terminal not authorized for this branch yet — run /api/clover_oauth for merchant ${merchantId}.` };
+  const expSoon = row.access_expires && (new Date(row.access_expires).getTime() - Date.now() < 5 * 60 * 1000);
+  if (!expSoon) return { token: row.access_token };
+  // refresh
+  const fr = await fetch('https://api.clover.com/oauth/v2/refresh', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: process.env.CLOVER_APP_ID, refresh_token: row.refresh_token }),
+  });
+  const tok = await fr.json().catch(() => null);
+  if (!fr.ok || !tok || !tok.access_token) return { token: row.access_token, stale: true };
+  await fetch(`${base}/rest/v1/clover_tokens?merchant_id=eq.${encodeURIComponent(merchantId)}`, {
+    method: 'PATCH', headers: { ...hdrs, Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      access_token: tok.access_token,
+      refresh_token: tok.refresh_token || row.refresh_token,
+      access_expires: tok.access_token_expiration ? new Date(tok.access_token_expiration * 1000).toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+  return { token: tok.access_token };
+}
 
 /* Signed pay-link tokens (HMAC-SHA256, keyed on ADMIN_API_KEY) */
 const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -227,7 +261,7 @@ export default async function handler(req, res) {
     if (!isAdmin && !userEmail && !PUBLIC_PAY.includes(action)) {
       return res.status(401).json({ ok: false, error: 'Sign in required.' });
     }
-    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create', 'probe_invoices'].includes(action)) {
+    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create', 'probe_invoices', 'terminal_config', 'terminal_charge'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -732,6 +766,109 @@ export default async function handler(req, res) {
         } catch { name = ''; }
       }
       return res.status(200).json({ ok: true, name });
+    }
+
+    /* ---------- Terminal: branch/device list for the picker ---------- */
+    if (action === 'terminal_config') {
+      const branches = Object.entries(CLOVER_BRANCHES).map(([k, v]) => ({
+        id: k, branch: v.branch, merchantId: v.merchantId, device: v.device, model: v.model }));
+      return res.status(200).json({ ok: true, branches, raid: 'OEFKFNBWHCSAM.9PSNNM5VC2456' });
+    }
+
+    /* ---------- Terminal: send a payment to a branch Flex (REST Pay Display) ---------- */
+    if (action === 'terminal_charge') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client first.' });
+      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+      if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
+      const branch = CLOVER_BRANCHES[String(b.branchId || '1')] || CLOVER_BRANCHES[1];
+      const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+      let clientName = String(b.clientName || '').slice(0, 40);
+      const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
+      const now = new Date();
+      const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+
+      const auth = await getCloverToken(branch.merchantId);
+      if (!auth.token) return res.status(400).json({ ok: false, error: auth.error || 'No terminal authorization on file for this branch.' });
+
+      // Fire the payment to the device — waits for the customer to tap/insert
+      const extId = 'SPB' + Date.now();
+      const cr = await fetch('https://scl.clover.com/v1/payments', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          'Content-Type': 'application/json',
+          'X-Clover-Device-Id': branch.device,
+          'X-POS-ID': 'SpeedyPaymentBridge',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({ amount: Math.round(total * 100), final: true, externalPaymentId: extId }),
+      });
+      const ctext = await cr.text();
+      let cbody = null; try { cbody = ctext ? JSON.parse(ctext) : null; } catch { cbody = ctext; }
+      const pay = cbody && (cbody.payment || cbody);
+      const paid = cr.status === 200 && pay && (pay.result === 'SUCCESS' || pay.result === 'APPROVED' || pay.status === 'SUCCESS');
+      if (!paid) {
+        const msg = (pay && (pay.result || pay.message)) || (cbody && cbody.message) || `Terminal returned HTTP ${cr.status}`;
+        await audit({ action: 'terminal_declined', who, clientId, amount: total, purpose, branch: branch.branch, cloverStatus: cr.status, clover: cbody });
+        return res.status(402).json({ ok: false, error: `Terminal payment not completed: ${msg}` });
+      }
+      const txnId = String(pay.id || extId);
+      const authCode = (pay.cardTransaction && pay.cardTransaction.authCode) || null;
+      const refNum = (pay.cardTransaction && pay.cardTransaction.referenceId) || null;
+      const brand = String((pay.cardTransaction && pay.cardTransaction.cardType) || 'CARD').toUpperCase();
+      const last4 = String((pay.cardTransaction && pay.cardTransaction.last4) || '????');
+      const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum, branch: branch.branch } };
+
+      // Policy + invoice resolution (same as other paths)
+      let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
+      try {
+        const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
+        if (policyNumber) {
+          const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+          const want = policyNumber.toUpperCase();
+          const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
+          if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+        }
+        invPick = pickInvoices(pc.body, total, policyGuid);
+        if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
+      } catch { policyGuid = null; }
+      out.invoiceApply = invPick.how;
+
+      const receipt = [{
+        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured — counter payment
+        payMethod: 'CreditCard', total, policyId: policyGuid,
+        ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
+        logNote: `CHARGE PAGE terminal — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ${branch.branch} Flex · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Card-present via Speedy payment bridge.`,
+      }];
+      if (!invPick.invoices && userEmail) {
+        receipt[0].task = {
+          title: `Invoice needed — payment $${total.toFixed(2)}`.slice(0, 50),
+          description: `Terminal payment of $${total.toFixed(2)} (${purpose}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply Clover ${txnId}.`,
+          dueDate: now.toISOString(), assignedToRole: 'SpecifiedUser', assignedToEmail: userEmail,
+        };
+      }
+      let r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+        method: 'POST', body: JSON.stringify(receipt) });
+      if (!(r1.status === 200 || r1.status === 202) && receipt[0].task) {
+        delete receipt[0].task;
+        r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+          method: 'POST', body: JSON.stringify(receipt) });
+      }
+      out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
+
+      const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+        method: 'POST', body: JSON.stringify({
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32,
+          policyId: policyGuid, PolicyId: policyGuid,
+          note: `CHARGE PAGE TERMINAL — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ${branch.branch} Flex (${branch.device}) · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Receipt posted.`,
+        }) });
+      out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
+
+      const auditSaved = await audit({ action: 'terminal_charge', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, hawksoft: { receipt: out.receipt, log: out.log } });
+      return res.status(200).json({ ok: out.receipt.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 
     if (action === 'charge_full_test') {

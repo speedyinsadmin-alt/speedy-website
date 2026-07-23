@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Platform Console — Speedy Insurance</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
@@ -55,9 +54,12 @@
 
   <div id="gate">
     <h1>Platform Console</h1>
-    <p>Speedy Platform — internal build console.<br>Sign in to continue.</p>
-    <div id="gsibtn"></div>
-    <p id="gateerr" class="err" style="display:none">This account isn't authorized for the console.</p>
+    <p>Speedy Platform — internal build console.<br>Enter the console key to continue.</p>
+    <input type="password" id="pw" placeholder="Console key" autocomplete="off"
+      style="width:100%;max-width:260px;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:#0a0f26;color:var(--ink);font-size:15px">
+    <div style="margin-top:12px"><button id="gobtn"
+      style="background:var(--blue);border:0;color:#fff;padding:11px 26px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer">Unlock</button></div>
+    <p id="gateerr" class="err" style="display:none">Wrong key.</p>
   </div>
 
   <div id="app">
@@ -76,33 +78,34 @@
 
 </div>
 <script>
-const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, TAB = 'hs';
 const $ = s => document.querySelector(s);
 
-window.addEventListener('load', () => {
-  const t = setInterval(() => {
-    if (!window.google) return;
-    clearInterval(t);
-    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
-    google.accounts.id.renderButton($('#gsibtn'), { theme: 'filled_blue', size: 'large', width: 260 });
-  }, 150);
-});
-
-async function onCred(resp) {
-  TOKEN = resp.credential;
-  // probe auth with the lightest view
+async function tryUnlock(key) {
+  TOKEN = key;
   const r = await api('tables');
-  if (!r || r.error === 'Not authorized') { $('#gateerr').style.display = 'block'; TOKEN = null; return; }
+  if (!r || r.error === 'Not authorized') { TOKEN = null; sessionStorage.removeItem('ck'); return false; }
+  sessionStorage.setItem('ck', key);
   $('#gate').style.display = 'none';
   $('#app').style.display = 'block';
-  $('#who').textContent = r.email || '';
+  $('#who').textContent = 'console-admin';
   render();
+  return true;
 }
+
+window.addEventListener('load', async () => {
+  $('#gobtn').onclick = async () => {
+    const ok = await tryUnlock($('#pw').value.trim());
+    if (!ok) $('#gateerr').style.display = 'block';
+  };
+  $('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#gobtn').click(); });
+  const saved = sessionStorage.getItem('ck');
+  if (saved) await tryUnlock(saved);
+});
 
 async function api(view) {
   try {
-    const r = await fetch('/api/platform?view=' + view, { headers: { 'x-id-token': TOKEN } });
+    const r = await fetch('/api/platform?view=' + view, { headers: { 'x-console-key': TOKEN } });
     return await r.json();
   } catch { return null; }
 }

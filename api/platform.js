@@ -48,17 +48,22 @@ async function sbInsert(s, table, rows) {
   return { ok: r.ok, status: r.status };
 }
 
-async function hsFetchClient() {
+function hsAuth() {
   const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
-  if (!ID || !SECRET) return { error: 'HawkSoft env vars missing' };
-  const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
-  const r = await fetch(`${HS_BASE}/vendor/agency/${AGENCY_ID}/client/${TEST_CLIENT}?version=4.0&include=Details,People,Contacts,Policies,Invoices`, {
-    headers: { Authorization: AUTH, 'Content-Type': 'application/json' },
-  });
+  if (!ID || !SECRET) return null;
+  return 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
+}
+async function hsCall(path, opts = {}) {
+  const AUTH = hsAuth();
+  if (!AUTH) return { error: 'HawkSoft env vars missing' };
+  const r = await fetch(HS_BASE + path, { ...opts, headers: { Authorization: AUTH, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
   const text = await r.text();
   let body = null; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   return { status: r.status, body };
 }
+const hsFetchClient = () => hsCall(`/vendor/agency/${AGENCY_ID}/client/${TEST_CLIENT}?version=4.0&include=Details,People,Contacts,Policies,Invoices`);
+const hsAllClientIds = () => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=2000-01-01T00:00:00Z`);
+const hsClientBatch = (ids) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&include=Details,People,Contacts,Policies`, { method: 'POST', body: JSON.stringify(ids) });
 
 const pick = (o, ...keys) => { for (const k of keys) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 const dateOnly = v => { const s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null; };
@@ -68,22 +73,15 @@ export default async function handler(req, res) {
   const email = await verifyGoogle(req.headers['x-id-token']);
   if (!email) return res.status(401).json({ ok: false, error: 'Not authorized' });
 
-  /* ============ POST: sync ZZTEST from HawkSoft into our tables ============ */
-  if (req.method === 'POST') {
-    let action = ''; try { action = (req.body && req.body.action) || ''; } catch {}
-    if (action !== 'sync_zztest') return res.status(400).json({ ok: false, error: 'Unknown action' });
-    const s = sb();
-    if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
-
-    const hs = await hsFetchClient();
-    if (hs.error || hs.status !== 200) return res.status(502).json({ ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status) });
-    const c = hs.body || {};
+  /* ============ Shared: map + upsert one HawkSoft client object ============ */
+  async function upsertHsClient(s, c) {
+    const cn = Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id'));
+    if (!isFinite(cn)) return { ok: false, error: 'no client number' };
     const people = c.people || c.People || [];
     const p0 = people[0] || {};
     const details = c.details || c.Details || {};
-
     const clientRow = {
-      client_no: TEST_CLIENT,
+      client_no: cn,
       kind: p0.businessName ? 'business' : 'person',
       first_name: pick(p0, 'firstName', 'FirstName'),
       last_name: pick(p0, 'lastName', 'LastName'),
@@ -100,16 +98,15 @@ export default async function handler(req, res) {
       updated_at: new Date().toISOString(),
     };
     const up1 = await sbUpsert(s, 'clients', [clientRow], 'client_no');
-    if (!up1.ok) return res.status(500).json({ ok: false, error: 'clients upsert failed', detail: up1.body });
+    if (!up1.ok) return { ok: false, error: 'clients upsert failed', detail: up1.body };
     const ourClient = up1.body && up1.body[0];
-
     const hsPols = c.policies || c.Policies || [];
     let polCount = 0;
     for (const p of hsPols) {
       const guid = pick(p, 'id', 'policyId', 'guid', 'Id', 'PolicyId');
       const row = {
         client_id: ourClient.id,
-        client_no: TEST_CLIENT,
+        client_no: cn,
         hs_policy_guid: guid ? String(guid) : null,
         policy_number: pick(p, 'policyNumber', 'number', 'PolicyNumber'),
         lob: pick(p, 'lob', 'lineOfBusiness', 'LOB'),
@@ -119,19 +116,54 @@ export default async function handler(req, res) {
         premium: Number(pick(p, 'premium', 'Premium')) || null,
         status: pick(p, 'status', 'Status') || 'Active',
         billing: pick(p, 'billing', 'billType', 'BillingType'),
-        carrier_extras: p,  // full HawkSoft policy object preserved verbatim
+        carrier_extras: p,
         updated_at: new Date().toISOString(),
       };
       const up = await sbUpsert(s, 'policies', [row], 'hs_policy_guid');
       if (up.ok) polCount++;
     }
+    return { ok: true, client_no: cn, policies: polCount };
+  }
 
-    await sbInsert(s, 'events', [{
-      actor: email, kind: 'client.synced', client_no: TEST_CLIENT, source: 'hawksoft_sync',
-      payload: { policies_synced: polCount, hs_status: hs.status },
-    }]);
+  /* ============ POST actions ============ */
+  if (req.method === 'POST') {
+    let body = {}; try { body = req.body || {}; } catch {}
+    const action = body.action || '';
+    const s = sb();
+    if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
 
-    return res.status(200).json({ ok: true, email, synced: { client_no: TEST_CLIENT, policies: polCount } });
+    if (action === 'sync_zztest') {
+      const hs = await hsFetchClient();
+      if (hs.error || hs.status !== 200) return res.status(502).json({ ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status) });
+      const r = await upsertHsClient(s, hs.body || {});
+      if (!r.ok) return res.status(500).json({ ok: false, error: r.error, detail: r.detail });
+      await sbInsert(s, 'events', [{ actor: email, kind: 'client.synced', client_no: TEST_CLIENT, source: 'hawksoft_sync', payload: { policies_synced: r.policies } }]);
+      return res.status(200).json({ ok: true, email, synced: { client_no: TEST_CLIENT, policies: r.policies } });
+    }
+
+    if (action === 'seed_ids') {
+      const hs = await hsAllClientIds();
+      if (hs.error || hs.status !== 200) return res.status(502).json({ ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status), detail: hs.body });
+      const ids = Array.isArray(hs.body) ? hs.body.map(Number).filter(isFinite) : [];
+      return res.status(200).json({ ok: true, email, count: ids.length, ids });
+    }
+
+    if (action === 'seed_batch') {
+      const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(isFinite).slice(0, 25) : [];
+      if (!ids.length) return res.status(400).json({ ok: false, error: 'ids required' });
+      const hs = await hsClientBatch(ids);
+      if (hs.error || hs.status !== 200) return res.status(502).json({ ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status), detail: typeof hs.body === 'string' ? hs.body.slice(0, 200) : hs.body });
+      const list = Array.isArray(hs.body) ? hs.body : [];
+      let ok = 0, pols = 0, failed = [];
+      for (const c of list) {
+        const r = await upsertHsClient(s, c);
+        if (r.ok) { ok++; pols += r.policies; } else failed.push(r.error);
+      }
+      await sbInsert(s, 'events', [{ actor: email, kind: 'clients.bulk_seeded', source: 'hawksoft_sync', payload: { requested: ids.length, upserted: ok, policies: pols } }]);
+      return res.status(200).json({ ok: true, email, upserted: ok, policies: pols, requested: ids.length, failed_count: failed.length });
+    }
+
+    return res.status(400).json({ ok: false, error: 'Unknown action' });
   }
 
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET/POST only' });

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Platform Console — Speedy Insurance</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
+    --red:#e03131; --blue:#4d7cfe; --green:#2fbf71; --amber:#f5a623;
+    --ink:#f2f5ff; --mute:#8f9ac4; --radius:14px;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:22px 16px 60px}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  h1{font-size:19px;margin:0;letter-spacing:.2px}
+  h1 small{color:var(--mute);font-weight:400;font-size:13px;margin-left:8px}
+  .who{margin-left:auto;color:var(--mute);font-size:13px}
+  #gate{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:38px 24px;text-align:center;max-width:420px;margin:12vh auto}
+  #gate p{color:var(--mute);margin:8px 0 20px}
+  #gsibtn{display:flex;justify-content:center}
+  #app{display:none}
+  nav{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  nav button{background:var(--navy2);border:1px solid var(--line);color:var(--mute);padding:9px 16px;border-radius:10px;font-size:14px;cursor:pointer}
+  nav button.on{color:var(--ink);border-color:var(--blue);background:rgba(77,124,254,.12)}
+  .card{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+  .card h2{font-size:14px;margin:0 0 10px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{color:var(--mute);text-align:left;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+  .pill.g{background:rgba(47,191,113,.15);color:var(--green)}
+  .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
+  .pill.r{background:rgba(224,49,49,.15);color:var(--red)}
+  .pill.b{background:rgba(77,124,254,.15);color:var(--blue)}
+  .kv{display:grid;grid-template-columns:170px 1fr;gap:4px 12px;font-size:13px}
+  .kv b{color:var(--mute);font-weight:600}
+  pre{background:#0a0f26;border:1px solid var(--line);border-radius:10px;padding:12px;font:12px/1.5 var(--mono);overflow:auto;max-height:420px;margin:10px 0 0}
+  .raw-t{color:var(--blue);font-size:13px;cursor:pointer;user-select:none;margin-top:10px;display:inline-block}
+  .muted{color:var(--mute)}
+  .err{color:var(--red)}
+  .load{color:var(--mute);padding:24px;text-align:center}
+  .amount{font-family:var(--mono)}
+  @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="gate">
+    <h1>Platform Console</h1>
+    <p>Speedy Platform — internal build console.<br>Sign in to continue.</p>
+    <div id="gsibtn"></div>
+    <p id="gateerr" class="err" style="display:none">This account isn't authorized for the console.</p>
+  </div>
+
+  <div id="app">
+    <header>
+      <div class="dot"></div>
+      <h1>Platform Console <small>read-only · build verification</small></h1>
+      <div class="who" id="who"></div>
+    </header>
+    <nav>
+      <button data-tab="hs" class="on">ZZTEST · HawkSoft</button>
+      <button data-tab="ledger">Ledger · Supabase</button>
+      <button data-tab="tables">Tables</button>
+    </nav>
+    <div id="view" class="card"><div class="load">Loading…</div></div>
+  </div>
+
+</div>
+<script>
+const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
+let TOKEN = null, TAB = 'hs';
+const $ = s => document.querySelector(s);
+
+window.addEventListener('load', () => {
+  const t = setInterval(() => {
+    if (!window.google) return;
+    clearInterval(t);
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
+    google.accounts.id.renderButton($('#gsibtn'), { theme: 'filled_blue', size: 'large', width: 260 });
+  }, 150);
+});
+
+async function onCred(resp) {
+  TOKEN = resp.credential;
+  // probe auth with the lightest view
+  const r = await api('tables');
+  if (!r || r.error === 'Not authorized') { $('#gateerr').style.display = 'block'; TOKEN = null; return; }
+  $('#gate').style.display = 'none';
+  $('#app').style.display = 'block';
+  $('#who').textContent = r.email || '';
+  render();
+}
+
+async function api(view) {
+  try {
+    const r = await fetch('/api/platform?view=' + view, { headers: { 'x-id-token': TOKEN } });
+    return await r.json();
+  } catch { return null; }
+}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); TAB = b.dataset.tab; render();
+});
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = v => isFinite(v) ? '$' + Number(v).toFixed(2) : '—';
+
+async function render() {
+  const el = $('#view');
+  el.innerHTML = '<div class="load">Loading…</div>';
+  if (TAB === 'hs') return renderHS(el);
+  if (TAB === 'ledger') return renderLedger(el);
+  if (TAB === 'tables') return renderTables(el);
+}
+
+/* ---------- ZZTEST · HawkSoft ---------- */
+async function renderHS(el) {
+  const r = await api('client');
+  if (!r || !r.ok) { el.innerHTML = '<div class="err">HawkSoft read failed' + (r ? ' (HTTP ' + esc(r.status) + ')' : '') + '</div>'; return; }
+  const c = r.client || {};
+  const people = c.people || c.People || [];
+  const p0 = people[0] || {};
+  const name = p0.businessName || [p0.firstName, p0.lastName].filter(Boolean).join(' ') || c.businessName || '(no name)';
+  const pols = c.policies || c.Policies || [];
+  const invs = c.invoices || c.Invoices || [];
+
+  let h = '<h2>Client — ZZTEST #26081 (test fixture)</h2>';
+  h += '<div class="kv">'
+    + '<b>Name</b><span>' + esc(name) + '</span>'
+    + '<b>HawkSoft #</b><span>' + esc(c.clientNumber || c.clientNo || c.number || '26081') + '</span>'
+    + '<b>Office</b><span>' + esc(c.officeName || c.office || (c.details && c.details.officeName) || '—') + '</span>'
+    + '<b>Status</b><span>' + esc(c.status || (c.details && c.details.status) || '—') + '</span>'
+    + '</div>';
+
+  h += '<h2 style="margin-top:18px">Policies (' + pols.length + ')</h2>';
+  h += pols.length ? '<table><tr><th>Policy #</th><th>LOB</th><th>Carrier</th><th class="hidemob">Term</th><th>Status</th></tr>'
+    + pols.map(p => '<tr>'
+      + '<td>' + esc(p.policyNumber || p.number || '—') + '</td>'
+      + '<td><span class="pill b">' + esc(p.lob || p.lineOfBusiness || p.LOB || '—') + '</span></td>'
+      + '<td>' + esc(p.carrier || p.carrierName || p.company || '—') + '</td>'
+      + '<td class="hidemob">' + esc((p.effectiveDate || '').slice(0,10)) + ' → ' + esc((p.expirationDate || '').slice(0,10)) + '</td>'
+      + '<td>' + esc(p.status || '—') + '</td>'
+      + '</tr>').join('') + '</table>'
+    : '<div class="muted">No policies returned.</div>';
+
+  h += '<h2 style="margin-top:18px">Invoices (' + invs.length + ')</h2>';
+  h += invs.length ? '<table><tr><th>#</th><th>Amount</th><th>Balance</th><th class="hidemob">Due</th><th>Policy-linked</th></tr>'
+    + invs.map(i => {
+      const bal = Number(i.balance ?? i.balanceDue ?? i.amountDue ?? i.due ?? NaN);
+      return '<tr>'
+        + '<td>' + esc(i.invoiceNumber || i.number || i.id || '—') + '</td>'
+        + '<td class="amount">' + money(i.amount ?? i.total) + '</td>'
+        + '<td class="amount">' + (isFinite(bal) && bal > 0 ? '<span class="pill a">' + money(bal) + '</span>' : '<span class="pill g">paid</span>') + '</td>'
+        + '<td class="hidemob">' + esc((i.dueDate || i.DueDate || '').slice(0,10) || '—') + '</td>'
+        + '<td>' + (i.policyId || i.PolicyId ? '<span class="pill g">yes</span>' : '<span class="muted">no</span>') + '</td>'
+        + '</tr>';
+    }).join('') + '</table>'
+    : '<div class="muted">No invoices returned.</div>';
+
+  h += '<span class="raw-t" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">▸ Raw JSON (B0 schema prep)</span>'
+    + '<pre style="display:none">' + esc(JSON.stringify(c, null, 2)) + '</pre>';
+  el.innerHTML = h;
+}
+
+/* ---------- Ledger · Supabase ---------- */
+async function renderLedger(el) {
+  const r = await api('ledger');
+  if (!r || !r.ok) { el.innerHTML = '<div class="err">Ledger read failed.</div>'; return; }
+  const rows = r.rows || [];
+  let h = '<h2>bridge_ledger — latest ' + rows.length + ' rows (live)</h2>';
+  if (!rows.length) {
+    h += '<div class="muted">No rows yet. First real charge from Sammy\u2019s pilot will land here — this is the A1 verification view.</div>';
+  } else {
+    const cols = Object.keys(rows[0]);
+    const pick = ['created_at','amount','method','branch','agent','client','policy','status','ref'].filter(c => cols.includes(c));
+    const shown = pick.length >= 4 ? pick : cols.slice(0, 8);
+    h += '<table><tr>' + shown.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr>'
+      + rows.map(row => '<tr>' + shown.map(c => {
+          let v = row[c];
+          if (c === 'created_at' && v) v = String(v).replace('T',' ').slice(0,19);
+          if (c === 'amount' && isFinite(v)) return '<td class="amount">' + money(v) + '</td>';
+          if (c === 'status') return '<td><span class="pill ' + (String(v).match(/paid|ok|success/i) ? 'g' : String(v).match(/fail|void|refund/i) ? 'r' : 'a') + '">' + esc(v) + '</span></td>';
+          return '<td>' + esc(v) + '</td>';
+        }).join('') + '</tr>').join('') + '</table>';
+  }
+  h += '<span class="raw-t" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">▸ Raw JSON</span>'
+    + '<pre style="display:none">' + esc(JSON.stringify(rows, null, 2)) + '</pre>';
+  el.innerHTML = h;
+}
+
+/* ---------- Tables ---------- */
+async function renderTables(el) {
+  const r = await api('tables');
+  if (!r || !r.ok) { el.innerHTML = '<div class="err">Table inventory failed.</div>'; return; }
+  let h = '<h2>Our database — what exists today</h2>';
+  h += '<table><tr><th>Table</th><th>Status</th><th>Rows</th><th>Columns</th></tr>'
+    + (r.tables || []).map(t => '<tr>'
+      + '<td><span class="amount">' + esc(t.table) + '</span></td>'
+      + '<td>' + (t.exists ? '<span class="pill g">live</span>' : '<span class="pill r">missing</span>') + '</td>'
+      + '<td>' + (t.rows === null ? '—' : t.rows) + '</td>'
+      + '<td class="muted">' + esc((t.columns || []).join(', ') || '—') + '</td>'
+      + '</tr>').join('') + '</table>';
+  h += '<p class="muted" style="font-size:13px;margin-top:14px">Coming as the platform grows: <b>events</b> · <b>clients</b> · <b>policies</b> (canonical schema, B0) · <b>invoices</b> (A3) · <b>tasks</b> (D1).</p>';
+  el.innerHTML = h;
+}
+</script>
+</body>
+</html>

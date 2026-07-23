@@ -13,7 +13,7 @@ const HS_BASE = 'https://integration.hawksoft.app';
 
 import { timingSafeEqual } from 'node:crypto';
 function verifyKey(key) {
-  const real = process.env.ADMIN_API_KEY || '';
+  const real = process.env.CONSOLE_KEY || process.env.ADMIN_API_KEY || '';
   if (!real || !key) return false;
   const a = Buffer.from(String(key)), b = Buffer.from(real);
   return a.length === b.length && timingSafeEqual(a, b);

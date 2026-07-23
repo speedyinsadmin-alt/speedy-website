@@ -185,14 +185,14 @@ async function renderLedger(el) {
     h += '<div class="muted">No rows yet. First real charge from Sammy\u2019s pilot will land here — this is the A1 verification view.</div>';
   } else {
     const cols = Object.keys(rows[0]);
-    const pick = ['created_at','amount','method','branch','agent','client','policy','status','ref'].filter(c => cols.includes(c));
+    const pick = ['ts','kind','client_id','amount','purpose','agent','ref','invoice_status'].filter(c => cols.includes(c));
     const shown = pick.length >= 4 ? pick : cols.slice(0, 8);
     h += '<table><tr>' + shown.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr>'
       + rows.map(row => '<tr>' + shown.map(c => {
           let v = row[c];
-          if (c === 'created_at' && v) v = String(v).replace('T',' ').slice(0,19);
+          if (c === 'ts' && v) v = String(v).replace('T',' ').slice(0,19);
           if (c === 'amount' && isFinite(v)) return '<td class="amount">' + money(v) + '</td>';
-          if (c === 'status') return '<td><span class="pill ' + (String(v).match(/paid|ok|success/i) ? 'g' : String(v).match(/fail|void|refund/i) ? 'r' : 'a') + '">' + esc(v) + '</span></td>';
+          if (c === 'invoice_status' || c === 'kind') return '<td><span class="pill ' + (String(v).match(/paid|ok|success/i) ? 'g' : String(v).match(/fail|void|refund/i) ? 'r' : 'a') + '">' + esc(v) + '</span></td>';
           return '<td>' + esc(v) + '</td>';
         }).join('') + '</tr>').join('') + '</table>';
   }

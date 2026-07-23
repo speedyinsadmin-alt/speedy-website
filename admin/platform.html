@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v2.3 -->
+<!-- build v2.4 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v2.3</small></h1>
+      <h1>Platform Console <small id="ver">v2.4</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -199,12 +199,18 @@ async function seedAll() {
   const idsRes = await apiPostBody({ action: 'seed_ids' });
   if (!idsRes || !idsRes.ok) { prog.textContent = 'Could not fetch client IDs' + (idsRes && idsRes.error ? ': ' + idsRes.error : '') + '.'; btn.disabled = false; btn.textContent = '⇊ Seed ALL clients from HawkSoft'; return; }
   const ids = idsRes.ids || [];
+  if (idsRes.already) prog.textContent = idsRes.already + ' clients already in — resuming with the remaining ' + ids.length + '.';
+  if (!ids.length) { prog.textContent = 'All ' + (idsRes.total || idsRes.already) + ' clients are already seeded. Nothing to do.'; btn.disabled = false; btn.textContent = '⇊ Seed ALL clients from HawkSoft'; return; }
   let done = 0, clients = 0, pols = 0;
   for (let i = 0; i < ids.length; i += 25) {
     const batch = ids.slice(i, i + 25);
     btn.textContent = 'Seeding… ' + Math.round(100 * i / ids.length) + '%';
     prog.textContent = 'Seeding clients ' + (i + 1) + '–' + Math.min(i + 25, ids.length) + ' of ' + ids.length + ' — ' + clients + ' saved, ' + pols + ' policies so far';
     const r = await apiPostBody({ action: 'seed_batch', ids: batch });
+    if (r && r.error === 'Not authorized') {
+      prog.textContent = '⚠ Session expired at ' + clients + ' clients saved. Refresh the page, sign in again, and press Seed — it resumes where it stopped.';
+      btn.textContent = '⇊ Seed ALL clients from HawkSoft'; btn.disabled = false; return;
+    }
     if (r && r.ok) { clients += r.upserted; pols += r.policies; }
     done = i + batch.length;
   }

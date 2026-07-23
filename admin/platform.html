@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v2.0.1 -->
+<!-- build v2.1 -->
 </head>
 <body>
 <div class="wrap">
@@ -68,8 +68,9 @@
       <div class="who" id="who"></div>
     </header>
     <nav>
-      <button data-tab="hs" class="on">ZZTEST · HawkSoft</button>
-      <button data-tab="ledger">Ledger · Supabase</button>
+      <button data-tab="clients" class="on">Clients</button>
+      <button data-tab="hs">ZZTEST · HawkSoft</button>
+      <button data-tab="ledger">Ledger</button>
       <button data-tab="tables">Tables</button>
     </nav>
     <div id="view" class="card"><div class="load">Loading…</div></div>
@@ -78,7 +79,7 @@
 </div>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-let TOKEN = null, TAB = 'hs';
+let TOKEN = null, TAB = 'clients';
 const $ = s => document.querySelector(s);
 
 window.addEventListener('load', () => {
@@ -116,12 +117,109 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money = v => isFinite(v) ? '$' + Number(v).toFixed(2) : '—';
 
+let OPEN_CLIENT = null; // client_no currently open in drill-in
 async function render() {
   const el = $('#view');
   el.innerHTML = '<div class="load">Loading…</div>';
+  if (TAB === 'clients') return OPEN_CLIENT ? renderOurClient(el, OPEN_CLIENT) : renderClients(el);
   if (TAB === 'hs') return renderHS(el);
   if (TAB === 'ledger') return renderLedger(el);
   if (TAB === 'tables') return renderTables(el);
+}
+function openClient(no) { OPEN_CLIENT = no; render(); }
+function closeClient() { OPEN_CLIENT = null; render(); }
+
+async function apiPost(action) {
+  try {
+    const r = await fetch('/api/platform', { method: 'POST',
+      headers: { 'x-id-token': TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }) });
+    return await r.json();
+  } catch { return null; }
+}
+
+/* ---------- Clients (our platform) ---------- */
+async function renderClients(el) {
+  const r = await api('our_clients');
+  if (!r || !r.ok) { el.innerHTML = '<div class="err">Client list failed.</div>'; return; }
+  const list = r.clients || [];
+  let h = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'
+    + '<h2 style="margin:0">Clients — Speedy Platform (' + list.length + ')</h2>'
+    + '<button id="syncbtn" style="margin-left:auto;background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync ZZTEST from HawkSoft</button>'
+    + '</div>';
+  if (!list.length) {
+    h += '<div class="muted" style="padding:18px 0">No clients in our database yet. Press <b>Sync ZZTEST</b> to pull the test client from HawkSoft — that is the first parallel-run record.</div>';
+  } else {
+    h += '<table><tr><th>#</th><th>Name</th><th class="hidemob">Branch</th><th>Status</th><th>Policies</th></tr>'
+      + list.map(c => {
+        const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
+        const pc = (r.policy_counts || {})[c.client_no] || { total: 0, active: 0 };
+        return '<tr style="cursor:pointer" onclick="openClient(' + c.client_no + ')">'
+          + '<td class="amount">' + esc(c.client_no) + '</td>'
+          + '<td><b>' + esc(name) + '</b></td>'
+          + '<td class="hidemob">' + esc(c.branch || '—') + '</td>'
+          + '<td><span class="pill ' + (String(c.status).toLowerCase() === 'active' ? 'g' : 'a') + '">' + esc(c.status) + '</span></td>'
+          + '<td>' + pc.active + ' active / ' + pc.total + '</td>'
+          + '</tr>';
+      }).join('') + '</table>';
+  }
+  el.innerHTML = h;
+  $('#syncbtn').onclick = async () => {
+    $('#syncbtn').textContent = 'Syncing…'; $('#syncbtn').disabled = true;
+    const res = await apiPost('sync_zztest');
+    if (res && res.ok) { render(); }
+    else { $('#syncbtn').textContent = 'Sync failed — retry'; $('#syncbtn').disabled = false; }
+  };
+}
+
+async function renderOurClient(el, no) {
+  const r = await api('our_client&no=' + no);
+  if (!r || !r.ok || !r.client) { el.innerHTML = '<div class="err">Client load failed.</div>'; return; }
+  const c = r.client;
+  const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
+  let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← All clients</span>';
+  h += '<h2 style="margin-top:0">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
+  h += '<div class="kv">'
+    + '<b>Status</b><span><span class="pill ' + (String(c.status).toLowerCase()==='active'?'g':'a') + '">' + esc(c.status) + '</span></span>'
+    + '<b>Branch</b><span>' + esc(c.branch || '—') + '</span>'
+    + '<b>Phone</b><span>' + esc(c.phone || '—') + '</span>'
+    + '<b>Email</b><span>' + esc(c.email || '—') + '</span>'
+    + '<b>Address</b><span>' + esc([c.address1, c.city, c.state, c.zip].filter(Boolean).join(', ') || '—') + '</span>'
+    + '</div>';
+
+  h += '<h2 style="margin-top:18px">Policies (' + r.policies.length + ')</h2>';
+  h += r.policies.length ? '<table><tr><th>Policy #</th><th>LOB</th><th>Carrier</th><th class="hidemob">Term</th><th>Premium</th><th>Status</th></tr>'
+    + r.policies.map(p => '<tr>'
+      + '<td>' + esc(p.policy_number || '—') + '</td>'
+      + '<td><span class="pill b">' + esc(p.lob || '—') + '</span></td>'
+      + '<td>' + esc(p.carrier || '—') + '</td>'
+      + '<td class="hidemob">' + esc(p.effective_date || '') + ' → ' + esc(p.expiration_date || '') + '</td>'
+      + '<td class="amount">' + money(p.premium) + '</td>'
+      + '<td>' + esc(p.status || '—') + '</td>'
+      + '</tr>').join('') + '</table>'
+    : '<div class="muted">No policies. Sync from HawkSoft or add via intake.</div>';
+
+  h += '<h2 style="margin-top:18px">Payments (' + r.payments.length + ')</h2>';
+  h += r.payments.length ? '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th>Ref</th></tr>'
+    + r.payments.map(p => '<tr>'
+      + '<td>' + esc(String(p.ts).replace('T',' ').slice(0,16)) + '</td>'
+      + '<td><span class="pill ' + (String(p.kind).includes('charge') ? 'g' : 'b') + '">' + esc(p.kind) + '</span></td>'
+      + '<td class="amount">' + money(p.amount) + '</td>'
+      + '<td class="hidemob">' + esc(p.purpose || '—') + '</td>'
+      + '<td>' + esc(p.ref || '—') + '</td>'
+      + '</tr>').join('') + '</table>'
+    : '<div class="muted">No payments recorded.</div>';
+
+  h += '<h2 style="margin-top:18px">Activity (' + r.events.length + ')</h2>';
+  h += r.events.length ? '<table><tr><th>When</th><th>Event</th><th class="hidemob">By</th><th>Source</th></tr>'
+    + r.events.map(e => '<tr>'
+      + '<td>' + esc(String(e.ts).replace('T',' ').slice(0,16)) + '</td>'
+      + '<td><span class="pill a">' + esc(e.kind) + '</span></td>'
+      + '<td class="hidemob">' + esc(e.actor || '—') + '</td>'
+      + '<td>' + esc(e.source || '—') + '</td>'
+      + '</tr>').join('') + '</table>'
+    : '<div class="muted">No activity yet.</div>';
+  el.innerHTML = h;
 }
 
 /* ---------- ZZTEST · HawkSoft ---------- */

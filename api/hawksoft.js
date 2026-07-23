@@ -772,7 +772,7 @@ export default async function handler(req, res) {
     if (action === 'terminal_config') {
       const branches = Object.entries(CLOVER_BRANCHES).map(([k, v]) => ({
         id: k, branch: v.branch, merchantId: v.merchantId, device: v.device, model: v.model }));
-      return res.status(200).json({ ok: true, branches, raid: 'OEFKFNBWHCSAM.9PSNNM5VC2456' });
+      return res.status(200).json({ ok: true, branches, raid: '0EFKFNBWHCSAM.9PSNNM5VC2456' });
     }
 
     /* ---------- Terminal: send a payment to a branch Flex (REST Pay Display) ---------- */
@@ -801,7 +801,7 @@ export default async function handler(req, res) {
           Authorization: `Bearer ${auth.token}`,
           'Content-Type': 'application/json',
           'X-Clover-Device-Id': branch.device,
-          'X-POS-ID': 'SpeedyPaymentBridge',
+          'X-POS-ID': '0EFKFNBWHCSAM.9PSNNM5VC2456', // production RAID
           'Idempotency-Key': crypto.randomUUID(),
         },
         body: JSON.stringify({ amount: Math.round(total * 100), final: true, externalPaymentId: extId }),

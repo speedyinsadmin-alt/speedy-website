@@ -145,7 +145,19 @@ export default async function handler(req, res) {
       const hs = await hsAllClientIds();
       if (hs.error || hs.status !== 200) return res.status(502).json({ ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status), detail: hs.body });
       const ids = Array.isArray(hs.body) ? hs.body.map(Number).filter(isFinite) : [];
-      return res.status(200).json({ ok: true, email, count: ids.length, ids });
+      // Resume: subtract client_nos already in our database (paged reads, PostgREST caps at 1000/page)
+      const have = new Set();
+      for (let from = 0; ; from += 1000) {
+        const r = await fetch(`${s.base}/rest/v1/clients?select=client_no&order=client_no.asc`, {
+          headers: { ...s.hdrs, Range: `${from}-${from + 999}` },
+        });
+        const page = await r.json().catch(() => []);
+        if (!Array.isArray(page) || !page.length) break;
+        for (const row of page) have.add(Number(row.client_no));
+        if (page.length < 1000) break;
+      }
+      const todo = ids.filter(n => !have.has(n));
+      return res.status(200).json({ ok: true, email, total: ids.length, already: have.size, count: todo.length, ids: todo });
     }
 
     if (action === 'seed_batch') {

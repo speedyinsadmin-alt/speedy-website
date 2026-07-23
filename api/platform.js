@@ -52,7 +52,7 @@ export default async function handler(req, res) {
   if (view === 'ledger') {
     const s = sb();
     if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
-    const r = await fetch(`${s.base}/rest/v1/bridge_ledger?select=*&order=created_at.desc&limit=50`, { headers: s.hdrs });
+    const r = await fetch(`${s.base}/rest/v1/bridge_ledger?select=*&order=ts.desc&limit=50`, { headers: s.hdrs });
     const rows = await r.json().catch(() => []);
     return res.status(200).json({ ok: r.ok, email, rows: Array.isArray(rows) ? rows : [], raw: Array.isArray(rows) ? undefined : rows });
   }

@@ -242,21 +242,10 @@ export default async function handler(req, res) {
   /* ---- TEMP: receipts discovery ---- */
   if (view === 'rcpt') {
     const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
-    const paths = [
-      `/vendor/agency/${AGENCY_ID}/client/${no}/receipt?version=4.0`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}/payments?version=4.0`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}/transactions?version=4.0`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}/invoices?version=4.0`,
-      `/vendor/agency/${AGENCY_ID}/receipts?version=4.0&clientNumber=${no}`,
-      `/vendor/agency/${AGENCY_ID}/accounting/receipts?version=4.0&clientNumber=${no}`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Invoices,Details`,
-    ];
-    const out = {};
-    for (const p of paths) {
-      const r = await hsCall(p);
-      out[p.split('?')[0]] = { status: r.status, sample: typeof r.body === 'string' ? r.body.slice(0,150) : (r.body && typeof r.body==='object' ? (Array.isArray(r.body)? ('array len '+r.body.length + (r.body[0]?' keys:'+Object.keys(r.body[0]).join(','):'')) : Object.keys(r.body).join(',')) : r.body) };
-    }
-    return res.status(200).json({ ok: true, email, probe: out });
+    const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Invoices,Details`);
+    const b = r.body || {};
+    const invs = b.invoices || b.Invoices || [];
+    return res.status(200).json({ ok: true, email, count: Array.isArray(invs)?invs.length:0, sample_invoice: Array.isArray(invs)&&invs[0]?invs[0]:invs });
   }
 
   /* ---- HawkSoft direct: ZZTEST raw ---- */

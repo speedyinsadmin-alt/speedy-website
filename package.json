@@ -2,6 +2,7 @@
   "name": "speedy-website",
   "private": true,
   "dependencies": {
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "nodemailer": "^6.9.14"
   }
 }

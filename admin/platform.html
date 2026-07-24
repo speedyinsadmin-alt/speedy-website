@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v2.4 -->
+<!-- build v2.5 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v2.4</small></h1>
+      <h1>Platform Console <small id="ver">v2.5</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -145,9 +145,10 @@ async function renderClients(el) {
   const list = r.clients || [];
   let h = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'
     + '<h2 style="margin:0">Clients — Speedy Platform (' + list.length + ')</h2>'
-    + '<button id="seedbtn" style="margin-left:auto;background:var(--green);border:0;color:#04220f;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer">⇊ Seed ALL clients from HawkSoft</button>'
-    + '<button id="syncbtn" style="background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync ZZTEST</button>'
+    + '<button id="deltabtn" style="margin-left:auto;background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync changes now</button>'
+    + '<button id="seedbtn" style="background:var(--navy);border:1px solid var(--line);color:var(--mute);padding:8px 14px;border-radius:9px;font-size:13px;cursor:pointer">⇊ Full seed</button>'
     + '</div>'
+    + '<div id="syncline" class="muted" style="font-size:13px;margin:2px 0 12px">checking sync status…</div>'
     + '<div id="seedprog" class="muted" style="display:none;font-size:13px;margin:4px 0 10px"></div>'
     + (list.length > 8 ? '<input id="csearch" placeholder="Search name or client #…" style="width:100%;max-width:340px;margin:6px 0 12px;padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:#0a0f26;color:var(--ink);font-size:14px">' : '');
   if (!list.length) {
@@ -174,6 +175,14 @@ async function renderClients(el) {
     else { $('#syncbtn').textContent = 'Sync failed — retry'; $('#syncbtn').disabled = false; }
   };
   $('#seedbtn').onclick = () => seedAll();
+  $('#deltabtn').onclick = async () => {
+    const b = $('#deltabtn'); b.disabled = true; b.textContent = 'Syncing…';
+    const r = await apiPostBody({ action: 'delta_sync' });
+    b.disabled = false; b.textContent = '⟳ Sync changes now';
+    if (r && r.ok) { $('#syncline').textContent = 'Just synced — ' + r.clients + ' clients and ' + r.policies + ' policies updated from HawkSoft.'; }
+    else { $('#syncline').textContent = 'Sync failed' + (r && r.error ? ': ' + r.error : '') + '.'; }
+  };
+  loadSyncStatus();
   const srch = $('#csearch');
   if (srch) srch.oninput = () => {
     const q = srch.value.toLowerCase();
@@ -181,6 +190,16 @@ async function renderClients(el) {
       if (!i) return; tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
   };
+}
+
+async function loadSyncStatus() {
+  const line = $('#syncline'); if (!line) return;
+  const r = await api('sync_status');
+  if (!r || !r.ok || !r.state) { line.textContent = 'Sync status unavailable.'; return; }
+  const t = new Date(r.state.last_sync);
+  const mins = Math.round((Date.now() - t.getTime()) / 60000);
+  const ago = mins < 1 ? 'just now' : mins < 60 ? mins + ' min ago' : Math.round(mins / 60) + ' hr ago';
+  line.innerHTML = 'HawkSoft sync: <b>' + ago + '</b> · ' + (r.state.last_count || 0) + ' records last run · nightly cron + live refresh when you open a client';
 }
 
 async function apiPostBody(payload) {
@@ -224,7 +243,8 @@ async function renderOurClient(el, no) {
   if (!r || !r.ok || !r.client) { el.innerHTML = '<div class="err">Client load failed.</div>'; return; }
   const c = r.client;
   const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
-  let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← All clients</span>';
+  let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← All clients</span>'
+    + (r.live ? '<span class="pill g" style="float:right">● live from HawkSoft</span>' : '<span class="pill a" style="float:right">cached copy</span>');
   h += '<h2 style="margin-top:0">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
   h += '<div class="kv">'
     + '<b>Status</b><span><span class="pill ' + (String(c.status).toLowerCase()==='active'?'g':'a') + '">' + esc(c.status) + '</span></span>'

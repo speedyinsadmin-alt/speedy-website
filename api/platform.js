@@ -239,6 +239,21 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET/POST only' });
   const view = String(req.query.view || '');
 
+  /* ---- TEMP: receipts discovery ---- */
+  if (view === 'rcpt') {
+    const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
+    const out = {};
+    // A) include=Receipts on the client endpoint
+    const a = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Receipts,Invoices,Payments`);
+    out.client_include = { status: a.status, keys: a.body && typeof a.body === 'object' ? Object.keys(a.body) : a.body, receipts: a.body && (a.body.receipts || a.body.Receipts), payments: a.body && (a.body.payments || a.body.Payments) };
+    // B) dedicated accounting/receipts endpoints (guesses)
+    const b = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}/receipts?version=4.0`);
+    out.receipts_endpoint = { status: b.status, body: typeof b.body === 'string' ? b.body.slice(0,200) : b.body };
+    const d = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}/accounting?version=4.0`);
+    out.accounting_endpoint = { status: d.status, body: typeof d.body === 'string' ? d.body.slice(0,200) : d.body };
+    return res.status(200).json({ ok: true, email, discovery: out });
+  }
+
   /* ---- HawkSoft direct: ZZTEST raw ---- */
   if (view === 'client') {
     const hs = await hsFetchClient();

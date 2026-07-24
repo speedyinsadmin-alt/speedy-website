@@ -131,6 +131,7 @@ async function upsertHsClient(s, c) {
   let polCount = 0;
   for (const p of hsPols) {
     const guid = pick(p, 'id', 'policyId', 'guid', 'Id', 'PolicyId');
+    const _cls = classifyRecord(p.carrier || p.writingCarrier);
     const row = {
       client_id: ourClient.id,
       client_no: cn,

@@ -245,15 +245,36 @@ export default async function handler(req, res) {
 
   /* ---- Our clients list ---- */
   if (view === 'our_clients') {
-    const cl = await sbGet(s, 'clients?select=*&order=client_no.asc&limit=200');
-    const po = await sbGet(s, 'policies?select=client_no,status');
-    const counts = {};
-    for (const p of (po.rows || [])) {
-      counts[p.client_no] = counts[p.client_no] || { total: 0, active: 0 };
-      counts[p.client_no].total++;
-      if (String(p.status).toLowerCase() === 'active') counts[p.client_no].active++;
+    const q = String(req.query.q || '').trim();
+    let path;
+    if (q) {
+      // Search: client_no exact, OR name/business/phone/email contains (case-insensitive)
+      const like = `*${q.replace(/[,()*]/g, '')}*`;
+      const ors = [
+        `first_name.ilike.${like}`,
+        `last_name.ilike.${like}`,
+        `business_name.ilike.${like}`,
+        `phone.ilike.${like}`,
+        `email.ilike.${like}`,
+      ];
+      if (/^\d+$/.test(q)) ors.unshift(`client_no.eq.${q}`);
+      path = `clients?select=*&or=(${ors.join(',')})&order=client_no.asc&limit=100`;
+    } else {
+      path = 'clients?select=*&order=client_no.asc&limit=100';
     }
-    return res.status(200).json({ ok: cl.ok, email, clients: cl.rows, policy_counts: counts });
+    const cl = await sbGet(s, path);
+    // policy counts only for the returned clients
+    const nos = (cl.rows || []).map(c => c.client_no).filter(n => n != null);
+    let counts = {};
+    if (nos.length) {
+      const po = await sbGet(s, `policies?select=client_no,status&client_no=in.(${nos.join(',')})`);
+      for (const p of (po.rows || [])) {
+        counts[p.client_no] = counts[p.client_no] || { total: 0, active: 0 };
+        counts[p.client_no].total++;
+        if (String(p.status).toLowerCase() === 'active') counts[p.client_no].active++;
+      }
+    }
+    return res.status(200).json({ ok: cl.ok, email, clients: cl.rows || [], policy_counts: counts, query: q, total_shown: (cl.rows || []).length });
   }
 
   /* ---- Our single client: profile + policies + payments + events ---- */

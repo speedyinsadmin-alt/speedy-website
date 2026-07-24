@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v3.3 -->
+<!-- build v3.4 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.3</small></h1>
+      <h1>Platform Console <small id="ver">v3.4</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -198,7 +198,7 @@ async function renderClients(el) {
   };
 
   $('#seedbtn').onclick = () => seedAll(false);
-  const rb = $('#resyncbtn'); if (rb) rb.onclick = () => seedAll(true);
+  const rb = $('#resyncbtn'); if (rb) rb.onclick = () => startServerResync();
   $('#deltabtn').onclick = async () => {
     const b = $('#deltabtn'); b.disabled = true; b.textContent = 'Syncing…';
     const rr = await apiPostBody({ action: 'delta_sync' });
@@ -208,7 +208,36 @@ async function renderClients(el) {
     else { line.textContent = 'Sync failed' + (rr && rr.error ? ': ' + rr.error : '') + '.'; }
   };
   loadSyncStatus();
+  (async () => { const st = await api('job_status'); if (st && st.job && (st.job.status==='running'||st.job.status==='pending')) pollResync(); })();
 }
+
+let resyncPoll = null;
+async function startServerResync() {
+  const btn = $('#resyncbtn'), prog = $('#seedprog');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  if (prog) { prog.style.display = 'block'; prog.textContent = 'Building client list on the server…'; }
+  const r = await apiPostBody({ action: 'start_resync' });
+  if (!r || !r.ok) { btn.disabled = false; btn.textContent = '↻ Re-sync all fields'; if (prog) prog.textContent = 'Could not start' + (r&&r.error?': '+r.error:'') + '.'; return; }
+  pollResync();
+}
+async function pollResync() {
+  const btn = $('#resyncbtn'), prog = $('#seedprog');
+  if (resyncPoll) clearInterval(resyncPoll);
+  const tick = async () => {
+    const st = await api('job_status');
+    const j = st && st.job;
+    if (!j) { if (prog) prog.textContent = 'No active job.'; stopResync(); return; }
+    const pct = j.total ? Math.round(100 * (j.processed||0) / j.total) : 0;
+    if (prog) { prog.style.display='block'; prog.textContent = 'Re-syncing on server: ' + (j.processed||0) + ' / ' + j.total + ' (' + pct + '%) · ' + (j.clients_updated||0) + ' clients, ' + (j.policies_updated||0) + ' policies · safe to close this tab'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Re-syncing ' + pct + '%'; }
+    if (j.status === 'done') { if (prog) prog.textContent = 'Re-sync complete — ' + (j.clients_updated||0) + ' clients, ' + (j.policies_updated||0) + ' policies classified.'; stopResync(); if (btn){btn.disabled=false;btn.textContent='↻ Re-sync all fields';} render(); return; }
+    // nudge the server to do another chunk (also progresses if cron is idle)
+    apiPostBody({ action: 'step_resync' });
+  };
+  await tick();
+  resyncPoll = setInterval(tick, 6000);
+}
+function stopResync(){ if (resyncPoll) { clearInterval(resyncPoll); resyncPoll = null; } }
 
 async function loadSyncStatus() {
   const line = $('#syncline'); if (!line) return;

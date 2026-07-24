@@ -195,10 +195,11 @@ export default async function handler(req, res) {
     }
 
     if (action === 'seed_ids') {
+      const force = !!body.force; // force=true => return ALL ids (re-sync existing rows with latest mapping)
       const hs = await hsAllClientIds();
       if (hs.error || hs.status !== 200) return res.status(502).json({ ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status), detail: hs.body });
       const ids = Array.isArray(hs.body) ? hs.body.map(Number).filter(isFinite) : [];
-      // Resume: subtract client_nos already in our database (paged reads, PostgREST caps at 1000/page)
+      if (force) return res.status(200).json({ ok: true, email, total: ids.length, already: 0, count: ids.length, ids, resync: true });
       const have = new Set();
       for (let from = 0; ; from += 1000) {
         const r = await fetch(`${s.base}/rest/v1/clients?select=client_no&order=client_no.asc`, {

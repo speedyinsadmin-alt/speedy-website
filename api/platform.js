@@ -9,6 +9,7 @@ const ALLOWLIST = ['info@speedyins.com'];
 const AGENCY_ID = 15112;
 const TEST_CLIENT = 26081; // ZZTEST — the only client sync/HawkSoft-read will touch
 const HS_BASE = 'https://integration.hawksoft.app';
+const OFFICE_MAP = { '1': 'Moreno Valley', '2': 'Riverside Van Buren', '3': 'Riverside Magnolia', '4': 'Lake Elsinore' };
 
 async function verifyGoogle(idToken) {
   if (!idToken) return null;
@@ -73,24 +74,29 @@ const dateOnly = v => { const s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.t
 async function upsertHsClient(s, c) {
   const cn = Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id'));
   if (!isFinite(cn)) return { ok: false, error: 'no client number' };
-  const people = c.people || c.People || [];
+  const people = c.people || [];
   const p0 = people[0] || {};
-  const details = c.details || c.Details || {};
+  const details = c.details || {};
+  const addr = details.mailingAddress || details.physicalAddress || {};
+  const contacts = c.contacts || [];
+  const phone = (contacts.find(x => /phone|cell|mobile/i.test(x.type || '')) || {}).data || null;
+  const email = (contacts.find(x => /email/i.test(x.type || '')) || {}).data || null;
+  const officeId = details.officeId != null ? details.officeId : c.officeId;
   const clientRow = {
     client_no: cn,
-    kind: p0.businessName ? 'business' : 'person',
-    first_name: pick(p0, 'firstName', 'FirstName'),
-    last_name: pick(p0, 'lastName', 'LastName'),
-    business_name: pick(p0, 'businessName', 'BusinessName') || pick(c, 'businessName', 'name'),
-    email: pick(p0, 'email', 'Email'),
-    phone: pick(p0, 'phone', 'cellPhone', 'homePhone'),
-    address1: pick(details, 'address1', 'Address1') || pick(c, 'address1'),
-    city: pick(details, 'city', 'City') || pick(c, 'city'),
-    state: pick(details, 'state', 'State') || pick(c, 'state'),
-    zip: pick(details, 'zip', 'Zip', 'postalCode') || pick(c, 'zip'),
-    branch: pick(details, 'officeName', 'office') || pick(c, 'officeName', 'office'),
-    status: pick(details, 'status') || pick(c, 'status') || 'Active',
-    extras: { hawksoft_snapshot_at: new Date().toISOString() },
+    kind: details.isCommercial ? 'business' : 'person',
+    first_name: p0.firstName || null,
+    last_name: p0.lastName || null,
+    business_name: details.companyName || details.dbaName || null,
+    email,
+    phone,
+    address1: addr.address1 || null,
+    city: addr.city || null,
+    state: addr.state || null,
+    zip: addr.zip || null,
+    branch: OFFICE_MAP[String(officeId)] || (officeId != null ? 'Office ' + officeId : null),
+    status: details.status || 'Active',
+    extras: { office_id: officeId ?? null, client_type: details.clientType || null, producer: details.producer || null, source: details.source || null, hawksoft_snapshot_at: new Date().toISOString() },
     updated_at: new Date().toISOString(),
   };
   const up1 = await sbUpsert(s, 'clients', [clientRow], 'client_no');
@@ -103,15 +109,15 @@ async function upsertHsClient(s, c) {
     const row = {
       client_id: ourClient.id,
       client_no: cn,
-      hs_policy_guid: guid ? String(guid) : null,
-      policy_number: pick(p, 'policyNumber', 'number', 'PolicyNumber'),
-      lob: pick(p, 'lob', 'lineOfBusiness', 'LOB'),
-      carrier: pick(p, 'carrier', 'carrierName', 'company', 'Carrier'),
-      effective_date: dateOnly(pick(p, 'effectiveDate', 'EffectiveDate')),
-      expiration_date: dateOnly(pick(p, 'expirationDate', 'ExpirationDate')),
-      premium: Number(pick(p, 'premium', 'Premium')) || null,
-      status: pick(p, 'status', 'Status') || 'Active',
-      billing: pick(p, 'billing', 'billType', 'BillingType'),
+      hs_policy_guid: p.id ? String(p.id) : (guid ? String(guid) : null),
+      policy_number: p.policyNumber || null,
+      lob: (Array.isArray(p.loBs) && p.loBs.length ? p.loBs.map(l => (l && (l.lineOfBusiness || l.lob || l.code || l.type)) || l).filter(Boolean).join(', ') : null) || p.applicationType || p.title || p.type || null,
+      carrier: p.carrier || p.writingCarrier || null,
+      effective_date: dateOnly(p.effectiveDate),
+      expiration_date: dateOnly(p.expirationDate),
+      premium: (p.premium != null ? Number(p.premium) : null),
+      status: p.status || 'Active',
+      billing: p.billingType || null,
       carrier_extras: p,
       updated_at: new Date().toISOString(),
     };
@@ -232,13 +238,6 @@ export default async function handler(req, res) {
 
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET/POST only' });
   const view = String(req.query.view || '');
-
-  /* ---- TEMP: raw any client (schema discovery) ---- */
-  if (view === 'raw') {
-    const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
-    const fresh = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Details,People,Contacts,Policies,Invoices`);
-    return res.status(200).json({ ok: fresh.status === 200, status: fresh.status, email, raw: fresh.body });
-  }
 
   /* ---- HawkSoft direct: ZZTEST raw ---- */
   if (view === 'client') {

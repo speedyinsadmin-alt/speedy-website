@@ -11,6 +11,31 @@ const TEST_CLIENT = 26081; // ZZTEST — the only client sync/HawkSoft-read will
 const HS_BASE = 'https://integration.hawksoft.app';
 const OFFICE_MAP = { '1': 'Moreno Valley', '2': 'Riverside Van Buren', '3': 'Riverside Magnolia', '4': 'Lake Elsinore' };
 
+// Carrier name normalization (misspellings / variants -> canonical). Grow as needed.
+const CARRIER_NORMALIZE = {
+  'MAPFREE': 'MAPFRE',
+  'MAPFRE': 'MAPFRE',
+  'MCGRAW INSURANCE SERVICES': 'MCGRAW',
+  'MCGRAW': 'MCGRAW',
+};
+function normalizeCarrier(name) {
+  if (!name) return null;
+  const key = String(name).trim().toUpperCase();
+  return CARRIER_NORMALIZE[key] || String(name).trim();
+}
+// Classify a HawkSoft "policy" container into what it really is.
+// Returns { record_type, renewal_months, carrier } — carrier cleared for non-insurance.
+function classifyRecord(rawCarrier) {
+  const c = String(rawCarrier || '').toUpperCase();
+  if (c.includes('DEPARTMENT OF MOTOR VEHICLES') || /\bDMV\b/.test(c)) {
+    return { record_type: 'dmv_service', renewal_months: 12, carrier: null };
+  }
+  if (rawCarrier && rawCarrier.trim()) {
+    return { record_type: 'insurance', renewal_months: null, carrier: normalizeCarrier(rawCarrier) };
+  }
+  return { record_type: 'unknown', renewal_months: null, carrier: null };
+}
+
 async function verifyGoogle(idToken) {
   if (!idToken) return null;
   try {
@@ -112,7 +137,10 @@ async function upsertHsClient(s, c) {
       hs_policy_guid: p.id ? String(p.id) : (guid ? String(guid) : null),
       policy_number: p.policyNumber || null,
       lob: (Array.isArray(p.loBs) && p.loBs.length ? p.loBs.map(l => (l && (l.lineOfBusiness || l.lob || l.code || l.type)) || l).filter(Boolean).join(', ') : null) || p.applicationType || p.title || p.type || null,
-      carrier: p.carrier || p.writingCarrier || null,
+      carrier: _cls.carrier,
+      carrier_normalized: _cls.carrier,
+      record_type: _cls.record_type,
+      renewal_months: _cls.renewal_months,
       effective_date: dateOnly(p.effectiveDate),
       expiration_date: dateOnly(p.expirationDate),
       premium: (p.premium != null ? Number(p.premium) : null),
@@ -275,11 +303,17 @@ export default async function handler(req, res) {
     const nos = (cl.rows || []).map(c => c.client_no).filter(n => n != null);
     let counts = {};
     if (nos.length) {
-      const po = await sbGet(s, `policies?select=client_no,status&client_no=in.(${nos.join(',')})`);
+      const po = await sbGet(s, `policies?select=client_no,status,expiration_date,record_type&client_no=in.(${nos.join(',')})`);
+      const today = new Date().toISOString().slice(0,10);
       for (const p of (po.rows || [])) {
-        counts[p.client_no] = counts[p.client_no] || { total: 0, active: 0 };
-        counts[p.client_no].total++;
-        if (String(p.status).toLowerCase() === 'active') counts[p.client_no].active++;
+        counts[p.client_no] = counts[p.client_no] || { total: 0, inforce: 0, dmv: 0 };
+        if (p.record_type === 'dmv_service') { counts[p.client_no].dmv++; continue; }
+        if (p.record_type === 'insurance' || !p.record_type) {
+          counts[p.client_no].total++;
+          const st = String(p.status || '').toLowerCase();
+          const live = p.expiration_date && p.expiration_date >= today && !['cancelled','canceled','expired'].includes(st);
+          if (live) counts[p.client_no].inforce++;
+        }
       }
     }
     return res.status(200).json({ ok: cl.ok, email, clients: cl.rows || [], policy_counts: counts, query: q, total_shown: (cl.rows || []).length });
@@ -298,7 +332,7 @@ export default async function handler(req, res) {
     }
     const [cl, po, led, ev] = await Promise.all([
       sbGet(s, `clients?client_no=eq.${no}&select=*`),
-      sbGet(s, `policies?client_no=eq.${no}&select=*&order=effective_date.desc`),
+      sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`),
       sbGet(s, `bridge_ledger?client_id=eq.${no}&select=*&order=ts.desc&limit=50`),
       sbGet(s, `events?client_no=eq.${no}&select=*&order=ts.desc&limit=50`),
     ]);

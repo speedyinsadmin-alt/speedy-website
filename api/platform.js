@@ -233,6 +233,13 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET/POST only' });
   const view = String(req.query.view || '');
 
+  /* ---- TEMP: raw any client (schema discovery) ---- */
+  if (view === 'raw') {
+    const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
+    const fresh = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Details,People,Contacts,Policies,Invoices`);
+    return res.status(200).json({ ok: fresh.status === 200, status: fresh.status, email, raw: fresh.body });
+  }
+
   /* ---- HawkSoft direct: ZZTEST raw ---- */
   if (view === 'client') {
     const hs = await hsFetchClient();

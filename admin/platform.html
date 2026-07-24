@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v2.8 -->
+<!-- build v2.9 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v2.8</small></h1>
+      <h1>Platform Console <small id="ver">v2.9</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -168,6 +168,7 @@ async function renderClients(el) {
     + '<h2 style="margin:0">Clients — Speedy Platform</h2>'
     + '<button id="deltabtn" style="margin-left:auto;background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync changes now</button>'
     + '<button id="seedbtn" style="background:var(--navy);border:1px solid var(--line);color:var(--mute);padding:8px 14px;border-radius:9px;font-size:13px;cursor:pointer">⇊ Full seed</button>'
+    + '<button id="resyncbtn" style="background:var(--amber);border:0;color:#2a1a00;padding:8px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer">↻ Re-sync all fields</button>'
     + '</div>'
     + '<div id="syncline" class="muted" style="font-size:13px;margin:2px 0 12px">checking sync status…</div>'
     + '<div id="seedprog" class="muted" style="display:none;font-size:13px;margin:4px 0 10px"></div>'
@@ -196,7 +197,8 @@ async function renderClients(el) {
     }, 300);
   };
 
-  $('#seedbtn').onclick = () => seedAll();
+  $('#seedbtn').onclick = () => seedAll(false);
+  const rb = $('#resyncbtn'); if (rb) rb.onclick = () => seedAll(true);
   $('#deltabtn').onclick = async () => {
     const b = $('#deltabtn'); b.disabled = true; b.textContent = 'Syncing…';
     const rr = await apiPostBody({ action: 'delta_sync' });
@@ -227,15 +229,15 @@ async function apiPostBody(payload) {
   } catch { return null; }
 }
 
-async function seedAll() {
-  const btn = $('#seedbtn'), prog = $('#seedprog');
+async function seedAll(force) {
+  const btn = force ? $('#resyncbtn') : $('#seedbtn'), prog = $('#seedprog');
   btn.disabled = true; btn.textContent = 'Fetching client list…';
   prog.style.display = 'block'; prog.textContent = 'Asking HawkSoft for all client IDs…';
-  const idsRes = await apiPostBody({ action: 'seed_ids' });
-  if (!idsRes || !idsRes.ok) { prog.textContent = 'Could not fetch client IDs' + (idsRes && idsRes.error ? ': ' + idsRes.error : '') + '.'; btn.disabled = false; btn.textContent = '⇊ Seed ALL clients from HawkSoft'; return; }
+  const idsRes = await apiPostBody({ action: 'seed_ids', force: !!force });
+  if (!idsRes || !idsRes.ok) { prog.textContent = 'Could not fetch client IDs' + (idsRes && idsRes.error ? ': ' + idsRes.error : '') + '.'; btn.disabled = false; btn.textContent = force ? '↻ Re-sync all fields' : '⇊ Full seed'; return; }
   const ids = idsRes.ids || [];
   if (idsRes.already) prog.textContent = idsRes.already + ' clients already in — resuming with the remaining ' + ids.length + '.';
-  if (!ids.length) { prog.textContent = 'All ' + (idsRes.total || idsRes.already) + ' clients are already seeded. Nothing to do.'; btn.disabled = false; btn.textContent = '⇊ Seed ALL clients from HawkSoft'; return; }
+  if (!ids.length) { prog.textContent = 'All ' + (idsRes.total || idsRes.already) + ' clients are already seeded. Nothing to do.'; btn.disabled = false; btn.textContent = force ? '↻ Re-sync all fields' : '⇊ Full seed'; return; }
   let done = 0, clients = 0, pols = 0;
   for (let i = 0; i < ids.length; i += 25) {
     const batch = ids.slice(i, i + 25);
@@ -244,13 +246,13 @@ async function seedAll() {
     const r = await apiPostBody({ action: 'seed_batch', ids: batch });
     if (r && r.error === 'Not authorized') {
       prog.textContent = '⚠ Session expired at ' + clients + ' clients saved. Refresh the page, sign in again, and press Seed — it resumes where it stopped.';
-      btn.textContent = '⇊ Seed ALL clients from HawkSoft'; btn.disabled = false; return;
+      btn.textContent = force ? '↻ Re-sync all fields' : '⇊ Full seed'; btn.disabled = false; return;
     }
     if (r && r.ok) { clients += r.upserted; pols += r.policies; }
     done = i + batch.length;
   }
   prog.textContent = 'Done — ' + clients + ' clients and ' + pols + ' policies seeded from HawkSoft (' + done + ' IDs processed).';
-  btn.textContent = '⇊ Seed ALL clients from HawkSoft'; btn.disabled = false;
+  btn.textContent = force ? '↻ Re-sync all fields' : '⇊ Full seed'; btn.disabled = false;
   OPEN_CLIENT = null; render();
 }
 

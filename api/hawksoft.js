@@ -398,8 +398,8 @@ export default async function handler(req, res) {
       if (!clientId || clientId < 1) {
         return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
       }
-      if (!total || total < 0.5 || total > 1000) {
-        return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
+      if (!total || total < 0.5) {
+        return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       }
       const source = String(b.source || '');
       if (!source || source.length < 8) {
@@ -577,7 +577,7 @@ export default async function handler(req, res) {
       const clientId = parseInt(b.clientId, 10);
       if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
       const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
-      if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
+      if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const purpose = String(b.purpose || 'Down payment').slice(0, 80);
       const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
       const clientName = String(b.clientName || '').slice(0, 40);
@@ -713,7 +713,7 @@ export default async function handler(req, res) {
       const clientId = parseInt(b.clientId, 10);
       if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
       const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
-      if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
+      if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
       const byShort = String(userEmail || 'admin').replace('@speedyins.com', '');
       // Resolve policy GUID so the creation log files under the exact policy tab (fail-soft)
@@ -781,7 +781,7 @@ export default async function handler(req, res) {
       const clientId = parseInt(b.clientId, 10);
       if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client first.' });
       const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
-      if (!total || total < 0.5 || total > 1000) return res.status(400).json({ ok: false, error: 'Amount must be between $0.50 and $1,000.00.' });
+      if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const branch = CLOVER_BRANCHES[String(b.branchId || '1')] || CLOVER_BRANCHES[1];
       const purpose = String(b.purpose || 'Down payment').slice(0, 80);
       const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);

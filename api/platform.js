@@ -61,69 +61,116 @@ async function hsCall(path, opts = {}) {
   let body = null; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   return { status: r.status, body };
 }
-const hsFetchClient = () => hsCall(`/vendor/agency/${AGENCY_ID}/client/${TEST_CLIENT}?version=4.0&include=Details,People,Contacts,Policies,Invoices`);
+const hsFetchClient = (no = TEST_CLIENT) => hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Details,People,Contacts,Policies,Invoices`);
 const hsAllClientIds = () => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=2000-01-01T00:00:00Z`);
+const hsChangedSince = (iso) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=${encodeURIComponent(iso)}`);
 const hsClientBatch = (ids) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&include=Details,People,Contacts,Policies`, { method: 'POST', body: JSON.stringify({ clientNumbers: ids }) });
 
 const pick = (o, ...keys) => { for (const k of keys) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 const dateOnly = v => { const s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null; };
 
-export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 'no-store');
-  const email = await verifyGoogle(req.headers['x-id-token']);
-  if (!email) return res.status(401).json({ ok: false, error: 'Not authorized' });
-
-  /* ============ Shared: map + upsert one HawkSoft client object ============ */
-  async function upsertHsClient(s, c) {
-    const cn = Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id'));
-    if (!isFinite(cn)) return { ok: false, error: 'no client number' };
-    const people = c.people || c.People || [];
-    const p0 = people[0] || {};
-    const details = c.details || c.Details || {};
-    const clientRow = {
+/* ============ Shared: map + upsert one HawkSoft client object ============ */
+async function upsertHsClient(s, c) {
+  const cn = Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id'));
+  if (!isFinite(cn)) return { ok: false, error: 'no client number' };
+  const people = c.people || c.People || [];
+  const p0 = people[0] || {};
+  const details = c.details || c.Details || {};
+  const clientRow = {
+    client_no: cn,
+    kind: p0.businessName ? 'business' : 'person',
+    first_name: pick(p0, 'firstName', 'FirstName'),
+    last_name: pick(p0, 'lastName', 'LastName'),
+    business_name: pick(p0, 'businessName', 'BusinessName') || pick(c, 'businessName', 'name'),
+    email: pick(p0, 'email', 'Email'),
+    phone: pick(p0, 'phone', 'cellPhone', 'homePhone'),
+    address1: pick(details, 'address1', 'Address1') || pick(c, 'address1'),
+    city: pick(details, 'city', 'City') || pick(c, 'city'),
+    state: pick(details, 'state', 'State') || pick(c, 'state'),
+    zip: pick(details, 'zip', 'Zip', 'postalCode') || pick(c, 'zip'),
+    branch: pick(details, 'officeName', 'office') || pick(c, 'officeName', 'office'),
+    status: pick(details, 'status') || pick(c, 'status') || 'Active',
+    extras: { hawksoft_snapshot_at: new Date().toISOString() },
+    updated_at: new Date().toISOString(),
+  };
+  const up1 = await sbUpsert(s, 'clients', [clientRow], 'client_no');
+  if (!up1.ok) return { ok: false, error: 'clients upsert failed', detail: up1.body };
+  const ourClient = up1.body && up1.body[0];
+  const hsPols = c.policies || c.Policies || [];
+  let polCount = 0;
+  for (const p of hsPols) {
+    const guid = pick(p, 'id', 'policyId', 'guid', 'Id', 'PolicyId');
+    const row = {
+      client_id: ourClient.id,
       client_no: cn,
-      kind: p0.businessName ? 'business' : 'person',
-      first_name: pick(p0, 'firstName', 'FirstName'),
-      last_name: pick(p0, 'lastName', 'LastName'),
-      business_name: pick(p0, 'businessName', 'BusinessName') || pick(c, 'businessName', 'name'),
-      email: pick(p0, 'email', 'Email'),
-      phone: pick(p0, 'phone', 'cellPhone', 'homePhone'),
-      address1: pick(details, 'address1', 'Address1') || pick(c, 'address1'),
-      city: pick(details, 'city', 'City') || pick(c, 'city'),
-      state: pick(details, 'state', 'State') || pick(c, 'state'),
-      zip: pick(details, 'zip', 'Zip', 'postalCode') || pick(c, 'zip'),
-      branch: pick(details, 'officeName', 'office') || pick(c, 'officeName', 'office'),
-      status: pick(details, 'status') || pick(c, 'status') || 'Active',
-      extras: { hawksoft_snapshot_at: new Date().toISOString() },
+      hs_policy_guid: guid ? String(guid) : null,
+      policy_number: pick(p, 'policyNumber', 'number', 'PolicyNumber'),
+      lob: pick(p, 'lob', 'lineOfBusiness', 'LOB'),
+      carrier: pick(p, 'carrier', 'carrierName', 'company', 'Carrier'),
+      effective_date: dateOnly(pick(p, 'effectiveDate', 'EffectiveDate')),
+      expiration_date: dateOnly(pick(p, 'expirationDate', 'ExpirationDate')),
+      premium: Number(pick(p, 'premium', 'Premium')) || null,
+      status: pick(p, 'status', 'Status') || 'Active',
+      billing: pick(p, 'billing', 'billType', 'BillingType'),
+      carrier_extras: p,
       updated_at: new Date().toISOString(),
     };
-    const up1 = await sbUpsert(s, 'clients', [clientRow], 'client_no');
-    if (!up1.ok) return { ok: false, error: 'clients upsert failed', detail: up1.body };
-    const ourClient = up1.body && up1.body[0];
-    const hsPols = c.policies || c.Policies || [];
-    let polCount = 0;
-    for (const p of hsPols) {
-      const guid = pick(p, 'id', 'policyId', 'guid', 'Id', 'PolicyId');
-      const row = {
-        client_id: ourClient.id,
-        client_no: cn,
-        hs_policy_guid: guid ? String(guid) : null,
-        policy_number: pick(p, 'policyNumber', 'number', 'PolicyNumber'),
-        lob: pick(p, 'lob', 'lineOfBusiness', 'LOB'),
-        carrier: pick(p, 'carrier', 'carrierName', 'company', 'Carrier'),
-        effective_date: dateOnly(pick(p, 'effectiveDate', 'EffectiveDate')),
-        expiration_date: dateOnly(pick(p, 'expirationDate', 'ExpirationDate')),
-        premium: Number(pick(p, 'premium', 'Premium')) || null,
-        status: pick(p, 'status', 'Status') || 'Active',
-        billing: pick(p, 'billing', 'billType', 'BillingType'),
-        carrier_extras: p,
-        updated_at: new Date().toISOString(),
-      };
-      const up = await sbUpsert(s, 'policies', [row], 'hs_policy_guid');
-      if (up.ok) polCount++;
-    }
-    return { ok: true, client_no: cn, policies: polCount };
+    const up = await sbUpsert(s, 'policies', [row], 'hs_policy_guid');
+    if (up.ok) polCount++;
   }
+  return { ok: true, client_no: cn, policies: polCount };
+}
+
+
+async function runDeltaSync(s, actor) {
+  const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
+  const last = (st.rows && st.rows[0] && st.rows[0].last_sync) || '2026-07-23T00:00:00Z';
+  // 30-min safety overlap so nothing slips between runs
+  const asOf = new Date(new Date(last).getTime() - 30 * 60 * 1000).toISOString();
+  const startedAt = new Date().toISOString();
+
+  const hs = await hsChangedSince(asOf);
+  if (hs.error || hs.status !== 200) return { ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status) };
+  const ids = Array.isArray(hs.body) ? hs.body.map(Number).filter(isFinite) : [];
+
+  let clients = 0, pols = 0;
+  for (let i = 0; i < ids.length; i += 25) {
+    const batch = ids.slice(i, i + 25);
+    const b = await hsClientBatch(batch);
+    if (b.error || b.status !== 200) continue;
+    for (const c of (Array.isArray(b.body) ? b.body : [])) {
+      const r = await upsertHsClient(s, c);
+      if (r.ok) { clients++; pols += r.policies; }
+    }
+  }
+
+  await fetch(`${s.base}/rest/v1/sync_state?key=eq.hawksoft_clients`, {
+    method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+    body: JSON.stringify({ last_sync: startedAt, last_count: clients, note: 'delta sync', updated_at: startedAt }),
+  });
+  await sbInsert(s, 'events', [{ actor, kind: 'sync.completed', source: 'hawksoft_sync',
+    payload: { changed_ids: ids.length, clients_updated: clients, policies_updated: pols, as_of: asOf } }]);
+  return { ok: true, changed: ids.length, clients, policies: pols, as_of: asOf };
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+
+  /* ---- Cron entry (Vercel Cron): /api/platform?view=cron_sync ---- */
+  if (req.method === 'GET' && String(req.query.view || '') === 'cron_sync') {
+    const secret = process.env.CRON_SECRET || '';
+    const authed = secret
+      ? req.headers.authorization === `Bearer ${secret}`
+      : !!req.headers['x-vercel-cron'];
+    if (!authed) return res.status(401).json({ ok: false, error: 'Not authorized' });
+    const s = sb();
+    if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
+    const out = await runDeltaSync(s, 'system:cron');
+    return res.status(out.ok ? 200 : 502).json(out);
+  }
+
+  const email = await verifyGoogle(req.headers['x-id-token']);
+  if (!email) return res.status(401).json({ ok: false, error: 'Not authorized' });
 
   /* ============ POST actions ============ */
   if (req.method === 'POST') {
@@ -175,6 +222,11 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, email, upserted: ok, policies: pols, requested: ids.length, failed_count: failed.length });
     }
 
+    if (action === 'delta_sync') {
+      const out = await runDeltaSync(s, email);
+      return res.status(out.ok ? 200 : 502).json({ ...out, email });
+    }
+
     return res.status(400).json({ ok: false, error: 'Unknown action' });
   }
 
@@ -208,13 +260,27 @@ export default async function handler(req, res) {
   if (view === 'our_client') {
     const no = parseInt(String(req.query.no || ''), 10);
     if (!isFinite(no)) return res.status(400).json({ ok: false, error: 'no= required' });
+    // LIVE: pull this client fresh from HawkSoft before rendering
+    let live = false;
+    const fresh = await hsFetchClient(no);
+    if (!fresh.error && fresh.status === 200 && fresh.body) {
+      const up = await upsertHsClient(s, fresh.body);
+      live = !!up.ok;
+    }
     const [cl, po, led, ev] = await Promise.all([
       sbGet(s, `clients?client_no=eq.${no}&select=*`),
       sbGet(s, `policies?client_no=eq.${no}&select=*&order=effective_date.desc`),
       sbGet(s, `bridge_ledger?client_id=eq.${no}&select=*&order=ts.desc&limit=50`),
       sbGet(s, `events?client_no=eq.${no}&select=*&order=ts.desc&limit=50`),
     ]);
-    return res.status(200).json({ ok: true, email, client: (cl.rows || [])[0] || null, policies: po.rows || [], payments: led.rows || [], events: ev.rows || [] });
+    return res.status(200).json({ ok: true, email, live, refreshed_at: new Date().toISOString(), client: (cl.rows || [])[0] || null, policies: po.rows || [], payments: led.rows || [], events: ev.rows || [] });
+  }
+
+  /* ---- Sync status ---- */
+  if (view === 'sync_status') {
+    const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
+    const ev = await sbGet(s, "events?kind=eq.sync.completed&select=ts,payload&order=ts.desc&limit=5");
+    return res.status(200).json({ ok: true, email, state: (st.rows || [])[0] || null, recent: ev.rows || [] });
   }
 
   /* ---- Ledger ---- */

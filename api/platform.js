@@ -188,6 +188,41 @@ async function runDeltaSync(s, actor) {
   return { ok: true, changed: ids.length, clients, policies: pols, as_of: asOf };
 }
 
+async function sbPatch(s, path, obj) {
+  return fetch(`${s.base}/rest/v1/${path}`, { method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' }, body: JSON.stringify(obj) });
+}
+// Process up to CHUNK ids of a resync job, then return. Cron calls this repeatedly until done.
+async function stepResyncJob(s, job, budgetMs) {
+  const CHUNK = 25;
+  const ids = Array.isArray(job.ids) ? job.ids : [];
+  let cursor = job.cursor || 0;
+  let cU = job.clients_updated || 0, pU = job.policies_updated || 0;
+  const deadline = Date.now() + (budgetMs || 45000);
+  while (cursor < ids.length && Date.now() < deadline) {
+    const batch = ids.slice(cursor, cursor + CHUNK);
+    const b = await hsClientBatch(batch);
+    if (!b.error && b.status === 200) {
+      for (const c of (Array.isArray(b.body) ? b.body : [])) {
+        const r = await upsertHsClient(s, c);
+        if (r.ok) { cU++; pU += r.policies; }
+      }
+    }
+    cursor += batch.length;
+    await sbPatch(s, `sync_jobs?id=eq.${job.id}`, { cursor, processed: cursor, clients_updated: cU, policies_updated: pU, status: 'running', updated_at: new Date().toISOString() });
+  }
+  const done = cursor >= ids.length;
+  await sbPatch(s, `sync_jobs?id=eq.${job.id}`, { cursor, processed: cursor, clients_updated: cU, policies_updated: pU, status: done ? 'done' : 'running', updated_at: new Date().toISOString() });
+  if (done) {
+    await sbPatch(s, `sync_state?key=eq.hawksoft_clients`, { last_sync: new Date().toISOString(), last_count: cU, note: 'full resync (server job)', updated_at: new Date().toISOString() });
+    await sbInsert(s, 'events', [{ actor: job.started_by || 'system:job', kind: 'resync.completed', source: 'hawksoft_sync', payload: { clients: cU, policies: pU, total: ids.length } }]);
+  }
+  return { done, cursor, total: ids.length, clients: cU, policies: pU };
+}
+async function getActiveJob(s) {
+  const r = await sbGet(s, "sync_jobs?status=in.(pending,running)&order=created_at.desc&limit=1");
+  return (r.rows || [])[0] || null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -200,6 +235,8 @@ export default async function handler(req, res) {
     if (!authed) return res.status(401).json({ ok: false, error: 'Not authorized' });
     const s = sb();
     if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
+    const job = await getActiveJob(s);
+    if (job) { const j = await stepResyncJob(s, job, 50000); return res.status(200).json({ ok: true, mode: 'resync_job', ...j }); }
     const out = await runDeltaSync(s, 'system:cron');
     return res.status(out.ok ? 200 : 502).json(out);
   }
@@ -256,6 +293,27 @@ export default async function handler(req, res) {
       }
       await sbInsert(s, 'events', [{ actor: email, kind: 'clients.bulk_seeded', source: 'hawksoft_sync', payload: { requested: ids.length, upserted: ok, policies: pols } }]);
       return res.status(200).json({ ok: true, email, upserted: ok, policies: pols, requested: ids.length, failed_count: failed.length });
+    }
+
+    if (action === 'start_resync') {
+      const existing = await getActiveJob(s);
+      if (existing) return res.status(200).json({ ok: true, already: true, job: existing });
+      const hs = await hsAllClientIds();
+      if (hs.error || hs.status !== 200) return res.status(502).json({ ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status) });
+      const ids = Array.isArray(hs.body) ? hs.body.map(Number).filter(isFinite) : [];
+      const ins = await fetch(`${s.base}/rest/v1/sync_jobs`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
+        body: JSON.stringify([{ kind: 'resync_all', status: 'running', total: ids.length, ids, started_by: email }]) });
+      const jrow = (await ins.json().catch(() => []))[0];
+      // do one step immediately so progress starts
+      const step = await stepResyncJob(s, jrow, 20000);
+      return res.status(200).json({ ok: true, started: true, total: ids.length, ...step });
+    }
+
+    if (action === 'step_resync') {
+      const job = await getActiveJob(s);
+      if (!job) return res.status(200).json({ ok: true, done: true, no_job: true });
+      const step = await stepResyncJob(s, job, 45000);
+      return res.status(200).json({ ok: true, ...step });
     }
 
     if (action === 'delta_sync') {
@@ -340,6 +398,13 @@ export default async function handler(req, res) {
       sbGet(s, `events?client_no=eq.${no}&select=*&order=ts.desc&limit=50`),
     ]);
     return res.status(200).json({ ok: true, email, live, refreshed_at: new Date().toISOString(), client: (cl.rows || [])[0] || null, policies: po.rows || [], payments: led.rows || [], events: ev.rows || [] });
+  }
+
+  /* ---- Resync job status ---- */
+  if (view === 'job_status') {
+    const job = await getActiveJob(s);
+    const last = await sbGet(s, "sync_jobs?order=created_at.desc&limit=1");
+    return res.status(200).json({ ok: true, email, job: job || (last.rows || [])[0] || null });
   }
 
   /* ---- Sync status ---- */

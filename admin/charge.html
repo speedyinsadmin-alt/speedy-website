@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.26 · cap removed</div>
+    <div class="ver">v2.27 · confirmation emails</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -480,7 +480,7 @@ async function chargeLive(){
     out.textContent = 'Charging card\u2026';
     const j = await post({action:'charge_live', clientId: confirmed.clientNumber,
       clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
-      source: tk.token, policyNumber: effPolicy()});
+      source: tk.token, policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
     out.style.display='none'; out.textContent='';
     const rb = document.getElementById('resultbox');
     if(j.ok){
@@ -494,7 +494,7 @@ async function chargeLive(){
         <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||j.txnId||'')}</b></div>
         ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
-        <div class="foot">Receipt, branded PDF and log note filed to the HawkSoft client record. Signing out\u2026</div>
+        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to the HawkSoft client record. Signing out\u2026</div>
       </div>`;
       rb.scrollIntoView({behavior:'smooth'});
       setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
@@ -530,7 +530,7 @@ async function chargeCash(){
     rb.innerHTML=''; btn.disabled = true; out.style.display='block'; out.textContent='Recording cash payment\u2026';
   try{
     const j = await post({action:'charge_cash', clientId: confirmed.clientNumber, clientName: confirmed.name || '',
-      amount: amt, purpose: purposeText(), policyNumber: effPolicy()});
+      amount: amt, purpose: purposeText(), policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
     out.style.display='none';
     if(j.ok){
       rb.innerHTML = `<div class="result good"><h3>\u2713 Cash payment recorded</h3>
@@ -539,7 +539,7 @@ async function chargeCash(){
         <div class="kv"><span>For</span><b>${esc(purposeText())}</b></div>
         <div class="kv"><span>Reference</span><b>${esc(j.ref||'')}</b></div>
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
-        <div class="foot">Receipt, branded PDF and log note filed to HawkSoft. Signing out\u2026</div></div>`;
+        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to HawkSoft. Signing out\u2026</div></div>`;
       rb.scrollIntoView({behavior:'smooth'});
       setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
     } else {
@@ -558,7 +558,7 @@ async function createLink(){
     out.style.display='none'; btn.disabled = true; lo.innerHTML='<div class="hint">Creating link\u2026</div>';
   try{
     const j = await post({action:'paylink_create', clientId: confirmed.clientNumber, clientName: confirmed.name || '',
-      amount: amt, purpose: purposeText(), policyNumber: effPolicy()});
+      amount: amt, purpose: purposeText(), policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
     btn.disabled = false;
     if(!j.ok){ lo.innerHTML = '<div class="result bad"><div class="foot" style="font-size:14px;opacity:1">'+esc(j.error||'Failed')+'</div></div>'; return; }
     const first = ((confirmed.name||'').split(',').pop()||'').trim().split(' ')[0] || '';
@@ -657,7 +657,7 @@ async function chargeTerminal(){
   try{
     const j = await post({action:'terminal_charge', clientId: confirmed.clientNumber,
       clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
-      policyNumber: effPolicy(), branchId: document.getElementById('branchSel').value});
+      policyNumber: effPolicy(), branchId: document.getElementById('branchSel').value, clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
     out.style.display='none';
     if(j.ok){
       const ch = (j.results && j.results.charge) || {};
@@ -669,7 +669,7 @@ async function chargeTerminal(){
         <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||'')}</b></div>
         ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
-        <div class="foot">Receipt and log filed to HawkSoft. Signing out\u2026</div></div>`;
+        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt and log filed to HawkSoft. Signing out\u2026</div></div>`;
       rb.scrollIntoView({behavior:'smooth'});
       setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
     } else {

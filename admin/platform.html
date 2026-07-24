@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v3.2 -->
+<!-- build v3.3 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.2</small></h1>
+      <h1>Platform Console <small id="ver">v3.3</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -352,8 +352,12 @@ async function renderOurClient(el, no, _bg) {
   let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← All clients</span>'
     + (r.live ? '<span class="pill g" style="float:right">● live from HawkSoft</span>' : '<span class="pill b" style="float:right;cursor:pointer" onclick="refreshClient(' + no + ')">↻ refresh from HawkSoft</span>');
   h += '<h2 style="margin:0 0 2px">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
+  const clientActive = String(c.status||'').toLowerCase()==='active';
+  const lapsed = clientActive && insurance.length > 0 && inforce === 0;
+  const prospect = insurance.length === 0 && dmv.length === 0;
   h += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 4px">'
-    + '<span class="pill ' + (String(c.status).toLowerCase()==='active'?'g':'a') + '">' + esc(c.status || '—') + '</span>'
+    + '<span class="pill ' + (clientActive?'g':'a') + '">' + esc(c.status || '—') + '</span>'
+    + (lapsed ? '<span class="pill a">⚠ no in-force policies</span>' : '')
     + '<span class="muted">' + esc(c.branch || 'No branch') + '</span>'
     + (c.phone ? '<a href="tel:' + esc(c.phone) + '" style="color:var(--blue);text-decoration:none">' + esc(c.phone) + '</a>' : '')
     + (c.email ? '<a href="mailto:' + esc(c.email) + '" style="color:var(--blue);text-decoration:none">' + esc(c.email) + '</a>' : '')

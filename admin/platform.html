@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v2.9 -->
+<!-- build v3.0 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v2.9</small></h1>
+      <h1>Platform Console <small id="ver">v3.0</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -146,13 +146,13 @@ function clientTable(list, counts) {
   return '<table><tr><th>#</th><th>Name</th><th class="hidemob">Branch</th><th>Status</th><th>Policies</th></tr>'
     + list.map(c => {
       const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
-      const pc = (counts || {})[c.client_no] || { total: 0, active: 0 };
+      const pc = (counts || {})[c.client_no] || { total: 0, inforce: 0, dmv: 0 };
       return '<tr style="cursor:pointer" onclick="openClient(' + c.client_no + ')">'
         + '<td class="amount">' + esc(c.client_no) + '</td>'
         + '<td><b>' + esc(name) + '</b></td>'
         + '<td class="hidemob">' + esc(c.branch || '—') + '</td>'
         + '<td><span class="pill ' + (String(c.status).toLowerCase() === 'active' ? 'g' : 'a') + '">' + esc(c.status) + '</span></td>'
-        + '<td>' + pc.active + ' active / ' + pc.total + '</td>'
+        + '<td>' + pc.inforce + ' in-force / ' + pc.total + (pc.dmv ? ' · ' + pc.dmv + ' DMV' : '') + '</td>'
         + '</tr>';
     }).join('') + '</table>';
 }
@@ -256,54 +256,115 @@ async function seedAll(force) {
   OPEN_CLIENT = null; render();
 }
 
+const SECTION_STATE = {}; // remembers expand/collapse across clients
+function section(key, title, count, bodyHtml, opts) {
+  opts = opts || {};
+  const empty = !count;
+  // default: insurance open, others collapsed; empty auto-collapsed; remember overrides
+  let open = SECTION_STATE[key];
+  if (open === undefined) open = opts.defaultOpen && !empty;
+  const chevron = open ? '▾' : '▸';
+  const dim = empty ? 'opacity:.5' : '';
+  return '<div class="sec" style="' + dim + '">'
+    + '<div class="sechead" onclick="toggleSection(\'' + key + '\')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 0;border-top:1px solid var(--line)">'
+    + '<span style="color:var(--mute);width:14px">' + chevron + '</span>'
+    + '<b style="font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--mute)">' + title + '</b>'
+    + '<span class="pill b" style="margin-left:2px">' + count + '</span>'
+    + (opts.note ? '<span class="muted" style="font-size:12px;margin-left:4px">' + opts.note + '</span>' : '')
+    + '</div>'
+    + '<div class="secbody" style="' + (open ? '' : 'display:none') + ';padding-bottom:8px">' + (empty ? '<div class="muted" style="padding:4px 0 12px">' + (opts.emptyText || 'Nothing here.') + '</div>' : bodyHtml) + '</div>'
+    + '</div>';
+}
+function toggleSection(key) {
+  const cur = SECTION_STATE[key];
+  SECTION_STATE[key] = (cur === undefined) ? false : !cur;
+  // re-render current client without refetch flicker: just toggle DOM
+  render();
+}
+
+function policyRows(list, isDmv) {
+  const today = new Date().toISOString().slice(0,10);
+  const head = isDmv
+    ? '<table><tr><th>Service #</th><th>Term</th><th class="hidemob">Period</th><th>Renews</th><th>Status</th></tr>'
+    : '<table><tr><th>Policy #</th><th>Carrier</th><th class="hidemob">Term</th><th>Premium</th><th>In force?</th><th>Status</th></tr>';
+  const rows = list.map(p => {
+    const st = String(p.status || '').toLowerCase();
+    const live = p.expiration_date && p.expiration_date >= today && !['cancelled','canceled','expired'].includes(st);
+    if (isDmv) {
+      return '<tr>'
+        + '<td>' + esc(p.policy_number || '—') + '</td>'
+        + '<td>' + (p.renewal_months ? p.renewal_months + ' mo' : '—') + '</td>'
+        + '<td class="hidemob">' + esc(p.effective_date || '') + ' → ' + esc(p.expiration_date || '') + '</td>'
+        + '<td>' + (live ? '<span class="pill g">current</span>' : '<span class="pill a">due</span>') + '</td>'
+        + '<td>' + esc(p.status || '—') + '</td>'
+        + '</tr>';
+    }
+    return '<tr>'
+      + '<td>' + esc(p.policy_number || '—') + '</td>'
+      + '<td>' + esc(p.carrier || '—') + '</td>'
+      + '<td class="hidemob">' + esc(p.effective_date || '') + ' → ' + esc(p.expiration_date || '') + '</td>'
+      + '<td class="amount">' + money(p.premium) + '</td>'
+      + '<td>' + (live ? '<span class="pill g">yes</span>' : '<span class="muted">no</span>') + '</td>'
+      + '<td>' + esc(p.status || '—') + '</td>'
+      + '</tr>';
+  }).join('');
+  return head + rows + '</table>';
+}
+
 async function renderOurClient(el, no) {
   const r = await api('our_client&no=' + no);
   if (!r || !r.ok || !r.client) { el.innerHTML = '<div class="err">Client load failed.</div>'; return; }
   const c = r.client;
   const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
+  const today = new Date().toISOString().slice(0,10);
+
+  const all = r.policies || [];
+  const insurance = all.filter(p => (p.record_type || 'insurance') === 'insurance');
+  const dmv = all.filter(p => p.record_type === 'dmv_service');
+  const other = all.filter(p => p.record_type === 'unknown');
+  const inforce = insurance.filter(p => { const st=String(p.status||'').toLowerCase(); return p.expiration_date && p.expiration_date>=today && !['cancelled','canceled','expired'].includes(st); }).length;
+
+  // ---- Summary bar (always visible) ----
   let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← All clients</span>'
     + (r.live ? '<span class="pill g" style="float:right">● live from HawkSoft</span>' : '<span class="pill a" style="float:right">cached copy</span>');
-  h += '<h2 style="margin-top:0">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
-  h += '<div class="kv">'
-    + '<b>Status</b><span><span class="pill ' + (String(c.status).toLowerCase()==='active'?'g':'a') + '">' + esc(c.status) + '</span></span>'
-    + '<b>Branch</b><span>' + esc(c.branch || '—') + '</span>'
-    + '<b>Phone</b><span>' + esc(c.phone || '—') + '</span>'
-    + '<b>Email</b><span>' + esc(c.email || '—') + '</span>'
-    + '<b>Address</b><span>' + esc([c.address1, c.city, c.state, c.zip].filter(Boolean).join(', ') || '—') + '</span>'
+  h += '<h2 style="margin:0 0 2px">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 4px">'
+    + '<span class="pill ' + (String(c.status).toLowerCase()==='active'?'g':'a') + '">' + esc(c.status || '—') + '</span>'
+    + '<span class="muted">' + esc(c.branch || 'No branch') + '</span>'
+    + (c.phone ? '<a href="tel:' + esc(c.phone) + '" style="color:var(--blue);text-decoration:none">' + esc(c.phone) + '</a>' : '')
+    + (c.email ? '<a href="mailto:' + esc(c.email) + '" style="color:var(--blue);text-decoration:none">' + esc(c.email) + '</a>' : '')
+    + '<span class="pill b">' + inforce + ' in-force / ' + insurance.length + ' policies</span>'
+    + (dmv.length ? '<span class="pill a">' + dmv.length + ' DMV</span>' : '')
     + '</div>';
+  h += '<div class="muted" style="font-size:13px;margin-bottom:6px">' + esc([c.address1, c.city, c.state, c.zip].filter(Boolean).join(', ') || 'No address on file') + '</div>';
 
-  h += '<h2 style="margin-top:18px">Policies (' + r.policies.length + ')</h2>';
-  h += r.policies.length ? '<table><tr><th>Policy #</th><th>LOB</th><th>Carrier</th><th class="hidemob">Term</th><th>Premium</th><th>Status</th></tr>'
-    + r.policies.map(p => '<tr>'
-      + '<td>' + esc(p.policy_number || '—') + '</td>'
-      + '<td><span class="pill b">' + esc(p.lob || '—') + '</span></td>'
-      + '<td>' + esc(p.carrier || '—') + '</td>'
-      + '<td class="hidemob">' + esc(p.effective_date || '') + ' → ' + esc(p.expiration_date || '') + '</td>'
-      + '<td class="amount">' + money(p.premium) + '</td>'
-      + '<td>' + esc(p.status || '—') + '</td>'
-      + '</tr>').join('') + '</table>'
-    : '<div class="muted">No policies. Sync from HawkSoft or add via intake.</div>';
+  // ---- Collapsible sections ----
+  h += section('ins_' + no, 'Insurance policies', insurance.length, policyRows(insurance, false),
+    { defaultOpen: true, emptyText: 'No insurance policies.' });
+  h += section('dmv_' + no, 'DMV / Services', dmv.length, policyRows(dmv, true),
+    { defaultOpen: false, emptyText: 'No DMV services.' });
+  if (other.length) h += section('unk_' + no, 'Unclassified', other.length, policyRows(other, false),
+    { defaultOpen: false, note: 'needs review', emptyText: '' });
 
-  h += '<h2 style="margin-top:18px">Payments (' + r.payments.length + ') <span class="muted" style="font-weight:400;font-size:12px;text-transform:none;letter-spacing:0">— via Speedy platform</span></h2>';
-  h += r.payments.length ? '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th>Ref</th></tr>'
-    + r.payments.map(p => '<tr>'
+  const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th>Ref</th></tr>'
+    + (r.payments||[]).map(p => '<tr>'
       + '<td>' + esc(String(p.ts).replace('T',' ').slice(0,16)) + '</td>'
       + '<td><span class="pill ' + (String(p.kind).includes('charge') ? 'g' : 'b') + '">' + esc(p.kind) + '</span></td>'
       + '<td class="amount">' + money(p.amount) + '</td>'
       + '<td class="hidemob">' + esc(p.purpose || '—') + '</td>'
-      + '<td>' + esc(p.ref || '—') + '</td>'
-      + '</tr>').join('') + '</table>'
-    : '<div class="muted">No payments recorded.</div>';
+      + '<td>' + esc(p.ref || '—') + '</td></tr>').join('') + '</table>';
+  h += section('pay_' + no, 'Payments', (r.payments||[]).length, payBody,
+    { defaultOpen: false, note: 'via Speedy platform', emptyText: 'No payments recorded yet.' });
 
-  h += '<h2 style="margin-top:18px">Activity (' + r.events.length + ')</h2>';
-  h += r.events.length ? '<table><tr><th>When</th><th>Event</th><th class="hidemob">By</th><th>Source</th></tr>'
-    + r.events.map(e => '<tr>'
+  const actBody = '<table><tr><th>When</th><th>Event</th><th class="hidemob">By</th><th>Source</th></tr>'
+    + (r.events||[]).map(e => '<tr>'
       + '<td>' + esc(String(e.ts).replace('T',' ').slice(0,16)) + '</td>'
       + '<td><span class="pill a">' + esc(e.kind) + '</span></td>'
       + '<td class="hidemob">' + esc(e.actor || '—') + '</td>'
-      + '<td>' + esc(e.source || '—') + '</td>'
-      + '</tr>').join('') + '</table>'
-    : '<div class="muted">No activity yet.</div>';
+      + '<td>' + esc(e.source || '—') + '</td></tr>').join('') + '</table>';
+  h += section('act_' + no, 'Activity', (r.events||[]).length, actBody,
+    { defaultOpen: false, emptyText: 'No activity yet.' });
+
   el.innerHTML = h;
 }
 

@@ -240,14 +240,6 @@ export default async function handler(req, res) {
   const view = String(req.query.view || '');
 
   /* ---- TEMP: receipts discovery ---- */
-  if (view === 'rcpt') {
-    const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
-    const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Invoices,Details`);
-    const b = r.body || {};
-    const invs = b.invoices || b.Invoices || [];
-    return res.status(200).json({ ok: true, email, count: Array.isArray(invs)?invs.length:0, sample_invoice: Array.isArray(invs)&&invs[0]?invs[0]:invs });
-  }
-
   /* ---- HawkSoft direct: ZZTEST raw ---- */
   if (view === 'client') {
     const hs = await hsFetchClient();

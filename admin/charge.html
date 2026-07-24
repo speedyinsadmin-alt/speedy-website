@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.25 · terminal charging</div>
+    <div class="ver">v2.26 · cap removed</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -467,8 +467,7 @@ async function chargeLive(){
   const btn = document.getElementById('liveBtn');
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.textContent = 'Verify and confirm the client first.'; return; }
-  if(parseFloat(amt) > 1000){ out.textContent = 'Charges are capped at $1,000.00 \u2014 for larger amounts split the payment or call Saif.'; return; }
-  document.getElementById('resultbox').innerHTML = '';
+    document.getElementById('resultbox').innerHTML = '';
   if(!cloverSDK){ out.textContent = 'Card fields not ready — tap the client confirm again or refresh.'; return; }
   btn.disabled = true;
   out.textContent = 'Securing card with Clover\u2026';
@@ -528,8 +527,7 @@ async function chargeCash(){
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm the client first.'; return; }
   if(!parseFloat(amt)){ out.style.display='block'; out.textContent='Enter the amount first.'; return; }
-  if(parseFloat(amt) > 1000){ out.style.display='block'; out.textContent='Capped at $1,000.00.'; return; }
-  rb.innerHTML=''; btn.disabled = true; out.style.display='block'; out.textContent='Recording cash payment\u2026';
+    rb.innerHTML=''; btn.disabled = true; out.style.display='block'; out.textContent='Recording cash payment\u2026';
   try{
     const j = await post({action:'charge_cash', clientId: confirmed.clientNumber, clientName: confirmed.name || '',
       amount: amt, purpose: purposeText(), policyNumber: effPolicy()});
@@ -557,8 +555,7 @@ async function createLink(){
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm the client first.'; return; }
   if(!parseFloat(amt)){ out.style.display='block'; out.textContent='Enter the amount first \u2014 the link locks it in.'; return; }
-  if(parseFloat(amt) > 1000){ out.style.display='block'; out.textContent='Capped at $1,000.00.'; return; }
-  out.style.display='none'; btn.disabled = true; lo.innerHTML='<div class="hint">Creating link\u2026</div>';
+    out.style.display='none'; btn.disabled = true; lo.innerHTML='<div class="hint">Creating link\u2026</div>';
   try{
     const j = await post({action:'paylink_create', clientId: confirmed.clientNumber, clientName: confirmed.name || '',
       amount: amt, purpose: purposeText(), policyNumber: effPolicy()});
@@ -655,8 +652,7 @@ async function chargeTerminal(){
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm the client first.'; return; }
   if(!parseFloat(amt)){ out.style.display='block'; out.textContent='Enter the amount first.'; return; }
-  if(parseFloat(amt) > 1000){ out.style.display='block'; out.textContent='Capped at $1,000.00.'; return; }
-  rb.innerHTML=''; btn.disabled = true; out.style.display='block';
+    rb.innerHTML=''; btn.disabled = true; out.style.display='block';
   out.textContent = 'Sent to terminal \u2014 waiting for the customer\u2019s card\u2026';
   try{
     const j = await post({action:'terminal_charge', clientId: confirmed.clientNumber,

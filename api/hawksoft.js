@@ -95,6 +95,35 @@ const emailFrom = (body) => {
   } catch { return ''; }
 };
 
+/* Decline alert to the responsible agent — so failed payments get a follow-up call */
+async function sendDeclineAlert(o) {
+  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass || !o.to) return 'not sent';
+  try {
+    const nodemailer = (await import('nodemailer')).default;
+    const t = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } });
+    const amt = `$${Number(o.amount).toFixed(2)}`;
+    await t.sendMail({
+      from: `"Speedy Payment Bridge" <${user}>`, to: o.to,
+      subject: `⚠ Payment DECLINED — ${amt} — client #${o.clientId}`,
+      html: `<table width="560" cellpadding="0" cellspacing="0" align="center" style="background:#fff;font-family:Arial,sans-serif;color:#222;max-width:560px;width:100%">
+        <tr><td style="background:#D42B2B;padding:12px 24px;text-align:center;color:#fff;font-size:17px;font-weight:bold">Payment Declined — Follow Up Needed</td></tr>
+        <tr><td style="padding:20px 24px">
+          <table width="100%" cellpadding="8" cellspacing="0" style="border:1px solid #e0e0e0;font-size:14px">
+            <tr><td style="color:#555;font-weight:bold;width:40%;border-bottom:1px solid #eee">Amount</td><td style="border-bottom:1px solid #eee"><b>${amt}</b></td></tr>
+            <tr style="background:#f7f7f7"><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">Client</td><td style="border-bottom:1px solid #eee">${o.clientName || ''} · #${o.clientId}</td></tr>
+            <tr><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">For</td><td style="border-bottom:1px solid #eee">${o.purpose || ''}</td></tr>
+            <tr style="background:#f7f7f7"><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">Channel</td><td style="border-bottom:1px solid #eee">${o.channel || ''}</td></tr>
+            <tr><td style="color:#555;font-weight:bold">Decline reason</td><td><b style="color:#D42B2B">${o.reason || 'not provided by processor'}</b></td></tr>
+          </table>
+          <p style="font-size:13px;color:#555;line-height:1.6;margin:14px 0 0">The card was NOT charged. Consider calling the client to retry with another card or send a new payment link.</p>
+        </td></tr></table>`,
+      text: `Payment DECLINED: ${amt}, client #${o.clientId} (${o.clientName || ''}), ${o.purpose || ''}. Reason: ${o.reason || 'not provided'}. Channel: ${o.channel || ''}. Card was not charged.`,
+    });
+    return `alerted ${o.to}`;
+  } catch (e) { return `alert failed: ${String(e).slice(0, 60)}`; }
+}
+
 /* Signed pay-link tokens (HMAC-SHA256, keyed on ADMIN_API_KEY) */
 const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const makeToken = (obj, key) => { const pl = b64u(JSON.stringify(obj)); return pl + '.' + b64u(createHmac('sha256', key).update(pl).digest()).slice(0, 22); };
@@ -461,8 +490,13 @@ export default async function handler(req, res) {
       let cbody = null; try { cbody = ctext ? JSON.parse(ctext) : null; } catch { cbody = ctext; }
       const paid = cr.status === 200 && cbody && (cbody.paid === true || cbody.status === 'succeeded');
       if (!paid) {
-        const msg = (cbody && (cbody.message || (cbody.error && (cbody.error.message || cbody.error.code)))) || `Clover returned HTTP ${cr.status}`;
-        await audit({ action: 'charge_live_declined', who, clientId, amount: total, purpose, cloverStatus: cr.status, clover: cbody });
+        const err = (cbody && cbody.error) || {};
+        const msg = err.message || err.code || (cbody && cbody.message)
+          || (cbody && cbody.failure_message) || (cbody && cbody.status) || `Clover returned HTTP ${cr.status}`;
+        const alertTo = (action === 'paylink_charge') ? (typeof taskEmail === 'string' ? taskEmail : null) : userEmail;
+        const alerted = await sendDeclineAlert({ to: alertTo || 'info@speedyins.com', amount: total, clientId, clientName, purpose,
+          reason: msg, channel: action === 'paylink_charge' ? 'Pay link (client self-pay)' : 'Charge page — typed card' });
+        await audit({ action: action + '_declined', who, clientId, amount: total, purpose, reason: msg, alerted, cloverStatus: cr.status, clover: cbody });
         return res.status(402).json({ ok: false, error: `Charge failed: ${msg}` });
       }
       const txnId = String(cbody.id || 'UNKNOWN');
@@ -860,8 +894,11 @@ export default async function handler(req, res) {
       const pay = cbody && (cbody.payment || cbody);
       const paid = cr.status === 200 && pay && (pay.result === 'SUCCESS' || pay.result === 'APPROVED' || pay.status === 'SUCCESS');
       if (!paid) {
-        const msg = (pay && (pay.result || pay.message)) || (cbody && cbody.message) || `Terminal returned HTTP ${cr.status}`;
-        await audit({ action: 'terminal_declined', who, clientId, amount: total, purpose, branch: branch.branch, cloverStatus: cr.status, clover: cbody });
+        const msg = (pay && (pay.result === 'FAIL' && pay.failureMessage)) || (pay && (pay.result || pay.message))
+          || (cbody && cbody.message) || `Terminal returned HTTP ${cr.status}`;
+        const alerted = await sendDeclineAlert({ to: userEmail || 'info@speedyins.com', amount: total, clientId, clientName, purpose,
+          reason: String(msg), channel: `Terminal — ${branch.branch}` });
+        await audit({ action: 'terminal_declined', who, clientId, amount: total, purpose, reason: String(msg), alerted, branch: branch.branch, cloverStatus: cr.status, clover: cbody });
         return res.status(402).json({ ok: false, error: `Terminal payment not completed: ${msg}` });
       }
       const txnId = String(pay.id || extId);

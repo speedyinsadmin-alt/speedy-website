@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v2.7d -->
+<!-- build v2.8 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v2.7d</small></h1>
+      <h1>Platform Console <small id="ver">v2.8</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -282,7 +282,7 @@ async function renderOurClient(el, no) {
       + '</tr>').join('') + '</table>'
     : '<div class="muted">No policies. Sync from HawkSoft or add via intake.</div>';
 
-  h += '<h2 style="margin-top:18px">Payments (' + r.payments.length + ')</h2>';
+  h += '<h2 style="margin-top:18px">Payments (' + r.payments.length + ') <span class="muted" style="font-weight:400;font-size:12px;text-transform:none;letter-spacing:0">— via Speedy platform</span></h2>';
   h += r.payments.length ? '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th>Ref</th></tr>'
     + r.payments.map(p => '<tr>'
       + '<td>' + esc(String(p.ts).replace('T',' ').slice(0,16)) + '</td>'
@@ -381,18 +381,10 @@ async function renderLedger(el) {
 }
 
 /* ---------- Tables ---------- */
-async function probeReceipts() {
-  const no = prompt('Client # to probe for HawkSoft receipts:', '23662');
-  if (!no) return;
-  const r = await api('rcpt&no=' + encodeURIComponent(no));
-  const w = window.open('', '_blank');
-  w.document.write('<pre style="white-space:pre-wrap;font:12px monospace;padding:16px">' + JSON.stringify(r, null, 2).replace(/</g,'&lt;') + '</pre>');
-}
-
 async function renderTables(el) {
   const r = await api('tables');
   if (!r || !r.ok) { el.innerHTML = '<div class="err">Table inventory failed.</div>'; return; }
-  let h = '<h2>Our database — what exists today <button onclick="probeReceipts()" style="float:right;background:var(--amber);border:0;color:#2a1a00;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">Probe HawkSoft receipts</button></h2>';
+  let h = '<h2>Our database — what exists today</h2>';
   h += '<table><tr><th>Table</th><th>Status</th><th>Rows</th><th>Columns</th></tr>'
     + (r.tables || []).map(t => '<tr>'
       + '<td><span class="amount">' + esc(t.table) + '</span></td>'

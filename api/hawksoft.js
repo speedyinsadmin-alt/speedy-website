@@ -54,6 +54,47 @@ async function getCloverToken(merchantId) {
   return { token: tok.access_token };
 }
 
+/* Payment confirmation email — Gmail SMTP from info@speedyins.com. Fail-soft. */
+async function sendConfirmEmail(o) {
+  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass || !o.to) return o.to ? 'not configured' : 'no client email on file';
+  try {
+    const nodemailer = (await import('nodemailer')).default;
+    const t = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } });
+    const amt = `$${Number(o.amount).toFixed(2)}`;
+    const html = `<table width="560" cellpadding="0" cellspacing="0" align="center" style="background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#222;max-width:560px;width:100%">
+      <tr><td style="padding:22px 28px 12px;text-align:center"><img src="https://www.speedyins.com/assets/logo.png" alt="Speedy Insurance Agency" width="160" style="max-width:160px;height:auto"></td></tr>
+      <tr><td style="background:#1f9d55;padding:12px 28px;text-align:center"><span style="color:#fff;font-size:18px;font-weight:bold">Payment Received — Thank You!</span></td></tr>
+      <tr><td style="padding:22px 28px 6px">
+        <p style="margin:0 0 14px;line-height:1.7;font-size:15px">Hi ${o.name || 'there'},</p>
+        <p style="margin:0 0 16px;line-height:1.7;font-size:15px">We received your payment. Here is your confirmation:</p>
+        <table width="100%" cellpadding="9" cellspacing="0" style="border:1px solid #e0e0e0;font-size:14px;margin:0 0 18px">
+          <tr style="background:#0B1829"><td colspan="2" style="color:#fff;font-weight:bold">Payment Confirmation</td></tr>
+          <tr><td style="color:#555;font-weight:bold;width:45%;border-bottom:1px solid #eee">Amount</td><td style="border-bottom:1px solid #eee"><b>${amt}</b></td></tr>
+          <tr style="background:#f7f7f7"><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">For</td><td style="border-bottom:1px solid #eee">${o.purpose || 'Payment'}</td></tr>
+          <tr><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">Method</td><td style="border-bottom:1px solid #eee">${o.method || ''}</td></tr>
+          ${o.confirmation ? `<tr style="background:#f7f7f7"><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">Confirmation #</td><td style="border-bottom:1px solid #eee">${o.confirmation}</td></tr>` : ''}
+          <tr><td style="color:#555;font-weight:bold">Date</td><td>${o.stamp || ''} PT</td></tr>
+        </table>
+        <p style="margin:0 0 14px;line-height:1.6;font-size:12px;color:#888;font-style:italic">A record of this payment has been filed with your Speedy Insurance account. If you did not make this payment, call us immediately at (951) 472-0927.</p>
+      </td></tr>
+      <tr><td style="padding:0 28px 24px"><table width="100%" cellpadding="0" cellspacing="0" style="border-top:2px solid #D42B2B"><tr><td style="padding-top:12px;font-size:13px;line-height:1.8;color:#444"><strong>Speedy Insurance Agency</strong><br>(951) 472-0927 · speedyins.com</td></tr></table></td></tr></table>`;
+    await t.sendMail({
+      from: `"Speedy Insurance Agency" <${user}>`, to: o.to,
+      subject: `Payment received — ${amt} — Speedy Insurance Agency`,
+      html,
+      text: `Payment received: ${amt} for ${o.purpose || 'Payment'}. ${o.confirmation ? 'Confirmation ' + o.confirmation + '. ' : ''}Speedy Insurance Agency, (951) 472-0927.`,
+    });
+    return `sent to ${o.to}`;
+  } catch (e) { return `failed: ${String(e).slice(0, 80)}`; }
+}
+const emailFrom = (body) => {
+  try {
+    const m = JSON.stringify(body).match(/[\w.+-]+@[\w-]+\.[\w.-]+/g);
+    return (m && m[0]) || '';
+  } catch { return ''; }
+};
+
 /* Signed pay-link tokens (HMAC-SHA256, keyed on ADMIN_API_KEY) */
 const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const makeToken = (obj, key) => { const pl = b64u(JSON.stringify(obj)); return pl + '.' + b64u(createHmac('sha256', key).update(pl).digest()).slice(0, 22); };
@@ -443,6 +484,7 @@ export default async function handler(req, res) {
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
+        if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
       out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
       out.invoiceApply = invPick.how;
@@ -556,7 +598,10 @@ export default async function handler(req, res) {
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 
-      const auditSaved = await audit({ action, who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+      out.confirmationEmail = await sendConfirmEmail({
+        to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
+        amount: total, purpose, method: `${brand} ****${last4}`, confirmation: txnId, stamp });
+      const auditSaved = await audit({ action, who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 
@@ -598,6 +643,7 @@ export default async function handler(req, res) {
           if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
+        if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
       out.invoiceApply = invPick.how;
 
@@ -703,7 +749,10 @@ export default async function handler(req, res) {
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 
-      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, hawksoft: out });
+      out.confirmationEmail = await sendConfirmEmail({
+        to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
+        amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
+      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved });
     }
 
@@ -834,6 +883,7 @@ export default async function handler(req, res) {
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
+        if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
       out.invoiceApply = invPick.how;
 
@@ -867,7 +917,10 @@ export default async function handler(req, res) {
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 
-      const auditSaved = await audit({ action: 'terminal_charge', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, hawksoft: { receipt: out.receipt, log: out.log } });
+      out.confirmationEmail = await sendConfirmEmail({
+        to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
+        amount: total, purpose, method: `${brand} ****${last4} — ${branch.branch} terminal`, confirmation: txnId, stamp });
+      const auditSaved = await audit({ action: 'terminal_charge', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, log: out.log } });
       return res.status(200).json({ ok: out.receipt.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 

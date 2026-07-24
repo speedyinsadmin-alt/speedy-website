@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/platform?view=cron_sync", "schedule": "0 9 * * *" }
+  ]
+}

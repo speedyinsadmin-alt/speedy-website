@@ -324,12 +324,14 @@ export default async function handler(req, res) {
   if (view === 'our_client') {
     const no = parseInt(String(req.query.no || ''), 10);
     if (!isFinite(no)) return res.status(400).json({ ok: false, error: 'no= required' });
-    // LIVE: pull this client fresh from HawkSoft before rendering
     let live = false;
-    const fresh = await hsFetchClient(no);
-    if (!fresh.error && fresh.status === 200 && fresh.body) {
-      const up = await upsertHsClient(s, fresh.body);
-      live = !!up.ok;
+    // Only hit HawkSoft when explicitly asked (background refresh). Default = fast DB read.
+    if (String(req.query.refresh || '') === '1') {
+      const fresh = await hsFetchClient(no);
+      if (!fresh.error && fresh.status === 200 && fresh.body) {
+        const up = await upsertHsClient(s, fresh.body);
+        live = !!up.ok;
+      }
     }
     const [cl, po, led, ev] = await Promise.all([
       sbGet(s, `clients?client_no=eq.${no}&select=*`),

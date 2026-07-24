@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v3.1 -->
+<!-- build v3.2 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.1</small></h1>
+      <h1>Platform Console <small id="ver">v3.2</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -324,8 +324,8 @@ function policyRows(list, isDmv) {
   return head + rows + '</table>';
 }
 
-async function renderOurClient(el, no) {
-  const r = await api('our_client&no=' + no);
+async function renderOurClient(el, no, _bg) {
+  const r = await api('our_client&no=' + no + (_bg ? '&refresh=1' : ''));
   if (!r || !r.ok || !r.client) { el.innerHTML = '<div class="err">Client load failed.</div>'; return; }
   const c = r.client;
   const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
@@ -350,7 +350,7 @@ async function renderOurClient(el, no) {
 
   // ---- Summary bar (always visible) ----
   let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← All clients</span>'
-    + (r.live ? '<span class="pill g" style="float:right">● live from HawkSoft</span>' : '<span class="pill a" style="float:right">cached copy</span>');
+    + (r.live ? '<span class="pill g" style="float:right">● live from HawkSoft</span>' : '<span class="pill b" style="float:right;cursor:pointer" onclick="refreshClient(' + no + ')">↻ refresh from HawkSoft</span>');
   h += '<h2 style="margin:0 0 2px">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
   h += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 4px">'
     + '<span class="pill ' + (String(c.status).toLowerCase()==='active'?'g':'a') + '">' + esc(c.status || '—') + '</span>'
@@ -392,6 +392,16 @@ async function renderOurClient(el, no) {
     { defaultOpen: false, emptyText: 'No activity yet.' });
 
   el.innerHTML = h;
+
+  // First open (not a bg pass) and data isn't live yet -> silently refresh once from HawkSoft
+  if (!_bg && !r.live && OPEN_CLIENT === no) {
+    setTimeout(() => { if (OPEN_CLIENT === no) renderOurClient(el, no, true); }, 50);
+  }
+}
+
+function refreshClient(no) {
+  const el = $('#view');
+  if (el) renderOurClient(el, no, true);
 }
 
 /* ---------- ZZTEST · HawkSoft ---------- */

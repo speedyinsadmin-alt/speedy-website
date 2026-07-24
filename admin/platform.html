@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v3.0 -->
+<!-- build v3.1 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.0</small></h1>
+      <h1>Platform Console <small id="ver">v3.1</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -266,8 +266,8 @@ function section(key, title, count, bodyHtml, opts) {
   const chevron = open ? '▾' : '▸';
   const dim = empty ? 'opacity:.5' : '';
   return '<div class="sec" style="' + dim + '">'
-    + '<div class="sechead" onclick="toggleSection(\'' + key + '\')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 0;border-top:1px solid var(--line)">'
-    + '<span style="color:var(--mute);width:14px">' + chevron + '</span>'
+    + '<div class="sechead" data-sec="' + key + '" onclick="toggleSection(\'' + key + '\')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 0;border-top:1px solid var(--line)">'
+    + '<span class="chev" style="color:var(--mute);width:14px">' + chevron + '</span>'
     + '<b style="font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--mute)">' + title + '</b>'
     + '<span class="pill b" style="margin-left:2px">' + count + '</span>'
     + (opts.note ? '<span class="muted" style="font-size:12px;margin-left:4px">' + opts.note + '</span>' : '')
@@ -276,10 +276,14 @@ function section(key, title, count, bodyHtml, opts) {
     + '</div>';
 }
 function toggleSection(key) {
-  const cur = SECTION_STATE[key];
-  SECTION_STATE[key] = (cur === undefined) ? false : !cur;
-  // re-render current client without refetch flicker: just toggle DOM
-  render();
+  const head = document.querySelector('[data-sec="' + key + '"]');
+  if (!head) return;
+  const body = head.nextElementSibling;
+  const chev = head.querySelector('.chev');
+  const open = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  if (chev) chev.textContent = open ? '▾' : '▸';
+  SECTION_STATE[key] = open; // remember for next client
 }
 
 function policyRows(list, isDmv) {
@@ -291,11 +295,20 @@ function policyRows(list, isDmv) {
     const st = String(p.status || '').toLowerCase();
     const live = p.expiration_date && p.expiration_date >= today && !['cancelled','canceled','expired'].includes(st);
     if (isDmv) {
+      const exp = p.expiration_date || '';
+      let badge = '<span class="muted">expired</span>';
+      if (exp) {
+        const days = Math.round((new Date(exp) - new Date()) / 86400000);
+        if (days < 0) badge = '<span class="muted">expired</span>';
+        else if (days <= 30) badge = '<span class="pill a">renew in ' + days + 'd</span>';
+        else badge = '<span class="pill g">current</span>';
+      }
+      const isLatest = p._latest ? ' <span class="pill b" style="font-size:10px">latest</span>' : '';
       return '<tr>'
-        + '<td>' + esc(p.policy_number || '—') + '</td>'
+        + '<td>' + esc(p.policy_number || '—') + isLatest + '</td>'
         + '<td>' + (p.renewal_months ? p.renewal_months + ' mo' : '—') + '</td>'
-        + '<td class="hidemob">' + esc(p.effective_date || '') + ' → ' + esc(p.expiration_date || '') + '</td>'
-        + '<td>' + (live ? '<span class="pill g">current</span>' : '<span class="pill a">due</span>') + '</td>'
+        + '<td class="hidemob">' + esc(p.effective_date || '') + ' → ' + esc(exp) + '</td>'
+        + '<td>' + badge + '</td>'
         + '<td>' + esc(p.status || '—') + '</td>'
         + '</tr>';
     }
@@ -320,7 +333,18 @@ async function renderOurClient(el, no) {
 
   const all = r.policies || [];
   const insurance = all.filter(p => (p.record_type || 'insurance') === 'insurance');
-  const dmv = all.filter(p => p.record_type === 'dmv_service');
+  let dmv = all.filter(p => p.record_type === 'dmv_service');
+  // latest DMV per client = max expiration_date; drives the registration reminder
+  if (dmv.length) {
+    dmv = dmv.slice().sort((a,b) => String(b.expiration_date||'').localeCompare(String(a.expiration_date||'')));
+    dmv[0]._latest = true;
+  }
+  const dmvLatest = dmv[0];
+  let dmvReminder = '';
+  if (dmvLatest && dmvLatest.expiration_date) {
+    const d = Math.round((new Date(dmvLatest.expiration_date) - new Date())/86400000);
+    if (d >= 0 && d <= 30) dmvReminder = '<span class="pill a">DMV renewal in ' + d + 'd</span>';
+  }
   const other = all.filter(p => p.record_type === 'unknown');
   const inforce = insurance.filter(p => { const st=String(p.status||'').toLowerCase(); return p.expiration_date && p.expiration_date>=today && !['cancelled','canceled','expired'].includes(st); }).length;
 
@@ -334,7 +358,8 @@ async function renderOurClient(el, no) {
     + (c.phone ? '<a href="tel:' + esc(c.phone) + '" style="color:var(--blue);text-decoration:none">' + esc(c.phone) + '</a>' : '')
     + (c.email ? '<a href="mailto:' + esc(c.email) + '" style="color:var(--blue);text-decoration:none">' + esc(c.email) + '</a>' : '')
     + '<span class="pill b">' + inforce + ' in-force / ' + insurance.length + ' policies</span>'
-    + (dmv.length ? '<span class="pill a">' + dmv.length + ' DMV</span>' : '')
+    + (dmv.length ? '<span class="pill ' + (dmvReminder?'a':'b') + '" style="background:rgba(77,124,254,.12)">' + dmv.length + ' DMV</span>' : '')
+    + (dmvReminder || '')
     + '</div>';
   h += '<div class="muted" style="font-size:13px;margin-bottom:6px">' + esc([c.address1, c.city, c.state, c.zip].filter(Boolean).join(', ') || 'No address on file') + '</div>';
 
@@ -342,7 +367,8 @@ async function renderOurClient(el, no) {
   h += section('ins_' + no, 'Insurance policies', insurance.length, policyRows(insurance, false),
     { defaultOpen: true, emptyText: 'No insurance policies.' });
   h += section('dmv_' + no, 'DMV / Services', dmv.length, policyRows(dmv, true),
-    { defaultOpen: false, emptyText: 'No DMV services.' });
+    { defaultOpen: false, emptyText: 'No DMV services.',
+      note: dmvLatest && dmvLatest.expiration_date ? 'latest reg exp ' + dmvLatest.expiration_date : '' });
   if (other.length) h += section('unk_' + no, 'Unclassified', other.length, policyRows(other, false),
     { defaultOpen: false, note: 'needs review', emptyText: '' });
 

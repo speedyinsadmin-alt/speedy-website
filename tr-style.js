@@ -49,6 +49,28 @@
     '  border-color: #a81f1f !important;',
     '}',
 
+    /* ---------- LANGUAGE TOGGLE ----------
+       Targeted by value attribute so it never inherits the
+       primary-button treatment used by Continue/Next.        */
+    'input[value="Espa\\00f1ol"], input[value="Espanol"], input[value="English"], input[value="Ingl\\00e9s"] {',
+    '  background: transparent !important;',
+    '  background-image: none !important;',
+    '  border: 1.5px solid #D42B2B !important;',
+    '  color: #D42B2B !important;',
+    '  border-radius: 999px !important;',
+    '  font-size: 13px !important;',
+    '  font-weight: 700 !important;',
+    '  padding: 7px 20px !important;',
+    '  box-shadow: none !important;',
+    '  width: auto !important;',
+    '  min-width: 0 !important;',
+    '  display: inline-block !important;',
+    '}',
+    'input[value="Espa\\00f1ol"]:hover, input[value="Espanol"]:hover, input[value="English"]:hover, input[value="Ingl\\00e9s"]:hover {',
+    '  background: #D42B2B !important;',
+    '  color: #FFFFFF !important;',
+    '}',
+
     /* ---------- SECONDARY / BACK ---------- */
     'input.previousPage, .previousPage {',
     '  background: transparent !important;',

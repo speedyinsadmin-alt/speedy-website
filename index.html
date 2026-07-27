@@ -385,7 +385,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     </a>
     <div class="nav-links" id="navLinks">
       <a href="#services" class="nav-link">Services</a>
-      <a href="#quote" class="nav-link">Get a Quote</a>
+      <a href="quote.html" class="nav-link">Get a Quote</a>
       <div class="nav-dropdown">
         <a href="#locations" class="nav-link nav-dropdown-toggle">Locations <i class="fas fa-chevron-down" style="font-size:10px;margin-left:3px"></i></a>
         <div class="nav-dropdown-menu">
@@ -400,13 +400,13 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       <a href="#privacy" class="nav-link">Privacy Policy</a>
       <a href="#terms" class="nav-link">Terms &amp; Conditions</a>
       <a href="#contact" class="nav-link">Contact</a>
-      <a href="#quote" class="nav-cta">Free Quote <i class="fas fa-arrow-right" style="font-size:12px"></i></a>
+      <a href="quote.html" class="nav-cta">Free Quote <i class="fas fa-arrow-right" style="font-size:12px"></i></a>
     </div>
     <button class="mobile-toggle" onclick="document.getElementById('mobileMenu').classList.toggle('open')"><i class="fas fa-bars"></i></button>
   </div>
   <div class="mobile-menu" id="mobileMenu">
     <a href="#services" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Services</a>
-    <a href="#quote" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Get a Quote</a>
+    <a href="quote.html" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Get a Quote</a>
     <a href="#locations" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Locations</a>
     <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Moreno Valley HQ</a>
     <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Riverside — Van Buren</a>
@@ -417,7 +417,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <a href="#privacy" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Privacy Policy</a>
     <a href="#terms" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Terms &amp; Conditions</a>
     <a href="#contact" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Contact</a>
-    <a href="#quote" class="nav-cta" onclick="document.getElementById('mobileMenu').classList.remove('open')">Free Quote</a>
+    <a href="quote.html" class="nav-cta" onclick="document.getElementById('mobileMenu').classList.remove('open')">Free Quote</a>
 <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.1);margin-top:4px"><button class="lang-btn active">EN</button><a href="es.html" class="lang-btn" style="text-decoration:none;color:rgba(255,255,255,0.6)">ES</a></div>
   </div>
 </nav>
@@ -430,7 +430,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       <h1 class="hero-title">Insurance<br><span>You Can</span><br>Count On</h1>
       <p class="hero-sub">Fast quotes from 20+ top carriers. Honest prices. Real people who care. 4 convenient locations across the Inland Empire.</p>
       <div class="hero-btns">
-        <a href="#quote" class="btn-primary"><i class="fas fa-bolt"></i> Get My Free Quote</a>
+        <a href="quote.html" class="btn-primary"><i class="fas fa-bolt"></i> Get My Free Quote</a>
         <a href="tel:9516951500" class="btn-secondary"><i class="fas fa-phone"></i> Call Us Now</a>
       </div>
       <div class="hero-stats">
@@ -550,24 +550,9 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       </div>
       <div class="quote-form fade-up">
         <div class="quote-form-title">Get Your Free Quote</div>
-        <div class="quote-form-sub">No obligation · Best rates guaranteed</div>
-        <div class="form-row">
-          <input class="form-input" id="quoteFirstName" placeholder="First name" />
-          <input class="form-input" id="quoteLastName" placeholder="Last name" />
-        </div>
-        <div class="form-row">
-          <input class="form-input" id="quotePhone" type="tel" placeholder="Phone number" />
-          <input class="form-input" id="quoteZip" placeholder="ZIP code" />
-        </div>
-        <select class="form-select" id="quoteType">
-          <option>Select insurance type</option>
-          <option>Auto Insurance</option>
-          <option>Home Insurance</option>
-          <option>Commercial Insurance</option>
-          <option>SR-22</option>
-          <option>DMV Services</option>
-          <option>Other</option>
-        </select>
+        <div class="quote-form-sub">Compare 20+ carriers in minutes — no obligation</div>
+        <a href="quote.html" class="form-submit" style="display:flex;align-items:center;justify-content:center;gap:9px;text-decoration:none;margin-bottom:18px"><i class="fas fa-bolt"></i> Start My Free Quote</a>
+        <p style="font-size:11px;color:var(--gray-500);text-align:center;margin-bottom:18px">Takes about 3 minutes · No credit card required</p>
         <!-- Google Review Cards -->
         <div style="margin-bottom:14px">
           <p style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gray-400);margin-bottom:10px;text-align:center">⭐ Rate Us on Google — Pick Your Branch</p>
@@ -602,7 +587,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
             </a>
           </div>
         </div>
-        <button class="form-submit" onclick="submitQuoteToChat(event)"><i class="fas fa-bolt"></i> Get My Free Quote</button>
+
         <div class="form-trust">
           <span class="form-trust-item"><i class="fas fa-lock"></i> Secure</span>
           <span class="form-trust-item"><i class="fas fa-check"></i> No spam</span>
@@ -710,55 +695,55 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <div class="svc-icon"><i class="fas fa-car"></i></div>
         <div class="svc-name">Auto Insurance</div>
         <div class="svc-desc">Bodily injury liability, medical payments, PIP, comprehensive, collision & property damage. DUI, SR-22, tickets — every driver welcome. Full coverage as low as $59/mo.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card fade-up fade-up-d1">
         <div class="svc-icon"><i class="fas fa-home"></i></div>
         <div class="svc-name">Home Insurance</div>
         <div class="svc-desc">Homeowners insurance protects your structure, personal belongings, and covers injuries on your property. We find the best rates for homes across the Inland Empire — including CA FAIR Plan.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card fade-up fade-up-d2">
         <div class="svc-icon"><i class="fas fa-building"></i></div>
         <div class="svc-name">Commercial Insurance</div>
         <div class="svc-desc">Commercial insurance protects your business from theft, liability, and property damage. Losses can cripple a business — be covered before the unexpected happens. Serving Inland Empire businesses since 2005.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card fade-up fade-up-d1">
         <div class="svc-icon"><i class="fas fa-id-card"></i></div>
         <div class="svc-name">DMV Services</div>
         <div class="svc-desc">Registration renewals, replacement stickers, title transfers, duplicate titles, release of liability, disabled placards, personalized plates & more. No appointment necessary — get your stickers in minutes.</div>
-        <a href="#quote" class="svc-cta">Learn More <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Learn More <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card fade-up fade-up-d2">
         <div class="svc-icon"><i class="fas fa-ship"></i></div>
         <div class="svc-name">Boat · RV · Motorcycle</div>
         <div class="svc-desc">Recreational vehicle coverage for boats, jet skis, RVs, ATVs, motorcycles & classic cars. Ride with confidence.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card fade-up fade-up-d1">
         <div class="svc-icon"><i class="fas fa-file-alt"></i></div>
         <div class="svc-name">SR-22 Insurance</div>
         <div class="svc-desc">An SR-22 is filed with the CA DMV to verify you have the required liability insurance. We file instantly. Required after DUI, reckless driving, driving without insurance, or 3+ violations. No car? We offer non-owner SR-22 too.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card fade-up fade-up-d2">
         <div class="svc-icon"><i class="fas fa-certificate"></i></div>
         <div class="svc-name">Bond Insurance</div>
         <div class="svc-desc">Business owners may need a surety bond for state tax or utility requirements. Contractors need license or permit bonds for municipal licensing. We align you with the best bond service that fits your needs.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card fade-up fade-up-d3">
         <div class="svc-icon"><i class="fas fa-shield-alt"></i></div>
         <div class="svc-name">General Liability</div>
         <div class="svc-desc">Protects your business from bodily injury (e.g. a client who slips on your property), property damage, and data loss. If a client's belongings are damaged during business activities, you're protected.</div>
-        <a href="#quote" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Get a Quote <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="svc-card featured fade-up fade-up-d3">
         <div class="svc-icon"><i class="fas fa-bolt"></i></div>
         <div class="svc-name">Get a Free Quote</div>
         <div class="svc-desc">Compare rates from 20+ top carriers instantly. No obligation. Fast, easy, and free — see your best price in 60 seconds.</div>
-        <a href="#quote" class="svc-cta">Start Now <i class="fas fa-arrow-right"></i></a>
+        <a href="quote.html" class="svc-cta">Start Now <i class="fas fa-arrow-right"></i></a>
       </div>
     </div>
   </div>
@@ -783,7 +768,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <p style="font-size:16px;color:var(--gray-500);line-height:1.7;margin-bottom:24px">
           Our bilingual team speaks English and Spanish. We are open <span id="aboutHours">Mon–Fri 9am–7pm, Sat 9am–5pm</span>, across 4 locations in Moreno Valley, Riverside, and Lake Elsinore.
         </p>
-        <a href="#quote" class="btn-primary"><i class="fas fa-bolt"></i> Get a Free Quote</a>
+        <a href="quote.html" class="btn-primary"><i class="fas fa-bolt"></i> Get a Free Quote</a>
       </div>
       <div class="about-stats-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div style="background:white;border-radius:var(--radius-lg);padding:24px;text-align:center;border:1px solid var(--gray-200)">
@@ -899,7 +884,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       </div>
 
       <!-- CTA card -->
-      <div onclick="document.getElementById('quote').scrollIntoView({behavior:'smooth'})" style="border:2px dashed var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.3s;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;background:var(--gray-100)" onmouseover="this.style.borderColor='var(--red)';this.style.background='#FEF2F2'" onmouseout="this.style.borderColor='var(--gray-200)';this.style.background='var(--gray-100)'">
+      <div onclick="window.location.href='quote.html'" style="border:2px dashed var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;cursor:pointer;transition:all 0.3s;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;background:var(--gray-100)" onmouseover="this.style.borderColor='var(--red)';this.style.background='#FEF2F2'" onmouseout="this.style.borderColor='var(--gray-200)';this.style.background='var(--gray-100)'">
         <div style="width:60px;height:60px;background:var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
           <i class="fas fa-comments-dollar" style="font-size:24px;color:white"></i>
         </div>
@@ -923,7 +908,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div id="articleBody" style="padding:40px;font-size:15px;color:var(--gray-700);line-height:1.8"></div>
     <div style="padding:32px 40px;background:var(--navy);text-align:center">
       <p style="color:rgba(255,255,255,0.7);margin-bottom:16px;font-size:15px">Ready to get covered? Our agents are standing by.</p>
-      <a href="#quote" onclick="closeArticle()" style="background:var(--red);color:white;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;display:inline-block">Get My Free Quote &rarr;</a>
+      <a href="quote.html" onclick="closeArticle()" style="background:var(--red);color:white;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;display:inline-block">Get My Free Quote &rarr;</a>
     </div>
     <button onclick="closeArticle()" style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,0.1);border:none;color:white;font-size:20px;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">&times;</button>
   </div>

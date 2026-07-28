@@ -328,29 +328,6 @@ export default async function handler(req, res) {
   const view = String(req.query.view || '');
 
   /* ---- TEMP: receipts discovery ---- */
-  /* ---- TEMP: attachment listing discovery ---- */
-  if (view === 'attprobe') {
-    const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
-    const paths = [
-      `/vendor/agency/${AGENCY_ID}/client/${no}/attachment?version=4.0`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}/attachments?version=4.0`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Attachments`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}/documents?version=4.0`,
-      `/vendor/agency/${AGENCY_ID}/client/${no}/files?version=4.0`,
-    ];
-    const out = {};
-    for (const p of paths) {
-      const r = await hsCall(p);
-      let shape = r.body;
-      if (r.body && typeof r.body === 'object') {
-        shape = Array.isArray(r.body) ? ('array len ' + r.body.length + (r.body[0] ? ' keys:' + Object.keys(r.body[0]).join(',') : ''))
-              : Object.keys(r.body).join(',');
-      } else if (typeof r.body === 'string') shape = r.body.slice(0, 120);
-      out[p.split('?')[0] + (p.includes('include') ? '?include=Attachments' : '')] = { status: r.status, shape };
-    }
-    return res.status(200).json({ ok: true, email, attprobe: out });
-  }
-
   /* ---- HawkSoft direct: ZZTEST raw ---- */
   if (view === 'client') {
     const hs = await hsFetchClient();

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Carrier Payment — Speedy Insurance</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
+    --red:#e03131; --blue:#4d7cfe; --green:#2fbf71; --amber:#f5a623;
+    --ink:#f2f5ff; --mute:#8f9ac4; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 60px}
+  header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
+  h1{font-size:18px;margin:0}
+  h1 small{color:var(--mute);font-weight:400;font-size:12px;margin-left:6px}
+  #gate{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:34px 22px;text-align:center;max-width:400px;margin:12vh auto}
+  #gate p{color:var(--mute);margin:8px 0 18px}
+  #gsibtn{display:flex;justify-content:center}
+  #app{display:none}
+  .card{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px}
+  .eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  label{font-size:12px;color:var(--mute);display:block;margin:12px 0 6px;font-weight:600}
+  input,select{width:100%;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:14px}
+  input:focus,select:focus{outline:none;border-color:var(--blue)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .clientbar{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .clientbar .amt{color:var(--green);font-size:18px;font-weight:600;text-align:right}
+  .clientbar .sub{color:var(--mute);font-size:12px}
+  .fee{display:flex;justify-content:space-between;font-size:13px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .fee b{color:var(--green)}
+  .drop{border:1.5px dashed rgba(245,166,35,.5);border-radius:12px;background:rgba(245,166,35,.06);padding:18px;text-align:center;cursor:pointer;transition:.15s}
+  .drop:hover{border-color:var(--amber);background:rgba(245,166,35,.1)}
+  .drop.has{border-style:solid;border-color:var(--green);background:rgba(47,191,113,.08)}
+  .drop .ic{font-size:26px;color:var(--amber)}
+  .drop.has .ic{color:var(--green)}
+  .btns{display:flex;gap:10px;margin-top:16px}
+  .btns button{flex:1;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:0}
+  .save{background:var(--navy2);border:1.5px solid var(--line)!important;color:var(--mute)}
+  .submit{background:var(--green);color:#04220f;flex:1.4}
+  .submit:disabled{opacity:.4;cursor:not-allowed}
+  #msg{margin-top:12px;font-size:13px;text-align:center;min-height:18px}
+  .ok{color:var(--green)} .err{color:var(--red)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
+  .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
+  .hint{color:var(--mute);font-size:11px;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="gate">
+    <h1>Carrier Payment</h1>
+    <p>Internal audit capture. Sign in to continue.</p>
+    <div id="gsibtn"></div>
+    <p id="gateerr" class="err" style="display:none">This account isn't authorized.</p>
+  </div>
+
+  <div id="app">
+    <header>
+      <div class="dot"></div>
+      <h1>Carrier Payment <small>internal · audit capture</small></h1>
+    </header>
+
+    <div class="card">
+      <div class="clientbar">
+        <div>
+          <div id="cname" style="font-weight:500">—</div>
+          <div class="sub" id="csub">—</div>
+        </div>
+        <div>
+          <div class="amt" id="cpaid">$0.00</div>
+          <div class="sub" id="cmeth">client paid</div>
+        </div>
+      </div>
+
+      <div class="eyebrow" style="margin-top:14px"><span style="color:var(--amber)">◆</span> Carrier payment</div>
+      <div class="row">
+        <div>
+          <label>Carrier paid</label>
+          <input id="carrier" placeholder="e.g. ANCHOR DIAMOND" autocomplete="off">
+        </div>
+        <div>
+          <label>Amount to carrier</label>
+          <input id="camt" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+      <label>Paid with company card</label>
+      <select id="card">
+        <option value="">Select card…</option>
+        <option>Company Visa</option>
+        <option>Company Amex</option>
+      </select>
+      <div class="fee"><span class="mute">Speedy keeps (fee)</span><b id="fee">—</b></div>
+    </div>
+
+    <div class="card">
+      <div class="eyebrow"><span style="color:var(--green)">◆</span> Carrier receipt <span class="pill a">required for audit</span></div>
+      <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+        <div class="ic" id="dropic">⇪</div>
+        <div id="droptxt" style="font-size:13px;margin-top:6px">Tap to upload the carrier's receipt</div>
+        <div class="hint">PDF or photo — this is the proof of payment</div>
+      </div>
+      <input type="file" id="file" accept="application/pdf,image/*" style="display:none">
+    </div>
+
+    <div class="btns">
+      <button class="save" onclick="submit(false)">Save &amp; finish later</button>
+      <button class="submit" id="submitBtn" onclick="submit(true)" disabled>Submit to audit</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+</div>
+<script>
+const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
+let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null;
+const $ = s => document.querySelector(s);
+const qp = new URLSearchParams(location.search);
+const CTX = {
+  client_no: qp.get('client') || qp.get('no') || '',
+  name: qp.get('name') || '',
+  paid: qp.get('paid') || '',
+  method: qp.get('method') || 'client paid',
+  policy_id: qp.get('policy_id') || '',
+  policy_guid: qp.get('policy_guid') || '',
+  payment_id: qp.get('payment_id') || '',
+  policy_num: qp.get('policy') || '',
+};
+
+window.addEventListener('load', () => {
+  const t = setInterval(() => {
+    if (!window.google) return;
+    clearInterval(t);
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
+    google.accounts.id.renderButton($('#gsibtn'), { theme:'filled_blue', size:'large', width:260 });
+  }, 150);
+});
+
+function onCred(resp){
+  TOKEN = resp.credential;
+  $('#gate').style.display='none';
+  $('#app').style.display='block';
+  fillCtx();
+}
+
+function fillCtx(){
+  $('#cname').textContent = CTX.name || ('Client #' + CTX.client_no) || '—';
+  $('#csub').textContent = [CTX.client_no ? '#'+CTX.client_no : '', CTX.policy_num ? 'policy '+CTX.policy_num : ''].filter(Boolean).join(' · ') || '—';
+  $('#cpaid').textContent = CTX.paid ? '$'+Number(CTX.paid).toFixed(2) : '$0.00';
+  $('#cmeth').textContent = CTX.method;
+  recalcFee();
+}
+
+$('#camt').addEventListener('input', recalcFee);
+function recalcFee(){
+  const paid = Number(CTX.paid||0), cAmt = Number($('#camt').value||0);
+  const fee = paid && cAmt ? paid - cAmt : null;
+  $('#fee').textContent = fee!=null ? '$'+fee.toFixed(2) : '—';
+  updateSubmit();
+}
+
+$('#file').addEventListener('change', e => {
+  const f = e.target.files[0]; if(!f) return;
+  FILE_NAME = f.name; FILE_MIME = f.type;
+  const rd = new FileReader();
+  rd.onload = () => {
+    FILE_B64 = rd.result;
+    $('#drop').classList.add('has');
+    $('#dropic').textContent = '✓';
+    $('#droptxt').textContent = f.name;
+    updateSubmit();
+  };
+  rd.readAsDataURL(f);
+});
+
+function updateSubmit(){
+  // audit submit needs: carrier, amount, card, receipt
+  const ok = $('#carrier').value.trim() && Number($('#camt').value)>0 && $('#card').value && FILE_B64;
+  $('#submitBtn').disabled = !ok;
+}
+['carrier','camt','card'].forEach(id => $('#'+id).addEventListener('input', updateSubmit));
+$('#card').addEventListener('change', updateSubmit);
+
+async function submit(complete){
+  const msg = $('#msg'); msg.className=''; msg.textContent = complete ? 'Submitting to audit…' : 'Saving…';
+  const payload = {
+    action: 'save_carrier_leg',
+    client_no: Number(CTX.client_no)||null,
+    policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, payment_id: CTX.payment_id||null,
+    carrier: $('#carrier').value.trim()||null,
+    carrier_amount: Number($('#camt').value)||null,
+    carrier_card: $('#card').value||null,
+    receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME,
+    complete: !!complete,
+  };
+  try{
+    const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const j = await r.json();
+    if(j.ok){
+      msg.className='ok';
+      msg.textContent = complete
+        ? '✓ Audit complete — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')+'.'
+        : '✓ Saved as pending — task flagged. You can finish later.';
+      if(complete){ $('#submitBtn').disabled=true; $('.save').disabled=true; }
+    } else {
+      msg.className='err'; msg.textContent = j.error || 'Failed.';
+    }
+  }catch(e){ msg.className='err'; msg.textContent='Network error.'; }
+}
+</script>
+</body>
+</html>

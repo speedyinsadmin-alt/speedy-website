@@ -1,4 +1,5 @@
 export const config = { maxDuration: 30, api: { bodyParser: { sizeLimit: '12mb' } } };
+import { gzipSync } from 'node:zlib';
 // /api/carrier — Phase 1: capture the carrier-payment leg + required receipt for a completed client payment.
 // POST actions: save_carrier_leg (with base64 receipt) -> Blob + attachments + HawkSoft file + ledger lifecycle.
 // Auth: Google ID token, allowlist. Reads/writes only our tables + files the receipt to the client's HawkSoft record.
@@ -51,7 +52,6 @@ function b64ToBuf(b64) {
   return Buffer.from(clean, 'base64');
 }
 const b64h = s => Buffer.from(String(s), 'utf8').toString('base64');
-import { gzipSync } from 'node:zlib';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');

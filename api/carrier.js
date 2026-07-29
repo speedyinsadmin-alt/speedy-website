@@ -30,15 +30,15 @@ function sb() {
 
 async function blobPut(path, buf, contentType) {
   const tok = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!tok) return null;
+  if (!tok) return { url: null, status: 'no_token' };
   const r = await fetch(`https://blob.vercel-storage.com/${path}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${tok}`, 'x-api-version': '7', 'content-type': contentType || 'application/octet-stream', 'x-add-random-suffix': '1' },
     body: buf,
   });
-  if (r.status !== 200) return null;
+  if (r.status !== 200) { const errtxt = await r.text().catch(()=> ''); return { url: null, status: 'http_' + r.status, err: errtxt.slice(0,120) }; }
   const j = await r.json().catch(() => null);
-  return j && j.url ? j.url : null;
+  return { url: j && j.url ? j.url : null, status: 'ok' };
 }
 
 async function sha256hex(buf) {
@@ -51,6 +51,7 @@ function b64ToBuf(b64) {
   return Buffer.from(clean, 'base64');
 }
 const b64h = s => Buffer.from(String(s), 'utf8').toString('base64');
+import { gzipSync } from 'node:zlib';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -81,14 +82,15 @@ export default async function handler(req, res) {
     }
 
     let attachment = null;
-    let hsFiled = false, hsRefId = null;
+    let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'not_attempted';
 
     if (receipt_b64) {
       const buf = b64ToBuf(receipt_b64);
       const hash = await sha256hex(buf);
       const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
       const path = `carrier-receipts/${client_no}/${Date.now()}_${(carrier || 'carrier').replace(/[^a-z0-9]/gi, '').slice(0, 20)}.${ext}`;
-      const url = await blobPut(path, buf, receipt_mime || 'application/octet-stream');
+      const blobRes = await blobPut(path, buf, receipt_mime || 'application/octet-stream');
+      const url = blobRes.url; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
 
       // Store attachment row in our vault
       const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
@@ -120,8 +122,9 @@ export default async function handler(req, res) {
             FileName: b64h(fname), FileExt: ext, Channel: '32',
             ...(policy_guid ? { PolicyId: policy_guid } : {}),
           },
-          body: buf,
+          body: gzipSync(buf),
         });
+        hsStatus = r2.status;
         hsFiled = (r2.status === 200 || r2.status === 202);
         hsRefId = refId;
         if (attachment) {
@@ -160,8 +163,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true, email, status,
       attachment_id: attachment && attachment.id,
-      blob_url: attachment && attachment.blob_url,
-      hawksoft_filed: hsFiled, hawksoft_refid: hsRefId,
+      blob_url: url,
+      blob_status: blobStatus,
+      hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_refid: hsRefId,
     });
   }
 

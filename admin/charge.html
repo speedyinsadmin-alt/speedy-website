@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.27 · confirmation emails</div>
+    <div class="ver">v2.28 · carrier &amp; documents next</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -394,6 +394,21 @@ async function createClient(){
     }
   }catch(e){ out.textContent = 'Error: '+e; }
 }
+function nextCarrierLink(amt){
+  const c = (typeof confirmed!=='undefined' && confirmed) ? confirmed : {};
+  const params = new URLSearchParams({
+    client: c.clientNumber||'', name: c.name||'',
+    paid: (amt!=null?amt:''), method: 'client paid',
+    policy: (c.policyNumber||''), policy_guid: (c.policyGuid||c.policyId||'')
+  });
+  return '/admin/carrier.html?' + params.toString();
+}
+function nextBtnHtml(amt){
+  return '<div style="margin-top:14px"><a href="'+nextCarrierLink(amt)+'" '
+    + 'style="display:block;text-align:center;background:#f5a623;color:#2a1a00;padding:12px;border-radius:11px;font-weight:700;text-decoration:none;font-size:15px">'
+    + 'Next \u2192 Carrier payment &amp; documents</a>'
+    + '<div style="text-align:center;color:#8f9ac4;font-size:12px;margin-top:6px">or you\'re done \u2014 sign out</div></div>';
+}
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function resetMatch(){ document.getElementById('matchbox').innerHTML=''; document.getElementById('chargecard').classList.add('hide'); confirmed=null; }
 function confirmClient(n){
@@ -494,10 +509,10 @@ async function chargeLive(){
         <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||j.txnId||'')}</b></div>
         ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
-        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to the HawkSoft client record. Signing out\u2026</div>
+        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to the HawkSoft client record.</div>
+        ${nextBtnHtml(parseFloat(amt).toFixed(2))}
       </div>`;
       rb.scrollIntoView({behavior:'smooth'});
-      setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
     } else {
       rb.innerHTML = `<div class="result bad"><h3>Payment not completed</h3>
         <div class="foot" style="font-size:14px;opacity:1">${esc(j.error||'The charge did not go through. The card was not billed twice \u2014 try again or use another card.')}</div></div>`;
@@ -539,7 +554,7 @@ async function chargeCash(){
         <div class="kv"><span>For</span><b>${esc(purposeText())}</b></div>
         <div class="kv"><span>Reference</span><b>${esc(j.ref||'')}</b></div>
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
-        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to HawkSoft. Signing out\u2026</div></div>`;
+        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to HawkSoft.</div>${nextBtnHtml(parseFloat(amt).toFixed(2))}</div>`;
       rb.scrollIntoView({behavior:'smooth'});
       setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
     } else {
@@ -669,7 +684,7 @@ async function chargeTerminal(){
         <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||'')}</b></div>
         ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
-        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt and log filed to HawkSoft. Signing out\u2026</div></div>`;
+        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt and log filed to HawkSoft.</div>${nextBtnHtml(null)}</div>`;
       rb.scrollIntoView({behavior:'smooth'});
       setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
     } else {

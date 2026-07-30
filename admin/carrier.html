@@ -109,6 +109,26 @@
       <input type="file" id="file" accept="application/pdf,image/*" style="display:none">
     </div>
 
+    <div class="card">
+      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Documents <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional — application, photos, license</span></div>
+      <label>Document type</label>
+      <select id="dtype">
+        <option value="carrier_application">Carrier application</option>
+        <option value="vehicle_photo">Vehicle photo</option>
+        <option value="property_photo">Property photo</option>
+        <option value="driver_license">Driver license</option>
+        <option value="dec_page">Dec page</option>
+        <option value="other">Other</option>
+      </select>
+      <div class="drop" id="docdrop" onclick="document.getElementById('docfile').click()" style="margin-top:10px">
+        <div class="ic" style="color:var(--blue)">+</div>
+        <div style="font-size:13px;margin-top:6px">Tap to add documents</div>
+        <div class="hint">PDF or photos · you can add several</div>
+      </div>
+      <input type="file" id="docfile" accept="application/pdf,image/*" multiple style="display:none">
+      <div id="doclist" style="margin-top:10px"></div>
+    </div>
+
     <div class="btns">
       <button class="save" onclick="submit(false)">Save &amp; finish later</button>
       <button class="submit" id="submitBtn" onclick="submit(true)" disabled>Submit to audit</button>
@@ -120,6 +140,7 @@
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null;
+let DOCS = [];
 const $ = s => document.querySelector(s);
 const qp = new URLSearchParams(location.search);
 const CTX = {
@@ -165,6 +186,24 @@ function recalcFee(){
   updateSubmit();
 }
 
+$('#docfile').addEventListener('change', e => {
+  const dtype = $('#dtype').value;
+  [...e.target.files].forEach(f => {
+    const rd = new FileReader();
+    rd.onload = () => { DOCS.push({ doc_type: dtype, name: f.name, mime: f.type, b64: rd.result }); renderDocs(); };
+    rd.readAsDataURL(f);
+  });
+  e.target.value = '';
+});
+function renderDocs(){
+  $('#doclist').innerHTML = DOCS.map((d,i) =>
+    '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
+    + '<span class="pill" style="background:rgba(77,124,254,.15);color:var(--blue)">' + d.doc_type.replace(/_/g,\' \') + '</span>'
+    + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + d.name + '</span>'
+    + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
+  ).join('');
+}
+
 $('#file').addEventListener('change', e => {
   const f = e.target.files[0]; if(!f) return;
   FILE_NAME = f.name; FILE_MIME = f.type;
@@ -202,11 +241,23 @@ async function submit(complete){
   try{
     const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const j = await r.json();
+    // upload optional documents (each logged to our vault + HawkSoft)
+    let docsOk = 0;
+    for(const d of DOCS){
+      try{
+        const dr = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
+          body: JSON.stringify({ action:'save_carrier_leg', client_no:Number(CTX.client_no)||null,
+            policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
+            doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, complete:false }) });
+        const dj = await dr.json(); if(dj.ok) docsOk++;
+      }catch(e){}
+    }
     if(j.ok){
       msg.className='ok';
-      msg.textContent = complete
-        ? '✓ Audit complete — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')+'.'
-        : '✓ Saved as pending — task flagged. You can finish later.';
+      msg.textContent = (complete
+        ? '✓ Audit complete — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')
+        : '✓ Saved as pending — task flagged')
+        + (docsOk ? ' · '+docsOk+' document'+(docsOk>1?'s':'')+' logged' : '') + '.';
       if(complete){ $('#submitBtn').disabled=true; $('.save').disabled=true; }
     } else {
       msg.className='err'; msg.textContent = j.error || 'Failed.';

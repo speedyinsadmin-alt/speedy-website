@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     }
 
     let attachment = null;
-    let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'not_attempted';
+    let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'optional';
 
     if (receipt_b64) {
       const buf = b64ToBuf(receipt_b64);
@@ -92,13 +92,14 @@ export default async function handler(req, res) {
       const blobRes = await blobPut(path, buf, receipt_mime || 'application/octet-stream');
       const url = blobRes.url; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
 
-      // Store attachment row in our vault
+      // Store attachment row in our vault — file bytes stored INLINE in Supabase (guaranteed, no Blob dependency)
+      const dtype = (body.doc_type || 'carrier_receipt');
       const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
         method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
         body: JSON.stringify([{
           client_no, policy_id: policy_id || null, payment_id: payment_id || null,
-          kind: 'carrier_receipt', filename: receipt_name || `carrier_${carrier}.${ext}`,
-          blob_url: url, sha256: hash, mime: receipt_mime, bytes: buf.length,
+          kind: dtype, doc_type: dtype, filename: receipt_name || `${dtype}_${carrier || client_no}.${ext}`,
+          blob_url: url, file_b64: receipt_b64, sha256: hash, mime: receipt_mime, bytes: buf.length,
           carrier: carrier || null, amount: carrier_amount != null ? Number(carrier_amount) : null,
           uploaded_by: email,
         }]),

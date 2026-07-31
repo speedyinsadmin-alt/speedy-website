@@ -401,7 +401,8 @@ function nextCarrierLink(amt){
     paid: (amt!=null?amt:''), method: 'client paid',
     policy: (c.policyNumber||''), policy_guid: (c.policyGuid||c.policyId||'')
   });
-  return '/admin/carrier.html?' + params.toString();
+  const base = '/admin/carrier.html?' + params.toString();
+  return base + (typeof gToken!=='undefined' && gToken ? '#tok=' + encodeURIComponent(gToken) : '');
 }
 function nextBtnHtml(amt){
   return '<div style="margin-top:14px"><a href="'+nextCarrierLink(amt)+'" '

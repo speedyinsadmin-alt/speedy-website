@@ -196,5 +196,52 @@ export default async function handler(req, res) {
     });
   }
 
+  if (action === 'create_audit_task') {
+    const { client_no, payment_id, policy_id, service_type, checklist } = body;
+    if (!client_no) return res.status(400).json({ ok: false, error: 'client_no required' });
+    const until = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
+    const title = service_type === 'dmv_service' ? `DMV documents needed — client #${client_no}` : `Audit documents needed — client #${client_no}`;
+    const desc = `Upload required documents to complete the audit for client #${client_no}. Reminders daily for 72h. Started by ${email}.`;
+    const hs = await hsCreateTask(client_no, title, desc, email);
+    const ins = await fetch(`${s.base}/rest/v1/audit_tasks`, {
+      method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
+      body: JSON.stringify([{
+        client_no, payment_id: payment_id || null, policy_id: policy_id || null,
+        service_type: service_type || null, status: 'open', assigned_to: email, created_by: email,
+        checklist: checklist || [], hawksoft_task_refid: hs.refid,
+        reminder_until: until, reminder_count: 0,
+      }]),
+    });
+    const task = (await ins.json().catch(() => []))[0] || null;
+    await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify([{ actor: email, kind: 'audit_task.created', client_no, source: 'carrier_capture',
+        payload: { task_id: task && task.id, service_type, hawksoft_filed: hs.ok } }]) });
+    return res.status(200).json({ ok: true, email, task_id: task && task.id, hawksoft_task: hs.ok });
+  }
+
+  if (action === 'mark_ready') {
+    const { task_id, client_no, checklist } = body;
+    if (!task_id) return res.status(400).json({ ok: false, error: 'task_id required' });
+    await fetch(`${s.base}/rest/v1/audit_tasks?id=eq.${task_id}`, {
+      method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'ready_for_audit', ...(checklist ? { checklist } : {}), updated_at: new Date().toISOString() }),
+    });
+    await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify([{ actor: email, kind: 'audit_task.ready', client_no: client_no || null, source: 'carrier_capture', payload: { task_id } }]) });
+    return res.status(200).json({ ok: true, email, status: 'ready_for_audit' });
+  }
+
+  if (action === 'confirm_audit') {
+    const { task_id, client_no } = body;
+    if (!task_id) return res.status(400).json({ ok: false, error: 'task_id required' });
+    await fetch(`${s.base}/rest/v1/audit_tasks?id=eq.${task_id}`, {
+      method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'complete', confirmed_by: email, confirmed_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+    });
+    await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify([{ actor: email, kind: 'audit_task.confirmed', client_no: client_no || null, source: 'audit_review', payload: { task_id } }]) });
+    return res.status(200).json({ ok: true, email, status: 'complete' });
+  }
+
   return res.status(400).json({ ok: false, error: 'Unknown action' });
 }

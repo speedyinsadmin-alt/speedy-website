@@ -53,6 +53,32 @@ function b64ToBuf(b64) {
 }
 const b64h = s => Buffer.from(String(s), 'utf8').toString('base64');
 
+
+async function hsCreateTask(clientNo, title, description, taskEmail) {
+  const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
+  if (!ID || !SECRET) return { ok: false, refid: null };
+  const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
+  const refId = crypto.randomUUID();
+  const now = new Date();
+  const receipt = [{
+    channel: 32,
+    logNote: `Audit task: ${title}`,
+    task: {
+      title: String(title).slice(0, 80),
+      description: String(description).slice(0, 500),
+      dueDate: new Date(now.getTime() + 72 * 3600 * 1000).toISOString(),
+      ...(taskEmail ? { specifiedUser: { email: taskEmail } } : {}),
+    },
+  }];
+  try {
+    const r = await fetch(`${HS_BASE}/vendor/agency/${AGENCY_ID}/client/${clientNo}/receipts?version=4.0`, {
+      method: 'POST', headers: { Authorization: AUTH, 'Content-Type': 'application/json', RefId: refId },
+      body: JSON.stringify(receipt),
+    });
+    return { ok: r.status === 200 || r.status === 202, refid: refId, status: r.status };
+  } catch { return { ok: false, refid: refId }; }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });

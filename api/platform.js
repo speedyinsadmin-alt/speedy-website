@@ -328,19 +328,6 @@ export default async function handler(req, res) {
   const view = String(req.query.view || '');
 
   /* ---- TEMP: receipts discovery ---- */
-  /* ---- TEMP: people fields probe ---- */
-  if (view === 'people') {
-    const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
-    const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=People,Details,Policies`);
-    const b = r.body || {};
-    const people = b.people || b.People || [];
-    const dump = people.map(p => ({ keys: Object.keys(p), person: p }));
-    // ALSO persist to events so it can be read server-side (avoids browser copy-paste)
-    await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-      body: JSON.stringify([{ actor: email, kind: 'debug.people_probe', client_no: no, source: 'probe', payload: { count: people.length, people: dump } }]) });
-    return res.status(200).json({ ok: true, email, count: people.length, saved: true, people: dump });
-  }
-
   /* ---- HawkSoft direct: ZZTEST raw ---- */
   if (view === 'client') {
     const hs = await hsFetchClient();

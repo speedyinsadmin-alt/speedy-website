@@ -331,6 +331,16 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ...step });
     }
 
+    if (action === 'set_commission') {
+      const { agent_email, percentage } = body;
+      if (!agent_email || percentage == null) return res.status(400).json({ ok: false, error: 'agent_email + percentage required' });
+      await fetch(`${s.base}/rest/v1/agent_commission`, {
+        method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify([{ agent_email, percentage: Number(percentage), updated_by: email, updated_at: new Date().toISOString() }]),
+      });
+      return res.status(200).json({ ok: true, email, agent_email, percentage: Number(percentage) });
+    }
+
     if (action === 'delta_sync') {
       const out = await runDeltaSync(s, email);
       return res.status(out.ok ? 200 : 502).json({ ...out, email });
@@ -424,11 +434,67 @@ export default async function handler(req, res) {
 
   /* ---- Sync status ---- */
   if (view === 'audit_list') {
-    // All audit tasks + their payment + attachment counts
-    const tasks = await sbGet(s, 'audit_tasks?select=*&order=created_at.desc&limit=200');
-    const atts = await sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft&order=created_at.desc&limit=500');
-    const pays = await sbGet(s, 'bridge_ledger?select=id,ts,kind,client_id,amount,purpose,audit_status,carrier_name,carrier_paid_amount&order=ts.desc&limit=200');
-    return res.status(200).json({ ok: true, email, tasks: tasks.rows || [], attachments: atts.rows || [], payments: pays.rows || [] });
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const AUDIT_CUTOFF = '2026-07-29'; // proof-of-payment process started ~here; older charges are pre-audit
+    const tasks = await sbGet(s, 'audit_tasks?select=*&order=created_at.desc&limit=500');
+    const atts = await sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft&order=created_at.desc&limit=1000');
+    const pays = await sbGet(s, 'bridge_ledger?select=*&order=ts.desc&limit=500');
+    // client names for the payments (dedupe client ids)
+    const ids = [...new Set((pays.rows || []).map(p => p.client_id).filter(x => x != null))];
+    const nameMap = {};
+    if (ids.length) {
+      const cl = await sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`);
+      for (const c of (cl.rows || [])) nameMap[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
+    }
+    // record_type per client (to derive service path) — from policies
+    const typeMap = {};
+    if (ids.length) {
+      const po = await sbGet(s, `policies?client_no=in.(${ids.join(',')})&select=client_no,record_type`);
+      for (const r of (po.rows || [])) { if (!typeMap[r.client_no]) typeMap[r.client_no] = r.record_type; if (r.record_type === 'dmv_service') typeMap[r.client_no] = 'dmv_service'; }
+    }
+    const comm = await sbGet(s, 'agent_commission?select=*');
+    const commMap = {}; for (const c of (comm.rows || [])) commMap[c.agent_email] = Number(c.percentage);
+
+    let rows = (pays.rows || []).map(p => {
+      const dateStr = String(p.ts || '').slice(0, 10);
+      const preAudit = dateStr < AUDIT_CUTOFF;
+      const purpose = String(p.purpose || '').toLowerCase();
+      let path = p.service_path;
+      if (!path) {
+        if (purpose.includes('dmv') || purpose.includes('registration') || purpose.includes('regist')) path = 'dmv_service';
+        else path = typeMap[p.client_id] || 'insurance';
+      }
+      const docs = (atts.rows || []).filter(a => (a.payment_id === p.id) || (a.client_no === p.client_id));
+      const task = (tasks.rows || []).find(t => t.payment_id === p.id);
+      const auditStatus = preAudit ? 'pre_audit' : (task ? task.status : (p.audit_status || 'client_paid'));
+      const cost = p.service_cost != null ? Number(p.service_cost) : (p.carrier_paid_amount != null ? Number(p.carrier_paid_amount) : null);
+      const fee = p.fee_amount != null ? Number(p.fee_amount) : (cost != null ? Number(p.amount) - cost : null);
+      const pct = commMap[p.agent] != null ? commMap[p.agent] : 10;
+      const commission = (fee != null && auditStatus === 'complete') ? +(fee * pct / 100).toFixed(2) : null;
+      return {
+        id: p.id, ts: p.ts, client_no: p.client_id, client_name: nameMap[p.client_id] || null,
+        amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
+        agent: p.agent, path, audit_status: auditStatus, pre_audit: preAudit,
+        service_cost: cost, fee, pct, commission, doc_count: docs.length, task_id: task ? task.id : null,
+      };
+    });
+    if (q) {
+      rows = rows.filter(r =>
+        String(r.client_no).includes(q) ||
+        (r.client_name || '').toLowerCase().includes(q) ||
+        (r.purpose || '').toLowerCase().includes(q) ||
+        (r.ref || '').toLowerCase().includes(q) ||
+        (r.agent || '').toLowerCase().includes(q) ||
+        (r.path || '').toLowerCase().includes(q)
+      );
+    }
+    return res.status(200).json({ ok: true, email, rows, attachments: atts.rows || [], commissions: comm.rows || [] });
+  }
+
+  if (view === 'agent_breakdown') {
+    const agent = String(req.query.agent || '');
+    const r = await sbGet(s, `bridge_ledger?agent=eq.${encodeURIComponent(agent)}&select=*&order=ts.desc&limit=500`);
+    return res.status(200).json({ ok: true, email, rows: r.rows || [] });
   }
 
   if (view === 'attachment_get') {

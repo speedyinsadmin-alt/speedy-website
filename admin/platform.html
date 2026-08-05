@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.8</small></h1>
+      <h1>Platform Console <small id="ver">v3.9</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -612,13 +612,93 @@ async function renderLedger(el) {
 }
 
 /* ---------- Tables ---------- */
+let AUDIT_SUB = 'transactions'; // 'transactions' | 'commissions'
+let AUDIT_AGENT = null; // when set, show that agent's breakdown
+
+function auditSubNav(){
+  const btn = (id,label) => '<button onclick="setAuditSub(\''+id+'\')" style="background:'+(AUDIT_SUB===id?'var(--blue)':'var(--navy)')+';color:'+(AUDIT_SUB===id?'#fff':'var(--mute)')+';border:1px solid var(--line);padding:7px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;margin-right:8px">'+label+'</button>';
+  return '<div style="margin:2px 0 16px">'+btn('transactions','Transactions')+btn('commissions','Commissions')+'</div>';
+}
+function setAuditSub(s){ AUDIT_SUB = s; AUDIT_AGENT = null; render(); }
+
+async function renderCommissions(el){
+  const r = AUDIT_CACHE || await api('audit_list');
+  const rows = r.rows || [];
+  const commMap = {}; for(const c of (r.commissions||[])) commMap[c.agent_email] = Number(c.percentage);
+
+  // If an agent is selected, show their breakdown
+  if(AUDIT_AGENT){
+    const mine = rows.filter(x => x.agent === AUDIT_AGENT);
+    const earned = mine.reduce((a,x)=> a + (x.commission||0), 0);
+    const pending = mine.reduce((a,x)=> a + ((x.commission==null && x.fee!=null)? x.fee*x.pct/100 : 0), 0);
+    let h = '<span class="raw-t" onclick="AUDIT_AGENT=null;render()" style="display:inline-block;margin-bottom:10px">← All agents</span>';
+    h += '<h2 style="margin:0">'+esc((AUDIT_AGENT||'').split('@')[0])+' <span class="muted" style="font-weight:400;font-size:13px">· '+esc(AUDIT_AGENT)+'</span></h2>';
+    h += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 16px;font-size:13px">'
+      + '<span>Transactions: <b>'+mine.length+'</b></span>'
+      + '<span>Earned: <b class="amount" style="color:#7fa8ff">'+money(earned)+'</b></span>'
+      + '<span>Pending: <b class="amount muted">'+money(pending)+'</b></span></div>';
+    h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th>Fee</th><th>Comm.</th><th>Status</th></tr>';
+    for(const x of mine){
+      h += '<tr><td class="muted" style="font-size:12px">'+esc(String(x.ts||'').replace('T',' ').slice(0,16))+'</td>'
+        + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span></td>'
+        + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':x.path)+'</span></td>'
+        + '<td class="amount">'+money(x.amount)+'</td>'
+        + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'
+        + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+'</td>'
+        + '<td>'+(x.pre_audit?'<span class="muted">—</span>':x.audit_status==='complete'?'<span class="pill g">complete</span>':'<span class="pill a">'+esc(x.audit_status||'')+'</span>')+'</td></tr>';
+    }
+    h += '</table>';
+    el.innerHTML = h;
+    return;
+  }
+
+  // Otherwise: per-agent totals
+  const agents = {};
+  for(const x of rows){
+    const a = x.agent || '(unknown)';
+    if(!agents[a]) agents[a] = { agent:a, count:0, fees:0, earned:0, pending:0, pct: (commMap[a]!=null?commMap[a]:10) };
+    agents[a].count++;
+    agents[a].fees += (x.fee||0);
+    if(x.commission!=null) agents[a].earned += x.commission;
+    else if(x.fee!=null) agents[a].pending += x.fee*x.pct/100;
+  }
+  const list = Object.values(agents).sort((a,b)=> b.earned - a.earned);
+  const totEarned = list.reduce((a,x)=>a+x.earned,0);
+
+  let h = '<div class="muted" style="font-size:12.5px;margin-bottom:12px">Commission is % of the fee, earned only when the audit is complete. Set each agent\'s rate below (default 10%). Paid monthly with salary.</div>';
+  h += '<div style="margin-bottom:14px;font-size:14px">Total earned this book: <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></div>';
+  h += '<table><tr><th>Agent</th><th>Transactions</th><th>Total fees</th><th>Rate %</th><th>Earned</th><th>Pending</th></tr>';
+  if(!list.length) h += '<tr><td colspan="6" class="muted">No agent activity.</td></tr>';
+  for(const a of list){
+    const safe = (a.agent||'').replace(/'/g,"\\'");
+    h += '<tr>'
+      + '<td><span class="raw-t" onclick="AUDIT_AGENT=\''+safe+'\';render()">'+esc((a.agent||'').split('@')[0])+'</span></td>'
+      + '<td>'+a.count+'</td>'
+      + '<td class="amount">'+money(a.fees)+'</td>'
+      + '<td><input type="number" value="'+a.pct+'" min="0" max="100" step="0.5" onchange="saveCommission(\''+safe+'\',this.value)" style="width:64px;background:var(--navy);border:1px solid var(--line);border-radius:7px;padding:5px 8px;color:var(--ink);font-size:13px">%</td>'
+      + '<td class="amount"><b style="color:#7fa8ff">'+money(a.earned)+'</b></td>'
+      + '<td class="amount muted">'+money(a.pending)+'</td>'
+      + '</tr>';
+  }
+  h += '</table>';
+  el.innerHTML = h;
+}
+
+async function saveCommission(agent, pct){
+  const r = await fetch('/api/platform',{method:'POST',headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},body:JSON.stringify({action:'set_commission',agent_email:agent,percentage:Number(pct)})});
+  const j = await r.json();
+  if(j.ok){ AUDIT_CACHE=null; render(); } else alert(j.error||'Failed to save rate');
+}
+
+
 let AUDIT_Q = '';
 let AUDIT_CACHE = null;
 async function renderAudit(el){
-  el.innerHTML = '<div class="muted">Loading audit…</div>';
+  el.innerHTML = '<h2>Audit — full transaction trail</h2>' + auditSubNav() + '<div class="muted">Loading…</div>';
   const r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : ''));
   if(!r || !r.ok){ el.innerHTML = '<div class="err">Failed to load audit.</div>'; return; }
   AUDIT_CACHE = r;
+  if(AUDIT_SUB === 'commissions'){ const wrap=document.createElement('div'); await renderCommissions(wrap); el.innerHTML = '<h2>Audit — commissions</h2>' + auditSubNav(); el.appendChild(wrap); return; }
   const rows = r.rows || [];
   const atts = r.attachments || [];
 
@@ -636,8 +716,8 @@ async function renderAudit(el){
   const totFees = rows.reduce((a,x)=> a + (x.fee||0), 0);
   const totComm = rows.reduce((a,x)=> a + (x.commission||0), 0);
 
-  let h = '<h2>Audit — full transaction trail</h2>';
-  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. Fees and commission shown per transaction; commission is earned only when the audit is complete.</div>';
+  let h = '<h2>Audit — full transaction trail</h2>' + auditSubNav();
+  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. Commission is earned only when the audit is complete.</div>';
 
   // search
   h += '<input id="auditSearch" placeholder="Search client name, #, transaction ref, agent, purpose…" value="'+esc(AUDIT_Q)+'" '

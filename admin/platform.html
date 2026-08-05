@@ -513,18 +513,10 @@ async function renderLedger(el) {
 }
 
 /* ---------- Tables ---------- */
-async function probePeople(){
-  const no = prompt('Client # to inspect people fields:', '25396');
-  if(!no) return;
-  const r = await api('people&no=' + encodeURIComponent(no));
-  const w = window.open('','_blank');
-  w.document.write('<pre style="white-space:pre-wrap;font:12px monospace;padding:16px">'+JSON.stringify(r,null,2).replace(/</g,'&lt;')+'</pre>');
-}
-
 async function renderTables(el) {
   const r = await api('tables');
   if (!r || !r.ok) { el.innerHTML = '<div class="err">Table inventory failed.</div>'; return; }
-  let h = '<h2>Our database — what exists today <button onclick="probePeople()" style="float:right;background:var(--amber);border:0;color:#2a1a00;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">Probe people</button></h2>';
+  let h = '<h2>Our database — what exists today</h2>';
   h += '<table><tr><th>Table</th><th>Status</th><th>Rows</th><th>Columns</th></tr>'
     + (r.tables || []).map(t => '<tr>'
       + '<td><span class="amount">' + esc(t.table) + '</span></td>'

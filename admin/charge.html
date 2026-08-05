@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.28 · carrier &amp; documents next</div>
+    <div class="ver">v2.29 · name picker</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -343,10 +343,19 @@ async function verify(){
     const apiName = String(c.name||'').toUpperCase();
     const mismatch = typed.length>3 && apiName.length>3 &&
         !apiName.includes(typed.split(' ')[0]) && !typed.includes(apiName.split(' ')[0]);
+    const ppl = Array.isArray(c.people) ? c.people : [];
+    const multi = ppl.length > 1;
+    const nameBlock = multi
+      ? `<h2 style="margin-bottom:6px">${esc(c.name)}</h2>
+         <label class="hint" style="display:block;margin:2px 0 4px">Charging which name? (defaults to named insured)</label>
+         <select id="chargeName" onchange="onNamePick()" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--navy2,#161f45);color:var(--ink,#f2f5ff);font-size:14px;margin-bottom:4px">
+           ${ppl.map((p,i)=>`<option value="${esc(p.name)}" ${p.role==='named insured'?'selected':''}>${esc(p.name)} — ${esc(p.role)}${p.role==='excluded'?' ⚠':''}</option>`).join('')}
+         </select>`
+      : `<h2>${esc(c.name)}</h2>`;
     box.innerHTML = `
       <div class="match ${mismatch?'warn':''}">
         <div class="tag"><span class="dot"></span> ${mismatch?'Name mismatch — check!':'Matched in HawkSoft'}</div>
-        <h2>${esc(c.name)}</h2>
+        ${nameBlock}
         <div class="meta">
           <span class="chip">Client #${c.clientNumber}</span>
           ${c.officeId?`<span class="chip b">${({1:'Moreno Valley',2:'Riverside — Van Buren',3:'Riverside — Magnolia'})[c.officeId]||('Office '+c.officeId)}</span>`:''}
@@ -412,6 +421,10 @@ function nextBtnHtml(amt){
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function resetMatch(){ document.getElementById('matchbox').innerHTML=''; document.getElementById('chargecard').classList.add('hide'); confirmed=null; }
+function onNamePick(){
+  const sel = document.getElementById('chargeName');
+  if (sel && confirmed) confirmed.name = sel.value;
+}
 function confirmClient(n){
   document.getElementById('chargecard').classList.remove('hide');
   initClover();

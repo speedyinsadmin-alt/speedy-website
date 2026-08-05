@@ -328,6 +328,17 @@ export default async function handler(req, res) {
   const view = String(req.query.view || '');
 
   /* ---- TEMP: receipts discovery ---- */
+  /* ---- TEMP: people fields probe ---- */
+  if (view === 'people') {
+    const no = parseInt(String(req.query.no || ''), 10) || TEST_CLIENT;
+    const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=People,Details,Policies`);
+    const b = r.body || {};
+    const people = b.people || b.People || [];
+    // show every field on each person + which policies list them
+    const dump = people.map(p => ({ keys: Object.keys(p), person: p }));
+    return res.status(200).json({ ok: true, email, count: people.length, people: dump });
+  }
+
   /* ---- HawkSoft direct: ZZTEST raw ---- */
   if (view === 'client') {
     const hs = await hsFetchClient();

@@ -155,10 +155,12 @@ const CTX = {
 };
 
 window.addEventListener('load', () => {
-  // Handoff: token passed from charge page via URL hash -> skip second sign-in
+  // Handoff: token from localStorage (reliable) or URL hash -> skip second sign-in
   const hash = new URLSearchParams(location.hash.slice(1));
-  const passed = hash.get('tok');
+  let passed = hash.get('tok');
+  if (!passed) { try { passed = localStorage.getItem('speedy_handoff_tok'); } catch(e){} }
   if (passed) {
+    try { localStorage.removeItem('speedy_handoff_tok'); } catch(e){}
     history.replaceState(null, '', location.pathname + location.search); // scrub token from URL
     TOKEN = passed;
     $('#gate').style.display='none';

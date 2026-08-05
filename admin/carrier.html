@@ -291,9 +291,9 @@ async function submit(complete){
   for(const d of DOCS){
     try{
       const dr = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'save_carrier_leg', client_no:Number(CTX.client_no)||null,
+        body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
           policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
-          doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, complete:false }) });
+          doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime }) });
       let dj=null; try{ dj = await dr.json(); }catch(e){}
       if(dr.ok && (!dj || dj.ok)) docsOk++; else docsFail++;
     }catch(e){ docsFail++; }

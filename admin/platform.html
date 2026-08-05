@@ -128,7 +128,12 @@ async function render() {
   if (TAB === 'audit') return renderAudit(el);
   if (TAB === 'tables') return renderTables(el);
 }
-function openClient(no) { OPEN_CLIENT = no; render(); }
+function openClient(no) {
+  OPEN_CLIENT = no;
+  TAB = 'clients';
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x.dataset.tab === 'clients'));
+  render();
+}
 function closeClient() { OPEN_CLIENT = null; render(); }
 
 async function apiPost(action) {
@@ -621,6 +626,15 @@ function auditSubNav(){
 }
 function setAuditSub(s){ AUDIT_SUB = s; AGENT_OPEN = null; render(); }
 
+function agentName(email){
+  const M = { 'sammy@speedyins.com':'Samuel Rodriguez', 'info@speedyins.com':'Admin (info)',
+    'yolanda@speedyins.com':'Yolanda Hernandez','jorge@speedyins.com':'Jorge Ramos',
+    'yasmin@speedyins.com':'Yasmin Alfaro','fernando@speedyins.com':'Fernando Salgado',
+    'jesus@speedyins.com':'Jesus Velarde','alejandra@speedyins.com':'Alejandra Salas',
+    'esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
+    'chris@speedyins.com':'Christian Aguilar' };
+  return M[email] || (email||'').split('@')[0] || email;
+}
 function renderAgentView(r){
   const rows = r.rows || [];
   const commMap = {}; for(const c of (r.commissions||[])) commMap[c.agent_email] = Number(c.percentage);
@@ -656,8 +670,9 @@ function renderAgentView(r){
     h += '<div style="border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden">';
     h += '<div onclick="toggleAgent(\''+g.agent+'\')" style="cursor:pointer;display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--navy)">'
       + '<span style="color:var(--mute);width:12px">'+(open?'▾':'▸')+'</span>'
-      + '<div style="flex:1"><b style="font-size:15px">'+esc(isEmail?g.agent.split('@')[0]:g.agent)+'</b>'
-      + '<div class="muted" style="font-size:12px">'+g.tx.length+' transactions · '+esc(period)+'</div></div>'
+      + '<div style="flex:1"><b style="font-size:15px">'+esc(agentName(g.agent))+'</b>'
+      + (g.agent==='info@speedyins.com'?' <span class="pill a" style="font-size:10px">admin</span>':'')
+      + '<div class="muted" style="font-size:12px">'+g.tx.length+' transactions · '+esc(period)+' · '+esc(g.agent)+'</div></div>'
       + '<div style="text-align:right"><div class="muted" style="font-size:11px">Earned</div><b class="amount" style="color:#7fa8ff;font-size:16px">'+money(g.earned)+'</b></div>'
       + '<div style="text-align:right"><div class="muted" style="font-size:11px">Pending</div><span class="amount muted">'+money(g.pending)+'</span></div>'
       + '</div>';

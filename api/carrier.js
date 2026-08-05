@@ -100,6 +100,61 @@ export default async function handler(req, res) {
   let body = {}; try { body = req.body || {}; } catch {}
   const action = body.action || '';
 
+  if (action === 'add_document') {
+    // Lightweight: just store a supporting document (no ledger/carrier logic)
+    const { client_no, policy_id, policy_guid, payment_id, doc_type, receipt_b64, receipt_name, receipt_mime } = body;
+    if (!client_no || !receipt_b64) return res.status(400).json({ ok: false, error: 'client_no + file required' });
+    const buf = b64ToBuf(receipt_b64);
+    const hash = await sha256hex(buf);
+    const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
+    const dtype = doc_type || 'other';
+    const today = new Date().toISOString().slice(0,10);
+    const looksUuid = /^[0-9a-f-]{30,}\.[a-z]+$/i.test(receipt_name || '');
+    const niceName = (receipt_name && !looksUuid) ? receipt_name : `${dtype}_${client_no}_${today}.${ext}`;
+
+    const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
+      method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
+      body: JSON.stringify([{
+        client_no, policy_id: policy_id || null, payment_id: payment_id || null,
+        kind: dtype, doc_type: dtype, filename: niceName,
+        file_b64: receipt_b64, sha256: hash, mime: receipt_mime, bytes: buf.length,
+        uploaded_by: email,
+      }]),
+    });
+    const attachment = (await attIns.json().catch(() => []))[0] || null;
+
+    // File to HawkSoft too (gzip, same as receipts)
+    let hsFiled = false, hsRefId = null;
+    const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
+    if (ID && SECRET) {
+      const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
+      hsRefId = crypto.randomUUID();
+      const fname = niceName.replace(/\.[^.]+$/, '').slice(0, 60);
+      const desc = `${dtype.replace(/_/g,' ')}`.slice(0, 41);
+      try {
+        const r2 = await fetch(`${HS_BASE}/vendor/agency/${AGENCY_ID}/client/${client_no}/attachment?version=4.0`, {
+          method: 'POST',
+          headers: {
+            Authorization: AUTH, 'Content-Type': 'application/octet-stream',
+            RefId: hsRefId, TS: new Date().toISOString(), Desc: b64h(desc),
+            LogNote: b64h(`${dtype} filed by Speedy platform. Uploaded by ${email}.`),
+            FileName: b64h(fname), FileExt: ext, Channel: '32',
+            ...(policy_guid ? { PolicyId: policy_guid } : {}),
+          },
+          body: gzipSync(buf),
+        });
+        hsFiled = (r2.status === 200 || r2.status === 202);
+      } catch {}
+      if (attachment && hsFiled) {
+        await fetch(`${s.base}/rest/v1/attachments?id=eq.${attachment.id}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ filed_hawksoft: true, hawksoft_refid: hsRefId }),
+        });
+      }
+    }
+    return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled });
+  }
+
   if (action === 'save_carrier_leg') {
     const {
       client_no, policy_id, policy_guid, payment_id,

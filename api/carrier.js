@@ -120,11 +120,17 @@ export default async function handler(req, res) {
 
       // Store attachment row in our vault — file bytes stored INLINE in Supabase (guaranteed, no Blob dependency)
       const dtype = (body.doc_type || 'carrier_receipt');
+      const today = new Date().toISOString().slice(0,10);
+      const amtPart = carrier_amount != null ? ('_$' + Number(carrier_amount).toFixed(2)) : '';
+      const looksUuid = /^[0-9a-f-]{30,}\.[a-z]+$/i.test(receipt_name || '');
+      const niceName = (receipt_name && !looksUuid)
+        ? receipt_name
+        : `${dtype}_${(carrier || ('client'+client_no)).replace(/[^a-z0-9]/gi,'')}${amtPart}_${today}.${ext}`;
       const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
         method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
         body: JSON.stringify([{
           client_no, policy_id: policy_id || null, payment_id: payment_id || null,
-          kind: dtype, doc_type: dtype, filename: receipt_name || `${dtype}_${carrier || client_no}.${ext}`,
+          kind: dtype, doc_type: dtype, filename: niceName,
           blob_url: url, file_b64: receipt_b64, sha256: hash, mime: receipt_mime, bytes: buf.length,
           carrier: carrier || null, amount: carrier_amount != null ? Number(carrier_amount) : null,
           uploaded_by: email,

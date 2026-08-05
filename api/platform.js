@@ -512,6 +512,40 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, filename: a.filename, mime: a.mime, file_b64: a.file_b64, blob_url: a.blob_url });
   }
 
+  if (view === 'system_health') {
+    // Call the Postgres RPC for sizes
+    let health = null;
+    try {
+      const r = await fetch(`${s.base}/rest/v1/rpc/system_health`, {
+        method: 'POST', headers: { ...s.hdrs }, body: '{}',
+      });
+      health = await r.json();
+    } catch (e) { return res.status(500).json({ ok: false, error: 'health query failed' }); }
+
+    const dbBytes = Number(health.db_bytes || 0);
+    const attBytes = Number(health.attachments_bytes || 0);
+    // Supabase tier limits (Pro = 8GB disk; warn well before)
+    const DB_WARN = 6 * 1024 ** 3;      // 6 GB — start planning
+    const DB_CRIT = 7.5 * 1024 ** 3;    // 7.5 GB — act now (Pro cap 8GB)
+    const ATT_WARN = 500 * 1024 ** 2;   // 500 MB inline attachments — move to Blob
+    const ATT_CRIT = 1024 ** 3;         // 1 GB inline — urgent
+
+    const alerts = [];
+    if (dbBytes >= DB_CRIT) alerts.push({ level: 'critical', msg: 'Database near tier cap — upgrade Supabase or archive data now.' });
+    else if (dbBytes >= DB_WARN) alerts.push({ level: 'warn', msg: 'Database growing — plan capacity (Supabase Pro = 8GB).' });
+    if (attBytes >= ATT_CRIT) alerts.push({ level: 'critical', msg: 'Inline attachments over 1GB — move receipt PDFs to Blob storage.' });
+    else if (attBytes >= ATT_WARN) alerts.push({ level: 'warn', msg: 'Inline attachments over 500MB — consider moving PDFs to Blob storage.' });
+
+    return res.status(200).json({
+      ok: true, email,
+      db_bytes: dbBytes, attachments_bytes: attBytes,
+      attachment_count: health.attachment_count || 0,
+      tables: health.tables || [],
+      thresholds: { db_warn: DB_WARN, db_crit: DB_CRIT, att_warn: ATT_WARN, att_crit: ATT_CRIT },
+      alerts, generated_at: health.generated_at,
+    });
+  }
+
   if (view === 'sync_status') {
     const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
     const ev = await sbGet(s, "events?kind=eq.sync.completed&select=ts,payload&order=ts.desc&limit=5");

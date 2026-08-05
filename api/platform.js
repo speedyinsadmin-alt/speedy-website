@@ -549,8 +549,19 @@ export default async function handler(req, res) {
   if (view === 'sync_status') {
     const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
     const ev = await sbGet(s, "events?kind=eq.sync.completed&select=ts,payload&order=ts.desc&limit=5");
-    return res.status(200).json({ ok: true, email, state: (st.rows || [])[0] || null, recent: ev.rows || [] });
+    // live job progress from sync_jobs
+    const running = await sbGet(s, "sync_jobs?status=in.(pending,running)&select=id,kind,status,total,processed,clients_updated,policies_updated,created_at,updated_at&order=created_at.desc&limit=1");
+    const lastDone = await sbGet(s, "sync_jobs?status=eq.complete&select=id,kind,total,processed,clients_updated,policies_updated,created_at,updated_at&order=updated_at.desc&limit=1");
+    const job = (running.rows || [])[0] || null;
+    const done = (lastDone.rows || [])[0] || null;
+    return res.status(200).json({
+      ok: true, email,
+      state: (st.rows || [])[0] || null, recent: ev.rows || [],
+      job, last_complete: done,
+    });
   }
+
+
 
   /* ---- Ledger ---- */
   if (view === 'ledger') {

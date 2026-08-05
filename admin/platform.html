@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.0</small></h1>
+      <h1>Platform Console <small id="ver">v4.1</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -825,6 +825,55 @@ async function confirmAudit(taskId, clientNo){
 }
 
 
+async function renderSystemHealth(){
+  const r = await api('system_health');
+  if(!r || !r.ok) return '<div class="err" style="margin-top:20px">Could not load system health.</div>';
+  const mb = b => (b/1048576);
+  const fmt = b => b >= 1073741824 ? (b/1073741824).toFixed(2)+' GB' : (b/1048576).toFixed(1)+' MB';
+  const dbBytes = r.db_bytes||0, attBytes = r.attachments_bytes||0;
+  const dbWarn = r.thresholds.db_warn, dbCrit = r.thresholds.db_crit;
+  const attWarn = r.thresholds.att_warn;
+  const dbPct = Math.min(100, dbBytes / (8*1073741824) * 100);   // vs 8GB Pro cap
+  const attPct = Math.min(100, attBytes / attWarn * 100);         // vs 500MB warn line
+
+  const barColor = pct => pct >= 90 ? '#e03131' : pct >= 70 ? '#f5a623' : '#2fbf71';
+
+  let h = '<h2 style="margin-top:26px">System health</h2>';
+  h += '<div class="muted" style="font-size:12px;margin:-4px 0 12px">Storage usage and capacity. Updated live · '+esc(String(r.generated_at||'').replace('T',' ').slice(0,16))+'</div>';
+
+  // alerts
+  if(r.alerts && r.alerts.length){
+    for(const a of r.alerts){
+      const col = a.level==='critical' ? '#e03131' : '#f5a623';
+      h += '<div style="border:1px solid '+col+';background:'+col+'1a;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px"><b style="color:'+col+'">'+(a.level==='critical'?'⚠ CRITICAL':'⚠ Warning')+':</b> '+esc(a.msg)+'</div>';
+    }
+  } else {
+    h += '<div style="border:1px solid var(--green,#2fbf71);background:rgba(47,191,113,.1);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px"><b style="color:#2fbf71">✓ Healthy</b> — all storage well within limits.</div>';
+  }
+
+  // DB usage bar (vs 8GB Pro)
+  h += '<div style="margin-bottom:16px">';
+  h += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span>Database total</span><span><b>'+fmt(dbBytes)+'</b> <span class="muted">/ 8 GB (Pro)</span></span></div>';
+  h += '<div style="height:10px;background:var(--navy);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+dbPct.toFixed(1)+'%;background:'+barColor(dbPct)+'"></div></div>';
+  h += '<div class="muted" style="font-size:11px;margin-top:3px">Warn at '+fmt(dbWarn)+' · plan expansion by then</div>';
+  h += '</div>';
+
+  // Attachments usage bar (vs 500MB warn)
+  h += '<div style="margin-bottom:18px">';
+  h += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span>Inline attachments ('+(r.attachment_count||0)+' files)</span><span><b>'+fmt(attBytes)+'</b> <span class="muted">/ 500 MB (move-to-Blob line)</span></span></div>';
+  h += '<div style="height:10px;background:var(--navy);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+attPct.toFixed(1)+'%;background:'+barColor(attPct)+'"></div></div>';
+  h += '<div class="muted" style="font-size:11px;margin-top:3px">Receipt/doc PDFs stored in DB. Past 500 MB, move to Blob storage.</div>';
+  h += '</div>';
+
+  // per-table breakdown
+  h += '<table><tr><th>Table</th><th>Size</th><th>Rows</th><th class="hidemob">Dead rows</th></tr>';
+  for(const t of (r.tables||[])){
+    h += '<tr><td>'+esc(t.name)+'</td><td class="amount">'+fmt(t.bytes)+'</td><td>'+(t.rows!=null?Number(t.rows).toLocaleString():'—')+'</td><td class="hidemob muted">'+(t.dead_rows||0)+'</td></tr>';
+  }
+  h += '</table>';
+  return h;
+}
+
 async function renderTables(el) {
   const r = await api('tables');
   if (!r || !r.ok) { el.innerHTML = '<div class="err">Table inventory failed.</div>'; return; }
@@ -838,6 +887,8 @@ async function renderTables(el) {
       + '</tr>').join('') + '</table>';
   h += '<p class="muted" style="font-size:13px;margin-top:14px">Coming as the platform grows: <b>events</b> · <b>clients</b> · <b>policies</b> (canonical schema, B0) · <b>invoices</b> (A3) · <b>tasks</b> (D1).</p>';
   el.innerHTML = h;
+  // append live system-health panel
+  try { const hh = await renderSystemHealth(); const d = document.createElement('div'); d.innerHTML = hh; el.appendChild(d); } catch(e){}
 }
 </script>
 </body>

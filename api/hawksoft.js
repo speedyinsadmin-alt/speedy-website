@@ -231,6 +231,34 @@ async function ledger(event) {
   } catch { return false; }
 }
 
+/* Store a generated receipt PDF in OUR attachments vault so it's visible in the Audit tab.
+   Fail-soft: never blocks a charge. kind = 'client_receipt' (the branded PDF the client gets). */
+async function storeReceiptVault({ clientId, pdfBuf, filename, amount, txnId, who, policyGuid }) {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key || !pdfBuf) return false;
+  try {
+    const b64 = pdfBuf.toString('base64');
+    const hashBuf = await crypto.subtle.digest('SHA-256', pdfBuf);
+    const sha = [...new Uint8Array(hashBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    const row = {
+      client_no: Number.isFinite(parseInt(clientId, 10)) ? parseInt(clientId, 10) : null,
+      kind: 'client_receipt', doc_type: 'client_receipt',
+      filename: (filename || 'receipt') + '.pdf',
+      file_b64: b64, sha256: sha, mime: 'application/pdf', bytes: pdfBuf.length,
+      amount: (typeof amount === 'number') ? amount : null,
+      uploaded_by: who ? String(who).slice(0, 120) : 'charge_page',
+    };
+    const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/attachments`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify([row]),
+    });
+    return r.status === 201;
+  } catch { return false; }
+}
+
 async function audit(event) {
   const sb = await ledger(event); // Speedy ledger first — our system of record
   const tok = process.env.BLOB_READ_WRITE_TOKEN;
@@ -661,6 +689,8 @@ export default async function handler(req, res) {
         body: gzipSync(pdfBuf),
       });
       out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
+      // Also store the receipt PDF in OUR vault so it shows in the Audit tab
+      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId, who, policyGuid });
 
       // 4) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
@@ -813,6 +843,8 @@ export default async function handler(req, res) {
         body: gzipSync(pdfBuf),
       });
       out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
+      // Also store the receipt PDF in OUR vault so it shows in the Audit tab
+      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId, who, policyGuid });
 
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
@@ -1098,6 +1130,8 @@ export default async function handler(req, res) {
         body: gzipSync(pdfBuf),
       });
       out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
+      // Also store the receipt PDF in OUR vault so it shows in the Audit tab
+      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId, who, policyGuid });
 
       // 3) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {

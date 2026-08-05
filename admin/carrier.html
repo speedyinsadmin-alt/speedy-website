@@ -216,7 +216,7 @@ $('#docfile').addEventListener('change', e => {
 function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
     '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
-    + '<span class="pill" style="background:rgba(77,124,254,.15);color:var(--blue)">' + d.doc_type.replace(/_/g,\' \') + '</span>'
+    + '<span class="pill" style="background:rgba(77,124,254,.15);color:var(--blue)">' + d.doc_type.replace(/_/g,' ') + '</span>'
     + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + d.name + '</span>'
     + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
   ).join('');

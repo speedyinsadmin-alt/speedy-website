@@ -49,7 +49,7 @@
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
 </style>
-<!-- build v3.4 -->
+<!-- build v3.5 -->
 </head>
 <body>
 <div class="wrap">
@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.4</small></h1>
+      <h1>Platform Console <small id="ver">v3.5</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -317,13 +317,9 @@ function toggleSection(key) {
 
 function policyRows(list, isDmv) {
   const today = new Date().toISOString().slice(0,10);
-  const head = isDmv
-    ? '<table><tr><th>Service #</th><th>Term</th><th class="hidemob">Period</th><th>Renews</th><th>Status</th></tr>'
-    : '<table><tr><th>Policy #</th><th>Carrier</th><th class="hidemob">Term</th><th>Premium</th><th>In force?</th><th>Status</th></tr>';
-  const rows = list.map(p => {
-    const st = String(p.status || '').toLowerCase();
-    const live = p.expiration_date && p.expiration_date >= today && !['cancelled','canceled','expired'].includes(st);
-    if (isDmv) {
+  if (isDmv) {
+    const head = '<table><tr><th>Service #</th><th>Term</th><th class="hidemob">Period</th><th>Renews</th><th>Status</th></tr>';
+    const rows = list.map(p => {
       const exp = p.expiration_date || '';
       let badge = '<span class="muted">expired</span>';
       if (exp) {
@@ -340,18 +336,85 @@ function policyRows(list, isDmv) {
         + '<td>' + badge + '</td>'
         + '<td>' + esc(p.status || '—') + '</td>'
         + '</tr>';
+    }).join('');
+    return head + rows + '</table>';
+  }
+  // Insurance: each policy is an expandable card revealing drivers, vehicles, coverages
+  return list.map((p, i) => {
+    const st = String(p.status || '').toLowerCase();
+    const live = p.expiration_date && p.expiration_date >= today && !['cancelled','canceled','expired'].includes(st);
+    const ce = p.carrier_extras || {};
+    const drivers = ce.drivers || [];
+    const autos = ce.autos || [];
+    const coverages = ce.coverages || [];
+    const pid = 'pol_' + (p.id || i);
+    const open = POL_OPEN[pid];
+    const header = '<div onclick="togglePol(\'' + pid + '\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--navy);border:1px solid var(--line);border-radius:10px;margin-bottom:' + (open?'0':'8px') + '">'
+      + '<span class="chev2" style="color:var(--mute);width:12px">' + (open?'▾':'▸') + '</span>'
+      + '<div style="flex:1"><b>' + esc(p.policy_number || '—') + '</b> <span class="muted" style="font-size:12px">· ' + esc(p.carrier || '—') + '</span></div>'
+      + '<span class="muted hidemob" style="font-size:12px">' + esc(p.effective_date||'') + ' → ' + esc(p.expiration_date||'') + '</span>'
+      + '<span class="amount">' + money(p.premium) + '</span>'
+      + (live ? '<span class="pill g">in force</span>' : '<span class="pill a">' + esc(p.status||'—') + '</span>')
+      + '</div>';
+    if (!open) return header;
+
+    // Drivers
+    let dHtml = '';
+    if (drivers.length) {
+      dHtml = '<div style="margin:10px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:700">Drivers (' + drivers.length + ')</div>'
+        + '<table><tr><th>Name</th><th>Role</th><th class="hidemob">DOB</th><th class="hidemob">License</th><th>SR-22</th><th>Points</th></tr>'
+        + drivers.map(d => {
+            const rel = String(d.relationship||'').toLowerCase();
+            const status = String((d.personalInfo&&d.personalInfo.status)||'').toLowerCase();
+            const role = (rel==='insured'||status==='principal') ? '<span class="pill g">named insured</span>'
+                       : status==='excluded' ? '<span class="pill a">excluded</span>'
+                       : '<span class="pill b">' + esc((d.personalInfo&&d.personalInfo.status)||'driver') + '</span>';
+            const sr22 = (d.sR22 && d.sR22.hasSR22) ? '<span class="pill a">SR-22</span>' : '—';
+            const pts = (d.mvRs && d.mvRs.points!=null) ? d.mvRs.points : '—';
+            return '<tr>'
+              + '<td>' + esc([d.firstName,d.middleName,d.lastName].filter(Boolean).join(' ')) + '</td>'
+              + '<td>' + role + '</td>'
+              + '<td class="hidemob">' + esc(String(d.dateOfBirth||'').slice(0,10)) + '</td>'
+              + '<td class="hidemob">' + esc(d.licenseNumber||'—') + ' ' + esc(d.licenseState||'') + '</td>'
+              + '<td>' + sr22 + '</td>'
+              + '<td>' + pts + '</td>'
+              + '</tr>';
+          }).join('') + '</table>';
     }
-    return '<tr>'
-      + '<td>' + esc(p.policy_number || '—') + '</td>'
-      + '<td>' + esc(p.carrier || '—') + '</td>'
-      + '<td class="hidemob">' + esc(p.effective_date || '') + ' → ' + esc(p.expiration_date || '') + '</td>'
-      + '<td class="amount">' + money(p.premium) + '</td>'
-      + '<td>' + (live ? '<span class="pill g">yes</span>' : '<span class="muted">no</span>') + '</td>'
-      + '<td>' + esc(p.status || '—') + '</td>'
-      + '</tr>';
+    // Vehicles
+    let vHtml = '';
+    if (autos.length) {
+      vHtml = '<div style="margin:14px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:700">Vehicles (' + autos.length + ')</div>'
+        + '<table><tr><th>Year / Make / Model</th><th class="hidemob">VIN</th><th class="hidemob">Use</th><th>Premium</th></tr>'
+        + autos.map(a => '<tr>'
+            + '<td>' + esc([a.year,a.make,a.model].filter(Boolean).join(' ')) + '</td>'
+            + '<td class="hidemob amount" style="font-size:11px">' + esc(a.vin||'—') + '</td>'
+            + '<td class="hidemob">' + esc(a.use||'—') + '</td>'
+            + '<td class="amount">' + money(a.totalPremium) + '</td>'
+            + '</tr>').join('') + '</table>';
+    }
+    // Coverages
+    let cHtml = '';
+    if (coverages.length) {
+      cHtml = '<div style="margin:14px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:700">Coverages (' + coverages.length + ')</div>'
+        + '<table><tr><th>Coverage</th><th>Limits</th><th class="hidemob">Deductible</th><th>Premium</th></tr>'
+        + coverages.map(cv => '<tr>'
+            + '<td>' + esc(cv.description||cv.code||'—') + '</td>'
+            + '<td>' + esc(cv.limits||'—') + '</td>'
+            + '<td class="hidemob">' + esc(cv.deductibles||'—') + '</td>'
+            + '<td class="amount">' + (cv.premium?money(cv.premium):'—') + '</td>'
+            + '</tr>').join('') + '</table>';
+    }
+    const detail = '<div style="border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:6px 14px 14px;margin-bottom:8px;background:rgba(255,255,255,.02)">'
+      + (dHtml||vHtml||cHtml ? (dHtml+vHtml+cHtml) : '<div class="muted" style="padding:8px 0">No detailed data stored for this policy.</div>')
+      + '<div style="margin-top:10px"><span class="raw-t" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">▸ Raw policy JSON</span>'
+      + '<pre style="display:none">' + esc(JSON.stringify(ce,null,2)) + '</pre></div>'
+      + '</div>';
+    return header + detail;
   }).join('');
-  return head + rows + '</table>';
 }
+const POL_OPEN = {};
+function togglePol(pid){ POL_OPEN[pid] = !POL_OPEN[pid]; render(); }
 
 async function renderOurClient(el, no, _bg) {
   const r = await api('our_client&no=' + no + (_bg ? '&refresh=1' : ''));

@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.1</small></h1>
+      <h1>Platform Console <small id="ver">v4.2</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -249,11 +249,40 @@ function stopResync(){ if (resyncPoll) { clearInterval(resyncPoll); resyncPoll =
 async function loadSyncStatus() {
   const line = $('#syncline'); if (!line) return;
   const r = await api('sync_status');
-  if (!r || !r.ok || !r.state) { line.textContent = 'Sync status unavailable.'; return; }
-  const t = new Date(r.state.last_sync);
-  const mins = Math.round((Date.now() - t.getTime()) / 60000);
-  const ago = mins < 1 ? 'just now' : mins < 60 ? mins + ' min ago' : Math.round(mins / 60) + ' hr ago';
-  line.innerHTML = 'HawkSoft sync: <b>' + ago + '</b> · ' + (r.state.last_count || 0) + ' records last run · nightly cron + live refresh when you open a client';
+  if (!r || !r.ok) { line.textContent = 'Sync status unavailable.'; return; }
+  const rb = $('#resyncbtn');
+
+  // A job is actively running — show live progress, disable the button
+  if (r.job && (r.job.status === 'running' || r.job.status === 'pending')) {
+    const j = r.job;
+    const pct = j.total ? Math.round(j.processed / j.total * 1000) / 10 : 0;
+    line.innerHTML = '<span style="color:var(--amber,#f5a623)">● Re-sync running</span> — <b>' + pct + '%</b> · '
+      + (j.processed || 0).toLocaleString() + ' / ' + (j.total || 0).toLocaleString() + ' clients · '
+      + (j.policies_updated || 0).toLocaleString() + ' policies updated'
+      + '<div style="height:7px;background:var(--navy);border-radius:5px;overflow:hidden;margin-top:5px;max-width:420px"><div style="height:100%;width:' + pct + '%;background:var(--amber,#f5a623);transition:width .4s"></div></div>';
+    if (rb) { rb.disabled = true; rb.textContent = 'Re-sync in progress…'; rb.style.opacity = '0.5'; rb.style.cursor = 'not-allowed'; }
+    // auto-refresh the status every 5s while running
+    clearTimeout(window._syncStatusT);
+    window._syncStatusT = setTimeout(loadSyncStatus, 5000);
+    return;
+  }
+
+  // No job running — show last completed + normal button
+  if (rb) { rb.disabled = false; rb.textContent = '↻ Re-sync all fields'; rb.style.opacity = '1'; rb.style.cursor = 'pointer'; }
+  let parts = [];
+  if (r.last_complete) {
+    const t = new Date(r.last_complete.updated_at);
+    const mins = Math.round((Date.now() - t.getTime()) / 60000);
+    const ago = mins < 1 ? 'just now' : mins < 60 ? mins + ' min ago' : mins < 1440 ? Math.round(mins/60) + ' hr ago' : Math.round(mins/1440) + ' days ago';
+    parts.push('Last full re-sync: <b>' + ago + '</b> (' + (r.last_complete.processed || 0).toLocaleString() + ' clients)');
+  }
+  if (r.state && r.state.last_sync) {
+    const t2 = new Date(r.state.last_sync);
+    const m2 = Math.round((Date.now() - t2.getTime()) / 60000);
+    const ago2 = m2 < 1 ? 'just now' : m2 < 60 ? m2 + ' min ago' : Math.round(m2/60) + ' hr ago';
+    parts.push('nightly sync ' + ago2);
+  }
+  line.innerHTML = (parts.length ? parts.join(' · ') : 'No sync recorded yet') + ' · <span class="muted">live refresh when you open a client</span>';
 }
 
 async function apiPostBody(payload) {

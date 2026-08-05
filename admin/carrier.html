@@ -249,6 +249,9 @@ $('#card').addEventListener('change', updateSubmit);
 
 async function submit(complete){
   const msg = $('#msg'); msg.className=''; msg.textContent = complete ? 'Submitting to audit…' : 'Saving…';
+  const btn = $('#submitBtn'), saveBtn = document.querySelector('.save');
+  if(btn) btn.disabled = true; if(saveBtn) saveBtn.disabled = true;
+
   const payload = {
     action: 'save_carrier_leg',
     client_no: Number(CTX.client_no)||null,
@@ -259,31 +262,56 @@ async function submit(complete){
     receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME,
     complete: !!complete,
   };
+
+  // 1) MAIN submit (carrier leg + receipt) — this is what matters
+  let mainOk = false, mainMsg = '';
   try{
     const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    const j = await r.json();
-    // upload optional documents (each logged to our vault + HawkSoft)
-    let docsOk = 0;
-    for(const d of DOCS){
-      try{
-        const dr = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
-          body: JSON.stringify({ action:'save_carrier_leg', client_no:Number(CTX.client_no)||null,
-            policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
-            doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, complete:false }) });
-        const dj = await dr.json(); if(dj.ok) docsOk++;
-      }catch(e){}
-    }
-    if(j.ok){
-      msg.className='ok';
-      msg.textContent = (complete
+    let j = null; try { j = await r.json(); } catch(e){ j = null; }
+    if(r.ok && j && j.ok){
+      mainOk = true;
+      mainMsg = complete
         ? '✓ Audit complete — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')
-        : '✓ Saved as pending — task flagged')
-        + (docsOk ? ' · '+docsOk+' document'+(docsOk>1?'s':'')+' logged' : '') + '.';
-      if(complete){ $('#submitBtn').disabled=true; $('.save').disabled=true; }
+        : '✓ Saved as pending — task flagged';
+    } else if(r.ok && !j){
+      // saved but response didn't parse — treat as success (data landed)
+      mainOk = true;
+      mainMsg = complete ? '✓ Audit complete — receipt stored' : '✓ Saved as pending';
     } else {
-      msg.className='err'; msg.textContent = j.error || 'Failed.';
+      mainMsg = (j && j.error) ? j.error : ('Server returned ' + r.status);
     }
-  }catch(e){ msg.className='err'; msg.textContent='Network error.'; }
+  }catch(e){
+    // network dropped on the main call — but it may have saved. Tell the truth.
+    mainOk = null; // unknown
+    mainMsg = 'Submitted, but the connection dropped before confirmation. Check the Audit tab to verify.';
+  }
+
+  // 2) OPTIONAL documents — each independent, never blocks the main result
+  let docsOk = 0, docsFail = 0;
+  for(const d of DOCS){
+    try{
+      const dr = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'save_carrier_leg', client_no:Number(CTX.client_no)||null,
+          policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
+          doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, complete:false }) });
+      let dj=null; try{ dj = await dr.json(); }catch(e){}
+      if(dr.ok && (!dj || dj.ok)) docsOk++; else docsFail++;
+    }catch(e){ docsFail++; }
+  }
+
+  // 3) Show the real result
+  const docPart = docsOk ? ' · '+docsOk+' document'+(docsOk>1?'s':'')+' logged' : '';
+  const failPart = docsFail ? ' · '+docsFail+' document'+(docsFail>1?'s':'')+' failed (retry)' : '';
+  if(mainOk === true){
+    msg.className='ok'; msg.textContent = mainMsg + docPart + failPart + '.';
+    if(complete){ /* keep disabled — done */ }
+    else { if(saveBtn) saveBtn.disabled=false; }
+  } else if(mainOk === null){
+    msg.className=''; msg.style.color='#f5a623'; msg.textContent = mainMsg + docPart + '.';
+  } else {
+    msg.className='err'; msg.textContent = mainMsg + failPart;
+    if(btn) btn.disabled=false; if(saveBtn) saveBtn.disabled=false;
+  }
 }
 </script>
 </body>

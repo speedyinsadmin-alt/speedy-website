@@ -700,10 +700,17 @@ async function setAgentPct(email, val){
 let AUDIT_CACHE = null;
 async function renderAudit(el){
   el.innerHTML = '<h2>Audit — full transaction trail</h2>' + auditSubNav() + '<div class="muted">Loading…</div>';
-  const r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : ''));
-  if(!r || !r.ok){ el.innerHTML = '<div class="err">Failed to load audit.</div>'; return; }
+  let r;
+  try { r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : '')); }
+  catch(e){ el.innerHTML = auditSubNav() + '<div class="err">Load error: ' + esc(String(e&&e.message||e)) + '</div>'; return; }
+  if(!r){ el.innerHTML = auditSubNav() + '<div class="err">No response from server (audit_list). It may be redeploying — try again in a moment.</div>'; return; }
+  if(!r.ok){ el.innerHTML = auditSubNav() + '<div class="err">Server error: ' + esc(r.error||'unknown') + '</div>'; return; }
   AUDIT_CACHE = r;
-  if(AUDIT_SUB === 'agents'){ el.innerHTML = '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); return; }
+  if(AUDIT_SUB === 'agents'){
+    try { el.innerHTML = '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); }
+    catch(e){ el.innerHTML = auditSubNav() + '<div class="err">By-agent render error: ' + esc(String(e&&e.message||e)) + '</div>'; }
+    return;
+  }
   const rows = r.rows || [];
   const atts = r.attachments || [];
 

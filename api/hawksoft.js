@@ -127,11 +127,21 @@ async function sendDeclineAlert(o) {
 /* Signed pay-link tokens (HMAC-SHA256, keyed on ADMIN_API_KEY) */
 const b64u = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const makeToken = (obj, key) => { const pl = b64u(JSON.stringify(obj)); return pl + '.' + b64u(createHmac('sha256', key).update(pl).digest()).slice(0, 22); };
+function primaryPerson(people){
+  const arr = Array.isArray(people) ? people : [];
+  // 1) the named insured is flagged mainContactType 'First'
+  let p = arr.find(x => String((x && (x.mainContactType || x.MainContactType)) || '').toLowerCase() === 'first');
+  // 2) else first entry that actually has a name (skips blank/excluded-only rows)
+  if (!p) p = arr.find(x => x && (x.businessName || x.firstName || x.lastName));
+  // 3) else fall back to first
+  return p || arr[0] || {};
+}
+
 const clientNameFrom = (b) => {
   let name = '';
   const people = (b && (b.people || b.People)) || [];
   if (people.length) {
-    const pp = people[0] || {};
+    const pp = primaryPerson(people);
     name = [pp.businessName, [pp.firstName, pp.lastName].filter(Boolean).join(' ')].filter(Boolean)[0] || '';
   }
   if (!name) name = (b && (b.businessName || b.name)) || '';
@@ -346,7 +356,7 @@ export default async function handler(req, res) {
       let name = '';
       const people = b.people || b.People || [];
       if (people.length) {
-        const p = people[0] || {};
+        const p = primaryPerson(people);
         name = [p.businessName, [p.firstName, p.lastName].filter(Boolean).join(' ')].filter(Boolean)[0] || '';
       }
       if (!name) name = b.businessName || b.name || '';

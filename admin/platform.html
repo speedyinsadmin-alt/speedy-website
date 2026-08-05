@@ -798,6 +798,8 @@ function completeAudit(id){
     client: row.client_no, name: row.client_name||'', paid: row.amount||'',
     payment_id: id||'', method: 'client paid', svc: row.path||''
   });
+  // Pass token via localStorage (same origin, reliable across tabs) + hash as fallback
+  try { if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); } catch(e){}
   const url = '/admin/carrier.html?' + params.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
   window.open(url, '_blank');
 }

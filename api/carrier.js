@@ -29,6 +29,14 @@ function sb() {
   return { base: url.replace(/\/$/, ''), hdrs: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } };
 }
 
+async function sbGet(s, path) {
+  try {
+    const r = await fetch(`${s.base}/rest/v1/${path}`, { headers: s.hdrs });
+    const rows = await r.json().catch(() => []);
+    return { rows: Array.isArray(rows) ? rows : [] };
+  } catch { return { rows: [] }; }
+}
+
 async function blobPut(path, buf, contentType) {
   const tok = process.env.BLOB_READ_WRITE_TOKEN;
   if (!tok) return { url: null, status: 'no_token' };
@@ -170,8 +178,15 @@ export default async function handler(req, res) {
     }
 
     // Update ledger lifecycle if we have a payment_id
-    const status = complete ? 'audit_complete' : 'carrier_pending';
+    const status = complete ? 'complete' : 'carrier_pending';
     if (payment_id) {
+      // fetch the charge amount to compute the fee
+      const svcCost = (body.service_cost != null) ? Number(body.service_cost)
+                    : (carrier_amount != null ? Number(carrier_amount) : null);
+      let feeAmt = null;
+      const led = await sbGet(s, `bridge_ledger?id=eq.${payment_id}&select=amount`);
+      const chargeAmt = led.rows && led.rows[0] ? Number(led.rows[0].amount) : null;
+      if (chargeAmt != null && svcCost != null) feeAmt = +(chargeAmt - svcCost).toFixed(2);
       await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${payment_id}`, {
         method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
         body: JSON.stringify({
@@ -179,6 +194,9 @@ export default async function handler(req, res) {
           carrier_name: carrier || null,
           carrier_paid_amount: carrier_amount != null ? Number(carrier_amount) : null,
           carrier_card: carrier_card || null,
+          service_cost: svcCost,
+          fee_amount: feeAmt,
+          service_path: body.service_path || body.svc || null,
         }),
       });
     }

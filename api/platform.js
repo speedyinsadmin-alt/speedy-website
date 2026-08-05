@@ -107,11 +107,26 @@ async function upsertHsClient(s, c) {
   const phone = (contacts.find(x => /phone|cell|mobile/i.test(x.type || '')) || {}).data || null;
   const email = (contacts.find(x => /email/i.test(x.type || '')) || {}).data || null;
   const officeId = details.officeId != null ? details.officeId : c.officeId;
+  // Find the TRUE named insured from policy drivers (relationship='Insured' / status='Principal').
+  // people[0] is unreliable — it can be an excluded driver. Drivers carry the real role.
+  let insuredFirst = null, insuredLast = null;
+  const polsForName = c.policies || c.Policies || [];
+  outer: for (const pol of polsForName) {
+    for (const dr of (pol.drivers || pol.Drivers || [])) {
+      const rel = String(dr.relationship || '').toLowerCase();
+      const st = String((dr.personalInfo && dr.personalInfo.status) || '').toLowerCase();
+      if (rel === 'insured' || st === 'principal') {
+        insuredFirst = dr.firstName || null;
+        insuredLast = dr.lastName || null;
+        break outer;
+      }
+    }
+  }
   const clientRow = {
     client_no: cn,
     kind: details.isCommercial ? 'business' : 'person',
-    first_name: p0.firstName || null,
-    last_name: p0.lastName || null,
+    first_name: insuredFirst || p0.firstName || null,
+    last_name: insuredLast || p0.lastName || null,
     business_name: details.companyName || details.dbaName || null,
     email,
     phone,

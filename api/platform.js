@@ -423,6 +423,23 @@ export default async function handler(req, res) {
   }
 
   /* ---- Sync status ---- */
+  if (view === 'audit_list') {
+    // All audit tasks + their payment + attachment counts
+    const tasks = await sbGet(s, 'audit_tasks?select=*&order=created_at.desc&limit=200');
+    const atts = await sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft&order=created_at.desc&limit=500');
+    const pays = await sbGet(s, 'bridge_ledger?select=id,ts,kind,client_id,amount,purpose,audit_status,carrier_name,carrier_paid_amount&order=ts.desc&limit=200');
+    return res.status(200).json({ ok: true, email, tasks: tasks.rows || [], attachments: atts.rows || [], payments: pays.rows || [] });
+  }
+
+  if (view === 'attachment_get') {
+    const id = String(req.query.id || '');
+    if (!id) return res.status(400).json({ ok: false, error: 'id required' });
+    const r = await sbGet(s, `attachments?id=eq.${id}&select=filename,mime,file_b64,blob_url`);
+    const a = (r.rows || [])[0];
+    if (!a) return res.status(404).json({ ok: false, error: 'not found' });
+    return res.status(200).json({ ok: true, filename: a.filename, mime: a.mime, file_b64: a.file_b64, blob_url: a.blob_url });
+  }
+
   if (view === 'sync_status') {
     const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
     const ev = await sbGet(s, "events?kind=eq.sync.completed&select=ts,payload&order=ts.desc&limit=5");

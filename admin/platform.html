@@ -624,83 +624,86 @@ function renderAgentView(r){
   const rows = r.rows || [];
   const commMap = {}; for(const c of (r.commissions||[])) commMap[c.agent_email] = Number(c.percentage);
 
-  // If drilled into an agent, show their breakdown
-  if(AGENT_OPEN){
-    const mine = rows.filter(x => x.agent === AGENT_OPEN);
-    const pct = commMap[AGENT_OPEN] != null ? commMap[AGENT_OPEN] : 10;
-    const earned = mine.reduce((a,x)=> a + (x.commission||0), 0);
-    const pending = mine.reduce((a,x)=> a + ((x.commission==null && x.fee!=null) ? x.fee*x.pct/100 : 0), 0);
-    let h = '<span class="raw-t" onclick="backToAgents()">← All agents</span>';
-    h += '<h2 style="margin:8px 0 2px">'+esc((AGENT_OPEN||'').split('@')[0])+' <span class="muted" style="font-weight:400;font-size:13px">· '+esc(AGENT_OPEN)+'</span></h2>';
-    h += '<div style="display:flex;gap:20px;flex-wrap:wrap;margin:8px 0 14px;font-size:13px">'
-      + '<span>Rate: <b>'+pct+'%</b></span>'
-      + '<span>Earned this list: <b class="amount" style="color:#7fa8ff">'+money(earned)+'</b></span>'
-      + '<span class="muted">Pending (awaiting audit): '+money(pending)+'</span></div>';
-    h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th>Fee</th><th>Comm.</th><th>Status</th></tr>';
-    for(const x of mine){
-      const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(x.audit_status||'open').replace(/_/g,' ')+'</span>';
-      h += '<tr><td class="muted" style="font-size:12px">'+esc(String(x.ts||'').slice(0,10))+'</td>'
-        + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span></td>'
-        + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
-        + '<td class="amount">'+money(x.amount)+'</td>'
-        + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'
-        + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+'</td>'
-        + '<td>'+st+'</td></tr>';
-    }
-    h += '</table>';
-    return h;
-  }
-
-  // Agent totals table
+  // group by agent
   const byAgent = {};
   for(const x of rows){
     const a = x.agent || '(unknown)';
-    if(!byAgent[a]) byAgent[a] = { agent:a, tx:0, fees:0, earned:0, pending:0 };
-    byAgent[a].tx++;
-    byAgent[a].fees += (x.fee||0);
-    if(x.commission!=null) byAgent[a].earned += x.commission;
-    else if(x.fee!=null) byAgent[a].pending += x.fee*x.pct/100;
+    if(!byAgent[a]) byAgent[a] = { agent:a, tx:[], fees:0, earned:0, pending:0, first:null, last:null };
+    const g = byAgent[a];
+    g.tx.push(x);
+    g.fees += (x.fee||0);
+    if(x.commission!=null) g.earned += x.commission;
+    else if(x.fee!=null) g.pending += x.fee*x.pct/100;
+    const d = String(x.ts||'').slice(0,10);
+    if(d){ if(!g.first || d<g.first) g.first=d; if(!g.last || d>g.last) g.last=d; }
   }
-  const list = Object.values(byAgent).sort((a,b)=> b.earned - a.earned);
+  const list = Object.values(byAgent).sort((a,b)=> b.earned - a.earned || b.fees - a.fees);
   const totEarned = list.reduce((a,x)=>a+x.earned,0);
 
-  let h = '<div class="muted" style="font-size:12.5px;margin-bottom:10px">Commission is earned only when a transaction'+"'"+'s audit is complete. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
-  h += '<div style="margin-bottom:12px;font-size:14px">Total earned commission: <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></div>';
-  h += '<table><tr><th>Agent</th><th>Rate %</th><th>Transactions</th><th>Fees generated</th><th>Earned</th><th class="hidemob">Pending</th></tr>';
-  if(!list.length) h += '<tr><td colspan="6" class="muted">No agent activity.</td></tr>';
-  for(const a of list){
-    const isEmail = a.agent.includes('@');
-    const pct = commMap[a.agent] != null ? commMap[a.agent] : 10;
-    const rateCell = isEmail
-      ? '<input type="number" min="0" max="100" step="0.5" value="'+pct+'" onchange="setAgentPct(\''+a.agent+'\',this.value)" style="width:64px;background:var(--navy);border:1.5px solid var(--line);border-radius:7px;padding:5px 8px;color:var(--ink);font-size:13px">'
-      : '<span class="muted">—</span>';
-    const nameCell = isEmail
-      ? '<span class="raw-t" onclick="openAgent(\''+a.agent+'\')">'+esc(a.agent.split('@')[0])+'</span>'
-      : esc(a.agent);
-    h += '<tr><td>'+nameCell+'</td><td>'+rateCell+'</td><td>'+a.tx+'</td>'
-      + '<td class="amount">'+money(a.fees)+'</td>'
-      + '<td class="amount"><b style="color:#7fa8ff">'+money(a.earned)+'</b></td>'
-      + '<td class="amount hidemob muted">'+money(a.pending)+'</td></tr>';
+  let h = '<div class="muted" style="font-size:12.5px;margin:-4px 0 10px">Commission is earned only when a transaction'+"'"+'s audit is complete. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
+  h += '<div style="margin-bottom:14px;font-size:14px">Total earned commission: <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></div>';
+
+  if(!list.length) h += '<div class="muted">No agent activity.</div>';
+
+  for(const g of list){
+    const isEmail = g.agent.includes('@');
+    const pct = commMap[g.agent] != null ? commMap[g.agent] : 10;
+    const open = AGENT_OPEN === g.agent;
+    const period = (g.first && g.last) ? (g.first===g.last ? g.first : g.first+' → '+g.last) : '—';
+
+    // header card
+    h += '<div style="border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden">';
+    h += '<div onclick="toggleAgent(\''+g.agent+'\')" style="cursor:pointer;display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--navy)">'
+      + '<span style="color:var(--mute);width:12px">'+(open?'▾':'▸')+'</span>'
+      + '<div style="flex:1"><b style="font-size:15px">'+esc(isEmail?g.agent.split('@')[0]:g.agent)+'</b>'
+      + '<div class="muted" style="font-size:12px">'+g.tx.length+' transactions · '+esc(period)+'</div></div>'
+      + '<div style="text-align:right"><div class="muted" style="font-size:11px">Earned</div><b class="amount" style="color:#7fa8ff;font-size:16px">'+money(g.earned)+'</b></div>'
+      + '<div style="text-align:right"><div class="muted" style="font-size:11px">Pending</div><span class="amount muted">'+money(g.pending)+'</span></div>'
+      + '</div>';
+
+    if(open){
+      // rate editor + breakdown
+      h += '<div style="padding:12px 16px;border-top:1px solid var(--line);background:rgba(255,255,255,.02)">';
+      if(isEmail){
+        h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px">'
+          + '<span class="muted">Commission rate:</span>'
+          + '<input type="number" min="0" max="100" step="0.5" value="'+pct+'" onchange="setAgentPct(\''+g.agent+'\',this.value)" style="width:70px;background:var(--navy);border:1.5px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--ink);font-size:13px">'
+          + '<span class="muted">% of fee · fees generated: <b class="amount">'+money(g.fees)+'</b></span></div>';
+      }
+      h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th>Fee</th><th>Comm.</th><th>Status</th><th>Docs</th></tr>';
+      const atts = r.attachments || [];
+      for(const x of g.tx){
+        const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(String(x.audit_status||'open').replace(/_/g,' '))+'</span>';
+        const docs = atts.filter(a => (a.payment_id===x.id) || (a.client_no===x.client_no));
+        const docCell = docs.length ? docs.map(d=>'<span class="raw-t" onclick="viewAttachment(\''+d.id+'\')">📎</span>').join(' ') : '<span class="muted">—</span>';
+        h += '<tr><td class="muted" style="font-size:12px">'+esc(String(x.ts||'').slice(0,10))+'</td>'
+          + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span></td>'
+          + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
+          + '<td class="amount">'+money(x.amount)+'</td>'
+          + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'
+          + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+'</td>'
+          + '<td>'+st+'</td><td>'+docCell+'</td></tr>';
+      }
+      h += '</table></div>';
+    }
+    h += '</div>';
   }
-  h += '</table>';
   return h;
 }
-function openAgent(email){ AGENT_OPEN = email; render(); }
-function backToAgents(){ AGENT_OPEN = null; render(); }
+function toggleAgent(email){ AGENT_OPEN = (AGENT_OPEN===email) ? null : email; render(); }
 async function setAgentPct(email, val){
   const r = await fetch('/api/platform', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify({ action:'set_commission', agent_email:email, percentage:Number(val) }) });
   const j = await r.json();
   if(j.ok) render(); else alert(j.error||'Failed to save rate');
 }
 
-let AUDIT_Q = '';
 let AUDIT_CACHE = null;
 async function renderAudit(el){
   el.innerHTML = '<h2>Audit — full transaction trail</h2>' + auditSubNav() + '<div class="muted">Loading…</div>';
   const r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : ''));
   if(!r || !r.ok){ el.innerHTML = '<div class="err">Failed to load audit.</div>'; return; }
   AUDIT_CACHE = r;
-  if(AUDIT_SUB === 'commissions'){ const wrap=document.createElement('div'); await renderCommissions(wrap); el.innerHTML = '<h2>Audit — commissions</h2>' + auditSubNav(); el.appendChild(wrap); return; }
+  if(AUDIT_SUB === 'agents'){ el.innerHTML = '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); return; }
   const rows = r.rows || [];
   const atts = r.attachments || [];
 

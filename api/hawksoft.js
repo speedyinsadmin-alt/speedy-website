@@ -378,27 +378,35 @@ export default async function handler(req, res) {
         dueDate: String(i.dueDate || i.DueDate || '').slice(0, 10),
         policyNumber: polNumById[i.policyId || i.policyGuid || i.PolicyId] || '',
       })).filter(i => i.id && isFinite(i.bal) && i.bal > 0)).slice(0, 6);
-      // Build a labeled people list for the charge-name dropdown (named insured first)
-      const roleOf = (x) => {
-        const mct = String((x.mainContactType || x.MainContactType) || '').toLowerCase();
-        if (mct === 'first') return 'named insured';
-        const dt = String((x.driverType || x.DriverType || x.type || x.Type) || '').toLowerCase();
-        if (dt.includes('exclud')) return 'excluded';
-        if (x.isExcluded === true || x.excluded === true) return 'excluded';
-        if (dt) return dt;
-        return 'driver';
-      };
-      const peopleList = (people || [])
-        .map(x => ({
+      // Build the charge-name dropdown from POLICY DRIVERS — the real source of insured/excluded status.
+      // relationship:'Insured' + personalInfo.status:'Principal' = named insured; status:'Excluded' = excluded driver.
+      const allPolicies = b.policies || b.Policies || [];
+      const driverMap = new Map(); // dedupe by name, prefer the strongest role
+      const roleRank = { 'named insured': 0, 'active': 1, 'driver': 1, 'excluded': 2 };
+      for (const pol of allPolicies) {
+        for (const dr of (pol.drivers || pol.Drivers || [])) {
+          const nm = [dr.firstName, dr.middleName, dr.lastName].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+          if (!nm) continue;
+          const rel = String(dr.relationship || '').toLowerCase();
+          const st = String((dr.personalInfo && dr.personalInfo.status) || '').toLowerCase();
+          let role = 'active';
+          if (rel === 'insured' || st === 'principal') role = 'named insured';
+          else if (st === 'excluded') role = 'excluded';
+          const prev = driverMap.get(nm.toUpperCase());
+          if (!prev || roleRank[role] < roleRank[prev.role]) driverMap.set(nm.toUpperCase(), { name: nm, role });
+        }
+      }
+      let peopleList = [...driverMap.values()].sort((a, b) => (roleRank[a.role] - roleRank[b.role]));
+      // Fallback to client people if no drivers on any policy
+      if (!peopleList.length) {
+        peopleList = (people || []).map(x => ({
           name: [x.businessName, [x.firstName, x.lastName].filter(Boolean).join(' ')].filter(Boolean)[0] || '',
-          role: roleOf(x),
-        }))
-        .filter(p => p.name)
-        // named insured first, then others; excluded pushed to the bottom
-        .sort((a, b) => {
-          const rank = r => r === 'named insured' ? 0 : r === 'excluded' ? 2 : 1;
-          return rank(a.role) - rank(b.role);
-        });
+          role: 'active',
+        })).filter(p => p.name);
+      }
+      // The named insured drives the displayed client name (overrides people[0] if found)
+      const insured = peopleList.find(p => p.role === 'named insured');
+      if (insured) name = insured.name;
       return res.status(200).json({ ok: true, result: {
         clientNumber: b.clientNumber || clientId, name: name || '(no name on file)',
         phones, emails, officeId, status, openInvoices, people: peopleList,

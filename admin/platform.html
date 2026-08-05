@@ -349,11 +349,18 @@ function policyRows(list, isDmv) {
     const coverages = ce.coverages || [];
     const pid = 'pol_' + (p.id || i);
     const open = POL_OPEN[pid];
+    // monthly estimate (also shown in the collapsed header)
+    const _plan = ce.billingPlan || '';
+    const _prem = Number(p.premium) || Number(ce.premium) || null;
+    const _m = String(_plan).match(/(\d+)/);
+    const _nPay = _m ? Number(_m[1]) : null;
+    const _perPay = (_prem && _nPay) ? (_prem / _nPay) : null;
     const header = '<div onclick="togglePol(\'' + pid + '\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--navy);border:1px solid var(--line);border-radius:10px;margin-bottom:' + (open?'0':'8px') + '">'
       + '<span class="chev2" style="color:var(--mute);width:12px">' + (open?'▾':'▸') + '</span>'
       + '<div style="flex:1"><b>' + esc(p.policy_number || '—') + '</b> <span class="muted" style="font-size:12px">· ' + esc(p.carrier || '—') + '</span></div>'
       + '<span class="muted hidemob" style="font-size:12px">' + esc(p.effective_date||'') + ' → ' + esc(p.expiration_date||'') + '</span>'
-      + '<span class="amount">' + money(p.premium) + '</span>'
+      + (_perPay ? '<span style="font-size:13px;font-weight:700;color:#7fa8ff;white-space:nowrap">' + money(_perPay) + '<span style="font-size:10px;font-weight:400;color:var(--mute)">/mo</span></span>' : '')
+      + '<span class="amount muted" style="font-size:12px" title="term premium">' + money(p.premium) + '</span>'
       + (live ? '<span class="pill g">in force</span>' : '<span class="pill a">' + esc(p.status||'—') + '</span>')
       + '</div>';
     if (!open) return header;
@@ -409,10 +416,10 @@ function policyRows(list, isDmv) {
     const billPlan = ce.billingPlan || '—';
     const billType = ce.billingType || '—';
     const nTerms = Number(ce.numberOfTerms) || null;
-    const prem = Number(p.premium) || Number(ce.premium) || null;
+    const prem = _prem;
     const planMatch = String(billPlan).match(/(\d+)/);
-    const nPay = planMatch ? Number(planMatch[1]) : null;
-    const perPay = (prem && nPay) ? (prem / nPay) : null;
+    const nPay = _nPay;
+    const perPay = _perPay;
     const isDirect = String(billType).toLowerCase()==='direct';
     // Hero payment card (highlighted) + supporting details
     const heroPay = perPay

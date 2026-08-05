@@ -378,9 +378,30 @@ export default async function handler(req, res) {
         dueDate: String(i.dueDate || i.DueDate || '').slice(0, 10),
         policyNumber: polNumById[i.policyId || i.policyGuid || i.PolicyId] || '',
       })).filter(i => i.id && isFinite(i.bal) && i.bal > 0)).slice(0, 6);
+      // Build a labeled people list for the charge-name dropdown (named insured first)
+      const roleOf = (x) => {
+        const mct = String((x.mainContactType || x.MainContactType) || '').toLowerCase();
+        if (mct === 'first') return 'named insured';
+        const dt = String((x.driverType || x.DriverType || x.type || x.Type) || '').toLowerCase();
+        if (dt.includes('exclud')) return 'excluded';
+        if (x.isExcluded === true || x.excluded === true) return 'excluded';
+        if (dt) return dt;
+        return 'driver';
+      };
+      const peopleList = (people || [])
+        .map(x => ({
+          name: [x.businessName, [x.firstName, x.lastName].filter(Boolean).join(' ')].filter(Boolean)[0] || '',
+          role: roleOf(x),
+        }))
+        .filter(p => p.name)
+        // named insured first, then others; excluded pushed to the bottom
+        .sort((a, b) => {
+          const rank = r => r === 'named insured' ? 0 : r === 'excluded' ? 2 : 1;
+          return rank(a.role) - rank(b.role);
+        });
       return res.status(200).json({ ok: true, result: {
         clientNumber: b.clientNumber || clientId, name: name || '(no name on file)',
-        phones, emails, officeId, status, openInvoices,
+        phones, emails, officeId, status, openInvoices, people: peopleList,
       }});
     }
 

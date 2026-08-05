@@ -64,13 +64,14 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.6</small></h1>
+      <h1>Platform Console <small id="ver">v3.7</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
       <button data-tab="clients" class="on">Clients</button>
       <button data-tab="hs">ZZTEST · HawkSoft</button>
       <button data-tab="ledger">Ledger</button>
+      <button data-tab="audit">Audit</button>
       <button data-tab="tables">Tables</button>
     </nav>
     <div id="view" class="card"><div class="load">Loading…</div></div>
@@ -124,6 +125,7 @@ async function render() {
   if (TAB === 'clients') return OPEN_CLIENT ? renderOurClient(el, OPEN_CLIENT) : renderClients(el);
   if (TAB === 'hs') return renderHS(el);
   if (TAB === 'ledger') return renderLedger(el);
+  if (TAB === 'audit') return renderAudit(el);
   if (TAB === 'tables') return renderTables(el);
 }
 function openClient(no) { OPEN_CLIENT = no; render(); }
@@ -610,6 +612,72 @@ async function renderLedger(el) {
 }
 
 /* ---------- Tables ---------- */
+async function renderAudit(el){
+  el.innerHTML = '<div class="muted">Loading audit…</div>';
+  const r = await api('audit_list');
+  if(!r || !r.ok){ el.innerHTML = '<div class="err">Failed to load audit.</div>'; return; }
+  const tasks = r.tasks||[], atts = r.attachments||[], pays = r.payments||[];
+  const byStatus = s => tasks.filter(t=>t.status===s).length;
+  const attFor = (clientNo, payId) => atts.filter(a => (payId && a.payment_id===payId) || (!payId && a.client_no===clientNo));
+
+  let h = '<h2>Audit — payments &amp; documents</h2>';
+  h += '<div style="display:flex;gap:10px;margin:10px 0 16px;flex-wrap:wrap">'
+    + '<span class="pill a">'+byStatus('open')+' open</span>'
+    + '<span class="pill b">'+byStatus('ready_for_audit')+' ready for review</span>'
+    + '<span class="pill g">'+byStatus('complete')+' complete</span>'
+    + '<span class="muted" style="align-self:center">· '+atts.length+' documents on file</span></div>';
+
+  // Tasks table
+  h += '<table><tr><th>Client</th><th>Type</th><th>Status</th><th>Documents</th><th>Action</th></tr>';
+  if(!tasks.length) h += '<tr><td colspan="5" class="muted">No audit tasks yet.</td></tr>';
+  for(const t of tasks){
+    const docs = attFor(t.client_no, t.payment_id);
+    const badge = t.status==='complete'?'<span class="pill g">complete</span>'
+      : t.status==='ready_for_audit'?'<span class="pill b">ready for review</span>'
+      : '<span class="pill a">open</span>';
+    const docLinks = docs.length ? docs.map(d=>'<span class="raw-t" onclick="viewAttachment(\''+d.id+'\')" style="margin-right:8px">📎 '+esc((d.doc_type||d.kind||'doc').replace(/_/g,\' \'))+'</span>').join('') : '<span class="muted">none</span>';
+    const action = t.status==='ready_for_audit' ? '<button onclick="confirmAudit(\''+t.id+'\','+t.client_no+')" style="background:var(--green);border:0;color:#04220f;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">Confirm complete</button>'
+      : t.status==='complete' ? '<span class="muted">✓ '+esc((t.confirmed_by||'').split(\'@\')[0])+'</span>' : '<span class="muted">awaiting agent</span>';
+    h += '<tr><td><span class="raw-t" onclick="openClient('+t.client_no+')">#'+t.client_no+'</span></td>'
+      + '<td>'+esc(t.service_type||'—')+'</td><td>'+badge+'</td><td>'+docLinks+'</td><td>'+action+'</td></tr>';
+  }
+  h += '</table>';
+
+  // All documents (independent of tasks)
+  h += '<h2 style="margin-top:22px">All documents ('+atts.length+')</h2>';
+  h += '<table><tr><th>Client</th><th>Type</th><th>File</th><th class="hidemob">Carrier</th><th class="hidemob">When</th><th>HawkSoft</th></tr>';
+  if(!atts.length) h += '<tr><td colspan="6" class="muted">No documents yet.</td></tr>';
+  for(const a of atts){
+    h += '<tr><td><span class="raw-t" onclick="openClient('+a.client_no+')">#'+a.client_no+'</span></td>'
+      + '<td><span class="pill b">'+esc((a.doc_type||a.kind||'').replace(/_/g,\' \'))+'</span></td>'
+      + '<td><span class="raw-t" onclick="viewAttachment(\''+a.id+'\')">📎 '+esc(a.filename||'view')+'</span></td>'
+      + '<td class="hidemob">'+esc(a.carrier||'—')+'</td>'
+      + '<td class="hidemob muted">'+esc(String(a.created_at||\'\').replace(\'T\',\' \').slice(0,16))+'</td>'
+      + '<td>'+(a.filed_hawksoft?'<span class="pill g">filed</span>':'<span class="muted">—</span>')+'</td></tr>';
+  }
+  h += '</table>';
+  el.innerHTML = h;
+}
+
+async function viewAttachment(id){
+  const r = await api('attachment_get&id='+encodeURIComponent(id));
+  if(!r || !r.ok){ alert('Could not load document.'); return; }
+  const w = window.open('','_blank');
+  if(r.file_b64){
+    const src = r.file_b64.startsWith('data:') ? r.file_b64 : ('data:'+(r.mime||'application/octet-stream')+';base64,'+r.file_b64);
+    if((r.mime||'').includes('pdf')) w.document.write('<iframe src="'+src+'" style="border:0;width:100%;height:100vh"></iframe>');
+    else w.document.write('<img src="'+src+'" style="max-width:100%">');
+  } else if(r.blob_url){ w.location = r.blob_url; }
+  else w.document.write('<p>No file stored.</p>');
+}
+
+async function confirmAudit(taskId, clientNo){
+  if(!confirm('Mark this audit complete?')) return;
+  const r = await fetch('/api/carrier',{method:'POST',headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},body:JSON.stringify({action:'confirm_audit',task_id:taskId,client_no:clientNo})});
+  const j = await r.json();
+  if(j.ok) render(); else alert(j.error||'Failed');
+}
+
 async function renderTables(el) {
   const r = await api('tables');
   if (!r || !r.ok) { el.innerHTML = '<div class="err">Table inventory failed.</div>'; return; }

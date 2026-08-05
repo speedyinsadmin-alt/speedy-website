@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.5</small></h1>
+      <h1>Platform Console <small id="ver">v3.6</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -405,7 +405,25 @@ function policyRows(list, isDmv) {
             + '<td class="amount">' + (cv.premium?money(cv.premium):'—') + '</td>'
             + '</tr>').join('') + '</table>';
     }
+    // Billing summary — what an agent gets asked on every call
+    const billPlan = ce.billingPlan || '—';
+    const billType = ce.billingType || '—';
+    const nTerms = Number(ce.numberOfTerms) || null;
+    const prem = Number(p.premium) || Number(ce.premium) || null;
+    // count installments from plan name like "5 Payments"
+    const planMatch = String(billPlan).match(/(\d+)/);
+    const nPay = planMatch ? Number(planMatch[1]) : null;
+    const perPay = (prem && nPay) ? (prem / nPay) : null;
+    const billHtml = '<div style="margin:10px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:700">Billing</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px 16px;font-size:13px;padding:4px 0 4px">'
+      + '<div><span class="muted" style="font-size:11px;display:block">Billing type</span>' + esc(billType) + (String(billType).toLowerCase()==='direct'?' <span class="muted">(carrier bills client)</span>':'') + '</div>'
+      + '<div><span class="muted" style="font-size:11px;display:block">Payment plan</span>' + esc(billPlan) + '</div>'
+      + '<div><span class="muted" style="font-size:11px;display:block">Term premium</span><span class="amount">' + (prem?money(prem):'—') + '</span></div>'
+      + (perPay?('<div><span class="muted" style="font-size:11px;display:block">Est. per payment</span><span class="amount">'+money(perPay)+'</span> <span class="muted" style="font-size:11px">(≈'+prem.toFixed(2)+'÷'+nPay+')</span></div>'):'')
+      + '</div>'
+      + (String(billType).toLowerCase()==='direct'?'<div class="muted" style="font-size:11px;margin-top:2px">�credit exact schedule &amp; next due are on the carrier portal for direct-bill policies.</div>':'');
     const detail = '<div style="border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:6px 14px 14px;margin-bottom:8px;background:rgba(255,255,255,.02)">'
+      + billHtml
       + (dHtml||vHtml||cHtml ? (dHtml+vHtml+cHtml) : '<div class="muted" style="padding:8px 0">No detailed data stored for this policy.</div>')
       + '<div style="margin-top:10px"><span class="raw-t" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">▸ Raw policy JSON</span>'
       + '<pre style="display:none">' + esc(JSON.stringify(ce,null,2)) + '</pre></div>'
@@ -484,7 +502,7 @@ async function renderOurClient(el, no, _bg) {
       + '<td><span class="pill a">' + esc(e.kind) + '</span></td>'
       + '<td class="hidemob">' + esc(e.actor || '—') + '</td>'
       + '<td>' + esc(e.source || '—') + '</td></tr>').join('') + '</table>';
-  h += section('act_' + no, 'Activity', (r.events||[]).length, actBody,
+  h += section('act_' + no, 'History (audit trail)', (r.events||[]).length, actBody,
     { defaultOpen: false, emptyText: 'No activity yet.' });
 
   el.innerHTML = h;

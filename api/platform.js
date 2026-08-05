@@ -469,12 +469,18 @@ export default async function handler(req, res) {
       const auditStatus = preAudit ? 'pre_audit' : (task ? task.status : (p.audit_status || 'client_paid'));
       const cost = p.service_cost != null ? Number(p.service_cost) : (p.carrier_paid_amount != null ? Number(p.carrier_paid_amount) : null);
       const fee = p.fee_amount != null ? Number(p.fee_amount) : (cost != null ? Number(p.amount) - cost : null);
-      const pct = commMap[p.agent] != null ? commMap[p.agent] : 10;
-      const commission = (fee != null && auditStatus === 'complete') ? +(fee * pct / 100).toFixed(2) : null;
+      // Normalize agent identity: extract the email from the free-text agent string
+      const emailMatch = String(p.agent || '').match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+      const agentEmail = emailMatch ? emailMatch[0].toLowerCase() : (p.agent || 'unknown');
+      const isAdmin = agentEmail === 'info@speedyins.com';
+      const isSecureLink = /secure link/i.test(String(p.agent || ''));
+      const pct = commMap[agentEmail] != null ? commMap[agentEmail] : 10;
+      const commission = (fee != null && auditStatus === 'complete' && !isAdmin) ? +(fee * pct / 100).toFixed(2) : null;
       return {
         id: p.id, ts: p.ts, client_no: p.client_id, client_name: nameMap[p.client_id] || null,
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
-        agent: p.agent, path, audit_status: auditStatus, pre_audit: preAudit,
+        agent: agentEmail, agent_raw: p.agent, is_admin: isAdmin, secure_link: isSecureLink,
+        path, audit_status: auditStatus, pre_audit: preAudit,
         service_cost: cost, fee, pct, commission, doc_count: docs.length, task_id: task ? task.id : null,
       };
     });

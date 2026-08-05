@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v3.7</small></h1>
+      <h1>Platform Console <small id="ver">v3.8</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -612,64 +612,86 @@ async function renderLedger(el) {
 }
 
 /* ---------- Tables ---------- */
+let AUDIT_Q = '';
+let AUDIT_CACHE = null;
 async function renderAudit(el){
   el.innerHTML = '<div class="muted">Loading audit…</div>';
-  const r = await api('audit_list');
+  const r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : ''));
   if(!r || !r.ok){ el.innerHTML = '<div class="err">Failed to load audit.</div>'; return; }
-  const tasks = r.tasks||[], atts = r.attachments||[], pays = r.payments||[];
-  const byStatus = s => tasks.filter(t=>t.status===s).length;
-  const attFor = (clientNo, payId) => atts.filter(a => (payId && a.payment_id===payId) || (!payId && a.client_no===clientNo));
+  AUDIT_CACHE = r;
+  const rows = r.rows || [];
+  const atts = r.attachments || [];
 
-  let h = '<h2>Audit — payments &amp; documents</h2>';
-  h += '<div style="display:flex;gap:10px;margin:10px 0 16px;flex-wrap:wrap">'
-    + '<span class="pill a">'+byStatus('open')+' open</span>'
-    + '<span class="pill b">'+byStatus('ready_for_audit')+' ready for review</span>'
-    + '<span class="pill g">'+byStatus('complete')+' complete</span>'
-    + '<span class="muted" style="align-self:center">· '+atts.length+' documents on file</span></div>';
+  const pathLabel = p => p==='dmv_service' ? 'DMV service' : p==='insurance' ? 'Insurance' : p==='pre_audit' ? 'Pre-audit' : (p||'—');
+  const statusPill = row => {
+    if(row.pre_audit) return '<span class="muted" title="Charged before the proof-of-payment process">—</span>';
+    const s = row.audit_status;
+    if(s==='complete') return '<span class="pill g">complete</span>';
+    if(s==='ready_for_audit') return '<span class="pill b">ready for review</span>';
+    if(s==='carrier_pending') return '<span class="pill a">docs pending</span>';
+    return '<span class="pill a">needs audit</span>';
+  };
 
-  // Tasks table
-  h += '<table><tr><th>Client</th><th>Type</th><th>Status</th><th>Documents</th><th>Action</th></tr>';
-  if(!tasks.length) h += '<tr><td colspan="5" class="muted">No audit tasks yet.</td></tr>';
-  for(const t of tasks){
-    const docs = attFor(t.client_no, t.payment_id);
-    const badge = t.status==='complete'?'<span class="pill g">complete</span>'
-      : t.status==='ready_for_audit'?'<span class="pill b">ready for review</span>'
-      : '<span class="pill a">open</span>';
-    const docLinks = docs.length ? docs.map(d=>'<span class="raw-t" onclick="viewAttachment(\''+d.id+'\')" style="margin-right:8px">📎 '+esc((d.doc_type||d.kind||'doc').replace(/_/g,' '))+'</span>').join('') : '<span class="muted">none</span>';
-    const action = t.status==='ready_for_audit' ? '<button onclick="confirmAudit(\''+t.id+'\','+t.client_no+')" style="background:var(--green);border:0;color:#04220f;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">Confirm complete</button>'
-      : t.status==='complete' ? '<span class="muted">✓ '+esc((t.confirmed_by||'').split('@')[0])+'</span>' : '<span class="muted">awaiting agent</span>';
-    h += '<tr><td><span class="raw-t" onclick="openClient('+t.client_no+')">#'+t.client_no+'</span></td>'
-      + '<td>'+esc(t.service_type||'—')+'</td><td>'+badge+'</td><td>'+docLinks+'</td><td>'+action+'</td></tr>';
+  // totals
+  const totFees = rows.reduce((a,x)=> a + (x.fee||0), 0);
+  const totComm = rows.reduce((a,x)=> a + (x.commission||0), 0);
+
+  let h = '<h2>Audit — full transaction trail</h2>';
+  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. Fees and commission shown per transaction; commission is earned only when the audit is complete.</div>';
+
+  // search
+  h += '<input id="auditSearch" placeholder="Search client name, #, transaction ref, agent, purpose…" value="'+esc(AUDIT_Q)+'" '
+    + 'style="width:100%;max-width:520px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin-bottom:12px">';
+
+  h += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px">'
+    + '<span class="muted">'+rows.length+' transactions</span>'
+    + '<span class="muted">·</span><span>Total fees: <b class="amount">'+money(totFees)+'</b></span>'
+    + '<span class="muted">·</span><span>Commission (earned): <b class="amount" style="color:#7fa8ff">'+money(totComm)+'</b></span></div>';
+
+  h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th>Docs</th></tr>';
+  if(!rows.length) h += '<tr><td colspan="10" class="muted">No transactions.</td></tr>';
+  for(const row of rows){
+    const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
+    const docCell = docs.length ? docs.map(d=>'<span class="raw-t" onclick="viewAttachment(\''+d.id+'\')" title="'+esc(d.filename||'')+'">📎</span>').join(' ') : '<span class="muted">—</span>';
+    const nm = row.client_name ? esc(row.client_name) : '';
+    h += '<tr>'
+      + '<td class="muted" style="font-size:12px">'+esc(String(row.ts||'').replace('T',' ').slice(0,16))+'</td>'
+      + '<td><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span></td>'
+      + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
+      + '<td class="amount">'+money(row.amount)+'</td>'
+      + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
+      + '<td class="amount">'+(row.fee!=null?money(row.fee):'—')+'</td>'
+      + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
+      + '<td class="amount">'+(row.commission!=null?'<b style="color:#7fa8ff">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+'</td>'
+      + '<td>'+statusPill(row)+'</td>'
+      + '<td>'+docCell+'</td>'
+      + '</tr>';
   }
   h += '</table>';
 
-  // All documents (independent of tasks)
-  h += '<h2 style="margin-top:22px">All documents ('+atts.length+')</h2>';
-  h += '<table><tr><th>Client</th><th>Type</th><th>File</th><th class="hidemob">Carrier</th><th class="hidemob">When</th><th>HawkSoft</th></tr>';
-  if(!atts.length) h += '<tr><td colspan="6" class="muted">No documents yet.</td></tr>';
-  for(const a of atts){
-    h += '<tr><td><span class="raw-t" onclick="openClient('+a.client_no+')">#'+a.client_no+'</span></td>'
-      + '<td><span class="pill b">'+esc((a.doc_type||a.kind||'').replace(/_/g,' '))+'</span></td>'
-      + '<td><span class="raw-t" onclick="viewAttachment(\''+a.id+'\')">📎 '+esc(a.filename||'view')+'</span></td>'
-      + '<td class="hidemob">'+esc(a.carrier||'—')+'</td>'
-      + '<td class="hidemob muted">'+esc(String(a.created_at||'').replace('T',' ').slice(0,16))+'</td>'
-      + '<td>'+(a.filed_hawksoft?'<span class="pill g">filed</span>':'<span class="muted">—</span>')+'</td></tr>';
-  }
-  h += '</table>';
+  // pre-audit note
+  if(rows.some(x=>x.pre_audit)) h += '<div class="muted" style="font-size:12px;margin-top:10px">— Transactions marked "—" were charged before the proof-of-payment process began; no audit documents are required for them.</div>';
+
   el.innerHTML = h;
+  const si = document.getElementById('auditSearch');
+  if(si){
+    si.oninput = () => { AUDIT_Q = si.value; clearTimeout(window._auditT); window._auditT = setTimeout(()=>render(), 350); };
+    si.focus(); si.setSelectionRange(si.value.length, si.value.length);
+  }
 }
 
 async function viewAttachment(id){
   const r = await api('attachment_get&id='+encodeURIComponent(id));
-  if(!r || !r.ok){ alert('Could not load document.'); return; }
+  if(!r || !r.ok){ alert('Could not load document — no file stored for this record.'); return; }
   const w = window.open('','_blank');
   if(r.file_b64){
     const src = r.file_b64.startsWith('data:') ? r.file_b64 : ('data:'+(r.mime||'application/octet-stream')+';base64,'+r.file_b64);
     if((r.mime||'').includes('pdf')) w.document.write('<iframe src="'+src+'" style="border:0;width:100%;height:100vh"></iframe>');
     else w.document.write('<img src="'+src+'" style="max-width:100%">');
   } else if(r.blob_url){ w.location = r.blob_url; }
-  else w.document.write('<p>No file stored.</p>');
+  else w.document.write('<p style="font-family:sans-serif;padding:20px">No file stored for this record.</p>');
 }
+
 
 async function confirmAudit(taskId, clientNo){
   if(!confirm('Mark this audit complete?')) return;
@@ -677,6 +699,7 @@ async function confirmAudit(taskId, clientNo){
   const j = await r.json();
   if(j.ok) render(); else alert(j.error||'Failed');
 }
+
 
 async function renderTables(el) {
   const r = await api('tables');

@@ -577,6 +577,32 @@ export default async function handler(req, res) {
       const last4 = recover ? String(b.last4 || '????') : String((cbody.source && cbody.source.last4) || '????');
       const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum, recovered: recover } };
 
+      // SAFETY NET: record the captured charge to our ledger IMMEDIATELY, before receipt/HawkSoft steps.
+      // If anything downstream crashes, we still have proof the card was charged (flagged receipt_pending).
+      // On success, the final audit() call updates the same record with full details.
+      let safetyLedgerId = null;
+      if (!recover) {
+        try {
+          const sUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const sKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+          if (sUrl && sKey) {
+            const sr = await fetch(`${sUrl.replace(/\/$/, '')}/rest/v1/bridge_ledger`, {
+              method: 'POST',
+              headers: { apikey: sKey, Authorization: `Bearer ${sKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+              body: JSON.stringify({
+                kind: 'charge_captured', client_id: Number.isFinite(parseInt(clientId, 10)) ? parseInt(clientId, 10) : null,
+                amount: total, purpose: purpose ? String(purpose).slice(0, 120) : null,
+                agent: who ? String(who).slice(0, 120) : null, txn_id: txnId,
+                auth_code: authCode ? String(authCode) : null, ref: refNum || null,
+                extra: { safety_net: true, receipt_pending: true, brand, last4 },
+              }),
+            });
+            const srj = await sr.json().catch(() => null);
+            safetyLedgerId = srj && srj[0] ? srj[0].id : null;
+          }
+        } catch (e) { /* never block on the safety net itself */ }
+      }
+
       // Resolve policy GUID + matching open invoice (fail-soft on both)
       let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
@@ -708,7 +734,27 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: `${brand} ****${last4}`, confirmation: txnId, stamp });
-      const auditSaved = await audit({ action, who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+      // Finalize: update the safety-net row with full details (or create fresh if no safety row / recovery)
+      let auditSaved = false;
+      if (safetyLedgerId) {
+        try {
+          const sUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const sKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+          const pr = await fetch(`${sUrl.replace(/\/$/, '')}/rest/v1/bridge_ledger?id=eq.${safetyLedgerId}`, {
+            method: 'PATCH', headers: { apikey: sKey, Authorization: `Bearer ${sKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              kind: action, purpose: purpose ? String(purpose).slice(0, 120) : null,
+              invoice_status: out.invoiceApply || null,
+              extra: { safety_net: true, receipt_pending: false, finalized: true, brand, last4,
+                       receipt: out.receipt, attachment: out.attachment, log: out.log,
+                       followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail },
+            }),
+          });
+          auditSaved = pr.status === 200 || pr.status === 204;
+        } catch { auditSaved = false; }
+      } else {
+        auditSaved = await audit({ action, who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+      }
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 

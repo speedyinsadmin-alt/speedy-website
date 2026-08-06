@@ -67,8 +67,8 @@
           <div class="muted" style="font-size:12px;margin-top:2px">📍 Working at</div>
         </div>
         <div style="text-align:right">
-          <select id="officeSwitch" style="width:auto;padding:7px 10px;font-size:13px"></select>
-          <div class="dim" style="font-size:10px;margin-top:3px">tap to change · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span></div>
+          <div style="background:var(--field);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600" id="officeLabel">—</div>
+          <div class="dim" style="font-size:10px;margin-top:3px">sign out to change office · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span></div>
         </div>
       </div>
     </div>
@@ -136,7 +136,6 @@ function onCred(resp){
   // build office dropdowns (home pre-selected)
   const opts = OFFICES.map(o => '<option value="'+o+'"'+(o===home?' selected':'')+'>'+o+(o===home?' — your home branch':'')+'</option>').join('');
   $('#officeSel').innerHTML = opts;
-  $('#officeSwitch').innerHTML = OFFICES.map(o => '<option value="'+o+'">'+o+'</option>').join('');
   $('#welcomeName').textContent = 'Welcome, ' + name.split(' ')[0] + ' 👋';
   $('#homeName').innerHTML = name + ' <span class="beta">BETA</span>';
   OFFICE = home;
@@ -146,13 +145,11 @@ function onCred(resp){
 
 function confirmOffice(){
   OFFICE = $('#officeSel').value;
-  $('#officeSwitch').value = OFFICE;
+  $('#officeLabel').textContent = OFFICE;
   $('#officePick').classList.add('hide');
   $('#home').classList.remove('hide');
   loadHome();
 }
-
-$('#officeSwitch') && ($('#officeSwitch').onchange = function(){ OFFICE = this.value; });
 
 async function loadHome(){
   const r = await api('portal_home');

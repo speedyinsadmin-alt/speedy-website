@@ -1039,7 +1039,27 @@ export default async function handler(req, res) {
       const last4 = String((pay.cardTransaction && pay.cardTransaction.last4) || '????');
       const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum, branch: branch.branch } };
 
-      // Policy + invoice resolution (same as other paths)
+      // SAFETY NET (same as card): record captured terminal charge immediately, before receipt/HawkSoft.
+      let safetyLedgerId = null;
+      try {
+        const sUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const sKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+        if (sUrl && sKey) {
+          const sr = await fetch(`${sUrl.replace(/\/$/, '')}/rest/v1/bridge_ledger`, {
+            method: 'POST',
+            headers: { apikey: sKey, Authorization: `Bearer ${sKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+            body: JSON.stringify({
+              kind: 'charge_captured', client_id: Number.isFinite(parseInt(clientId, 10)) ? parseInt(clientId, 10) : null,
+              amount: total, purpose: purpose ? String(purpose).slice(0, 120) : null,
+              agent: who ? String(who).slice(0, 120) : null, txn_id: txnId,
+              auth_code: authCode ? String(authCode) : null, ref: refNum || null,
+              extra: { safety_net: true, receipt_pending: true, terminal: true, branch: branch.branch, brand, last4 },
+            }),
+          });
+          const srj = await sr.json().catch(() => null);
+          safetyLedgerId = srj && srj[0] ? srj[0].id : null;
+        }
+      } catch (e) { /* never block on the safety net */ }
       let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
@@ -1088,7 +1108,24 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: `${brand} ****${last4} — ${branch.branch} terminal`, confirmation: txnId, stamp });
-      const auditSaved = await audit({ action: 'terminal_charge', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, log: out.log } });
+      let auditSaved = false;
+      if (safetyLedgerId) {
+        try {
+          const sUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const sKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+          const pr = await fetch(`${sUrl.replace(/\/$/, '')}/rest/v1/bridge_ledger?id=eq.${safetyLedgerId}`, {
+            method: 'PATCH', headers: { apikey: sKey, Authorization: `Bearer ${sKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              kind: 'terminal_charge', purpose: purpose ? String(purpose).slice(0, 120) : null,
+              invoice_status: out.invoiceApply || null,
+              extra: { safety_net: true, receipt_pending: false, finalized: true, terminal: true, branch: branch.branch, brand, last4, receipt: out.receipt, log: out.log, confirmationEmail: out.confirmationEmail },
+            }),
+          });
+          auditSaved = pr.status === 200 || pr.status === 204;
+        } catch { auditSaved = false; }
+      } else {
+        auditSaved = await audit({ action: 'terminal_charge', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, log: out.log } });
+      }
       return res.status(200).json({ ok: out.receipt.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 

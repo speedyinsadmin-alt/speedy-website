@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.30 · driver status</div>
+    <div class="ver">v2.31 · purposes + note</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -179,12 +179,16 @@
       <button class="sel" type="button" onclick="pick(this)">Down payment</button>
       <button type="button" onclick="pick(this)">Renewal</button>
       <button type="button" onclick="pick(this)">Endorsement</button>
+      <button type="button" onclick="pick(this)">Cancellation</button>
+      <button type="button" onclick="pick(this)">DMV</button>
       <button type="button" onclick="pick(this)">Other</button>
     </div>
     <div id="otherWrap" class="hide">
       <label for="otherText">What's this payment for?</label>
-      <input type="text" id="otherText" maxlength="60" placeholder="e.g. DMV service, broker fee, reinstatement" autocomplete="off">
+      <input type="text" id="otherText" maxlength="60" placeholder="e.g. broker fee, reinstatement" autocomplete="off">
     </div>
+    <label for="noteText" style="margin-top:12px;display:block">Note <span class="hint" style="font-weight:400">— optional (shows on receipt &amp; log)</span></label>
+    <input type="text" id="noteText" maxlength="120" placeholder="e.g. partial payment, policy #, reinstatement" autocomplete="off" style="width:100%;box-sizing:border-box">
     
     <div id="polToggleWrap" class="hide" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px">
       <span class="hint" id="polToggleLabel" style="margin:0">Include policy # on receipt</span>
@@ -196,6 +200,8 @@
       <button type="button" onclick="pickMethod(this,'cash')">Cash</button>
       <button type="button" onclick="pickMethod(this,'link')">Text / Email link</button>
       <button type="button" onclick="pickMethod(this,'terminal')">Terminal</button>
+      <button type="button" onclick="pickMethod(this,'zelle')">Zelle</button>
+      <button type="button" onclick="pickMethod(this,'other')">Other</button>
     </div>
     <div id="cardSection">
       <label style="margin-top:14px;display:block">Card — secure Clover fields</label>
@@ -211,6 +217,12 @@
     <div id="cashSection" class="hide">
       <div class="hint" style="margin-top:12px">Records the cash payment in HawkSoft — receipt, branded PDF and log note. No card involved.</div>
       <button class="btn btn-red" id="cashBtn" onclick="chargeCash()">RECORD CASH PAYMENT</button>
+    </div>
+    <div id="altSection" class="hide">
+      <label for="altRef" style="margin-top:12px;display:block" id="altRefLabel">Zelle confirmation / reference <span class="hint" style="font-weight:400">— optional</span></label>
+      <input type="text" id="altRef" maxlength="80" placeholder="e.g. Zelle conf # or sender name" autocomplete="off" style="width:100%;box-sizing:border-box">
+      <div class="hint" style="margin-top:8px" id="altHint">Records the payment (no card processing) — receipt, branded PDF and log note. Same as cash.</div>
+      <button class="btn btn-red" id="altBtn" onclick="chargeAlt()">RECORD PAYMENT</button>
     </div>
     <div id="terminalSection" class="hide">
       <label style="margin-top:12px;display:block">Branch terminal</label>
@@ -480,6 +492,8 @@ function purposeText(){
   if(purpose!=='Other') return purpose;
   const t=document.getElementById('otherText').value.trim();
   return t ? 'Other: '+t : 'Other';}
+function noteText(){
+  const n=document.getElementById('noteText'); return n ? n.value.trim() : '';}
 
 let cloverSDK = null;
 async function initClover(){
@@ -516,7 +530,7 @@ async function chargeLive(){
     if(!tk || !tk.token){ out.textContent = 'Could not tokenize the card — check the fields.'; btn.disabled = false; return; }
     out.textContent = 'Charging card\u2026';
     const j = await post({action:'charge_live', clientId: confirmed.clientNumber,
-      clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
+      clientName: confirmed.name || '', amount: amt, purpose: purposeText(), note: noteText(),
       source: tk.token, policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
     out.style.display='none'; out.textContent='';
     const rb = document.getElementById('resultbox');
@@ -555,30 +569,43 @@ function pickMethod(b, m){
   document.getElementById('cashSection').classList.toggle('hide', m!=='cash');
   document.getElementById('linkSection').classList.toggle('hide', m!=='link');
   document.getElementById('terminalSection').classList.toggle('hide', m!=='terminal');
+  const alt = document.getElementById('altSection');
+  const isAlt = (m==='zelle' || m==='other');
+  alt.classList.toggle('hide', !isAlt);
+  if(isAlt){
+    document.getElementById('altRefLabel').innerHTML = (m==='zelle'?'Zelle confirmation / reference':'Payment reference')+' <span class="hint" style="font-weight:400">— optional</span>';
+    document.getElementById('altRef').placeholder = m==='zelle'?'e.g. Zelle conf # or sender name':'e.g. money order #, check #, other';
+  }
   if(m==='terminal') loadTerminals();
   document.getElementById('resultbox').innerHTML='';
 }
-async function chargeCash(){
+function chargeAlt(){ chargeCash(payMethodSel); }
+async function chargeCash(method){
+  const meth = method || 'cash';
+  const isAlt = (meth==='zelle' || meth==='other');
   const out = document.getElementById('out'); const rb = document.getElementById('resultbox');
-  const btn = document.getElementById('cashBtn');
+  const btn = document.getElementById(isAlt ? 'altBtn' : 'cashBtn');
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm the client first.'; return; }
   if(!parseFloat(amt)){ out.style.display='block'; out.textContent='Enter the amount first.'; return; }
-    rb.innerHTML=''; btn.disabled = true; out.style.display='block'; out.textContent='Recording cash payment\u2026';
+  const methLabel = meth==='zelle'?'Zelle':meth==='other'?'Other':'Cash';
+  const altRef = isAlt ? (document.getElementById('altRef').value.trim()) : '';
+    rb.innerHTML=''; btn.disabled = true; out.style.display='block'; out.textContent='Recording '+methLabel+' payment\u2026';
   try{
     const j = await post({action:'charge_cash', clientId: confirmed.clientNumber, clientName: confirmed.name || '',
-      amount: amt, purpose: purposeText(), policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
+      amount: amt, purpose: purposeText(), policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||'',
+      note: noteText(), payMethod: methLabel, altRef: altRef});
     out.style.display='none';
     if(j.ok){
-      rb.innerHTML = `<div class="result good"><h3>\u2713 Cash payment recorded</h3>
+      rb.innerHTML = `<div class="result good"><h3>\u2713 ${esc(methLabel)} payment recorded</h3>
         <div class="big">$${parseFloat(amt).toFixed(2)}</div>
         <div class="kv"><span>Client</span><b>${esc(confirmed.name||'')} \u00b7 #${confirmed.clientNumber}</b></div>
         <div class="kv"><span>For</span><b>${esc(purposeText())}</b></div>
-        <div class="kv"><span>Reference</span><b>${esc(j.ref||'')}</b></div>
+        ${noteText()?`<div class="kv"><span>Note</span><b>${esc(noteText())}</b></div>`:''}
+        ${altRef?`<div class="kv"><span>Reference</span><b>${esc(altRef)}</b></div>`:`<div class="kv"><span>Reference</span><b>${esc(j.ref||'')}</b></div>`}
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
         ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to HawkSoft.</div>${nextBtnHtml(parseFloat(amt).toFixed(2))}</div>`;
       rb.scrollIntoView({behavior:'smooth'});
-      setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
     } else {
       rb.innerHTML = `<div class="result bad"><h3>Not recorded</h3><div class="foot" style="font-size:14px;opacity:1">${esc(j.error||'Try again.')}</div></div>`;
       btn.disabled = false;
@@ -595,7 +622,7 @@ async function createLink(){
     out.style.display='none'; btn.disabled = true; lo.innerHTML='<div class="hint">Creating link\u2026</div>';
   try{
     const j = await post({action:'paylink_create', clientId: confirmed.clientNumber, clientName: confirmed.name || '',
-      amount: amt, purpose: purposeText(), policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
+      amount: amt, purpose: purposeText(), note: noteText(), policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
     btn.disabled = false;
     if(!j.ok){ lo.innerHTML = '<div class="result bad"><div class="foot" style="font-size:14px;opacity:1">'+esc(j.error||'Failed')+'</div></div>'; return; }
     const first = ((confirmed.name||'').split(',').pop()||'').trim().split(' ')[0] || '';
@@ -735,7 +762,7 @@ async function testLog(){
   out.style.display='block'; out.textContent='Writing log note…';
   try{
     const j = await post({action:'charge_full_test', clientId: confirmed.clientNumber,
-      amount: document.getElementById('amount').value||'0.00', purpose: purposeText(),
+      amount: document.getElementById('amount').value||'0.00', purpose: purposeText(), note: noteText(),
       policyNumber: document.getElementById('hsPolicyNumber').value.trim()});
     out.textContent = JSON.stringify(j,null,2);
     if(j.ok){

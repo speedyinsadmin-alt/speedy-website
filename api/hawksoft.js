@@ -538,40 +538,44 @@ export default async function handler(req, res) {
       if (!total || total < 0.5) {
         return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       }
+      const recover = b.skipCharge === true; // recovery: card already charged on Clover, just record it
       const source = String(b.source || '');
-      if (!source || source.length < 8) {
+      if (!recover && (!source || source.length < 8)) {
         return res.status(400).json({ ok: false, error: 'Missing payment token from the secure payment fields.' });
       }
       const now = new Date();
       const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
 
-      // 1) Charge the card — Clover ecommerce API
-      const cr = await fetch('https://scl.clover.com/v1/charges', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
-          'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({ amount: Math.round(total * 100), currency: 'usd', source,
-          description: `Speedy Insurance — ${purpose} — client ${clientId}` }),
-      });
-      const ctext = await cr.text();
-      let cbody = null; try { cbody = ctext ? JSON.parse(ctext) : null; } catch { cbody = ctext; }
-      const paid = cr.status === 200 && cbody && (cbody.paid === true || cbody.status === 'succeeded');
-      if (!paid) {
-        const err = (cbody && cbody.error) || {};
-        const msg = err.message || err.code || (cbody && cbody.message)
-          || (cbody && cbody.failure_message) || (cbody && cbody.status) || `Clover returned HTTP ${cr.status}`;
-        const alertTo = (action === 'paylink_charge') ? (typeof taskEmail === 'string' ? taskEmail : null) : userEmail;
-        const alerted = await sendDeclineAlert({ to: alertTo || 'info@speedyins.com', amount: total, clientId, clientName, purpose,
-          reason: msg, channel: action === 'paylink_charge' ? 'Pay link (client self-pay)' : 'Charge page — typed card' });
-        await audit({ action: action + '_declined', who, clientId, amount: total, purpose, reason: msg, alerted, cloverStatus: cr.status, clover: cbody });
-        return res.status(402).json({ ok: false, error: `Charge failed: ${msg}` });
+      let cbody = null, paid = true, cr = null;
+      if (!recover) {
+        // 1) Charge the card — Clover ecommerce API
+        cr = await fetch('https://scl.clover.com/v1/charges', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
+            'idempotency-key': crypto.randomUUID() },
+          body: JSON.stringify({ amount: Math.round(total * 100), currency: 'usd', source,
+            description: `Speedy Insurance — ${purpose} — client ${clientId}` }),
+        });
+        const ctext = await cr.text();
+        try { cbody = ctext ? JSON.parse(ctext) : null; } catch { cbody = ctext; }
+        paid = cr.status === 200 && cbody && (cbody.paid === true || cbody.status === 'succeeded');
+        if (!paid) {
+          const err = (cbody && cbody.error) || {};
+          const msg = err.message || err.code || (cbody && cbody.message)
+            || (cbody && cbody.failure_message) || (cbody && cbody.status) || `Clover returned HTTP ${cr.status}`;
+          const alertTo = (action === 'paylink_charge') ? (typeof taskEmail === 'string' ? taskEmail : null) : userEmail;
+          const alerted = await sendDeclineAlert({ to: alertTo || 'info@speedyins.com', amount: total, clientId, clientName, purpose,
+            reason: msg, channel: action === 'paylink_charge' ? 'Pay link (client self-pay)' : 'Charge page — typed card' });
+          await audit({ action: action + '_declined', who, clientId, amount: total, purpose, reason: msg, alerted, cloverStatus: cr.status, clover: cbody });
+          return res.status(402).json({ ok: false, error: `Charge failed: ${msg}` });
+        }
       }
-      const txnId = String(cbody.id || 'UNKNOWN');
-      const authCode = cbody.auth_code || cbody.authCode || null;
-      const refNum = cbody.ref_num || cbody.refNum || null;
-      const brand = String((cbody.source && cbody.source.brand) || 'CARD').toUpperCase();
-      const last4 = String((cbody.source && cbody.source.last4) || '????');
-      const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum } };
+      const txnId = recover ? String(b.txnId || 'UNKNOWN') : String(cbody.id || 'UNKNOWN');
+      const authCode = recover ? (b.authCode || null) : (cbody.auth_code || cbody.authCode || null);
+      const refNum = recover ? (b.refNum || null) : (cbody.ref_num || cbody.refNum || null);
+      const brand = recover ? String(b.brand || 'VISA').toUpperCase() : String((cbody.source && cbody.source.brand) || 'CARD').toUpperCase();
+      const last4 = recover ? String(b.last4 || '????') : String((cbody.source && cbody.source.last4) || '????');
+      const out = { charge: { ok: true, id: txnId, amount: total, brand, last4, authCode, refNum, recovered: recover } };
 
       // Resolve policy GUID + matching open invoice (fail-soft on both)
       let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };

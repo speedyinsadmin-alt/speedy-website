@@ -651,7 +651,7 @@ export default async function handler(req, res) {
       row('Date / Time', stamp + ' PT');
       row('Client', clientName || ('Client #' + clientId), true);
       row('Client #', String(clientId));
-      row('Payment for', purpose.slice(0, 38));
+      row('Payment for', purposeFull.slice(0, 38));
       if (policyNumber) row('Policy #', policyNumber, true);
       y -= 4; dash(y); y -= 14;
       row('Card', `${brand} **** ${last4}`);
@@ -727,13 +727,20 @@ export default async function handler(req, res) {
       const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
       if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const note = String(b.note || '').slice(0, 120).trim();
+      const payMethod = String(b.payMethod || 'Cash').slice(0, 20);
+      const altRef = String(b.altRef || '').slice(0, 80).trim();
+      // purpose shown on receipt includes the note when present
+      const purposeFull = note ? `${purpose} — ${note}` : purpose;
       const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
       const clientName = String(b.clientName || '').slice(0, 40);
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
       const taskEmail = userEmail || 'info@speedyins.com';
       const now = new Date();
       const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
-      const ref = 'CASH-' + crypto.randomUUID().slice(0, 10).toUpperCase();
+      // ref prefix by method: CASH- / ZELLE- / OTHER-
+      const refPrefix = payMethod.toUpperCase() === 'ZELLE' ? 'ZELLE-' : payMethod.toUpperCase() === 'OTHER' ? 'OTHER-' : 'CASH-';
+      const ref = altRef ? (refPrefix + altRef.replace(/[^a-z0-9]/gi, '').slice(0, 20).toUpperCase()) : (refPrefix + crypto.randomUUID().slice(0, 10).toUpperCase());
       const out = {};
 
       let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
@@ -752,14 +759,14 @@ export default async function handler(req, res) {
 
       const receipt = [{
         refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured
-        payMethod: 'Cash', total, policyId: policyGuid,
+        payMethod: payMethod, total, policyId: policyGuid,
         ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
-        logNote: `CHARGE PAGE cash — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
+        logNote: `CHARGE PAGE ${payMethod} — $${total.toFixed(2)} · ${purposeFull}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
       }];
       if (!invPick.invoices && taskEmail) {
         receipt[0].task = {
           title: `Invoice needed — cash $${total.toFixed(2)}`.slice(0, 50),
-          description: `Cash payment of $${total.toFixed(2)} (${purpose}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply ref ${ref}.`,
+          description: `${payMethod} payment of $${total.toFixed(2)} (${purposeFull}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply ref ${ref}.`,
           dueDate: now.toISOString(),
           assignedToRole: 'SpecifiedUser',
           assignedToEmail: taskEmail,
@@ -798,7 +805,7 @@ export default async function handler(req, res) {
       dash(y); y -= 20;
       ctr('PAYMENT RECEIPT', y, bold, 11, NAVY); y -= 26;
       ctr(`$${total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
-      ctr('RECEIVED — CASH', y, bold, 9, GREEN); y -= 22;
+      ctr('RECEIVED — ' + payMethod.toUpperCase(), y, bold, 9, GREEN); y -= 22;
       const row = (label, value, isBold) => {
         page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
         const f = isBold ? bold : helv;
@@ -809,10 +816,10 @@ export default async function handler(req, res) {
       row('Date / Time', stamp + ' PT');
       row('Client', clientName || ('Client #' + clientId), true);
       row('Client #', String(clientId));
-      row('Payment for', purpose.slice(0, 38));
+      row('Payment for', purposeFull.slice(0, 38));
       if (policyNumber) row('Policy #', policyNumber, true);
       y -= 4; dash(y); y -= 14;
-      row('Method', 'Cash');
+      row('Method', payMethod);
       row('Entry', 'In person — counter');
       y -= 4; solid(y); y -= 14;
       page.drawText('PAYMENT RECORD', { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
@@ -850,14 +857,14 @@ export default async function handler(req, res) {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32,
           policyId: policyGuid, PolicyId: policyGuid,
-          note: `CHARGE PAGE CASH — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Receipt posted + branded PDF attached.`,
+          note: `CHARGE PAGE ${payMethod.toUpperCase()} — $${total.toFixed(2)} · ${purposeFull}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Receipt posted + branded PDF attached.`,
         }) });
       out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
 
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
-      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose: purposeFull, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved });
     }
 
@@ -937,7 +944,7 @@ export default async function handler(req, res) {
       const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
       if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const branch = CLOVER_BRANCHES[String(b.branchId || '1')] || CLOVER_BRANCHES[1];
-      const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const purpose = ((n)=>{ const p=String(b.purpose||'Down payment').slice(0,80); return n?`${p} — ${n}`:p; })(String(b.note||'').slice(0,120).trim());
       const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
       let clientName = String(b.clientName || '').slice(0, 40);
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
@@ -1042,7 +1049,7 @@ export default async function handler(req, res) {
       if (!total || total <= 0 || total > 10) {
         return res.status(400).json({ ok: false, error: 'Test amounts capped at $10.00' });
       }
-      const purpose = String(b.purpose || 'Down payment').slice(0, 80);
+      const purpose = ((n)=>{ const p=String(b.purpose||'Down payment').slice(0,80); return n?`${p} — ${n}`:p; })(String(b.note||'').slice(0,120).trim());
       const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
       const who = userEmail
         ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
@@ -1096,7 +1103,7 @@ export default async function handler(req, res) {
       row('Date / Time', stamp + ' PT');
       row('Client', 'ZZTEST DELETE ME - API TEST', true);
       row('Client #', '26081');
-      row('Payment for', purpose.slice(0, 38));
+      row('Payment for', purposeFull.slice(0, 38));
       if (policyNumber) row('Policy #', policyNumber, true);
       y -= 4; dash(y); y -= 14;
       row('Card', 'VISA **** 4242 (TEST)');

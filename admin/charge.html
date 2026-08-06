@@ -607,7 +607,15 @@ async function chargeCash(method){
         ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to HawkSoft.</div>${nextBtnHtml(parseFloat(amt).toFixed(2))}</div>`;
       rb.scrollIntoView({behavior:'smooth'});
     } else {
-      rb.innerHTML = `<div class="result bad"><h3>Not recorded</h3><div class="foot" style="font-size:14px;opacity:1">${esc(j.error||'Try again.')}</div></div>`;
+      let detail = j.error || '';
+      if(!detail && j.results){
+        const parts=[];
+        if(j.results.receipt && !j.results.receipt.ok) parts.push('receipt: '+(j.results.receipt.error||j.results.receipt.status||'failed'));
+        if(j.results.attachment && !j.results.attachment.ok) parts.push('attachment: '+(j.results.attachment.error||j.results.attachment.status||'failed'));
+        if(j.results.log && !j.results.log.ok) parts.push('log: '+(j.results.log.error||j.results.log.status||'failed'));
+        detail = parts.join(' · ') || 'One or more HawkSoft steps failed.';
+      }
+      rb.innerHTML = `<div class="result bad"><h3>Not recorded</h3><div class="foot" style="font-size:14px;opacity:1">${esc(detail||'Try again.')}</div></div>`;
       btn.disabled = false;
     }
   }catch(e){ out.style.display='none'; rb.innerHTML = '<div class="result bad"><h3>Connection problem</h3><div class="foot" style="font-size:14px;opacity:1">'+esc(String(e))+'</div></div>'; btn.disabled = false; }

@@ -5,7 +5,15 @@ export const config = { maxDuration: 30 };
 // POST = sync_zztest only: HawkSoft client 26081 -> our clients/policies + events. No other writes.
 
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const ALLOWLIST = ['info@speedyins.com'];
+const ADMIN_ALLOWLIST = ['info@speedyins.com'];
+// Agents can sign into the PORTAL and see ONLY their own data (never admin views, never other agents).
+const AGENT_ALLOWLIST = [
+  'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
+  'chris@speedyins.com', 'yasmin@speedyins.com', 'fernando@speedyins.com', 'jesus@speedyins.com',
+  'alejandra@speedyins.com', 'esmeralda@speedyins.com', 'irene@speedyins.com',
+  'tony@speedyins.com', 'lana@speedyins.com',
+];
+const ALLOWLIST = ADMIN_ALLOWLIST; // back-compat for existing admin checks
 const AGENCY_ID = 15112;
 const TEST_CLIENT = 26081; // ZZTEST — the only client sync/HawkSoft-read will touch
 const HS_BASE = 'https://integration.hawksoft.app';
@@ -45,7 +53,23 @@ async function verifyGoogle(idToken) {
     if (t.aud !== GOOGLE_CLIENT_ID) return null;
     if (String(t.email_verified) !== 'true') return null;
     const email = String(t.email || '').toLowerCase();
-    return ALLOWLIST.includes(email) ? email : null;
+    return ADMIN_ALLOWLIST.includes(email) ? email : null;
+  } catch { return null; }
+}
+
+// Verify for portal access: returns { email, role } where role is 'admin' or 'agent'.
+async function verifyPortal(idToken) {
+  if (!idToken) return null;
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken));
+    if (r.status !== 200) return null;
+    const t = await r.json();
+    if (t.aud !== GOOGLE_CLIENT_ID) return null;
+    if (String(t.email_verified) !== 'true') return null;
+    const email = String(t.email || '').toLowerCase();
+    if (ADMIN_ALLOWLIST.includes(email)) return { email, role: 'admin' };
+    if (AGENT_ALLOWLIST.includes(email)) return { email, role: 'agent' };
+    return null;
   } catch { return null; }
 }
 
@@ -254,6 +278,62 @@ export default async function handler(req, res) {
     if (job) { const j = await stepResyncJob(s, job, 50000); return res.status(200).json({ ok: true, mode: 'resync_job', ...j }); }
     const out = await runDeltaSync(s, 'system:cron');
     return res.status(out.ok ? 200 : 502).json(out);
+  }
+
+  // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
+  // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
+  const portalViews = ['portal_home'];
+  if (portalViews.includes(view)) {
+    const who = await verifyPortal(req.headers['x-id-token']);
+    if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
+    const s = sb();
+    if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
+
+    if (view === 'portal_home') {
+      const me = who.email;
+      // Pull this agent's own ledger rows (match any agent string containing their email)
+      const all = await sbGet(s, 'bridge_ledger?select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind&order=ts.desc&limit=500');
+      const AUDIT_CUTOFF = '2026-07-29';
+      const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
+      const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
+
+      const mine = (all.rows || []).filter(r => String(r.agent || '').toLowerCase().includes(me));
+      // month boundary (America/Los_Angeles approx via UTC month is fine for display)
+      const now = new Date();
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+
+      let earned = 0, pending = 0, unfinished = [];
+      for (const r of mine) {
+        const dateStr = String(r.ts || '').slice(0, 10);
+        if (dateStr < AUDIT_CUTOFF) continue; // pre-audit: no commission expected
+        const fee = r.fee_amount != null ? Number(r.fee_amount)
+          : (r.service_cost != null ? Number(r.amount) - Number(r.service_cost) : null);
+        const complete = r.audit_status === 'complete';
+        if (complete && fee != null) {
+          if (r.ts >= monthStart) earned += fee * pct / 100;
+        } else if (r.kind !== 'charge_captured' || r.audit_status) {
+          // needs proof of payment / audit
+          const feeGuess = fee != null ? fee * pct / 100 : null;
+          if (r.ts >= monthStart && feeGuess != null) pending += feeGuess;
+          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid' });
+        }
+      }
+      // client names for the unfinished list
+      const ids = [...new Set(unfinished.map(u => u.client_no).filter(Boolean))];
+      const nameMap = {};
+      if (ids.length) {
+        const cl = await sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`);
+        for (const c of (cl.rows || [])) nameMap[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
+      }
+      unfinished = unfinished.map(u => ({ ...u, client_name: nameMap[u.client_no] || null })).slice(0, 50);
+
+      return res.status(200).json({
+        ok: true, email: me, role: who.role,
+        commission: { rate: pct, earned_month: +earned.toFixed(2), pending_month: +pending.toFixed(2) },
+        unfinished_count: unfinished.length, unfinished,
+        recent: mine.slice(0, 10).map(r => ({ ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid' })),
+      });
+    }
   }
 
   const email = await verifyGoogle(req.headers['x-id-token']);

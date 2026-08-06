@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speedy Portal</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --navy:#0b1029; --card:#0e1533; --ink:#e8ecff; --mute:#8f9ac4; --dim:#5c6690;
+    --line:rgba(255,255,255,.10); --blue:#4d7cfe; --blue-l:#7fa8ff; --green:#2fbf71;
+    --amber:#f5a623; --red:#e03131; --field:#161f45;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px}
+  .hide{display:none!important}
+  .beta{background:var(--amber);color:#2a1a00;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;vertical-align:middle;letter-spacing:.03em}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:12px}
+  .muted{color:var(--mute)} .dim{color:var(--dim)}
+  label{font-size:12px;color:var(--mute);display:block;margin-bottom:5px}
+  select,input{width:100%;background:var(--field);border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--ink);font-size:14px;outline:none}
+  select:focus,input:focus{border-color:var(--blue)}
+  .btn{display:block;width:100%;text-align:center;border:0;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
+  .btn-blue{background:var(--blue);color:#fff}
+  .btn-red{background:var(--red);color:#fff}
+  .btn-ghost{background:transparent;color:var(--mute);border:1.5px solid var(--line);font-weight:600}
+  .brand{font-size:20px;font-weight:800;letter-spacing:-.3px}
+  .brand .s{color:var(--red)} .brand .i{color:var(--blue-l)}
+  .row{display:flex;justify-content:space-between;align-items:center}
+  .tile{border-radius:10px;padding:12px;text-align:center;font-size:13px;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== GATE: sign in ===== -->
+  <div id="gate">
+    <div class="card" style="text-align:center;padding:30px 20px">
+      <div class="brand" style="margin-bottom:6px"><span class="s">SPEEDY</span> <span class="i">PORTAL</span> <span class="beta">BETA</span></div>
+      <div class="muted" style="margin-bottom:18px">Sign in with your @speedyins.com account</div>
+      <div id="gsibtn" style="display:inline-block"></div>
+      <div id="gateerr" class="hide" style="color:var(--red);font-size:13px;margin-top:14px">That account isn't set up for the portal yet. Ask the admin to add you.</div>
+    </div>
+  </div>
+
+  <!-- ===== OFFICE PICKER ===== -->
+  <div id="officePick" class="hide">
+    <div class="card" style="padding:24px 20px">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:17px;font-weight:800" id="welcomeName">Welcome 👋</div>
+        <div class="muted" style="font-size:13px">Which office are you working today?</div>
+      </div>
+      <label for="officeSel">Office</label>
+      <select id="officeSel"></select>
+      <button class="btn btn-blue" onclick="confirmOffice()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ===== HOME ===== -->
+  <div id="home" class="hide">
+    <!-- top bar -->
+    <div class="card" style="padding:14px 16px">
+      <div class="row">
+        <div>
+          <div style="font-size:16px;font-weight:800" id="homeName">Agent <span class="beta">BETA</span></div>
+          <div class="muted" style="font-size:12px;margin-top:2px">📍 Working at</div>
+        </div>
+        <div style="text-align:right">
+          <select id="officeSwitch" style="width:auto;padding:7px 10px;font-size:13px"></select>
+          <div class="dim" style="font-size:10px;margin-top:3px">tap to change · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- to-do -->
+    <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="alert('Coming in Stage 2 — your unfinished list')">
+      <div style="font-size:13px;font-weight:700;color:var(--amber)" id="todoText">⚠ You have payments needing proof</div>
+      <div style="font-size:11px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
+    </div>
+
+    <!-- commission -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div style="background:linear-gradient(135deg,rgba(47,191,113,.15),rgba(77,124,254,.08));border:1px solid rgba(47,191,113,.3);border-radius:12px;padding:13px">
+        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Earned this month</div>
+        <div style="font-size:22px;font-weight:800;color:var(--green)" id="earned">$0.00</div>
+      </div>
+      <div style="background:var(--field);border:1px solid var(--line);border-radius:12px;padding:13px">
+        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Pending</div>
+        <div style="font-size:22px;font-weight:800;color:var(--amber)" id="pending">$0.00</div>
+      </div>
+    </div>
+
+    <!-- search (Stage 2) -->
+    <div class="card" style="padding:14px 16px">
+      <input placeholder="🔍 Search any client — name, #, phone…" onclick="alert('Client search arrives in Stage 2')" readonly style="cursor:pointer">
+      <div class="dim" style="font-size:11px;margin-top:8px">Open clients — up to 5</div>
+      <div id="tabbar" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        <div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>
+      </div>
+      <button class="btn btn-red" onclick="alert('Charging inside the portal arrives in Stage 3. For now use the charge page.')" style="margin-top:12px">＋ New charge</button>
+    </div>
+
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · you see only your own work</div>
+  </div>
+
+</div>
+
+<script>
+const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
+const OFFICES = ['Moreno Valley','Riverside Van Buren','Riverside Magnolia','Lake Elsinore'];
+const STAFF = {
+  'sammy@speedyins.com':['Samuel Rodriguez','Moreno Valley'],'yolanda@speedyins.com':['Yolanda Hernandez','Moreno Valley'],
+  'jorge@speedyins.com':['Jorge Ramos','Moreno Valley'],'lfigueroa@speedyins.com':['Laura Figueroa','Moreno Valley'],
+  'chris@speedyins.com':['Christian Aguilar','Lake Elsinore'],'yasmin@speedyins.com':['Yasmin Alfaro','Riverside Van Buren'],
+  'fernando@speedyins.com':['Fernando Salgado','Riverside Van Buren'],'jesus@speedyins.com':['Jesus Velarde','Riverside Van Buren'],
+  'alejandra@speedyins.com':['Alejandra Salas','Riverside Magnolia'],'esmeralda@speedyins.com':['Esmeralda Ayala Hernandez','Riverside Magnolia'],
+  'irene@speedyins.com':['Irene Ayala Hernandez','Riverside Magnolia'],'tony@speedyins.com':['Tony Dabouqi','Moreno Valley'],
+  'lana@speedyins.com':['Lana D.','Moreno Valley'],'info@speedyins.com':['Admin','Moreno Valley']
+};
+let TOKEN = null, EMAIL = null, OFFICE = null;
+const $ = s => document.querySelector(s);
+const money = n => '$' + Number(n||0).toFixed(2);
+function jwtEmail(t){ try{ return JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email.toLowerCase(); }catch{ return null; } }
+
+async function api(view){
+  try{ const r = await fetch('/api/platform?view='+view, { headers:{ 'x-id-token': TOKEN } }); return await r.json(); }
+  catch{ return null; }
+}
+
+function onCred(resp){
+  TOKEN = resp.credential; EMAIL = jwtEmail(TOKEN);
+  const staff = STAFF[EMAIL];
+  const home = staff ? staff[1] : 'Moreno Valley';
+  const name = staff ? staff[0] : (EMAIL||'').split('@')[0];
+  // build office dropdowns (home pre-selected)
+  const opts = OFFICES.map(o => '<option value="'+o+'"'+(o===home?' selected':'')+'>'+o+(o===home?' — your home branch':'')+'</option>').join('');
+  $('#officeSel').innerHTML = opts;
+  $('#officeSwitch').innerHTML = OFFICES.map(o => '<option value="'+o+'">'+o+'</option>').join('');
+  $('#welcomeName').textContent = 'Welcome, ' + name.split(' ')[0] + ' 👋';
+  $('#homeName').innerHTML = name + ' <span class="beta">BETA</span>';
+  OFFICE = home;
+  $('#gate').classList.add('hide');
+  $('#officePick').classList.remove('hide');
+}
+
+function confirmOffice(){
+  OFFICE = $('#officeSel').value;
+  $('#officeSwitch').value = OFFICE;
+  $('#officePick').classList.add('hide');
+  $('#home').classList.remove('hide');
+  loadHome();
+}
+
+$('#officeSwitch') && ($('#officeSwitch').onchange = function(){ OFFICE = this.value; });
+
+async function loadHome(){
+  const r = await api('portal_home');
+  if(!r || !r.ok) return;
+  $('#earned').textContent = money(r.commission.earned_month);
+  $('#pending').textContent = money(r.commission.pending_month);
+  const n = r.unfinished_count || 0;
+  if(n){
+    $('#todo').classList.remove('hide');
+    $('#todoText').textContent = '⚠ ' + n + ' payment' + (n>1?'s':'') + ' need your proof of payment';
+  } else {
+    $('#todo').classList.add('hide');
+  }
+}
+
+function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
+
+window.addEventListener('load', () => {
+  const t = setInterval(() => {
+    if(!window.google) return;
+    clearInterval(t);
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
+    google.accounts.id.renderButton($('#gsibtn'), { theme:'filled_blue', size:'large', shape:'pill', text:'signin_with' });
+  }, 150);
+});
+</script>
+</body>
+</html>

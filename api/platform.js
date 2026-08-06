@@ -446,11 +446,15 @@ export default async function handler(req, res) {
       const cl = await sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`);
       for (const c of (cl.rows || [])) nameMap[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
     }
-    // record_type per client (to derive service path) — from policies
+    // record_type per client — track whether client has ANY insurance and ANY dmv (a client can have both)
     const typeMap = {};
     if (ids.length) {
       const po = await sbGet(s, `policies?client_no=in.(${ids.join(',')})&select=client_no,record_type`);
-      for (const r of (po.rows || [])) { if (!typeMap[r.client_no]) typeMap[r.client_no] = r.record_type; if (r.record_type === 'dmv_service') typeMap[r.client_no] = 'dmv_service'; }
+      for (const r of (po.rows || [])) {
+        if (!typeMap[r.client_no]) typeMap[r.client_no] = { insurance: false, dmv: false };
+        if (r.record_type === 'dmv_service') typeMap[r.client_no].dmv = true;
+        else typeMap[r.client_no].insurance = true;
+      }
     }
     const comm = await sbGet(s, 'agent_commission?select=*');
     const commMap = {}; for (const c of (comm.rows || [])) commMap[c.agent_email] = Number(c.percentage);
@@ -461,8 +465,14 @@ export default async function handler(req, res) {
       const purpose = String(p.purpose || '').toLowerCase();
       let path = p.service_path;
       if (!path) {
-        if (purpose.includes('dmv') || purpose.includes('registration') || purpose.includes('regist')) path = 'dmv_service';
-        else path = typeMap[p.client_id] || 'insurance';
+        // 1) The charge's own purpose is the source of truth (agent picked "DMV" or wrote registration)
+        if (purpose.includes('dmv') || purpose.includes('registration') || purpose.startsWith('regist')) path = 'dmv_service';
+        // 2) Otherwise default to insurance. Only tag DMV-by-client if the client is DMV-ONLY (no insurance policies)
+        else {
+          const t = typeMap[p.client_id];
+          if (t && t.dmv && !t.insurance) path = 'dmv_service';
+          else path = 'insurance';
+        }
       }
       const docs = (atts.rows || []).filter(a => (a.payment_id === p.id) || (a.client_no === p.client_id));
       const task = (tasks.rows || []).find(t => t.payment_id === p.id);

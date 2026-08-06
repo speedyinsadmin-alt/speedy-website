@@ -822,14 +822,15 @@ export default async function handler(req, res) {
       if (policyNumber) row('Policy #', policyNumber, true);
       y -= 4; dash(y); y -= 14;
       row('Method', payMethod);
-      row('Entry', 'In person — counter');
+      row('Entry', (payMethod.toLowerCase()==='zelle') ? 'Zelle — bank transfer' : (payMethod.toLowerCase()==='other') ? ('Other — ' + payMethod) : 'In person — counter');
       y -= 4; solid(y); y -= 14;
       page.drawText('PAYMENT RECORD', { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
       row('Reference', ref);
       row('Device', 'Web — Speedy payment bridge');
       row('Received by', who.slice(0, 42));
       y -= 4; solid(y); y -= 16;
-      for (const t of ['Cash payment received at the agency counter and', 'recorded to the HawkSoft client record by the', 'Speedy payment bridge.']) {
+      const footLead = (payMethod.toLowerCase()==='zelle') ? 'Zelle payment received and' : (payMethod.toLowerCase()==='cash') ? 'Cash payment received at the agency counter and' : (payMethod + ' payment received and');
+      for (const t of [footLead, 'recorded to the HawkSoft client record by the', 'Speedy payment bridge.']) {
         ctr(t, y, obl, 7, LIGHT); y -= 9;
       }
       y -= 6;

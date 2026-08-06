@@ -201,7 +201,7 @@ function fillCtx(){
 
 $('#camt').addEventListener('input', recalcFee);
 function recalcFee(){
-  const paid = Number(CTX.paid||0), cAmt = Number($('#camt').value||0);
+  const paid = Number(String(CTX.paid||0).replace(/,/g,'')), cAmt = Number(String($('#camt').value||0).replace(/,/g,''));
   const fee = paid && cAmt ? paid - cAmt : null;
   $('#fee').textContent = fee!=null ? '$'+fee.toFixed(2) : '—';
   updateSubmit();
@@ -241,7 +241,7 @@ $('#file').addEventListener('change', e => {
 
 function updateSubmit(){
   // audit submit needs: carrier, amount, card, receipt
-  const ok = $('#carrier').value.trim() && Number($('#camt').value)>0 && $('#card').value && FILE_B64;
+  const ok = $('#carrier').value.trim() && Number(String($('#camt').value).replace(/,/g,''))>0 && $('#card').value && FILE_B64;
   $('#submitBtn').disabled = !ok;
 }
 ['carrier','camt','card'].forEach(id => $('#'+id).addEventListener('input', updateSubmit));
@@ -257,7 +257,7 @@ async function submit(complete){
     client_no: Number(CTX.client_no)||null,
     policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, payment_id: CTX.payment_id||null,
     carrier: $('#carrier').value.trim()||null,
-    carrier_amount: Number($('#camt').value)||null,
+    carrier_amount: Number(String($('#camt').value).replace(/,/g,''))||null,
     carrier_card: $('#card').value||null,
     receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME,
     complete: !!complete,

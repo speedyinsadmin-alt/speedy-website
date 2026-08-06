@@ -690,7 +690,7 @@ export default async function handler(req, res) {
       });
       out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
       // Also store the receipt PDF in OUR vault so it shows in the Audit tab
-      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId, who, policyGuid });
+      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId: (typeof txnId!=='undefined'?txnId:(typeof ref!=='undefined'?ref:null)), who, policyGuid });
 
       // 4) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
@@ -851,7 +851,7 @@ export default async function handler(req, res) {
       });
       out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
       // Also store the receipt PDF in OUR vault so it shows in the Audit tab
-      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId, who, policyGuid });
+      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId: (typeof txnId!=='undefined'?txnId:(typeof ref!=='undefined'?ref:null)), who, policyGuid });
 
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
@@ -1138,7 +1138,7 @@ export default async function handler(req, res) {
       });
       out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
       // Also store the receipt PDF in OUR vault so it shows in the Audit tab
-      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId, who, policyGuid });
+      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId: (typeof txnId!=='undefined'?txnId:(typeof ref!=='undefined'?ref:null)), who, policyGuid });
 
       // 3) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {

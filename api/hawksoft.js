@@ -729,6 +729,8 @@ export default async function handler(req, res) {
       const purpose = String(b.purpose || 'Down payment').slice(0, 80);
       const note = String(b.note || '').slice(0, 120).trim();
       const payMethod = String(b.payMethod || 'Cash').slice(0, 20);
+      // HawkSoft receipts only accept known payment methods; Zelle/Other are recorded as Cash to HawkSoft (real method kept in note/PDF)
+      const hsPayMethod = (['cash','check'].includes(payMethod.toLowerCase())) ? payMethod : 'Cash';
       const altRef = String(b.altRef || '').slice(0, 80).trim();
       // purpose shown on receipt includes the note when present
       const purposeFull = note ? `${purpose} — ${note}` : purpose;
@@ -759,7 +761,7 @@ export default async function handler(req, res) {
 
       const receipt = [{
         refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured
-        payMethod: payMethod, total, policyId: policyGuid,
+        payMethod: hsPayMethod, total, policyId: policyGuid,
         ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
         logNote: `CHARGE PAGE ${payMethod} — $${total.toFixed(2)} · ${purposeFull}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
       }];

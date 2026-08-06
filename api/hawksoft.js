@@ -651,7 +651,7 @@ export default async function handler(req, res) {
       row('Date / Time', stamp + ' PT');
       row('Client', clientName || ('Client #' + clientId), true);
       row('Client #', String(clientId));
-      row('Payment for', purposeFull.slice(0, 38));
+      row('Payment for', purpose.slice(0, 38));
       if (policyNumber) row('Policy #', policyNumber, true);
       y -= 4; dash(y); y -= 14;
       row('Card', `${brand} **** ${last4}`);
@@ -1106,7 +1106,7 @@ export default async function handler(req, res) {
       row('Date / Time', stamp + ' PT');
       row('Client', 'ZZTEST DELETE ME - API TEST', true);
       row('Client #', '26081');
-      row('Payment for', purposeFull.slice(0, 38));
+      row('Payment for', purpose.slice(0, 38));
       if (policyNumber) row('Policy #', policyNumber, true);
       y -= 4; dash(y); y -= 14;
       row('Card', 'VISA **** 4242 (TEST)');

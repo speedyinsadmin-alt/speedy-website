@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.2</small></h1>
+      <h1>Platform Console <small id="ver">v4.3</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -785,6 +785,10 @@ async function renderAudit(el){
     + '<span class="muted">'+rows.length+' transactions</span>'
     + '<span class="muted">·</span><span>Total fees: <b class="amount">'+money(totFees)+'</b></span>'
     + '<span class="muted">·</span><span>Commission (earned): <b class="amount" style="color:#7fa8ff">'+money(totComm)+'</b></span></div>';
+  const pendingCount = rows.filter(x=>x.receipt_pending).length;
+  if(pendingCount){
+    h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:#e03131">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
+  }
 
   h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th>Docs</th></tr>';
   if(!rows.length) h += '<tr><td colspan="10" class="muted">No transactions.</td></tr>';
@@ -803,7 +807,7 @@ async function renderAudit(el){
       + '<td class="amount">'+(row.fee!=null?money(row.fee):'—')+'</td>'
       + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
       + '<td class="amount">'+(row.commission!=null?'<b style="color:#7fa8ff">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+'</td>'
-      + '<td>'+statusPill(row)+(completeBtn?'<br>'+completeBtn:'')+'</td>'
+      + '<td>'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 receipt pending</span><br>':'')+statusPill(row)+(completeBtn?'<br>'+completeBtn:'')+'</td>'
       + '<td>'+docCell+'</td>'
       + '</tr>';
   }

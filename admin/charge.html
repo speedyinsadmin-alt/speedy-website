@@ -240,6 +240,7 @@
     <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST only)</button>
     <button class="btn btn-ghost" onclick="probeInvoices()">Probe invoices (current client)</button>
     <button class="btn btn-ghost" onclick="probeChannels()" style="font-size:13px;padding:10px">🔬 Probe log channels on ZZTEST (find "From Other")</button>
+    <button class="btn btn-ghost" onclick="recoverMaria()" style="font-size:13px;padding:10px">↻ Recover charge — Maria Montelongo #20723 $541 (one-time)</button>
     </details>
     <pre id="out"></pre>
   </div>
@@ -765,6 +766,26 @@ async function probeChannels(){
     out.textContent = JSON.stringify(j,null,2) + '\n\nNow open ZZTEST → Log tab: each PROBE row shows its channel wording. Tell Claude which number shows From > Other.';
   }catch(e){ out.textContent='Error: '+e; }
 }
+
+async function recoverMaria(){
+  const out = document.getElementById('out'); out.style.display='block';
+  if(!confirm('Record the already-charged $541 Clover payment for Maria Montelongo #20723? This creates the receipt + HawkSoft record + ledger entry. It does NOT charge the card again.')) return;
+  out.textContent = 'Recovering charge…';
+  try{
+    const j = await post({
+      action:'charge_live', skipCharge:true,
+      clientId: 20723, clientName: 'MARIA MONTELONGO',
+      amount: '541.00', purpose: 'Down payment',
+      clientEmail: 'Maria17montelongo@gmail.com',
+      txnId: '7JYHMJVFSYPM2', authCode: '093723', refNum: '621800732837',
+      brand: 'VISA', last4: '1145'
+    });
+    out.textContent = JSON.stringify(j, null, 2);
+    if(j.ok) alert('✓ Recorded — receipt + HawkSoft + ledger created for Maria #20723.');
+    else alert('Recovery result: ' + (j.error || 'see details'));
+  }catch(e){ out.textContent = 'Error: ' + e; }
+}
+
 async function testLog(){
   const out = document.getElementById('out');
   out.style.display='block'; out.textContent='Writing log note…';

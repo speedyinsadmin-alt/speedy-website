@@ -491,6 +491,7 @@ export default async function handler(req, res) {
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
         agent: agentEmail, agent_raw: p.agent, is_admin: isAdmin, secure_link: isSecureLink,
         path, audit_status: auditStatus, pre_audit: preAudit,
+        receipt_pending: (p.kind === 'charge_captured') || !!(p.extra && p.extra.receipt_pending === true),
         service_cost: cost, fee, pct, commission, doc_count: docs.length, task_id: task ? task.id : null,
       };
     });

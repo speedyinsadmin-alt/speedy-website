@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.32 · recover</div>
+    <div class="ver">v2.33 · agent-safe</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -236,7 +236,7 @@
       <div id="linkOut"></div>
     </div>
     <div id="resultbox"></div>
-    <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Admin test tools</summary>
+    <details id="adminTools" class="hide" style="margin-top:10px"><summary class="hint" style="cursor:pointer">Admin test tools</summary>
     <button class="btn btn-red" id="logBtn" onclick="testLog()">Post TEST — receipt + PDF + log (ZZTEST only)</button>
     <button class="btn btn-ghost" onclick="probeInvoices()">Probe invoices (current client)</button>
     <button class="btn btn-ghost" onclick="probeChannels()" style="font-size:13px;padding:10px">🔬 Probe log channels on ZZTEST (find "From Other")</button>
@@ -270,6 +270,9 @@ function showSignedIn(){
     document.getElementById('whoEmail').textContent = em;
     document.getElementById('whoBranch').textContent = s[1];
   }
+  // Admin test tools: ONLY visible to info@speedyins.com (never to agents)
+  const at = document.getElementById('adminTools');
+  if(at){ const isAdmin = (em === 'info@speedyins.com'); at.classList.toggle('hide', !isAdmin); if(!isAdmin) at.removeAttribute('open'); }
 }
 function onCred(resp){
   gToken = resp.credential; showSignedIn();

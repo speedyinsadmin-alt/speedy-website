@@ -1,5 +1,12 @@
 {
   "crons": [
-    { "path": "/api/platform?view=cron_sync", "schedule": "0 9 * * *" }
+    {
+      "path": "/api/platform?view=cron_sync",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/rc-subscribe?action=renew&cron=1",
+      "schedule": "0 8 * * *"
+    }
   ]
 }

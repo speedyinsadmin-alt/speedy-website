@@ -565,7 +565,7 @@ export default async function handler(req, res) {
       const isAdmin = agentEmail === 'info@speedyins.com';
       const isSecureLink = /secure link/i.test(String(p.agent || ''));
       const pct = commMap[agentEmail] != null ? commMap[agentEmail] : 10;
-      const commission = (fee != null && auditStatus === 'complete' && !isAdmin) ? +(fee * pct / 100).toFixed(2) : null;
+      const commission = (fee != null && auditStatus === 'complete') ? +(fee * pct / 100).toFixed(2) : null;
       return {
         id: p.id, ts: p.ts, client_no: p.client_id, client_name: nameMap[p.client_id] || null,
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,

@@ -27,6 +27,8 @@
   #app{display:none}
   nav{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
   nav button{background:var(--navy2);border:1px solid var(--line);color:var(--mute);padding:9px 16px;border-radius:10px;font-size:14px;cursor:pointer}
+  .mini{background:var(--navy2);border:1px solid var(--line);color:var(--mute);padding:6px 13px;border-radius:9px;font-size:13px;cursor:pointer}
+  .mini.on{color:var(--ink);border-color:var(--blue);background:rgba(77,124,254,.12)}
   nav button.on{color:var(--ink);border-color:var(--blue);background:rgba(77,124,254,.12)}
   .card{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px}
   .card h2{font-size:14px;margin:0 0 10px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
@@ -64,13 +66,14 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.4</small></h1>
+      <h1>Platform Console <small id="ver">v4.5</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
       <button data-tab="clients" class="on">Clients</button>
       <button data-tab="hs">ZZTEST · HawkSoft</button>
       <button data-tab="ledger">Ledger</button>
+      <button data-tab="calls">Calls</button>
       <button data-tab="audit">Audit</button>
       <button data-tab="tables">Tables</button>
     </nav>
@@ -126,6 +129,7 @@ async function render() {
   if (TAB === 'clients') return OPEN_CLIENT ? renderOurClient(el, OPEN_CLIENT) : renderClients(el);
   if (TAB === 'hs') return renderHS(el);
   if (TAB === 'ledger') return renderLedger(el);
+  if (TAB === 'calls') return renderCalls(el);
   if (TAB === 'audit') return renderAudit(el);
   if (TAB === 'tables') return renderTables(el);
 }
@@ -918,6 +922,105 @@ async function renderSystemHealth(){
   }
   h += '</table>';
   return h;
+}
+
+let CALL_DAYS = 1, CALL_OPEN = null;
+
+async function renderCalls(el) {
+  const r = await api('calls&days=' + CALL_DAYS);
+  if (!r || !r.ok) { el.innerHTML = '<div class="err">Call read failed.</div>'; return; }
+
+  const dur = v => { v = Number(v)||0; if(!v) return '—'; const m=Math.floor(v/60), x=v%60; return m? m+'m '+x+'s' : x+'s'; };
+  const hhmm = t => t ? new Date(t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—';
+  const st = r.stats || {};
+
+  let h = '<h2>Calls — last ' + r.days + (r.days === 1 ? ' day' : ' days') + ' (live)</h2>';
+
+  h += '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    + [1,7,30].map(d => '<button class="mini' + (CALL_DAYS===d?' on':'') + '" onclick="CALL_DAYS=' + d + ';CALL_OPEN=null;render()">'
+        + (d===1?'Today':d+' days') + '</button>').join('')
+    + '<a href="/admin/calls.html" style="margin-left:auto;color:var(--blue);font-size:13px;text-decoration:none;align-self:center">Full Calls console →</a></div>';
+
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:10px;margin-bottom:16px">'
+    + [['Calls', st.total||0, ''],
+       ['Answered', st.answered||0, 'color:var(--green)'],
+       ['Missed', st.missed||0, 'color:var(--red)'],
+       ['Answer rate', (st.answerRate||0)+'%', ''],
+       ['Total talk', dur(st.talkSeconds), ''],
+       ['Avg length', dur(st.avgTalk), ''],
+       ['Known clients', st.matched||0, '']]
+      .map(([k,v,c]) => '<div style="background:#0a0f26;border:1px solid var(--line);border-radius:10px;padding:11px 13px">'
+        + '<div style="font-size:21px;font-weight:700;' + c + '">' + esc(v) + '</div>'
+        + '<div style="color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.5px">' + k + '</div></div>').join('')
+    + '</div>';
+
+  const ag = r.agents || [];
+  if (ag.length) {
+    h += '<h2 style="margin-top:18px">By agent</h2><table>'
+      + '<tr><th>Agent</th><th>Answered</th><th>Talk time</th><th>Avg</th><th>Rang, colleague took it</th></tr>'
+      + ag.map(a => '<tr><td>' + esc(a.agent) + '</td><td><b>' + a.answered + '</b></td><td>' + dur(a.talk) + '</td>'
+          + '<td class="muted">' + dur(a.answered ? Math.round(a.talk/a.answered) : 0) + '</td>'
+          + '<td class="muted">' + (a.missedWhileRinging || '—') + '</td></tr>').join('')
+      + '</table>';
+  }
+
+  const calls = r.calls || [];
+  h += '<h2 style="margin-top:18px">Calls</h2>';
+  if (!calls.length) {
+    h += '<div class="muted">No calls in this window.</div>';
+  } else {
+    h += '<table><tr><th>Time</th><th>Dir</th><th>Customer</th><th>Outcome</th>'
+       + '<th>Answered by</th><th>Length</th><th>Branch</th><th>Client</th></tr>';
+    for (const x of calls) {
+      const cls = x.outcome === 'Answered' ? 'g' : x.outcome === 'Auto' ? 'a' : 'r';
+      const label = x.outcome === 'Auto' ? 'Auto / IVR' : x.outcome;
+      const live = !x.call_end && !x.talk_seconds;
+      const extra = (x.transferred
+          ? '<div class="muted" style="font-size:11px">transferred: ' + esc((x.answer_chain||[]).join(' \u2192 ')) + '</div>' : '')
+        + ((x.rang_agents||[]).length
+          ? '<div class="muted" style="font-size:11px">also rang: ' + esc(x.rang_agents.join(', ')) + '</div>' : '');
+      h += '<tr style="cursor:pointer" onclick="toggleCall(\'' + esc(x.rc_session_id) + '\')">'
+        + '<td>' + hhmm(x.ring_start || x.call_end) + '</td>'
+        + '<td><span class="pill ' + (x.direction === 'Inbound' ? 'b' : 'a') + '">' + (x.direction === 'Inbound' ? 'In' : 'Out') + '</span></td>'
+        + '<td>' + esc(x.customer_pretty || '—') + '</td>'
+        + '<td><span class="pill ' + cls + '">' + esc(label) + '</span></td>'
+        + '<td>' + esc(x.answered_by || '—') + extra + '</td>'
+        + '<td>' + (live ? '<span class="pill b">live</span>' : dur(x.talk_seconds)) + '</td>'
+        + '<td class="muted">' + esc(x.office_name || '—') + '</td>'
+        + '<td>' + (x.client_number ? '<span class="pill">#' + esc(x.client_number) + '</span>' : '<span class="muted">new</span>') + '</td></tr>';
+      if (CALL_OPEN === x.rc_session_id) {
+        h += '<tr><td colspan="8" id="legs-' + esc(x.rc_session_id) + '" style="background:#0a0f26"><span class="muted">Loading legs\u2026</span></td></tr>';
+      }
+    }
+    h += '</table>';
+  }
+  el.innerHTML = h;
+  if (CALL_OPEN) loadLegs(CALL_OPEN);
+}
+
+async function toggleCall(sid) {
+  CALL_OPEN = (CALL_OPEN === sid) ? null : sid;
+  await render();
+}
+
+async function loadLegs(sid) {
+  const cell = document.getElementById('legs-' + sid);
+  if (!cell) return;
+  const d = await api('call_legs&session=' + encodeURIComponent(sid));
+  const legs = (d && d.legs) || [];
+  const hhmm = t => t ? new Date(t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—';
+  cell.innerHTML = !legs.length ? '<span class="muted">No leg detail.</span>'
+    : '<div class="muted" style="margin-bottom:6px;font-size:12px">RingCentral creates one leg per party. This is what the row above is built from.</div>'
+      + '<table style="font-size:12px"><tr><th>Leg</th><th>Dir</th><th>Party</th><th>Status</th><th>Reason</th>'
+      + '<th>Rang</th><th>Answered</th><th>Ended</th><th>Secs</th></tr>'
+      + legs.map(l => '<tr><td>' + esc((l.rc_party_id||'').slice(-2)) + '</td>'
+        + '<td class="muted">' + esc(l.direction||'—') + '</td>'
+        + '<td>' + esc(l.agent_name || 'external') + '</td>'
+        + '<td><span class="pill ' + (l.result==='Answered'?'g':l.result==='Rang'?'a':'') + '">' + esc(l.result||'—') + '</span></td>'
+        + '<td class="muted">' + esc(l.disconnect_reason || '—') + '</td>'
+        + '<td>' + hhmm(l.started_at) + '</td><td>' + hhmm(l.answered_at) + '</td><td>' + hhmm(l.ended_at) + '</td>'
+        + '<td>' + (l.duration_seconds ?? '—') + '</td></tr>').join('')
+      + '</table>';
 }
 
 async function renderTables(el) {

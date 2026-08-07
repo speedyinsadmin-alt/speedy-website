@@ -282,6 +282,7 @@ export default async function handler(req, res) {
 
   // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
   // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
+  const view = String(req.query.view || '');
   const portalViews = ['portal_home', 'portal_search', 'portal_client'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
@@ -460,7 +461,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'GET/POST only' });
-  const view = String(req.query.view || '');
+  // view declared earlier (before portal block)
 
   /* ---- TEMP: receipts discovery ---- */
   /* ---- HawkSoft direct: ZZTEST raw ---- */

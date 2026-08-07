@@ -105,7 +105,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.4</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.5</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -242,13 +242,15 @@ async function loadClient(no){
   if(r && r.ok) CLIENT_CACHE[no] = r;
   renderPanel();
 }
-function monthlyFor(p){
-  const ce = p.carrier_extras || {};
-  const plan = ce.billingPlan || '';
-  const prem = Number(p.premium) || Number(ce.premium) || null;
-  const m = String(plan).match(/(\d+)/);
-  const nPay = m ? Number(m[1]) : null;
-  return (prem && nPay) ? (prem / nPay) : null;
+function isExpired(p){
+  if(!p.expiration_date) return false;
+  return String(p.expiration_date).slice(0,10) < new Date().toISOString().slice(0,10);
+}
+function termMonths(p){
+  if(!p.effective_date || !p.expiration_date) return null;
+  const a = new Date(p.effective_date), b = new Date(p.expiration_date);
+  const mo = Math.round((b - a) / (1000*60*60*24*30.44));
+  return mo > 0 ? mo : null;
 }
 async function renderPanel(){
   const el = document.getElementById('clientPanel');
@@ -272,11 +274,17 @@ async function renderPanel(){
   h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Policies ('+pols.length+')</div>';
   if(!pols.length) h += '<div class="dim" style="font-size:12px;margin-bottom:8px">No insurance policies</div>';
   for(const p of pols){
-    const mo = monthlyFor(p);
+    const prem = Number(p.premium) || null;
+    const tm = termMonths(p);
+    const expired = isExpired(p);
+    const premLabel = prem ? '$'+prem.toLocaleString()+(tm?' <span style="font-size:10px;color:var(--mute)">/ '+tm+'-mo term</span>':' <span style="font-size:10px;color:var(--mute)">term</span>') : '';
     h += '<div style="background:var(--field);border-radius:10px;padding:11px 13px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
       + '<div><b style="font-size:13px">'+esc(p.carrier||'—')+'</b><div style="font-size:11px;color:var(--mute)">'+esc(p.policy_number||'')+'</div></div>'
-      + '<div style="text-align:right">'+(mo?'<div style="font-size:15px;font-weight:800;color:var(--blue-l)">$'+mo.toFixed(2)+'<span style="font-size:10px;color:var(--mute)">/mo</span></div>':'')
-      + '<span style="font-size:10px;color:var(--amber)">'+esc(p.status||'')+'</span></div></div>';
+      + '<div style="text-align:right">'+(prem?'<div style="font-size:14px;font-weight:800;color:var(--blue-l)">'+premLabel+'</div>':'')
+      + (expired
+          ? '<span style="font-size:10px;color:#ff8787;font-weight:700">⚠ EXPIRED '+String(p.expiration_date).slice(0,10)+'</span>'
+          : '<span style="font-size:10px;color:var(--amber)">'+esc(p.status||'')+'</span>')
+      + '</div></div>';
   }
   if(dmv.length) h += '<div class="dim" style="font-size:11px;margin-bottom:8px">+ '+dmv.length+' DMV service record'+(dmv.length>1?'s':'')+'</div>';
 
@@ -296,18 +304,24 @@ async function renderPanel(){
 
       // Policy overview grid
       const fmtD = d => d ? String(d).slice(0,10) : '—';
+      const tmF = termMonths(p);
+      const expiredF = isExpired(p);
       const rows = [
         ['Type', p.lob || ce.type || '—'],
-        ['Status', p.status || '—'],
+        ['Status', expiredF ? '⚠ Expired' : (p.status || '—')],
         ['Effective', fmtD(p.effective_date)],
-        ['Expires', fmtD(p.expiration_date)],
-        ['Premium', p.premium ? '$'+Number(p.premium).toLocaleString() : '—'],
+        ['Expires', fmtD(p.expiration_date) + (expiredF ? ' (past)' : '')],
+        ['Term premium', p.premium ? '$'+Number(p.premium).toLocaleString()+(tmF?' / '+tmF+'-mo':'') : '—'],
         ['Billing plan', ce.billingPlan || p.billing || '—'],
-        ['Term', ce.term || '—'],
+        ['Billing freq', ce.term || '—'],
       ];
-      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:10px;font-size:12px">';
-      for(const [k,v] of rows) h += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:3px"><span class="dim">'+k+'</span><b>'+esc(v)+'</b></div>';
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:8px;font-size:12px">';
+      for(const [k,v] of rows){
+        const isExp = String(v).includes('Expired') || String(v).includes('(past)');
+        h += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:3px"><span class="dim">'+k+'</span><b'+(isExp?' style="color:#ff8787"':'')+'>'+esc(v)+'</b></div>';
+      }
       h += '</div>';
+      h += '<div class="dim" style="font-size:11px;margin-bottom:8px">💡 Exact down payment &amp; monthly amounts are set by the carrier — check the carrier portal for the live schedule.</div>';
       if(ce.note){ h += '<div style="font-size:12px;margin-bottom:8px"><span class="dim">Note: </span>'+esc(ce.note)+'</div>'; }
 
       // Drivers — full

@@ -186,9 +186,28 @@ window.addEventListener('load', () => {
 
 function onCred(resp){
   TOKEN = resp.credential;
+  if(window._reauthResolve){ window._reauthResolve(resp.credential); window._reauthResolve = null; return; }
   $('#gate').style.display='none';
   $('#app').style.display='block';
   fillCtx();
+}
+
+// Re-authenticate in place (token expired) — returns a fresh token, keeps all form data.
+function reauth(){
+  return new Promise((resolve) => {
+    window._reauthResolve = resolve;
+    try {
+      google.accounts.id.prompt((notification) => {
+        // if the one-tap can't show, fall back to the visible button
+        if(notification && (notification.isNotDisplayed?.() || notification.isSkippedMoment?.())){
+          $('#gate').style.display='block';
+          const b = $('#gsibtn'); if(b) b.scrollIntoView({behavior:'smooth'});
+        }
+      });
+    } catch(e){ resolve(null); }
+    // safety timeout so we never hang forever
+    setTimeout(()=>{ if(window._reauthResolve){ window._reauthResolve=null; resolve(null); } }, 90000);
+  });
 }
 
 function fillCtx(){
@@ -266,7 +285,17 @@ async function submit(complete){
   // 1) MAIN submit (carrier leg + receipt) — this is what matters
   let mainOk = false, mainMsg = '';
   try{
-    const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    let r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    // If the token expired (401), re-authenticate WITHOUT losing the form, then retry once.
+    if(r.status === 401){
+      msg.textContent = 'Your session expired — please sign in again to finish (your work is saved on this screen).';
+      const newTok = await reauth();
+      if(newTok){
+        TOKEN = newTok;
+        msg.textContent = complete ? 'Submitting to audit…' : 'Saving…';
+        r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      }
+    }
     let j = null; try { j = await r.json(); } catch(e){ j = null; }
     if(r.ok && j && j.ok){
       mainOk = true;

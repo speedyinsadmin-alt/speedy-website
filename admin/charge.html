@@ -430,10 +430,15 @@ function nextCarrierLink(amt){
   return base + (typeof gToken!=='undefined' && gToken ? '#tok=' + encodeURIComponent(gToken) : '');
 }
 function nextBtnHtml(amt){
-  return '<div style="margin-top:14px"><a href="'+nextCarrierLink(amt)+'" '
+  return '<div style="margin-top:14px"><a href="'+nextCarrierLink(amt)+'" onclick="stashHandoff()" '
     + 'style="display:block;text-align:center;background:#f5a623;color:#2a1a00;padding:12px;border-radius:11px;font-weight:700;text-decoration:none;font-size:15px">'
     + 'Next \u2192 Carrier payment &amp; documents</a>'
     + '<div style="text-align:center;color:#8f9ac4;font-size:12px;margin-top:6px">or you\'re done \u2014 sign out</div></div>';
+}
+// Stash the current token in localStorage at the moment the agent clicks through to the
+// carrier/documents page — so the proof-of-payment step never forces a re-login.
+function stashHandoff(){
+  try{ if(typeof gToken!=='undefined' && gToken) localStorage.setItem('speedy_handoff_tok', gToken); }catch(e){}
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function resetMatch(){ document.getElementById('matchbox').innerHTML=''; document.getElementById('chargecard').classList.add('hide'); confirmed=null; }

@@ -98,19 +98,6 @@ async function getExtensionMap() {
 
 // ---- Event shaping ---------------------------------------------------------
 
-function resultFrom(status) {
-  const code = status?.code;
-  const reason = status?.reason;
-  if (code === 'Answered') return 'Answered';
-  if (code === 'VoiceMail') return 'Voicemail';
-  if (code !== 'Disconnected') return null;          // still in progress
-  if (reason === 'Voicemail') return 'Voicemail';
-  if (reason === 'Busy') return 'Busy';
-  if (reason === 'Rejected' || reason === 'Declined') return 'Rejected';
-  if (reason === 'NoAnswer' || reason === 'NotAllowed') return 'Missed';
-  return 'Answered';
-}
-
 function shape(body, party, extMap) {
   const now = body.eventTime || new Date().toISOString();
   const dir = party.direction || null;
@@ -132,6 +119,8 @@ function shape(body, party, extMap) {
     agent_name: info?.name || null,
     agent_email: info?.email || null,
     office_id: extNum && OFFICE_BY_EXT[extNum] != null ? OFFICE_BY_EXT[extNum] : null,
+    status_code: party.status?.code || null,
+    disconnect_reason: party.status?.reason || null,
     raw_event: body,
   };
 
@@ -140,10 +129,9 @@ function shape(body, party, extMap) {
   if (code === 'Answered') row.answered_at = now;
   if (code === 'Disconnected' || code === 'Gone') row.ended_at = now;
 
-  const result = resultFrom(party.status);
-  if (result) row.result = result;
-  if (party.missedCall === true) row.result = 'Missed';
-
+  // `result` is intentionally NOT set here. A single event cannot tell whether
+  // this leg answered — a leg that merely rang and stopped because a colleague
+  // picked up looks identical. The DB trigger derives it from the merged row.
   return row;
 }
 

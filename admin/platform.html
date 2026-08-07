@@ -64,7 +64,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.3</small></h1>
+      <h1>Platform Console <small id="ver">v4.4</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -841,13 +841,25 @@ function completeAudit(id){
 async function viewAttachment(id){
   const r = await api('attachment_get&id='+encodeURIComponent(id));
   if(!r || !r.ok){ alert('Could not load document — no file stored for this record.'); return; }
-  const w = window.open('','_blank');
-  if(r.file_b64){
-    const src = r.file_b64.startsWith('data:') ? r.file_b64 : ('data:'+(r.mime||'application/octet-stream')+';base64,'+r.file_b64);
-    if((r.mime||'').includes('pdf')) w.document.write('<iframe src="'+src+'" style="border:0;width:100%;height:100vh"></iframe>');
-    else w.document.write('<img src="'+src+'" style="max-width:100%">');
-  } else if(r.blob_url){ w.location = r.blob_url; }
-  else w.document.write('<p style="font-family:sans-serif;padding:20px">No file stored for this record.</p>');
+  if(r.blob_url){ window.open(r.blob_url, '_blank'); return; }
+  if(!r.file_b64){ alert('No file stored for this record.'); return; }
+  try {
+    // Decode base64 → Blob → object URL. Data-URIs this large fail silently in iframes;
+    // a Blob URL renders reliably at any size (the 1.96MB "signed app" was opening blank before).
+    let b64 = r.file_b64;
+    if(b64.startsWith('data:')) b64 = b64.split(',')[1] || '';
+    const bin = atob(b64);
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for(let i=0;i<len;i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: r.mime || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // free the memory after the tab has had time to load it
+    setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  } catch(e){
+    alert('Could not open the document: ' + e.message);
+  }
 }
 
 

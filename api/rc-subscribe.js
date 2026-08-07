@@ -4,9 +4,9 @@
 // delivery failures. This endpoint is how we create, inspect and renew it.
 //
 //   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>              -> list current subscriptions
-//   POST /api/rc-subscribe?token=<ADMIN_API_KEY>&action=create -> create/replace
-//   POST /api/rc-subscribe?token=<ADMIN_API_KEY>&action=renew  -> extend expiry
-//   POST /api/rc-subscribe?token=<ADMIN_API_KEY>&action=delete&id=<subId>
+//   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>&action=create -> create/replace
+//   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>&action=renew  -> extend expiry
+//   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>&action=delete&id=<subId>
 //
 // IMPORTANT: after creating, always read `disabledFilters` in the response.
 // A missing permission shows up there, not as an error — the subscription is
@@ -18,7 +18,10 @@ const RC_BASE = () =>
 // Account-wide: every extension across all four branches.
 const EVENT_FILTERS = ['/restapi/v1.0/account/~/telephony/sessions'];
 
+let tokenCache = { value: null, expires: 0 };
+
 async function getAccessToken() {
+  if (tokenCache.value && Date.now() < tokenCache.expires) return tokenCache.value;
   const basic = Buffer.from(
     `${process.env.RC_CLIENT_ID}:${process.env.RC_CLIENT_SECRET}`
   ).toString('base64');
@@ -36,7 +39,14 @@ async function getAccessToken() {
   });
 
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(`auth HTTP ${r.status}: ${j.error_description || j.error || ''}`);
+  if (!r.ok) {
+    const hint = r.status === 429 ? ' (Auth limit is 5 requests/60s — wait a minute and retry once)' : '';
+    throw new Error(`auth HTTP ${r.status}${hint}: ${j.error_description || j.error || ''}`);
+  }
+  tokenCache = {
+    value: j.access_token,
+    expires: Date.now() + Math.max(60, (j.expires_in || 3600) - 120) * 1000,
+  };
   return j.access_token;
 }
 
@@ -92,7 +102,7 @@ export default async function handler(req, res) {
   const action = String((req.query && req.query.action) || '').toLowerCase();
 
   // ---- list -------------------------------------------------------------
-  if (req.method === 'GET' || !action) {
+  if (!action) {
     const r = await rc(token, '/restapi/v1.0/subscription');
     const subs = (r.json && r.json.records) || [];
     return res.status(200).json({

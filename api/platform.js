@@ -282,12 +282,43 @@ export default async function handler(req, res) {
 
   // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
   // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
-  const portalViews = ['portal_home'];
+  const portalViews = ['portal_home', 'portal_search', 'portal_client'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
     const s = sb();
     if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
+
+    if (view === 'portal_search') {
+      const q = String(req.query.q || '').trim();
+      if (!q) return res.status(200).json({ ok: true, results: [] });
+      const like = `*${q.replace(/[,()*]/g, '')}*`;
+      const ors = [
+        `first_name.ilike.${like}`, `last_name.ilike.${like}`, `business_name.ilike.${like}`,
+        `phone.ilike.${like}`, `email.ilike.${like}`,
+      ];
+      if (/^\d+$/.test(q)) ors.unshift(`client_no.eq.${q}`);
+      const cl = await sbGet(s, `clients?select=client_no,first_name,last_name,business_name,phone,branch&or=(${ors.join(',')})&order=client_no.asc&limit=25`);
+      const results = (cl.rows || []).map(c => ({
+        client_no: c.client_no,
+        name: c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' '),
+        phone: c.phone || null, branch: c.branch || null,
+      }));
+      return res.status(200).json({ ok: true, results });
+    }
+
+    if (view === 'portal_client') {
+      const no = String(req.query.no || '').replace(/\D/g, '');
+      if (!no) return res.status(400).json({ ok: false, error: 'client no required' });
+      const cl = await sbGet(s, `clients?client_no=eq.${no}&select=*`);
+      const client = (cl.rows || [])[0];
+      if (!client) return res.status(404).json({ ok: false, error: 'not found' });
+      const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
+      // recent activity: this client's payments from the ledger
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&select=ts,amount,purpose,audit_status,kind&order=ts.desc&limit=6`);
+      return res.status(200).json({ ok: true, client, policies: po.rows || [], recent: pay.rows || [] });
+    }
+  }
 
     if (view === 'portal_home') {
       const me = who.email;

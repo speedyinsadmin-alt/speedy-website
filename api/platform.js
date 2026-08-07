@@ -318,7 +318,6 @@ export default async function handler(req, res) {
       const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&select=ts,amount,purpose,audit_status,kind&order=ts.desc&limit=6`);
       return res.status(200).json({ ok: true, client, policies: po.rows || [], recent: pay.rows || [] });
     }
-  }
 
     if (view === 'portal_home') {
       const me = who.email;

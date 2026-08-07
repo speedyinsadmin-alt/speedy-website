@@ -105,7 +105,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.2</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.3</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -295,10 +295,19 @@ async function renderPanel(){
       h += '<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+esc(p.carrier||'')+' — full detail</div>';
       const drivers = ce.drivers || [];
       if(drivers.length){ h += '<div class="dim" style="font-size:11px;margin-bottom:2px">Drivers</div>';
-        h += '<div style="font-size:12px;margin-bottom:8px">'+drivers.map(d=>esc((d.name||''))+' <span class="dim">'+(d.relationship||'')+'</span>').join('<br>')+'</div>'; }
+        h += '<div style="font-size:12px;margin-bottom:8px">'+drivers.map(d=>{
+          const nm = [d.firstName, d.middleName, d.lastName].filter(Boolean).join(' ') || d.name || '(driver)';
+          const dob = d.dateOfBirth ? String(d.dateOfBirth).slice(0,10) : '';
+          const lic = d.licenseNumber ? d.licenseState+' '+d.licenseNumber : '';
+          const extra = [d.relationship, dob, lic].filter(Boolean).join(' · ');
+          return '<b>'+esc(nm)+'</b>'+(extra?' <span class="dim">'+esc(extra)+'</span>':'');
+        }).join('<br>')+'</div>'; }
       const autos = ce.autos || [];
       if(autos.length){ h += '<div class="dim" style="font-size:11px;margin-bottom:2px">Vehicles</div>';
-        h += '<div style="font-size:12px;margin-bottom:8px">'+autos.map(a=>esc([a.year,a.make,a.model].filter(Boolean).join(' '))).join('<br>')+'</div>'; }
+        h += '<div style="font-size:12px;margin-bottom:8px">'+autos.map(a=>{
+          const v = esc([a.year,a.make,a.model].filter(Boolean).join(' '));
+          return '<b>'+v+'</b>'+(a.vin?' <span class="dim">· VIN '+esc(a.vin)+'</span>':'');
+        }).join('<br>')+'</div>'; }
     }
     h += '<div class="dim" style="font-size:11px">Full log &amp; coverages — more coming here.</div>';
     h += '</div>';

@@ -71,7 +71,7 @@
 <div id="app"><div class="wrap">
   <header>
     <span class="dot"></span>
-    <h1>Calls <small id="ver">v1.0</small></h1>
+    <h1>Calls <small id="ver">v1.1</small></h1>
     <span class="who" id="who"></span>
   </header>
 
@@ -83,6 +83,7 @@
       <option value="">All outcomes</option>
       <option value="Answered">Answered only</option>
       <option value="Missed">Missed only</option>
+      <option value="Auto">Auto / IVR only</option>
     </select>
     <a class="back" href="/admin/platform.html">← Platform Console</a>
   </nav>
@@ -193,18 +194,27 @@ function paint(r) {
 }
 
 function row(x) {
-  const answered = x.outcome === 'Answered';
+  const cls = x.outcome === 'Answered' ? 'g' : x.outcome === 'Auto' ? 'a' : 'r';
+  const label = x.outcome === 'Auto' ? 'Auto / IVR' : x.outcome;
+
+  const chain = x.transferred
+    ? `<div class="mute" style="font-size:11px;margin-top:2px">transferred: ${esc((x.answer_chain||[]).join(' → '))}</div>` : '';
   const rang = (x.rang_agents || []).length
     ? `<div class="mute" style="font-size:11px;margin-top:2px">also rang: ${esc(x.rang_agents.join(', '))}</div>` : '';
+
+  // A live call has no end event yet — don't render that as a zero-length call.
+  const live = !x.call_end && !x.talk_seconds;
+  const len = live ? '<span class="pill b">live</span>' : dur(x.talk_seconds);
+
   const open = OPEN === x.rc_session_id;
   return `
     <tr data-sid="${esc(x.rc_session_id)}">
       <td>${hhmm(x.ring_start || x.call_end)}<div class="mute" style="font-size:11px">${day(x.ring_start || x.call_end)}</div></td>
       <td><span class="pill ${x.direction === 'Inbound' ? 'b' : 'm'}">${x.direction === 'Inbound' ? 'In' : 'Out'}</span></td>
       <td class="mono">${esc(x.customer_pretty || '—')}</td>
-      <td><span class="pill ${answered ? 'g' : 'r'}">${esc(x.outcome)}</span></td>
-      <td>${esc(x.answered_by || '—')}${rang}</td>
-      <td>${dur(x.talk_seconds)}</td>
+      <td><span class="pill ${cls}">${esc(label)}</span>${x.transferred ? ' <span class="pill m">↪</span>' : ''}</td>
+      <td>${esc(x.answered_by || '—')}${chain}${rang}</td>
+      <td>${len}</td>
       <td class="mute">${esc(x.office_name || '—')}</td>
       <td>${x.client_number ? `<span class="pill m mono">#${esc(x.client_number)}</span>` : '<span class="mute">new</span>'}</td>
     </tr>

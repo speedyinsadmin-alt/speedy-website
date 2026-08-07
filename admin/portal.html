@@ -91,15 +91,19 @@
       </div>
     </div>
 
-    <!-- search (Stage 2) -->
+    <!-- search + tabs -->
     <div class="card" style="padding:14px 16px">
-      <input placeholder="🔍 Search any client — name, #, phone…" onclick="alert('Client search arrives in Stage 2')" readonly style="cursor:pointer">
-      <div class="dim" style="font-size:11px;margin-top:8px">Open clients — up to 5</div>
-      <div id="tabbar" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <input id="searchBox" placeholder="🔍 Search any client — name, #, phone…" autocomplete="off">
+      <div id="searchResults"></div>
+      <div class="dim" style="font-size:11px;margin-top:10px">Open clients — up to 5</div>
+      <div id="tabbar" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
         <div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>
       </div>
-      <button class="btn btn-red" onclick="alert('Charging inside the portal arrives in Stage 3. For now use the charge page.')" style="margin-top:12px">＋ New charge</button>
+      <button class="btn btn-red" onclick="alert('Charging inside the portal arrives in Stage 3.')" style="margin-top:12px">＋ New charge</button>
     </div>
+
+    <!-- open client panel -->
+    <div id="clientPanel"></div>
 
     <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · you see only your own work</div>
   </div>
@@ -150,6 +154,7 @@ function confirmOffice(){
   $('#officePick').classList.add('hide');
   $('#home').classList.remove('hide');
   loadHome();
+  initSearch();
 }
 
 async function loadHome(){
@@ -166,7 +171,149 @@ async function loadHome(){
   }
 }
 
-function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
+function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
+
+// ===== STAGE 2: client search, tabs (max 5), compact card =====
+const MAX_TABS = 5;
+let OPEN_TABS = [];      // [{client_no, name}]
+let ACTIVE_TAB = null;   // client_no
+let CLIENT_CACHE = {};   // client_no -> detail
+let FULL_OPEN = {};      // client_no -> bool (see full details expanded)
+
+function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// --- search ---
+let searchT = null;
+function initSearch(){
+  const box = document.getElementById('searchBox');
+  if(!box) return;
+  box.oninput = () => {
+    clearTimeout(searchT);
+    const q = box.value.trim();
+    if(q.length < 2){ document.getElementById('searchResults').innerHTML=''; return; }
+    searchT = setTimeout(() => runSearch(q), 300);
+  };
+}
+async function runSearch(q){
+  const box = document.getElementById('searchResults');
+  box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">Searching…</div>';
+  const r = await api('portal_search&q=' + encodeURIComponent(q));
+  if(!r || !r.ok){ box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">Search failed</div>'; return; }
+  if(!r.results.length){ box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">No clients found</div>'; return; }
+  box.innerHTML = '<div style="background:var(--navy);border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:8px">'
+    + r.results.map(c => '<div onclick="openClient('+c.client_no+',\''+esc(c.name).replace(/\x27/g,"")+'\')" style="padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)">'
+        + '<b>'+esc(c.name)+'</b> <span class="dim" style="font-size:11px">· #'+c.client_no+(c.branch?' · '+esc(c.branch):'')+'</span></div>').join('')
+    + '</div>';
+}
+
+// --- tabs ---
+function openClient(no, name){
+  document.getElementById('searchResults').innerHTML='';
+  document.getElementById('searchBox').value='';
+  if(OPEN_TABS.find(t => t.client_no === no)){ ACTIVE_TAB = no; renderTabs(); renderPanel(); return; }
+  if(OPEN_TABS.length >= MAX_TABS){ alert('You have 5 clients open — close one first.'); return; }
+  OPEN_TABS.push({ client_no: no, name: name || ('#'+no) });
+  ACTIVE_TAB = no;
+  renderTabs(); renderPanel();
+  loadClient(no);
+}
+function closeTab(no, ev){
+  if(ev) ev.stopPropagation();
+  OPEN_TABS = OPEN_TABS.filter(t => t.client_no !== no);
+  if(ACTIVE_TAB === no) ACTIVE_TAB = OPEN_TABS.length ? OPEN_TABS[OPEN_TABS.length-1].client_no : null;
+  renderTabs(); renderPanel();
+}
+function switchTab(no){ ACTIVE_TAB = no; renderTabs(); renderPanel(); }
+function renderTabs(){
+  const bar = document.getElementById('tabbar');
+  if(!OPEN_TABS.length){ bar.innerHTML = '<div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>'; return; }
+  bar.innerHTML = OPEN_TABS.map(t => {
+    const on = t.client_no === ACTIVE_TAB;
+    const short = t.name.length > 14 ? t.name.slice(0,13)+'…' : t.name;
+    return '<div onclick="switchTab('+t.client_no+')" style="background:'+(on?'var(--card)':'var(--field)')+';border:1px solid '+(on?'var(--blue)':'var(--line)')+';border-radius:8px;padding:7px 11px;font-size:12px;font-weight:'+(on?'700':'400')+';cursor:pointer;display:flex;gap:7px;align-items:center">'
+      + esc(short) + '<span onclick="closeTab('+t.client_no+',event)" style="color:var(--mute)">✕</span></div>';
+  }).join('') + '<div class="dim" style="font-size:11px;align-self:center;margin-left:4px">'+OPEN_TABS.length+'/5</div>';
+}
+
+// --- client detail ---
+async function loadClient(no){
+  await renderPanel(); // shows loading
+  const r = await api('portal_client&no=' + no);
+  if(r && r.ok) CLIENT_CACHE[no] = r;
+  renderPanel();
+}
+function monthlyFor(p){
+  const ce = p.carrier_extras || {};
+  const plan = ce.billingPlan || '';
+  const prem = Number(p.premium) || Number(ce.premium) || null;
+  const m = String(plan).match(/(\d+)/);
+  const nPay = m ? Number(m[1]) : null;
+  return (prem && nPay) ? (prem / nPay) : null;
+}
+async function renderPanel(){
+  const el = document.getElementById('clientPanel');
+  if(!ACTIVE_TAB){ el.innerHTML=''; return; }
+  const r = CLIENT_CACHE[ACTIVE_TAB];
+  if(!r){ el.innerHTML = '<div class="card"><div class="dim">Loading client…</div></div>'; return; }
+  const c = r.client;
+  const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
+  const pols = (r.policies || []).filter(p => p.record_type !== 'dmv_service');
+  const dmv = (r.policies || []).filter(p => p.record_type === 'dmv_service');
+  const full = FULL_OPEN[ACTIVE_TAB];
+
+  let h = '<div class="card" style="border-color:var(--blue)">';
+  // header
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+    + '<div><div style="font-size:16px;font-weight:800">'+esc(name)+'</div>'
+    + '<div class="muted" style="font-size:12px">#'+c.client_no+(c.branch?' · '+esc(c.branch):'')+(c.phone?' · <span style="color:var(--blue-l)">'+esc(c.phone)+'</span>':'')+'</div></div>'
+    + '<span style="background:rgba(47,191,113,.2);color:var(--green);font-size:10px;padding:3px 9px;border-radius:6px;font-weight:700">'+esc(c.status||'Active')+'</span></div>';
+
+  // policies compact
+  h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Policies ('+pols.length+')</div>';
+  if(!pols.length) h += '<div class="dim" style="font-size:12px;margin-bottom:8px">No insurance policies</div>';
+  for(const p of pols){
+    const mo = monthlyFor(p);
+    h += '<div style="background:var(--field);border-radius:10px;padding:11px 13px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
+      + '<div><b style="font-size:13px">'+esc(p.carrier||'—')+'</b><div style="font-size:11px;color:var(--mute)">'+esc(p.policy_number||'')+'</div></div>'
+      + '<div style="text-align:right">'+(mo?'<div style="font-size:15px;font-weight:800;color:var(--blue-l)">$'+mo.toFixed(2)+'<span style="font-size:10px;color:var(--mute)">/mo</span></div>':'')
+      + '<span style="font-size:10px;color:var(--amber)">'+esc(p.status||'')+'</span></div></div>';
+  }
+  if(dmv.length) h += '<div class="dim" style="font-size:11px;margin-bottom:8px">+ '+dmv.length+' DMV service record'+(dmv.length>1?'s':'')+'</div>';
+
+  // recent activity
+  h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px">Recent activity</div>';
+  const rec = r.recent || [];
+  if(!rec.length) h += '<div class="dim" style="font-size:12px">No recent activity in our system yet</div>';
+  else h += '<div style="font-size:12px;color:#c9d2f0;line-height:1.9">'
+    + rec.map(x => '• $'+Number(x.amount||0).toFixed(2)+' — '+esc(x.purpose||'payment')+' <span class="dim">· '+String(x.ts||'').slice(0,10)+'</span>').join('<br>') + '</div>';
+
+  // full details (expandable)
+  if(full){
+    h += '<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">';
+    for(const p of pols){
+      const ce = p.carrier_extras || {};
+      h += '<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+esc(p.carrier||'')+' — full detail</div>';
+      const drivers = ce.drivers || [];
+      if(drivers.length){ h += '<div class="dim" style="font-size:11px;margin-bottom:2px">Drivers</div>';
+        h += '<div style="font-size:12px;margin-bottom:8px">'+drivers.map(d=>esc((d.name||''))+' <span class="dim">'+(d.relationship||'')+'</span>').join('<br>')+'</div>'; }
+      const autos = ce.autos || [];
+      if(autos.length){ h += '<div class="dim" style="font-size:11px;margin-bottom:2px">Vehicles</div>';
+        h += '<div style="font-size:12px;margin-bottom:8px">'+autos.map(a=>esc([a.year,a.make,a.model].filter(Boolean).join(' '))).join('<br>')+'</div>'; }
+    }
+    h += '<div class="dim" style="font-size:11px">Full log &amp; coverages — more coming here.</div>';
+    h += '</div>';
+  }
+
+  // actions
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">'
+    + '<div onclick="toggleFull('+ACTIVE_TAB+')" style="background:var(--field);border:1px solid var(--line);border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:600;color:var(--blue-l);cursor:pointer">'+(full?'Hide details ▴':'See full details ▾')+'</div>'
+    + '<div onclick="alert(\'Charging inside the portal arrives in Stage 3.\')" style="background:var(--red);color:#fff;border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:700;cursor:pointer">Charge this client</div>'
+    + '</div>';
+  h += '</div>';
+  el.innerHTML = h;
+}
+function toggleFull(no){ FULL_OPEN[no] = !FULL_OPEN[no]; renderPanel(); }
+
 
 window.addEventListener('load', () => {
   const t = setInterval(() => {

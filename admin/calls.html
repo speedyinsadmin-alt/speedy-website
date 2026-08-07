@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Calls — Speedy Insurance</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
+    --red:#e03131; --blue:#4d7cfe; --green:#2fbf71; --amber:#f5a623;
+    --ink:#f2f5ff; --mute:#8f9ac4; --radius:14px;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:22px 16px 60px}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  h1{font-size:19px;margin:0;letter-spacing:.2px}
+  h1 small{color:var(--mute);font-weight:400;font-size:13px;margin-left:8px}
+  .who{margin-left:auto;color:var(--mute);font-size:13px}
+  #gate{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:38px 24px;text-align:center;max-width:420px;margin:12vh auto}
+  #gate p{color:var(--mute);margin:8px 0 20px}
+  #gsibtn{display:flex;justify-content:center}
+  #gateerr{display:none;color:var(--red);font-size:13px;margin-top:12px}
+  #app{display:none}
+  nav{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+  nav button{background:var(--navy2);border:1px solid var(--line);color:var(--mute);padding:9px 16px;border-radius:10px;font-size:14px;cursor:pointer}
+  nav button.on{color:var(--ink);border-color:var(--blue);background:rgba(77,124,254,.12)}
+  .card{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+  .stat{background:#0a0f26;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .stat b{display:block;font-size:24px;font-weight:700;letter-spacing:-.5px}
+  .stat span{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{color:var(--mute);text-align:left;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:rgba(77,124,254,.06)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+  .pill.g{background:rgba(47,191,113,.15);color:var(--green)}
+  .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
+  .pill.r{background:rgba(224,49,49,.15);color:var(--red)}
+  .pill.b{background:rgba(77,124,254,.15);color:var(--blue)}
+  .pill.m{background:rgba(143,154,196,.15);color:var(--mute)}
+  .mono{font-family:var(--mono);font-size:12px}
+  .mute{color:var(--mute)}
+  .empty{color:var(--mute);text-align:center;padding:30px 0;font-size:14px}
+  .det{background:#0a0f26;border-top:1px solid var(--line)}
+  .det td{padding:14px 18px}
+  .legs{width:100%;font-size:12px}
+  .legs th{font-size:11px;padding:4px 6px}
+  .legs td{padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.05)}
+  select{background:var(--navy2);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:10px;font-size:13px}
+  a.back{color:var(--blue);text-decoration:none;font-size:13px}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h1 style="margin-bottom:4px">Calls</h1>
+  <p>Sign in with your Speedy admin account.</p>
+  <div id="gsibtn"></div>
+  <div id="gateerr">That account isn't on the admin allowlist.</div>
+</div>
+
+<div id="app"><div class="wrap">
+  <header>
+    <span class="dot"></span>
+    <h1>Calls <small id="ver">v1.0</small></h1>
+    <span class="who" id="who"></span>
+  </header>
+
+  <nav>
+    <button data-days="1" class="on">Today</button>
+    <button data-days="7">7 days</button>
+    <button data-days="30">30 days</button>
+    <select id="outcome" style="margin-left:auto">
+      <option value="">All outcomes</option>
+      <option value="Answered">Answered only</option>
+      <option value="Missed">Missed only</option>
+    </select>
+    <a class="back" href="/admin/platform.html">← Platform Console</a>
+  </nav>
+
+  <div class="card">
+    <h2>Summary</h2>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="card">
+    <h2>By agent</h2>
+    <div id="agents"></div>
+  </div>
+
+  <div class="card">
+    <h2>Calls</h2>
+    <div id="calls"></div>
+  </div>
+</div></div>
+
+<script>
+const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
+let TOKEN = null, DAYS = 1, OUTCOME = '', OPEN = null;
+
+const $  = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hhmm = t => t ? new Date(t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—';
+const day  = t => t ? new Date(t).toLocaleDateString([], {month:'short',day:'numeric'}) : '';
+const dur  = s => {
+  s = Number(s) || 0;
+  if (!s) return '—';
+  const m = Math.floor(s/60), r = s%60;
+  return m ? `${m}m ${r}s` : `${r}s`;
+};
+
+window.onload = () => {
+  const t = setInterval(() => {
+    if (!window.google || !google.accounts) return;
+    clearInterval(t);
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
+    google.accounts.id.renderButton($('#gsibtn'), { theme:'filled_blue', size:'large', shape:'pill' });
+  }, 150);
+};
+
+async function onCred(resp) {
+  TOKEN = resp.credential;
+  const r = await api();
+  if (!r || r.error) { $('#gateerr').style.display = 'block'; TOKEN = null; return; }
+  $('#gate').style.display = 'none';
+  $('#app').style.display = 'block';
+  $('#who').textContent = r.email || '';
+  paint(r);
+}
+
+async function api(extra = '') {
+  try {
+    const qs = `days=${DAYS}${OUTCOME ? '&outcome=' + OUTCOME : ''}${extra}`;
+    const r = await fetch('/api/calls?' + qs, { headers: { 'x-id-token': TOKEN } });
+    return await r.json();
+  } catch { return null; }
+}
+
+async function reload() {
+  const r = await api();
+  if (r && !r.error) paint(r);
+}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); DAYS = Number(b.dataset.days); OPEN = null; reload();
+});
+$('#outcome').onchange = e => { OUTCOME = e.target.value; OPEN = null; reload(); };
+
+function paint(r) {
+  const s = r.stats || {};
+  $('#stats').innerHTML = `
+    <div class="stat"><b>${s.total||0}</b><span>Calls</span></div>
+    <div class="stat"><b style="color:var(--green)">${s.answered||0}</b><span>Answered</span></div>
+    <div class="stat"><b style="color:var(--red)">${s.missed||0}</b><span>Missed</span></div>
+    <div class="stat"><b>${s.answerRate||0}%</b><span>Answer rate</span></div>
+    <div class="stat"><b>${dur(s.talkSeconds)}</b><span>Total talk</span></div>
+    <div class="stat"><b>${dur(s.avgTalk)}</b><span>Avg length</span></div>
+    <div class="stat"><b>${s.matched||0}</b><span>Known clients</span></div>`;
+
+  const ag = r.agents || [];
+  $('#agents').innerHTML = !ag.length ? '<div class="empty">No agent activity in this window.</div>' : `
+    <table><thead><tr>
+      <th>Agent</th><th>Answered</th><th>Talk time</th><th>Avg</th><th>Rang, colleague took it</th>
+    </tr></thead><tbody>${ag.map(a => `
+      <tr style="cursor:default"><td>${esc(a.agent)}</td>
+      <td><b>${a.answered}</b></td>
+      <td>${dur(a.talk)}</td>
+      <td class="mute">${dur(a.answered ? Math.round(a.talk/a.answered) : 0)}</td>
+      <td class="mute">${a.missedWhileRinging || '—'}</td></tr>`).join('')}
+    </tbody></table>`;
+
+  const c = r.calls || [];
+  $('#calls').innerHTML = !c.length ? '<div class="empty">No calls in this window.</div>' : `
+    <table><thead><tr>
+      <th>Time</th><th>Dir</th><th>Customer</th><th>Outcome</th>
+      <th>Answered by</th><th>Length</th><th>Branch</th><th>Client</th>
+    </tr></thead><tbody>${c.map(x => row(x)).join('')}</tbody></table>`;
+
+  document.querySelectorAll('tbody tr[data-sid]').forEach(tr => {
+    tr.onclick = () => toggle(tr.dataset.sid);
+  });
+}
+
+function row(x) {
+  const answered = x.outcome === 'Answered';
+  const rang = (x.rang_agents || []).length
+    ? `<div class="mute" style="font-size:11px;margin-top:2px">also rang: ${esc(x.rang_agents.join(', '))}</div>` : '';
+  const open = OPEN === x.rc_session_id;
+  return `
+    <tr data-sid="${esc(x.rc_session_id)}">
+      <td>${hhmm(x.ring_start || x.call_end)}<div class="mute" style="font-size:11px">${day(x.ring_start || x.call_end)}</div></td>
+      <td><span class="pill ${x.direction === 'Inbound' ? 'b' : 'm'}">${x.direction === 'Inbound' ? 'In' : 'Out'}</span></td>
+      <td class="mono">${esc(x.customer_pretty || '—')}</td>
+      <td><span class="pill ${answered ? 'g' : 'r'}">${esc(x.outcome)}</span></td>
+      <td>${esc(x.answered_by || '—')}${rang}</td>
+      <td>${dur(x.talk_seconds)}</td>
+      <td class="mute">${esc(x.office_name || '—')}</td>
+      <td>${x.client_number ? `<span class="pill m mono">#${esc(x.client_number)}</span>` : '<span class="mute">new</span>'}</td>
+    </tr>
+    ${open ? `<tr class="det" id="det-${esc(x.rc_session_id)}"><td colspan="8"><div class="mute">Loading legs…</div></td></tr>` : ''}`;
+}
+
+async function toggle(sid) {
+  if (OPEN === sid) { OPEN = null; return reload(); }
+  OPEN = sid;
+  await reload();
+  const cell = document.querySelector(`#det-${CSS.escape(sid)} td`);
+  if (!cell) return;
+  const d = await api('&session=' + encodeURIComponent(sid));
+  const legs = (d && d.legs) || [];
+  cell.innerHTML = !legs.length ? '<div class="mute">No leg detail.</div>' : `
+    <div class="mute" style="margin-bottom:8px">RingCentral creates one leg per party. This is what the rollup above is built from.</div>
+    <table class="legs"><thead><tr>
+      <th>Leg</th><th>Dir</th><th>Party</th><th>Status</th><th>Reason</th>
+      <th>Rang</th><th>Answered</th><th>Ended</th><th>Secs</th>
+    </tr></thead><tbody>${legs.map(l => `
+      <tr><td class="mono">${esc((l.rc_party_id||'').slice(-2))}</td>
+      <td class="mute">${esc(l.direction||'—')}</td>
+      <td>${esc(l.agent_name || 'external')}</td>
+      <td><span class="pill ${l.result==='Answered'?'g':l.result==='Rang'?'a':'m'}">${esc(l.result||'—')}</span></td>
+      <td class="mute mono">${esc(l.disconnect_reason || '—')}</td>
+      <td class="mono">${hhmm(l.started_at)}</td>
+      <td class="mono">${hhmm(l.answered_at)}</td>
+      <td class="mono">${hhmm(l.ended_at)}</td>
+      <td>${l.duration_seconds ?? '—'}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+</script>
+</body>
+</html>

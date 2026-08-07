@@ -1,4 +1,4 @@
-export const config = { maxDuration: 30 };
+export const config = { maxDuration: 30 }; // build-bump portal-v2
 // /api/platform — backend for the Platform Console (admin/platform.html).
 // ACCESS: Google ID token (header x-id-token), allowlist below.
 // GET  = reads (HawkSoft ZZTEST, our clients/policies/events, ledger, tables)

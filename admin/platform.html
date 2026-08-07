@@ -88,8 +88,9 @@ window.addEventListener('load', () => {
   const t = setInterval(() => {
     if (!window.google) return;
     clearInterval(t);
-    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false, cancel_on_tap_outside: true });
     google.accounts.id.renderButton($('#gsibtn'), { theme: 'filled_blue', size: 'large', width: 260 });
+    google.accounts.id.disableAutoSelect();
   }, 150);
 });
 

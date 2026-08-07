@@ -64,7 +64,7 @@
       <div class="row">
         <div>
           <div style="font-size:16px;font-weight:800" id="homeName">Agent <span class="beta">BETA</span></div>
-          <div class="muted" style="font-size:12px;margin-top:2px">📍 Working at</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">📍 Working at <b style="color:var(--blue-l)" id="workingAt">—</b></div>
         </div>
         <div style="text-align:right">
           <div style="background:var(--field);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600" id="officeLabel">—</div>
@@ -116,7 +116,7 @@ const STAFF = {
   'fernando@speedyins.com':['Fernando Salgado','Riverside Van Buren'],'jesus@speedyins.com':['Jesus Velarde','Riverside Van Buren'],
   'alejandra@speedyins.com':['Alejandra Salas','Riverside Magnolia'],'esmeralda@speedyins.com':['Esmeralda Ayala Hernandez','Riverside Magnolia'],
   'irene@speedyins.com':['Irene Ayala Hernandez','Riverside Magnolia'],'tony@speedyins.com':['Tony Dabouqi','Moreno Valley'],
-  'lana@speedyins.com':['Lana D.','Moreno Valley'],'info@speedyins.com':['Admin','Moreno Valley']
+  'lana@speedyins.com':['Lana D.','Moreno Valley'],'info@speedyins.com':['Tony Dabouqi','Moreno Valley']
 };
 let TOKEN = null, EMAIL = null, OFFICE = null;
 const $ = s => document.querySelector(s);
@@ -146,6 +146,7 @@ function onCred(resp){
 function confirmOffice(){
   OFFICE = $('#officeSel').value;
   $('#officeLabel').textContent = OFFICE;
+  var wa=$('#workingAt'); if(wa) wa.textContent = OFFICE;
   $('#officePick').classList.add('hide');
   $('#home').classList.remove('hide');
   loadHome();

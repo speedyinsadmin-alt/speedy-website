@@ -105,7 +105,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.3</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.4</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -287,29 +287,58 @@ async function renderPanel(){
   else h += '<div style="font-size:12px;color:#c9d2f0;line-height:1.9">'
     + rec.map(x => '• $'+Number(x.amount||0).toFixed(2)+' — '+esc(x.purpose||'payment')+' <span class="dim">· '+String(x.ts||'').slice(0,10)+'</span>').join('<br>') + '</div>';
 
-  // full details (expandable)
+  // full details (expandable) — the COMPLETE policy record
   if(full){
     h += '<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">';
     for(const p of pols){
       const ce = p.carrier_extras || {};
-      h += '<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+esc(p.carrier||'')+' — full detail</div>';
+      h += '<div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--blue-l)">'+esc(p.carrier||'')+' — '+esc(p.policy_number||'')+'</div>';
+
+      // Policy overview grid
+      const fmtD = d => d ? String(d).slice(0,10) : '—';
+      const rows = [
+        ['Type', p.lob || ce.type || '—'],
+        ['Status', p.status || '—'],
+        ['Effective', fmtD(p.effective_date)],
+        ['Expires', fmtD(p.expiration_date)],
+        ['Premium', p.premium ? '$'+Number(p.premium).toLocaleString() : '—'],
+        ['Billing plan', ce.billingPlan || p.billing || '—'],
+        ['Term', ce.term || '—'],
+      ];
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:10px;font-size:12px">';
+      for(const [k,v] of rows) h += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:3px"><span class="dim">'+k+'</span><b>'+esc(v)+'</b></div>';
+      h += '</div>';
+      if(ce.note){ h += '<div style="font-size:12px;margin-bottom:8px"><span class="dim">Note: </span>'+esc(ce.note)+'</div>'; }
+
+      // Drivers — full
       const drivers = ce.drivers || [];
-      if(drivers.length){ h += '<div class="dim" style="font-size:11px;margin-bottom:2px">Drivers</div>';
-        h += '<div style="font-size:12px;margin-bottom:8px">'+drivers.map(d=>{
-          const nm = [d.firstName, d.middleName, d.lastName].filter(Boolean).join(' ') || d.name || '(driver)';
-          const dob = d.dateOfBirth ? String(d.dateOfBirth).slice(0,10) : '';
-          const lic = d.licenseNumber ? d.licenseState+' '+d.licenseNumber : '';
-          const extra = [d.relationship, dob, lic].filter(Boolean).join(' · ');
-          return '<b>'+esc(nm)+'</b>'+(extra?' <span class="dim">'+esc(extra)+'</span>':'');
-        }).join('<br>')+'</div>'; }
+      if(drivers.length){ h += '<div class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Drivers ('+drivers.length+')</div>';
+        for(const d of drivers){
+          const nm = [d.firstName, d.middleName, d.lastName].filter(Boolean).join(' ') || '(driver)';
+          h += '<div style="background:var(--field);border-radius:8px;padding:8px 11px;margin-bottom:5px;font-size:12px">'
+            + '<b>'+esc(nm)+'</b>'+(d.relationship?' <span class="dim">'+esc(d.relationship)+'</span>':'')
+            + '<div class="dim" style="font-size:11px;margin-top:2px">'
+            + [d.dateOfBirth?'DOB '+String(d.dateOfBirth).slice(0,10):'', d.gender||'', d.maritalStatus||'',
+               d.licenseNumber?('Lic '+(d.licenseState||'')+' '+d.licenseNumber):'', d.licenseDate?'since '+String(d.licenseDate).slice(0,10):'',
+               d.occupation||''].filter(Boolean).join(' · ')
+            + '</div></div>';
+        } }
+
+      // Vehicles — full
       const autos = ce.autos || [];
-      if(autos.length){ h += '<div class="dim" style="font-size:11px;margin-bottom:2px">Vehicles</div>';
-        h += '<div style="font-size:12px;margin-bottom:8px">'+autos.map(a=>{
-          const v = esc([a.year,a.make,a.model].filter(Boolean).join(' '));
-          return '<b>'+v+'</b>'+(a.vin?' <span class="dim">· VIN '+esc(a.vin)+'</span>':'');
-        }).join('<br>')+'</div>'; }
+      if(autos.length){ h += '<div class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Vehicles ('+autos.length+')</div>';
+        for(const a of autos){
+          const v = [a.year,a.make,a.model].filter(Boolean).join(' ');
+          h += '<div style="background:var(--field);border-radius:8px;padding:8px 11px;margin-bottom:5px;font-size:12px">'
+            + '<b>'+esc(v)+'</b>'+(a.totalPremium?' <span style="color:var(--blue-l)">$'+Number(a.totalPremium).toLocaleString()+'</span>':'')
+            + '<div class="dim" style="font-size:11px;margin-top:2px">'
+            + [a.vin?'VIN '+a.vin:'', a.use?'Use: '+a.use:'', (a.personalInfo&&a.personalInfo.annualMiles)?a.personalInfo.annualMiles+' mi/yr':''].filter(Boolean).join(' · ')
+            + '</div></div>';
+        } }
+
+      h += '<div style="height:10px"></div>';
     }
-    h += '<div class="dim" style="font-size:11px">Full log &amp; coverages — more coming here.</div>';
+    h += '<div class="dim" style="font-size:11px">Payment history &amp; documents — coming here next.</div>';
     h += '</div>';
   }
 

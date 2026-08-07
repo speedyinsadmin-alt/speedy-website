@@ -6,6 +6,7 @@
 //   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>              -> list current subscriptions
 //   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>&action=create -> create/replace
 //   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>&action=renew  -> extend expiry
+//        (also run daily by Vercel Cron, authenticated via CRON_SECRET)
 //   GET  /api/rc-subscribe?token=<ADMIN_API_KEY>&action=delete&id=<subId>
 //
 // IMPORTANT: after creating, always read `disabledFilters` in the response.
@@ -78,11 +79,20 @@ const expiresIn = 60 * 60 * 24 * 7;
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
+  // Two callers: Saif with the admin key, and Vercel Cron. The repo is public,
+  // so the cron cannot carry a token in vercel.json — Vercel sends
+  // `Authorization: Bearer $CRON_SECRET` instead when that env var exists.
   const admin = process.env.ADMIN_API_KEY;
   const supplied = String(
     (req.query && req.query.token) || req.headers['x-admin-key'] || ''
   );
-  if (!admin || supplied !== admin) {
+  const byAdmin = admin && supplied === admin;
+
+  const cronSecret = process.env.CRON_SECRET;
+  const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const byCron = cronSecret && bearer === cronSecret;
+
+  if (!byAdmin && !byCron) {
     return res.status(401).json({ ok: false, error: 'Invalid or missing token' });
   }
 
@@ -135,7 +145,22 @@ export default async function handler(req, res) {
       String(s.deliveryMode?.address || '').includes('/api/rc-webhook')
     );
     if (!mine.length) {
-      return res.status(404).json({ ok: false, error: 'No matching subscription to renew' });
+      const created = await rc(token, '/restapi/v1.0/subscription', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventFilters: EVENT_FILTERS,
+          deliveryMode: { transportType: 'WebHook', address: callbackUrl() },
+          expiresIn,
+        }),
+      });
+      return res.status(created.ok ? 200 : created.status).json({
+        ok: created.ok,
+        recreated: true,
+        note: 'No live subscription found — created a new one.',
+        id: created.json?.id,
+        expirationTime: created.json?.expirationTime,
+        disabledFilters: created.json?.disabledFilters || [],
+      });
     }
     const out = [];
     for (const s of mine) {

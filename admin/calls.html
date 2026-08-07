@@ -130,7 +130,7 @@ window.onload = () => {
 async function onCred(resp) {
   TOKEN = resp.credential;
   const r = await api();
-  if (!r || r.error) { $('#gateerr').style.display = 'block'; TOKEN = null; return; }
+  if (!r || r.error || r.ok === false) { $('#gateerr').style.display = 'block'; TOKEN = null; return; }
   $('#gate').style.display = 'none';
   $('#app').style.display = 'block';
   $('#who').textContent = r.email || '';
@@ -139,8 +139,9 @@ async function onCred(resp) {
 
 async function api(extra = '') {
   try {
-    const qs = `days=${DAYS}${OUTCOME ? '&outcome=' + OUTCOME : ''}${extra}`;
-    const r = await fetch('/api/calls?' + qs, { headers: { 'x-id-token': TOKEN } });
+    const view = extra.startsWith('&session=') ? 'call_legs' : 'calls';
+    const qs = `view=${view}&days=${DAYS}${OUTCOME ? '&outcome=' + OUTCOME : ''}${extra}`;
+    const r = await fetch('/api/platform?' + qs, { headers: { 'x-id-token': TOKEN } });
     return await r.json();
   } catch { return null; }
 }

@@ -691,6 +691,69 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: r.ok, email, rows: r.rows || [] });
   }
 
+  /* ---- Calls (RingCentral) ---- */
+  if (view === 'call_legs') {
+    const sid = String(req.query.session || '');
+    if (!sid) return res.status(400).json({ ok: false, error: 'Missing session' });
+    const r = await sbGet(s,
+      'call_log?rc_session_id=eq.' + encodeURIComponent(sid) +
+      '&select=rc_party_id,direction,from_number,to_number,agent_name,result,' +
+      'status_code,disconnect_reason,started_at,answered_at,ended_at,duration_seconds' +
+      '&order=rc_party_id.asc');
+    return res.status(200).json({ ok: r.ok, email, legs: r.rows || [] });
+  }
+
+  if (view === 'calls') {
+    const OFFICES = { 1: 'Moreno Valley', 2: 'Riverside — Van Buren', 3: 'Riverside — Magnolia', 4: 'Lake Elsinore' };
+    const pretty = p => (p && p.length === 10) ? `(${p.slice(0,3)}) ${p.slice(3,6)}-${p.slice(6)}` : (p || '');
+
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 1));
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+
+    let path = 'call_sessions?or=(ring_start.gte.' + since + ',call_end.gte.' + since + ')' +
+               '&order=ring_start.desc.nullslast&limit=500';
+    if (req.query.outcome) path += '&outcome=eq.' + encodeURIComponent(String(req.query.outcome));
+    if (req.query.office)  path += '&office_id=eq.' + encodeURIComponent(String(req.query.office));
+
+    const r = await sbGet(s, path);
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+
+    const calls = rows.map(c => ({
+      ...c,
+      customer_pretty: pretty(c.customer_number),
+      office_name: OFFICES[c.office_id] || (c.office_id ? 'Office ' + c.office_id : null),
+    }));
+
+    const answered = calls.filter(c => c.outcome === 'Answered');
+    const talk = answered.reduce((n, c) => n + (Number(c.talk_seconds) || 0), 0);
+
+    const byAgent = {};
+    for (const c of calls) {
+      if (c.answered_by) {
+        const a = (byAgent[c.answered_by] ||= { agent: c.answered_by, answered: 0, talk: 0, missedWhileRinging: 0 });
+        a.answered += 1; a.talk += Number(c.talk_seconds) || 0;
+      }
+      for (const name of (c.rang_agents || [])) {
+        (byAgent[name] ||= { agent: name, answered: 0, talk: 0, missedWhileRinging: 0 }).missedWhileRinging += 1;
+      }
+    }
+
+    return res.status(200).json({
+      ok: r.ok, email, days,
+      stats: {
+        total: calls.length,
+        answered: answered.length,
+        missed: calls.length - answered.length,
+        answerRate: calls.length ? Math.round(answered.length / calls.length * 100) : 0,
+        talkSeconds: talk,
+        avgTalk: answered.length ? Math.round(talk / answered.length) : 0,
+        matched: calls.filter(c => c.matched).length,
+      },
+      agents: Object.values(byAgent).sort((a, b) => b.answered - a.answered),
+      calls,
+    });
+  }
+
   /* ---- Table inventory ---- */
   if (view === 'tables') {
     const known = ['clients', 'policies', 'policy_detail', 'events', 'extractions', 'bridge_ledger', 'clover_tokens'];

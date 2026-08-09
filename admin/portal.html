@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Speedy Portal</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://checkout.clover.com/sdk.js"></script>
 <style>
   :root{
     --navy:#0b1029; --card:#0e1533; --ink:#e8ecff; --mute:#8f9ac4; --dim:#5c6690;
@@ -29,6 +30,15 @@
   .brand .s{color:var(--red)} .brand .i{color:var(--blue-l)}
   .row{display:flex;justify-content:space-between;align-items:center}
   .tile{border-radius:10px;padding:12px;text-align:center;font-size:13px;font-weight:600;cursor:pointer}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:12px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
+  .chips button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  .cf{background:#fff;border-radius:10px;padding:0 10px;min-height:44px}
+  #chargeSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  .res{border-radius:12px;padding:16px;margin-top:12px}
+  .res.good{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.45)}
+  .res.bad{background:rgba(224,49,49,.12);border:1px solid rgba(224,49,49,.45)}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 </style>
 </head>
 <body>
@@ -99,15 +109,81 @@
       <div id="tabbar" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
         <div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>
       </div>
-      <button class="btn btn-red" onclick="alert('Charging inside the portal arrives in Stage 3.')" style="margin-top:12px">＋ New charge</button>
+      <button class="btn btn-red" onclick="openCharge(ACTIVE_TAB)" style="margin-top:12px">＋ New charge</button>
     </div>
 
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.5</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.6</span> · you see only your own work</div>
   </div>
 
+</div>
+
+<!-- ===== STAGE 3: CHARGE SHEET — lives OUTSIDE #clientPanel so tab switching never unmounts the Clover card fields ===== -->
+<div id="chargeSheet" class="hide">
+  <div style="max-width:640px;margin:0 auto">
+    <div class="card" style="border-color:var(--blue)">
+
+      <div class="row" style="align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:16px;font-weight:800" id="chgTitle">Charge</div>
+          <div class="muted" style="font-size:12px;margin-top:2px" id="chgSub">—</div>
+        </div>
+        <div onclick="closeCharge()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px" title="Close">&#10005;</div>
+      </div>
+
+      <div id="chgAuthWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:10px;color:var(--amber)">
+        Your sign-in expired. <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="reauth()">Sign in again</span> &mdash; nothing you typed is lost.
+      </div>
+
+      <div id="chgLoading" class="dim" style="font-size:13px">Loading client from HawkSoft&hellip;</div>
+
+      <div id="chgBody" class="hide">
+        <div id="chgNamePick"></div>
+        <div id="chgInv"></div>
+
+        <label for="chgAmt">Amount</label>
+        <input id="chgAmt" inputmode="decimal" placeholder="0.00" autocomplete="off">
+
+        <label style="margin-top:12px">Purpose</label>
+        <div id="chgPurp" class="chips"></div>
+        <input id="chgOther" class="hide" placeholder="Describe the payment" style="margin-top:6px" maxlength="60">
+
+        <label for="chgNote" style="margin-top:12px">Note &mdash; optional</label>
+        <input id="chgNote" maxlength="120" placeholder="Shows on the receipt" autocomplete="off">
+
+        <div id="chgPolWrap" class="hide" style="margin-top:12px">
+          <label for="chgPolSel">Apply to policy &mdash; files the receipt under that policy tab</label>
+          <select id="chgPolSel"></select>
+        </div>
+
+        <label style="margin-top:12px">Method</label>
+        <div id="chgMeth" class="chips"></div>
+
+        <div id="chgCard" class="hide" style="margin-top:10px">
+          <div id="pCardNumber" class="cf"></div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <div id="pCardDate" class="cf" style="flex:1"></div>
+            <div id="pCardCvv" class="cf" style="flex:1"></div>
+            <div id="pCardZip" class="cf" style="flex:1"></div>
+          </div>
+          <div class="dim" id="chgCardHint" style="font-size:11px;margin-top:6px"></div>
+        </div>
+
+        <div id="chgAltWrap" class="hide" style="margin-top:10px">
+          <label id="chgAltLabel">Reference &mdash; optional</label>
+          <input id="chgAltRef" autocomplete="off" maxlength="60">
+        </div>
+
+        <button class="btn btn-red" id="chgGo" onclick="doCharge()">Charge</button>
+        <button class="btn btn-ghost" onclick="closeCharge()">Cancel</button>
+        <div id="chgOut" class="hide dim" style="font-size:12.5px;margin-top:10px;text-align:center"></div>
+      </div>
+
+      <div id="chgResult"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -133,6 +209,8 @@ async function api(view){
 }
 
 function onCred(resp){
+  // Re-auth mid-charge: refresh the token only, keep the sheet and everything typed
+  if(REAUTH){ TOKEN = resp.credential; REAUTH = false; var w = document.getElementById('chgAuthWarn'); if(w) w.classList.add('hide'); return; }
   TOKEN = resp.credential; EMAIL = jwtEmail(TOKEN);
   const staff = STAFF[EMAIL];
   const home = staff ? staff[1] : 'Moreno Valley';
@@ -171,7 +249,7 @@ async function loadHome(){
   }
 }
 
-function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
+function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; document.getElementById('chargeSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
 
 // ===== STAGE 2: client search, tabs (max 5), compact card =====
 const MAX_TABS = 5;
@@ -359,13 +437,335 @@ async function renderPanel(){
   // actions
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">'
     + '<div onclick="toggleFull('+ACTIVE_TAB+')" style="background:var(--field);border:1px solid var(--line);border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:600;color:var(--blue-l);cursor:pointer">'+(full?'Hide details ▴':'See full details ▾')+'</div>'
-    + '<div onclick="alert(\'Charging inside the portal arrives in Stage 3.\')" style="background:var(--red);color:#fff;border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:700;cursor:pointer">Charge this client</div>'
+    + '<div onclick="openCharge('+ACTIVE_TAB+')" style="background:var(--red);color:#fff;border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:700;cursor:pointer">Charge this client</div>'
     + '</div>';
   h += '</div>';
   el.innerHTML = h;
 }
 function toggleFull(no){ FULL_OPEN[no] = !FULL_OPEN[no]; renderPanel(); }
 
+/* ===================== STAGE 3 — CHARGE INSIDE THE PORTAL =====================
+   Reuses the SAME /api/hawksoft actions charge.html uses (charge_lookup, ecomm_config,
+   charge_live, charge_cash, paylink_create). No new endpoints, no divergence.
+   Money always uses the HawkSoft record, never the portal's cached Supabase card. */
+const PURPOSES = ['Down payment','Renewal','Endorsement','Cancellation','DMV','Other'];
+const METHODS  = [['card','Card'],['cash','Cash'],['link','Pay link'],['zelle','Zelle'],['other','Other']];
+let CHG = null;            // { clientNo, confirmed } — one charge at a time
+let CHG_PURPOSE = 'Down payment';
+let CHG_METHOD = 'card';
+let cloverSDK = null, cloverMounted = false;
+let REAUTH = false;
+let _plUrl = '', _plMsg = '', _plEmail = '';
+
+const chgEl = id => document.getElementById(id);
+function amtVal(){ return String(chgEl('chgAmt').value || '').replace(/,/g, '').trim(); }
+function chgPurposeText(){
+  if(CHG_PURPOSE !== 'Other') return CHG_PURPOSE;
+  const t = chgEl('chgOther').value.trim();
+  return t ? 'Other: ' + t : 'Other';
+}
+function chgNoteText(){ return chgEl('chgNote').value.trim(); }
+function chgPolicy(){
+  const w = chgEl('chgPolWrap');
+  if(w.classList.contains('hide')) return '';
+  return chgEl('chgPolSel').value || '';
+}
+
+async function hsPost(body){
+  const r = await fetch('/api/hawksoft', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'x-user-token': TOKEN },
+    body: JSON.stringify(body)
+  });
+  if(r.status === 401){ REAUTH = true; chgEl('chgAuthWarn').classList.remove('hide'); }
+  return r.json();
+}
+function reauth(){ if(window.google) google.accounts.id.prompt(); }
+
+// --- open / close ---
+async function openCharge(no){
+  if(!no){ alert('Open a client first — search above, then charge from their card.'); return; }
+  CHG = { clientNo: no, confirmed: null };
+  CHG_PURPOSE = 'Down payment'; CHG_METHOD = 'card';
+  chgEl('chgResult').innerHTML = '';
+  chgEl('chgBody').classList.add('hide');
+  chgEl('chgLoading').classList.remove('hide');
+  chgEl('chgAuthWarn').classList.add('hide');
+  chgEl('chgOut').classList.add('hide');
+  const tab = OPEN_TABS.find(t => t.client_no === no);
+  chgEl('chgTitle').textContent = 'Charge — ' + (tab ? tab.name : '#'+no);
+  chgEl('chgSub').textContent = '#' + no + ' · ' + OFFICE;
+  chgEl('chargeSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+
+  let j = null;
+  try{ j = await hsPost({ action:'charge_lookup', clientId: parseInt(no,10) }); }
+  catch(e){ j = { ok:false, error:String(e) }; }
+  if(!j || !j.ok){
+    chgEl('chgLoading').innerHTML = '<span style="color:#ff8787">Couldn\'t load #'+no+' from HawkSoft.</span> '
+      + esc((j && j.error) || 'Try again, or use the charge page.');
+    return;
+  }
+  CHG.confirmed = j.result;
+  chgEl('chgTitle').textContent = 'Charge — ' + (j.result.name || ('#'+no));
+  chgEl('chgSub').textContent = '#' + (j.result.clientNumber || no) + ' · ' + OFFICE;
+  chgEl('chgLoading').classList.add('hide');
+  chgEl('chgBody').classList.remove('hide');
+  renderChargeForm();
+}
+function closeCharge(){
+  chgEl('chargeSheet').classList.add('hide');
+  document.body.style.overflow = '';
+  CHG = null;
+  chgEl('chgAmt').value = ''; chgEl('chgNote').value = '';
+  chgEl('chgOther').value = ''; chgEl('chgAltRef').value = '';
+  chgEl('chgGo').disabled = false;
+  loadHome();
+}
+
+// --- form ---
+function renderChargeForm(){
+  const c = CHG.confirmed;
+
+  // named insured / excluded-driver picker (same rule as charge.html)
+  const ppl = Array.isArray(c.people) ? c.people : [];
+  const np = chgEl('chgNamePick');
+  if(ppl.length > 1){
+    np.innerHTML = '<label>Charging which name? — defaults to the named insured</label>'
+      + '<select id="chgWho" onchange="onChgName()">'
+      + ppl.map(p => '<option value="'+esc(p.name)+'"'+(p.role==='named insured'?' selected':'')+'>'+esc(p.name)+' — '
+          + (p.role==='named insured' ? '★ named insured' : p.role==='excluded' ? '⚠ EXCLUDED — do not charge' : 'active driver')
+          + '</option>').join('')
+      + '</select><div id="chgNameWarn" class="hide" style="color:var(--amber);font-size:12px;margin-top:5px"></div>'
+      + '<div style="height:12px"></div>';
+  } else np.innerHTML = '';
+
+  // open invoices
+  const inv = chgEl('chgInv');
+  const list = c.openInvoices || [];
+  if(list.length){
+    inv.innerHTML = '<div style="font-size:10px;color:#7ee2a8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Open invoices — tap to fill</div>'
+      + '<div class="chips" style="margin-bottom:12px">'
+      + list.map((iv,i) => '<button type="button" onclick="pickInv('+i+',this)" style="text-align:left">'
+          + '<b style="color:var(--ink);font-size:13px">$'+Number(iv.bal).toFixed(2)+'</b><br><span style="font-size:11px">'
+          + esc(iv.num || 'Invoice') + (iv.dueDate ? ' · due '+esc(iv.dueDate) : '') + '</span></button>').join('')
+      + '</div>';
+  } else inv.innerHTML = '';
+
+  chgEl('chgPurp').innerHTML = PURPOSES.map(p =>
+    '<button type="button" class="'+(p===CHG_PURPOSE?'sel':'')+'" onclick="pickPurpose(\''+p+'\',this)">'+p+'</button>').join('');
+  chgEl('chgMeth').innerHTML = METHODS.map(m =>
+    '<button type="button" class="'+(m[0]===CHG_METHOD?'sel':'')+'" onclick="pickChgMethod(\''+m[0]+'\',this)">'+m[1]+'</button>').join('')
+    + '<button type="button" disabled style="opacity:.45;cursor:default;border-style:dashed">Terminal — soon</button>';
+
+  // Policy picker — built from the policies already loaded on this client tab.
+  // charge_lookup does not return a policy number (charge.html gets it from HawkLink),
+  // so the portal offers the real list instead of guessing.
+  const cached = CLIENT_CACHE[CHG.clientNo];
+  const pols = ((cached && cached.policies) || []).filter(p => p.record_type !== 'dmv_service' && p.policy_number);
+  const w = chgEl('chgPolWrap');
+  if(pols.length){
+    chgEl('chgPolSel').innerHTML = pols.map(p =>
+        '<option value="' + esc(p.policy_number) + '">' + esc(p.policy_number) + ' — ' + esc(p.carrier || '')
+        + (isExpired(p) ? ' (expired)' : '') + '</option>').join('')
+      + '<option value="">No policy — file at client level</option>';
+    w.classList.remove('hide');
+  } else {
+    chgEl('chgPolSel').innerHTML = '<option value="">No policy — file at client level</option>';
+    w.classList.add('hide');
+  }
+
+  applyMethodUI();
+}
+function onChgName(){
+  const s = chgEl('chgWho'), warn = chgEl('chgNameWarn');
+  if(!s || !CHG || !CHG.confirmed) return;
+  CHG.confirmed.name = s.value;
+  const excluded = s.options[s.selectedIndex].textContent.includes('EXCLUDED');
+  warn.classList.toggle('hide', !excluded);
+  if(excluded) warn.textContent = '⚠ This is an EXCLUDED driver — normally you charge the named insured. Confirm this is right.';
+}
+function pickInv(i, btn){
+  const iv = CHG.confirmed.openInvoices[i];
+  chgEl('chgAmt').value = Number(iv.bal).toFixed(2);
+  if(iv.policyNumber){
+    const sel = chgEl('chgPolSel');
+    let found = [...sel.options].find(o => o.value === iv.policyNumber);
+    if(!found){ sel.insertBefore(new Option(iv.policyNumber + ' — from invoice', iv.policyNumber), sel.firstChild); }
+    sel.value = iv.policyNumber;
+    chgEl('chgPolWrap').classList.remove('hide');
+  }
+  document.querySelectorAll('#chgInv button').forEach(x => x.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+function pickPurpose(p, btn){
+  CHG_PURPOSE = p;
+  document.querySelectorAll('#chgPurp button').forEach(x => x.classList.remove('sel'));
+  btn.classList.add('sel');
+  chgEl('chgOther').classList.toggle('hide', p !== 'Other');
+  if(p === 'Other') chgEl('chgOther').focus();
+}
+function pickChgMethod(m, btn){
+  CHG_METHOD = m;
+  document.querySelectorAll('#chgMeth button').forEach(x => x.classList.remove('sel'));
+  btn.classList.add('sel');
+  chgEl('chgResult').innerHTML = '';
+  applyMethodUI();
+}
+function applyMethodUI(){
+  const isCard = CHG_METHOD === 'card';
+  const isAlt = (CHG_METHOD === 'zelle' || CHG_METHOD === 'other');
+  chgEl('chgCard').classList.toggle('hide', !isCard);
+  chgEl('chgAltWrap').classList.toggle('hide', !isAlt);
+  if(isAlt){
+    chgEl('chgAltLabel').textContent = (CHG_METHOD === 'zelle' ? 'Zelle confirmation / reference' : 'Payment reference') + ' — optional';
+    chgEl('chgAltRef').placeholder = CHG_METHOD === 'zelle' ? 'Zelle conf # or sender name' : 'money order #, check #, other';
+  }
+  chgEl('chgGo').textContent = CHG_METHOD === 'link' ? 'Create payment link' : 'Charge';
+  if(isCard) initPortalClover();
+}
+
+// Clover card fields — mounted ONCE, never unmounted (sheet lives outside #clientPanel)
+async function initPortalClover(){
+  if(cloverMounted) return true;
+  const hint = chgEl('chgCardHint');
+  try{
+    const cfg = await hsPost({ action:'ecomm_config' });
+    if(!cfg.ok || !cfg.pk){ hint.textContent = 'Card fields unavailable — CLOVER_ECOMM keys not set.'; return false; }
+    if(!window.Clover){ hint.textContent = 'Clover SDK failed to load — refresh the page.'; return false; }
+    cloverSDK = new Clover(cfg.pk, { merchantId: cfg.merchantId });
+    const el = cloverSDK.elements();
+    const styles = { body:{fontSize:'16px'}, input:{fontSize:'16px',color:'#111827',height:'44px',lineHeight:'44px',padding:'0'}, '::placeholder':{color:'#9ca3af'} };
+    el.create('CARD_NUMBER', styles).mount('#pCardNumber');
+    el.create('CARD_DATE', styles).mount('#pCardDate');
+    el.create('CARD_CVV', styles).mount('#pCardCvv');
+    el.create('CARD_POSTAL_CODE', styles).mount('#pCardZip');
+    cloverMounted = true;
+    return true;
+  }catch(e){ hint.textContent = 'Card fields failed to load: ' + e; return false; }
+}
+
+// --- charge ---
+function chgSay(t){ const o = chgEl('chgOut'); o.classList.remove('hide'); o.textContent = t; }
+function chgQuiet(){ chgEl('chgOut').classList.add('hide'); chgEl('chgOut').textContent = ''; }
+function chgFail(msg){
+  chgQuiet();
+  chgEl('chgResult').innerHTML = '<div class="res bad"><div style="font-size:15px;font-weight:800;margin-bottom:4px">Not completed</div>'
+    + '<div style="font-size:13px">' + esc(msg) + '</div></div>';
+  chgEl('chgGo').disabled = false;
+}
+function doCharge(){
+  if(!CHG || !CHG.confirmed) return;
+  const amt = amtVal();
+  if(!(parseFloat(amt) > 0)){ chgSay('Enter the amount first.'); return; }
+  if(CHG_METHOD === 'card') return chargeCardPortal(amt);
+  if(CHG_METHOD === 'link') return createLinkPortal(amt);
+  return chargeCashPortal(amt);
+}
+function baseBody(amt){
+  const c = CHG.confirmed;
+  return { clientId: c.clientNumber, clientName: c.name || '', amount: amt,
+    purpose: chgPurposeText(), note: chgNoteText(), policyNumber: chgPolicy(),
+    clientEmail: (c.emails && c.emails[0]) || '', office: OFFICE };
+}
+async function chargeCardPortal(amt){
+  const btn = chgEl('chgGo');
+  if(!cloverSDK){ chgSay('Card fields not ready — switch methods and back, or refresh.'); return; }
+  chgEl('chgResult').innerHTML = ''; btn.disabled = true;
+  chgSay('Securing card with Clover…');
+  try{
+    const tk = await cloverSDK.createToken();
+    if(tk && tk.errors && Object.keys(tk.errors).length){ chgSay('Card error: ' + Object.values(tk.errors).join(' · ')); btn.disabled = false; return; }
+    if(!tk || !tk.token){ chgSay('Could not read the card — check the fields.'); btn.disabled = false; return; }
+    chgSay('Charging card…');
+    const j = await hsPost(Object.assign({ action:'charge_live', source: tk.token }, baseBody(amt)));
+    if(j.ok){
+      const ch = (j.results && j.results.charge) || {};
+      showChargeResult(amt, [
+        ['Card', (ch.brand || 'CARD') + ' •••• ' + (ch.last4 || '')],
+        ['Clover transaction', ch.id || j.txnId || ''],
+      ]);
+    } else chgFail(j.error || 'The charge did not go through. The card was not billed twice — try again or use another card.');
+  }catch(e){ chgFail(String(e)); }
+}
+async function chargeCashPortal(amt){
+  const btn = chgEl('chgGo');
+  const label = CHG_METHOD === 'zelle' ? 'Zelle' : CHG_METHOD === 'other' ? 'Other' : 'Cash';
+  chgEl('chgResult').innerHTML = ''; btn.disabled = true;
+  chgSay('Recording ' + label + ' payment…');
+  try{
+    const j = await hsPost(Object.assign({ action:'charge_cash', payMethod: label,
+      altRef: (CHG_METHOD === 'cash' ? '' : chgEl('chgAltRef').value.trim()) }, baseBody(amt)));
+    if(j.ok) showChargeResult(amt, [['Method', label], ['Reference', j.ref || '']]);
+    else chgFail(j.error || 'One or more HawkSoft steps failed.');
+  }catch(e){ chgFail(String(e)); }
+}
+function showChargeResult(amt, rows){
+  chgQuiet();
+  const c = CHG.confirmed;
+  const money2 = '$' + parseFloat(amt).toFixed(2);
+  chgEl('chgBody').classList.add('hide');
+  chgEl('chgResult').innerHTML = '<div class="res good">'
+    + '<div style="font-size:15px;font-weight:800;color:var(--green)">✓ Payment recorded</div>'
+    + '<div style="font-size:28px;font-weight:800;margin:6px 0 10px">' + money2 + '</div>'
+    + '<div class="kv"><span class="muted">Client</span><b>' + esc(c.name || '') + ' · #' + c.clientNumber + '</b></div>'
+    + '<div class="kv"><span class="muted">For</span><b>' + esc(chgPurposeText()) + '</b></div>'
+    + '<div class="kv"><span class="muted">Office</span><b>' + esc(OFFICE) + '</b></div>'
+    + rows.filter(r => r[1]).map(r => '<div class="kv"><span class="muted">' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>').join('')
+    + '<div class="dim" style="font-size:11.5px;margin-top:8px">Receipt, branded PDF and log note filed to the HawkSoft record.</div>'
+    + '<a href="' + carrierLink(parseFloat(amt).toFixed(2)) + '" onclick="stashHandoff()" style="display:block;text-align:center;background:var(--amber);color:#2a1a00;padding:12px;border-radius:11px;font-weight:700;text-decoration:none;font-size:14px;margin-top:12px">Next → Carrier payment &amp; documents</a>'
+    + '<button class="btn btn-ghost" onclick="closeCharge()">Done — close</button>'
+    + '</div>';
+}
+function carrierLink(amt){
+  const c = CHG.confirmed || {};
+  const p = new URLSearchParams({ client: c.clientNumber || '', name: c.name || '', paid: amt,
+    method: 'client paid', policy: chgPolicy() || (c.policyNumber || ''),
+    policy_guid: (c.policyGuid || c.policyId || '') });
+  return '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
+}
+function stashHandoff(){ try{ if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); }catch(e){} }
+
+// --- pay link ---
+async function createLinkPortal(amt){
+  const btn = chgEl('chgGo');
+  chgEl('chgResult').innerHTML = ''; btn.disabled = true; chgSay('Creating link…');
+  try{
+    const j = await hsPost(Object.assign({ action:'paylink_create' }, baseBody(amt)));
+    btn.disabled = false;
+    if(!j.ok){ chgFail(j.error || 'Could not create the link.'); return; }
+    chgQuiet();
+    const c = CHG.confirmed;
+    const first = ((c.name || '').split(',').pop() || '').trim().split(' ')[0] || 'there';
+    const amtStr = '$' + parseFloat(amt).toFixed(2);
+    _plUrl = j.url;
+    _plMsg = 'Hi ' + first + ' — Speedy Insurance secure payment\nAmount: ' + amtStr + '\nFor: ' + chgPurposeText() + '\n\nPay here (valid 72 hours):\n' + j.url;
+    _plEmail = 'Hi ' + first + ',\n\nHere is your secure payment link from Speedy Insurance Agency.\n\nAmount: ' + amtStr
+      + '\nFor: ' + chgPurposeText() + '\nValid: 72 hours\n\nPay here:\n' + j.url
+      + '\n\nYour card details are entered directly with our secure payment processor — Speedy Insurance never sees or stores them. A receipt is filed to your account automatically.\n\nSpeedy Insurance Agency\n(951) 472-0927 · speedyins.com';
+    const phone = (c.phones && c.phones[0]) ? String(c.phones[0]).replace(/\D/g,'') : '';
+    chgEl('chgResult').innerHTML = '<div class="res good">'
+      + '<div style="font-size:15px;font-weight:800;color:var(--green)">Payment link ready</div>'
+      + '<div style="word-break:break-all;font-size:12px;color:#c9d2f0;margin:8px 0">' + esc(j.url) + '</div>'
+      + '<button class="btn btn-blue" onclick="copyTxt(_plUrl,this)">Copy link</button>'
+      + '<button class="btn btn-ghost" onclick="copyTxt(_plMsg,this)">Copy text message</button>'
+      + (phone ? '<a class="btn btn-ghost" style="text-decoration:none" href="sms:' + phone + '?body=' + encodeURIComponent(_plMsg) + '">Text to ' + esc(first) + '</a>' : '')
+      + '<button class="btn btn-ghost" onclick="emailLink()">Email to client (Gmail)</button>'
+      + '<div class="dim" id="chgGmailHint" style="font-size:11.5px;margin-top:8px;display:none">Email copied ✓ — in the Gmail window click into the body, press Ctrl+V, then Send.</div>'
+      + '<div class="dim" style="font-size:11.5px;margin-top:8px">When the client pays, the receipt, PDF and log file automatically — marked as sent by you.</div>'
+      + '<button class="btn btn-ghost" onclick="closeCharge()">Done — close</button>'
+      + '</div>';
+  }catch(e){ chgFail(String(e)); }
+}
+function copyTxt(t, b){
+  navigator.clipboard.writeText(t).then(() => { if(b){ const o = b.textContent; b.textContent = 'Copied ✓'; setTimeout(() => b.textContent = o, 1200); } }, () => {});
+}
+async function emailLink(){
+  try{ await navigator.clipboard.writeText(_plEmail); const h = chgEl('chgGmailHint'); if(h) h.style.display = 'block'; }catch(e){}
+  const c = CHG.confirmed || {};
+  const to = (c.emails && c.emails[0]) ? '&to=' + encodeURIComponent(c.emails[0]) : '';
+  window.open('https://mail.google.com/mail/?view=cm&fs=1' + to + '&su=' + encodeURIComponent('Your Speedy Insurance payment link'), '_blank', 'noopener');
+}
 
 window.addEventListener('load', () => {
   const t = setInterval(() => {

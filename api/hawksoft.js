@@ -538,6 +538,7 @@ export default async function handler(req, res) {
       if (!total || total < 0.5) {
         return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       }
+      const office = String(b.office || '').slice(0, 40) || null; // branch the agent selected in the portal
       const recover = b.skipCharge === true; // recovery: card already charged on Clover, just record it
       const source = String(b.source || '');
       if (!recover && (!source || source.length < 8)) {
@@ -594,7 +595,7 @@ export default async function handler(req, res) {
                 amount: total, purpose: purpose ? String(purpose).slice(0, 120) : null,
                 agent: who ? String(who).slice(0, 120) : null, txn_id: txnId,
                 auth_code: authCode ? String(authCode) : null, ref: refNum || null,
-                extra: { safety_net: true, receipt_pending: true, brand, last4 },
+                extra: { safety_net: true, receipt_pending: true, brand, last4, office },
               }),
             });
             const srj = await sr.json().catch(() => null);
@@ -753,7 +754,7 @@ export default async function handler(req, res) {
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action, who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action, who, office, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
@@ -782,6 +783,7 @@ export default async function handler(req, res) {
       // HawkSoft receipts only accept known payment methods; Zelle/Other are recorded as Cash to HawkSoft (real method kept in note/PDF)
       const hsPayMethod = (['cash','check'].includes(payMethod.toLowerCase())) ? payMethod : 'Cash';
       const altRef = String(b.altRef || '').slice(0, 80).trim();
+      const office = String(b.office || '').slice(0, 40) || null; // branch the agent selected in the portal
       // purpose shown on receipt includes the note when present
       const purposeFull = note ? `${purpose} — ${note}` : purpose;
       const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
@@ -917,7 +919,7 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
-      const auditSaved = await audit({ action: 'charge_cash', who, clientId, amount: total, purpose: purposeFull, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, amount: total, purpose: purposeFull, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved });
     }
 
@@ -955,7 +957,7 @@ export default async function handler(req, res) {
           policyId: linkPolicyGuid, PolicyId: linkPolicyGuid,
           note: `PAYMENT LINK created — $${total.toFixed(2)} for ${String(b.purpose || 'Payment').slice(0, 40)}${b.policyNumber ? ' · policy ' + String(b.policyNumber).trim() : ''} · by ${who} · expires ${expStr} PT. Client pays online; trail files automatically when paid.`,
         }) });
-      await audit({ action: 'paylink_create', who, clientId, amount: total, purpose: b.purpose, logged: lg.status });
+      await audit({ action: 'paylink_create', who, office: String(b.office || '').slice(0, 40) || null, clientId, amount: total, purpose: b.purpose, logged: lg.status });
       return res.status(200).json({ ok: true, url: `https://www.speedyins.com/pay.html?t=${tok}`, hours: 72, logged: lg.status === 200 || lg.status === 202 });
     }
 

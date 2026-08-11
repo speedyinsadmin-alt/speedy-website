@@ -44,7 +44,7 @@
   #docModal{position:fixed;inset:0;background:rgba(6,9,24,.92);z-index:80;padding:20px;overflow-y:auto}
   .docwrap{max-width:1040px;margin:0 auto;background:var(--navy2);border:1px solid var(--line);border-radius:14px;padding:16px}
   .docgrid{display:flex;gap:12px;margin-top:12px}
-  .doclist{width:230px;flex-shrink:0}
+  .doclist{width:230px;flex-shrink:0;max-height:520px;overflow-y:auto}
   .docitem{background:var(--navy);border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-bottom:6px;cursor:pointer}
   .docitem.sel{border-color:var(--blue)}
   .docitem.carrier{border-color:rgba(47,191,113,.5)}
@@ -81,7 +81,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.8</small></h1>
+      <h1>Platform Console <small id="ver">v4.9</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -142,14 +142,16 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 // Performance: only metadata is held here — file bytes are fetched when a file is clicked.
 const DOC_ROWS = {};
 function docsCell(docs, needsProof, rowKey, title){
-  DOC_ROWS[rowKey] = { docs, title };
-  const hasCarrier = docs.some(d => (d.doc_type || d.kind) === 'carrier_receipt');
-  const n = docs.length;
-  if(!n && !needsProof) return '<span class="muted">\u2014</span>';
+  const own   = docs.filter(d => d.payment_id === rowKey);
+  const other = docs.filter(d => d.payment_id !== rowKey);
+  DOC_ROWS[rowKey] = { own, other, title };
+  const hasCarrier = own.some(d => (d.doc_type || d.kind) === 'carrier_receipt');
+  const n = own.length;
+  if(!n && !other.length && !needsProof) return '<span class="muted">\u2014</span>';
   const cls = hasCarrier ? 'g' : (needsProof ? 'r' : 'b');
   const label = hasCarrier ? ('\u2713 ' + n + ' file' + (n>1?'s':''))
-              : needsProof ? ('No proof' + (n ? ' \u00b7 ' + n : ''))
-              : (n + ' file' + (n>1?'s':''));
+              : needsProof ? 'No proof'
+              : (n ? n + ' file' + (n>1?'s':'') : 'Files');
   return '<span class="docbtn ' + cls + '" onclick="openDocs(\'' + rowKey + '\')">'
        + '<i class="ti"></i>' + label + '</span>';
 }
@@ -902,16 +904,17 @@ function fmtBytes(b){
 function openDocs(rowKey){
   const entry = DOC_ROWS[rowKey];
   if(!entry) return;
-  const docs = (entry.docs || []).slice().sort((a,b) => {
-    const rank = k => k === 'carrier_receipt' ? 0 : k === 'client_receipt' ? 2 : 1;
-    return rank(docKind(a)) - rank(docKind(b));
-  });
+  const rank = k => k === 'carrier_receipt' ? 0 : k === 'client_receipt' ? 2 : 1;
+  const bySort = (a,b) => rank(docKind(a)) - rank(docKind(b));
+  const own   = (entry.own   || []).slice().sort(bySort);
+  const other = (entry.other || []).slice().sort(bySort);
+  const docs  = own.concat(other);
   let el = document.getElementById('docModal');
   if(!el){ el = document.createElement('div'); el.id = 'docModal'; document.body.appendChild(el); }
   el.innerHTML = '<div class="docwrap">'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:11px;border-bottom:1px solid var(--line)">'
     + '<div><div style="font-size:15px;font-weight:700">Documents</div>'
-    + '<div class="muted" style="font-size:12px;margin-top:2px">' + esc(entry.title || '') + ' \u00b7 ' + docs.length + ' file' + (docs.length===1?'':'s') + '</div></div>'
+    + '<div class="muted" style="font-size:12px;margin-top:2px">' + esc(entry.title || '') + ' \u00b7 ' + own.length + ' file' + (own.length===1?'':'s') + ' on this payment</div></div>'
     + '<div onclick="closeDocs()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">\u2715</div></div>'
     + '<div class="docgrid"><div class="doclist" id="docList"></div>'
     + '<div class="docpane" id="docPane"><div class="muted" style="padding:18px;font-size:13px">Select a file to view it.</div></div></div>'
@@ -920,14 +923,23 @@ function openDocs(rowKey){
     + '<button class="btn" onclick="docNewTab()" id="docNt" style="display:none">Open in new tab</button>'
     + '<div style="flex:1"></div><span class="muted" style="font-size:11.5px" id="docNote"></span></div>'
     + '</div>';
-  document.getElementById('docList').innerHTML = docs.map((d,i) => {
+  const item = (d,i) => {
     const k = docKind(d);
     return '<div class="docitem' + (k==='carrier_receipt'?' carrier':'') + '" id="di'+i+'" onclick="showDoc(\''+rowKey+'\','+i+')">'
       + '<div style="font-size:10.5px;font-weight:700;color:' + (k==='carrier_receipt'?'#7ee2a8':k==='client_receipt'?'#a8b2d4':'#8fadff') + '">'
       + esc(docLabel(k)).toUpperCase() + '</div>'
       + '<div style="font-size:12px;margin-top:3px;word-break:break-all">' + esc(d.filename || 'file') + '</div>'
       + '<div class="muted" style="font-size:10.5px">' + fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed \u2713' : '') + '</div></div>';
-  }).join('') || '<div class="muted" style="font-size:12.5px">No documents yet.</div>';
+  };
+  const hdr = t => '<div class="muted" style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin:4px 0 6px">' + t + '</div>';
+  let listHtml = own.length ? hdr('This payment') + own.map((d,i) => item(d,i)).join('')
+                            : '<div class="muted" style="font-size:12.5px;margin-bottom:8px">No documents on this payment yet.</div>';
+  if(other.length){
+    listHtml += '<div id="otherHdr" onclick="toggleOther()" style="cursor:pointer;color:var(--blue);font-size:11.5px;margin:10px 0 6px">'
+      + '\u25b8 Other files on this client (' + other.length + ')</div>'
+      + '<div id="otherWrap" style="display:none">' + other.map((d,i) => item(d, own.length + i)).join('') + '</div>';
+  }
+  document.getElementById('docList').innerHTML = listHtml;
   el.style.display = 'block';
   document.body.style.overflow = 'hidden';
   DOC_SORTED[rowKey] = docs;
@@ -968,6 +980,13 @@ async function showDoc(rowKey, i){
   document.getElementById('docDl').style.display = '';
   document.getElementById('docNt').style.display = '';
   document.getElementById('docNote').textContent = fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed to HawkSoft' : ' \u00b7 not filed to HawkSoft');
+}
+function toggleOther(){
+  const w = document.getElementById('otherWrap'), h = document.getElementById('otherHdr');
+  if(!w) return;
+  const open = w.style.display !== 'none';
+  w.style.display = open ? 'none' : 'block';
+  h.textContent = (open ? '\u25b8' : '\u25be') + h.textContent.slice(1);
 }
 function docDownload(){
   if(!DOC_CUR) return;

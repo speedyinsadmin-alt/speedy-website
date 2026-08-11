@@ -265,10 +265,34 @@ async function storeReceiptVault({ clientId, pdfBuf, filename, amount, txnId, wh
     };
     const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/attachments`, {
       method: 'POST',
-      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify([row]),
     });
-    return r.status === 201;
+    if (r.status !== 201) return false;
+    try {
+      const rows = await r.json();
+      const id = Array.isArray(rows) && rows[0] ? rows[0].id : null;
+      return id ? { ok: true, id } : true;
+    } catch { return true; }
+  } catch { return false; }
+}
+
+/* Link a stored receipt to its ledger row. The receipt PDF is written before the
+   ledger row exists on some paths, so payment_id is stamped afterwards — without it
+   every receipt on a client appears against every payment in the document viewer. */
+async function linkReceiptToPayment(attachmentId, paymentId) {
+  if (!attachmentId || !paymentId) return false;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+    || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) return false;
+  try {
+    const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/attachments?id=eq.${attachmentId}`, {
+      method: 'PATCH',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ payment_id: paymentId }),
+    });
+    return r.status === 204 || r.status === 200;
   } catch { return false; }
 }
 
@@ -801,6 +825,10 @@ export default async function handler(req, res) {
       } else {
         auditSaved = await audit({ action, who, office, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
+      // link this receipt to its ledger row so the viewer scopes files to the payment
+      if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
+        await linkReceiptToPayment(out.vault.id, auditSaved.id);
+      }
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved, ledgerId: (auditSaved && auditSaved.id) || null });
     }
 
@@ -921,6 +949,10 @@ export default async function handler(req, res) {
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
       const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, amount: total, purpose: purposeFull, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      // link this receipt to its ledger row so the viewer scopes files to the payment
+      if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
+        await linkReceiptToPayment(out.vault.id, auditSaved.id);
+      }
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved, ledgerId: (auditSaved && auditSaved.id) || null });
     }
 
@@ -1158,6 +1190,10 @@ export default async function handler(req, res) {
         } catch { auditSaved = false; }
       } else {
         auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+      }
+      // link this receipt to its ledger row so the viewer scopes files to the payment
+      if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
+        await linkReceiptToPayment(out.vault.id, auditSaved.id);
       }
       return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved, ledgerId: (auditSaved && auditSaved.id) || null });
     }

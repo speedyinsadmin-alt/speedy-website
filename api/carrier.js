@@ -117,7 +117,8 @@ export default async function handler(req, res) {
       body: JSON.stringify([{
         client_no, policy_id: policy_id || null, payment_id: payment_id || null,
         kind: dtype, doc_type: dtype, filename: niceName,
-        file_b64: receipt_b64, sha256: hash, mime: receipt_mime, bytes: buf.length,
+        file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
+        sha256: hash, mime: receipt_mime, bytes: buf.length,
         uploaded_by: email,
       }]),
     });
@@ -195,7 +196,8 @@ export default async function handler(req, res) {
         body: JSON.stringify([{
           client_no, policy_id: policy_id || null, payment_id: payment_id || null,
           kind: dtype, doc_type: dtype, filename: niceName,
-          blob_url: blobUrl, file_b64: receipt_b64, sha256: hash, mime: receipt_mime, bytes: buf.length,
+          blob_url: blobUrl, file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
+          sha256: hash, mime: receipt_mime, bytes: buf.length,
           carrier: carrier || null, amount: carrier_amount != null ? Number(carrier_amount) : null,
           uploaded_by: email,
         }]),

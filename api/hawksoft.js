@@ -9,6 +9,14 @@ import { createHmac } from 'node:crypto';
 
 const AGENCY_ID = 15112;
 
+/* SINGLE SOURCE for reading a money value off the wire.
+   parseFloat('1,602.40') === 1 — a typed or pasted comma would silently charge $1.00
+   instead of $1,602.40. Every amount from every charge path goes through here. */
+function parseMoney(v, dflt = 0) {
+  const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.]/g, ''));
+  return Number.isFinite(n) ? n : dflt;
+}
+
 /* Clover branch registry — confirmed with Saif 7/20/2026.
    Each branch = its own Clover business/merchant + one counter terminal.
    Used by the terminal-charging phase (REST Pay Display: X-Clover-Device-Id per charge).
@@ -326,6 +334,83 @@ function mapLob(input) {
   return 'OTHER';
 }
 
+/* ================= SINGLE SOURCE: branded receipt PDF =================
+   Every charge path — card (charge page + portal), cash/Zelle/Other,
+   terminal, and pay link — builds and files its receipt through these two
+   functions. Change the receipt design ONCE here and every path gets it.
+   Params that differ per method are passed in; everything else is shared. */
+async function buildReceiptPdf(o) {
+  const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+  const doc = await PDFDocument.create();
+  const W = 306, H = 590;
+  const page = doc.addPage([W, H]);
+  const helv = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const boldObl = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+  const obl = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const RED = rgb(0.83, 0.17, 0.17), NAVY = rgb(0.10, 0.14, 0.34), GRAY = rgb(0.4, 0.4, 0.4),
+        LIGHT = rgb(0.6, 0.6, 0.6), GREEN = rgb(0.13, 0.63, 0.35), BLACK = rgb(0, 0, 0),
+        LINE = rgb(0.8, 0.8, 0.8);
+  const ctr = (t, y, f, sz, c) => page.drawText(t, { x: (W - f.widthOfTextAtSize(t, sz)) / 2, y, font: f, size: sz, color: c });
+  const dash = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE, dashArray: [2, 2] });
+  const solid = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE });
+  let y = H - 32;
+  ctr('SPEEDY', y, boldObl, 15, NAVY); y -= 19;
+  ctr('INSURANCE AGENCY', y, boldObl, 17, RED); y -= 15;
+  ctr(o.branchName || 'Speedy Insurance Agency', y, helv, 8, GRAY); y -= 11;
+  ctr('(951) 472-0927  \u00b7  speedyins.com', y, helv, 8, GRAY); y -= 16;
+  dash(y); y -= 20;
+  ctr('PAYMENT RECEIPT', y, bold, 11, NAVY); y -= 26;
+  ctr(`$${o.total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
+  ctr(o.headline, y, bold, 9, GREEN); y -= 22;
+  const row = (label, value, isBold) => {
+    page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
+    const f = isBold ? bold : helv;
+    const vw = f.widthOfTextAtSize(value, 8.5);
+    page.drawText(value, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
+    y -= 12;
+  };
+  row('Date / Time', o.stamp + ' PT');
+  row('Client', o.clientName || ('Client #' + o.clientId), true);
+  row('Client #', String(o.clientId));
+  row('Payment for', String(o.purpose).slice(0, 38));
+  if (o.policyNumber) row('Policy #', o.policyNumber, true);
+  y -= 4; dash(y); y -= 14;
+  for (const r of (o.detailRows || [])) row(r[0], r[1], r[2]);
+  y -= 4; solid(y); y -= 14;
+  page.drawText(o.recordTitle, { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
+  for (const r of (o.recordRows || [])) row(r[0], r[1], r[2]);
+  y -= 4; solid(y); y -= 16;
+  for (const t of (o.footerLines || [])) { if (t) ctr(t, y, obl, 7, LIGHT); y -= 9; }
+  y -= 6;
+  ctr('Thank you for choosing Speedy Insurance!', y, bold, 8, NAVY);
+  return Buffer.from(await doc.save());
+}
+
+/* Attach the receipt PDF to the HawkSoft client record AND store it in our vault.
+   Returns { fname, attachment, vault } — fail-soft, same shape for every path. */
+async function fileReceiptPdf(o) {
+  const { gzipSync } = await import('node:zlib');
+  const b64h = str => Buffer.from(str, 'utf8').toString('base64');
+  const fname = `${o.filePrefix}_${o.now.toISOString().slice(0, 10)}_${String(o.total.toFixed(2)).replace('.', '-')}usd`;
+  const r2 = await o.hs(`/vendor/agency/${AGENCY_ID}/client/${o.clientId}/attachment?version=4.0`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      RefId: crypto.randomUUID(), TS: o.now.toISOString(),
+      Desc: b64h(String(o.desc).slice(0, 41)),
+      LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. ${o.logNoteTail || ''}`.trim()),
+      FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
+      ...(o.policyGuid ? { PolicyId: o.policyGuid } : {}),
+    },
+    body: gzipSync(o.pdfBuf),
+  });
+  const attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
+  const vault = await storeReceiptVault({ clientId: o.clientId, pdfBuf: o.pdfBuf, filename: fname,
+    amount: o.total, txnId: o.txnId || null, who: o.who, policyGuid: o.policyGuid });
+  return { fname, attachment, vault };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -514,7 +599,7 @@ export default async function handler(req, res) {
         const tok = readToken(b.t, KEY);
         if (!tok) return res.status(400).json({ ok: false, error: 'This payment link is invalid or has expired. Please ask your agent for a new one.' });
         clientId = parseInt(tok.c, 10);
-        total = Math.round(parseFloat(tok.a || '0') * 100) / 100;
+        total = Math.round(parseMoney(tok.a) * 100) / 100;
         purpose = String(tok.p || 'Payment').slice(0, 80);
         policyNumber = String(tok.pol || '').trim().slice(0, 25);
         clientName = String(tok.n || '').slice(0, 40);
@@ -523,7 +608,7 @@ export default async function handler(req, res) {
         taskEmail = byFull;
       } else {
         clientId = parseInt(b.clientId, 10);
-        total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+        total = Math.round(parseMoney(b.amount) * 100) / 100;
         purpose = String(b.purpose || 'Down payment').slice(0, 80);
         policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
         clientName = String(b.clientName || '').slice(0, 40);
@@ -648,80 +733,35 @@ export default async function handler(req, res) {
       out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
       out.followUpTask = receipt[0].task ? `assigned to ${taskEmail}` : (invPick.invoices ? 'not needed — invoice applied' : 'none');
 
-      // 3) Branded receipt PDF -> Attachments
-      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
-      const doc = await PDFDocument.create();
-      const W = 306, H = 590;
-      const page = doc.addPage([W, H]);
-      const helv = await doc.embedFont(StandardFonts.Helvetica);
-      const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-      const boldObl = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
-      const obl = await doc.embedFont(StandardFonts.HelveticaOblique);
-      const RED = rgb(0.83, 0.17, 0.17), NAVY = rgb(0.10, 0.14, 0.34), GRAY = rgb(0.4, 0.4, 0.4),
-            LIGHT = rgb(0.6, 0.6, 0.6), GREEN = rgb(0.13, 0.63, 0.35), BLACK = rgb(0, 0, 0),
-            LINE = rgb(0.8, 0.8, 0.8);
-      const ctr = (t, y, f, s, c) => page.drawText(t, { x: (W - f.widthOfTextAtSize(t, s)) / 2, y, font: f, size: s, color: c });
-      const dash = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE, dashArray: [2, 2] });
-      const solid = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE });
-      let y = H - 32;
-      ctr('SPEEDY', y, boldObl, 15, NAVY); y -= 19;
-      ctr('INSURANCE AGENCY', y, boldObl, 17, RED); y -= 15;
-      ctr(b.branchName || 'Speedy Insurance Agency', y, helv, 8, GRAY); y -= 11;
-      ctr('(951) 472-0927  ·  speedyins.com', y, helv, 8, GRAY); y -= 16;
-      dash(y); y -= 20;
-      ctr('PAYMENT RECEIPT', y, bold, 11, NAVY); y -= 26;
-      ctr(`$${total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
-      ctr('APPROVED', y, bold, 9, GREEN); y -= 22;
-      const row = (label, value, isBold) => {
-        page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
-        const f = isBold ? bold : helv;
-        const vw = f.widthOfTextAtSize(value, 8.5);
-        page.drawText(value, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
-        y -= 12;
-      };
-      row('Date / Time', stamp + ' PT');
-      row('Client', clientName || ('Client #' + clientId), true);
-      row('Client #', String(clientId));
-      row('Payment for', purpose.slice(0, 38));
-      if (policyNumber) row('Policy #', policyNumber, true);
-      y -= 4; dash(y); y -= 14;
-      row('Card', `${brand} **** ${last4}`);
-      row('Entry method', 'Keyed — secure online form');
-      row('Cardholder verification', 'Online — CVV verified');
-      y -= 4; solid(y); y -= 14;
-      page.drawText('CLOVER / FISERV TRANSACTION RECORD', { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
-      row('Clover transaction ID', txnId.slice(0, 30));
-      if (authCode) row('Auth code', String(authCode));
-      if (refNum) row('Reference #', String(refNum));
-      row('Merchant ID', '1K7NR5V6K1ER1');
-      row('Device', 'Web — Speedy payment bridge');
-      row('Charged by', who.slice(0, 42));
-      y -= 4; solid(y); y -= 16;
-      for (const t of ['All fields above are drawn from the Clover/Fiserv', 'transaction record and tie 1:1 to the processor\u2019s', 'system of record (transaction ID + auth code).', '', 'Filed automatically to the HawkSoft client record', 'by the Speedy payment bridge.']) {
-        if (t) ctr(t, y, obl, 7, LIGHT); y -= 9;
-      }
-      y -= 6;
-      ctr('Thank you for choosing Speedy Insurance!', y, bold, 8, NAVY);
-      const pdfBuf = Buffer.from(await doc.save());
-
-      const { gzipSync } = await import('node:zlib');
-      const b64h = s => Buffer.from(s, 'utf8').toString('base64');
-      const fname = `Clover_Receipt_${now.toISOString().slice(0, 10)}_${String(total.toFixed(2)).replace('.', '-')}usd`;
-      const r2 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          RefId: crypto.randomUUID(), TS: now.toISOString(),
-          Desc: b64h(`Clover receipt $${total.toFixed(2)}`.slice(0, 41)),
-          LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. Charged by ${who}. Clover ${txnId}.`),
-          FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
-          ...(policyGuid ? { PolicyId: policyGuid } : {}),
-        },
-        body: gzipSync(pdfBuf),
+      // 3) Branded receipt PDF -> attachment + vault (shared: buildReceiptPdf / fileReceiptPdf)
+      const pdfBuf = await buildReceiptPdf({
+        total, stamp, clientName, clientId, purpose, policyNumber,
+        branchName: b.branchName || 'Speedy Insurance Agency',
+        headline: 'APPROVED',
+        detailRows: [
+          ['Card', `${brand} **** ${last4}`],
+          ['Entry method', 'Keyed \u2014 secure online form'],
+          ['Cardholder verification', 'Online \u2014 CVV verified'],
+        ],
+        recordTitle: 'CLOVER / FISERV TRANSACTION RECORD',
+        recordRows: [
+          ['Clover transaction ID', txnId.slice(0, 30)],
+          ...(authCode ? [['Auth code', String(authCode)]] : []),
+          ...(refNum ? [['Reference #', String(refNum)]] : []),
+          ['Merchant ID', '1K7NR5V6K1ER1'],
+          ['Device', 'Web \u2014 Speedy payment bridge'],
+          ['Charged by', who.slice(0, 42)],
+        ],
+        footerLines: ['All fields above are drawn from the Clover/Fiserv',
+          'transaction record and tie 1:1 to the processor\u2019s',
+          'system of record (transaction ID + auth code).', '',
+          'Filed automatically to the HawkSoft client record', 'by the Speedy payment bridge.'],
       });
-      out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
-      // Also store the receipt PDF in OUR vault so it shows in the Audit tab
-      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId: (typeof txnId!=='undefined'?txnId:(typeof ref!=='undefined'?ref:null)), who, policyGuid });
+      const filedLive = await fileReceiptPdf({ hs, clientId, pdfBuf, now, total, who, policyGuid, txnId,
+        filePrefix: 'Clover_Receipt', desc: `Clover receipt $${total.toFixed(2)}`,
+        logNoteTail: `Charged by ${who}. Clover ${txnId}.` });
+      out.attachment = filedLive.attachment;
+      out.vault = filedLive.vault;
 
       // 4) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
@@ -775,7 +815,7 @@ export default async function handler(req, res) {
       const b = req.body || {};
       const clientId = parseInt(b.clientId, 10);
       if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
-      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+      const total = Math.round(parseMoney(b.amount) * 100) / 100;
       if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const purpose = String(b.purpose || 'Down payment').slice(0, 80);
       const note = String(b.note || '').slice(0, 120).trim();
@@ -837,76 +877,32 @@ export default async function handler(req, res) {
       out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
       out.followUpTask = receipt[0].task ? `assigned to ${taskEmail}` : (invPick.invoices ? 'not needed — invoice applied' : 'none');
 
-      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
-      const doc = await PDFDocument.create();
-      const W = 306, H = 590;
-      const page = doc.addPage([W, H]);
-      const helv = await doc.embedFont(StandardFonts.Helvetica);
-      const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-      const boldObl = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
-      const obl = await doc.embedFont(StandardFonts.HelveticaOblique);
-      const RED = rgb(0.83, 0.17, 0.17), NAVY = rgb(0.10, 0.14, 0.34), GRAY = rgb(0.4, 0.4, 0.4),
-            LIGHT = rgb(0.6, 0.6, 0.6), GREEN = rgb(0.13, 0.63, 0.35), BLACK = rgb(0, 0, 0),
-            LINE = rgb(0.8, 0.8, 0.8);
-      const ctr = (t, y, f, s, c) => page.drawText(t, { x: (W - f.widthOfTextAtSize(t, s)) / 2, y, font: f, size: s, color: c });
-      const dash = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE, dashArray: [2, 2] });
-      const solid = y => page.drawLine({ start: { x: 25, y }, end: { x: W - 25, y }, thickness: 1, color: LINE });
-      let y = H - 32;
-      ctr('SPEEDY', y, boldObl, 15, NAVY); y -= 19;
-      ctr('INSURANCE AGENCY', y, boldObl, 17, RED); y -= 15;
-      ctr('Speedy Insurance Agency', y, helv, 8, GRAY); y -= 11;
-      ctr('(951) 472-0927  ·  speedyins.com', y, helv, 8, GRAY); y -= 16;
-      dash(y); y -= 20;
-      ctr('PAYMENT RECEIPT', y, bold, 11, NAVY); y -= 26;
-      ctr(`$${total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
-      ctr('RECEIVED — ' + payMethod.toUpperCase(), y, bold, 9, GREEN); y -= 22;
-      const row = (label, value, isBold) => {
-        page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
-        const f = isBold ? bold : helv;
-        const vw = f.widthOfTextAtSize(value, 8.5);
-        page.drawText(value, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
-        y -= 12;
-      };
-      row('Date / Time', stamp + ' PT');
-      row('Client', clientName || ('Client #' + clientId), true);
-      row('Client #', String(clientId));
-      row('Payment for', purposeFull.slice(0, 38));
-      if (policyNumber) row('Policy #', policyNumber, true);
-      y -= 4; dash(y); y -= 14;
-      row('Method', payMethod);
-      row('Entry', (payMethod.toLowerCase()==='zelle') ? 'Zelle — bank transfer' : (payMethod.toLowerCase()==='other') ? ('Other — ' + payMethod) : 'In person — counter');
-      y -= 4; solid(y); y -= 14;
-      page.drawText('PAYMENT RECORD', { x: 29, y, font: bold, size: 8.5, color: NAVY }); y -= 13;
-      row('Reference', ref);
-      row('Device', 'Web — Speedy payment bridge');
-      row('Received by', who.slice(0, 42));
-      y -= 4; solid(y); y -= 16;
-      const footLead = (payMethod.toLowerCase()==='zelle') ? 'Zelle payment received and' : (payMethod.toLowerCase()==='cash') ? 'Cash payment received at the agency counter and' : (payMethod + ' payment received and');
-      for (const t of [footLead, 'recorded to the HawkSoft client record by the', 'Speedy payment bridge.']) {
-        ctr(t, y, obl, 7, LIGHT); y -= 9;
-      }
-      y -= 6;
-      ctr('Thank you for choosing Speedy Insurance!', y, bold, 8, NAVY);
-      const pdfBuf = Buffer.from(await doc.save());
-
-      const { gzipSync } = await import('node:zlib');
-      const b64h = s => Buffer.from(s, 'utf8').toString('base64');
-      const fname = `Cash_Receipt_${now.toISOString().slice(0, 10)}_${String(total.toFixed(2)).replace('.', '-')}usd`;
-      const r2 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          RefId: crypto.randomUUID(), TS: now.toISOString(),
-          Desc: b64h(`Cash receipt $${total.toFixed(2)}`.slice(0, 41)),
-          LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. Cash received by ${who}. Ref ${ref}.`),
-          FileName: b64h(fname), FileExt: 'pdf', Channel: '32',
-          ...(policyGuid ? { PolicyId: policyGuid } : {}),
-        },
-        body: gzipSync(pdfBuf),
+      const pdfBuf = await buildReceiptPdf({
+        total, stamp, clientName, clientId, purpose: purposeFull, policyNumber,
+        branchName: 'Speedy Insurance Agency',
+        headline: 'RECEIVED \u2014 ' + payMethod.toUpperCase(),
+        detailRows: [
+          ['Method', payMethod],
+          ['Entry', (payMethod.toLowerCase() === 'zelle') ? 'Zelle \u2014 bank transfer'
+            : (payMethod.toLowerCase() === 'other') ? ('Other \u2014 ' + payMethod) : 'In person \u2014 counter'],
+        ],
+        recordTitle: 'PAYMENT RECORD',
+        recordRows: [
+          ['Reference', ref],
+          ['Device', 'Web \u2014 Speedy payment bridge'],
+          ['Received by', who.slice(0, 42)],
+        ],
+        footerLines: [
+          (payMethod.toLowerCase() === 'zelle') ? 'Zelle payment received and'
+            : (payMethod.toLowerCase() === 'cash') ? 'Cash payment received at the agency counter and'
+            : (payMethod + ' payment received and'),
+          'recorded to the HawkSoft client record by the', 'Speedy payment bridge.'],
       });
-      out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
-      // Also store the receipt PDF in OUR vault so it shows in the Audit tab
-      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId: (typeof txnId!=='undefined'?txnId:(typeof ref!=='undefined'?ref:null)), who, policyGuid });
+      const filedCash = await fileReceiptPdf({ hs, clientId, pdfBuf, now, total, who, policyGuid, txnId: ref,
+        filePrefix: 'Cash_Receipt', desc: `Cash receipt $${total.toFixed(2)}`,
+        logNoteTail: `Cash received by ${who}. Ref ${ref}.` });
+      out.attachment = filedCash.attachment;
+      out.vault = filedCash.vault;
 
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
@@ -928,7 +924,7 @@ export default async function handler(req, res) {
       const b = req.body || {};
       const clientId = parseInt(b.clientId, 10);
       if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
-      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+      const total = Math.round(parseMoney(b.amount) * 100) / 100;
       if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
       const byShort = String(userEmail || 'admin').replace('@speedyins.com', '');
@@ -996,7 +992,7 @@ export default async function handler(req, res) {
       const b = req.body || {};
       const clientId = parseInt(b.clientId, 10);
       if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client first.' });
-      const total = Math.round(parseFloat(b.amount || '0') * 100) / 100;
+      const total = Math.round(parseMoney(b.amount) * 100) / 100;
       if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const branch = CLOVER_BRANCHES[String(b.branchId || '1')] || CLOVER_BRANCHES[1];
       const purpose = ((n)=>{ const p=String(b.purpose||'Down payment').slice(0,80); return n?`${p} — ${n}`:p; })(String(b.note||'').slice(0,120).trim());
@@ -1055,7 +1051,7 @@ export default async function handler(req, res) {
               amount: total, purpose: purpose ? String(purpose).slice(0, 120) : null,
               agent: who ? String(who).slice(0, 120) : null, txn_id: txnId,
               auth_code: authCode ? String(authCode) : null, ref: refNum || null,
-              extra: { safety_net: true, receipt_pending: true, terminal: true, branch: branch.branch, brand, last4 },
+              extra: { safety_net: true, receipt_pending: true, terminal: true, branch: branch.branch, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, brand, last4 },
             }),
           });
           const srj = await sr.json().catch(() => null);
@@ -1099,6 +1095,36 @@ export default async function handler(req, res) {
       }
       out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
 
+      // Branded receipt PDF -> attachment + vault. Terminal previously skipped this
+      // entirely, so card-present charges filed a receipt + log but no PDF.
+      const pdfBuf = await buildReceiptPdf({
+        total, stamp, clientName, clientId, purpose, policyNumber,
+        branchName: branch.branch ? ('Speedy Insurance \u2014 ' + branch.branch) : 'Speedy Insurance Agency',
+        headline: 'APPROVED',
+        detailRows: [
+          ['Card', `${brand} **** ${last4}`],
+          ['Entry method', 'Card present \u2014 Clover terminal'],
+          ['Terminal', branch.branch ? (branch.branch + ' Flex') : 'Clover Flex'],
+        ],
+        recordTitle: 'CLOVER / FISERV TRANSACTION RECORD',
+        recordRows: [
+          ['Clover transaction ID', String(txnId).slice(0, 30)],
+          ...(authCode ? [['Auth code', String(authCode)]] : []),
+          ['Merchant ID', '1K7NR5V6K1ER1'],
+          ['Device', 'Clover Flex \u2014 Speedy payment bridge'],
+          ['Charged by', who.slice(0, 42)],
+        ],
+        footerLines: ['All fields above are drawn from the Clover/Fiserv',
+          'transaction record and tie 1:1 to the processor\u2019s',
+          'system of record (transaction ID + auth code).', '',
+          'Filed automatically to the HawkSoft client record', 'by the Speedy payment bridge.'],
+      });
+      const filedTerm = await fileReceiptPdf({ hs, clientId, pdfBuf, now, total, who, policyGuid, txnId,
+        filePrefix: 'Clover_Terminal_Receipt', desc: `Terminal receipt $${total.toFixed(2)}`,
+        logNoteTail: `Card present via ${branch.branch || 'Clover'} Flex. Charged by ${who}. Clover ${txnId}.` });
+      out.attachment = filedTerm.attachment;
+      out.vault = filedTerm.vault;
+
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
         method: 'POST', body: JSON.stringify({
           refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32,
@@ -1126,9 +1152,9 @@ export default async function handler(req, res) {
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action: 'terminal_charge', who, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, log: out.log } });
+        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
-      return res.status(200).json({ ok: out.receipt.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
     }
 
     if (action === 'charge_full_test') {
@@ -1137,7 +1163,7 @@ export default async function handler(req, res) {
       if (clientId !== 26081) {
         return res.status(400).json({ ok: false, error: 'Full-trail test is limited to ZZTEST client #26081.' });
       }
-      const total = Math.round(parseFloat(b.amount || '1') * 100) / 100;
+      const total = Math.round(parseMoney(b.amount, 1) * 100) / 100;
       if (!total || total <= 0 || total > 10) {
         return res.status(400).json({ ok: false, error: 'Test amounts capped at $10.00' });
       }
@@ -1509,7 +1535,7 @@ export default async function handler(req, res) {
     if (action === 'create_receipt') {
       const b = req.body || {};
       const clientId = parseInt(b.clientId, 10);
-      const total = Math.round(parseFloat(b.amount) * 100) / 100;
+      const total = Math.round(parseMoney(b.amount) * 100) / 100;
       if (!clientId) return res.status(400).json({ ok: false, error: 'clientId required' });
       if (!total || total <= 0 || total > 10) {
         return res.status(400).json({ ok: false, error: 'Test receipts are capped at $10.00 — amount must be between $0.01 and $10.00' });

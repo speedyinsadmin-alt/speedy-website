@@ -37,7 +37,19 @@
   td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
   tr:last-child td{border-bottom:0}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
-  .dchip{display:inline-block;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:600;margin:0 0 0 4px;cursor:pointer;white-space:nowrap}
+  .docbtn{display:inline-block;padding:4px 11px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent}
+  .docbtn.g{background:rgba(47,191,113,.15);color:#7ee2a8;border-color:rgba(47,191,113,.35)}
+  .docbtn.r{background:rgba(224,49,49,.15);color:#ff8f8f;border-color:rgba(224,49,49,.35)}
+  .docbtn.b{background:rgba(77,124,254,.15);color:#8fadff;border-color:rgba(77,124,254,.35)}
+  #docModal{position:fixed;inset:0;background:rgba(6,9,24,.92);z-index:80;padding:20px;overflow-y:auto}
+  .docwrap{max-width:1040px;margin:0 auto;background:var(--navy2);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .docgrid{display:flex;gap:12px;margin-top:12px}
+  .doclist{width:230px;flex-shrink:0}
+  .docitem{background:var(--navy);border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-bottom:6px;cursor:pointer}
+  .docitem.sel{border-color:var(--blue)}
+  .docitem.carrier{border-color:rgba(47,191,113,.5)}
+  .docpane{flex:1;background:#f4f4f2;border-radius:9px;min-height:460px;position:relative}
+  .docpane iframe{width:100%;height:460px;border:0;border-radius:9px;display:block}
   .dchip:first-child{margin-left:0}
   td.docs,th.docs{white-space:nowrap;width:1%;text-align:right}
   .pill.g{background:rgba(47,191,113,.15);color:var(--green)}
@@ -69,7 +81,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.7</small></h1>
+      <h1>Platform Console <small id="ver">v4.8</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -124,34 +136,22 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-// ONE docs renderer for every audit table. Anonymous paperclips hid the only document
-// that matters: the carrier receipt gates audit completion, so it gets its own chip
-// (green present / red missing). Auto-generated Speedy receipts collapse to a muted
-// count; supporting documents group together.
-// a declined charge must never read green
-function kindPill(k){
-  const t = String(k || '');
-  if(/declin|fail|error|void|refund/i.test(t)) return 'r';
-  if(/captured|pending/i.test(t)) return 'a';
-  return t.includes('charge') ? 'g' : 'b';
-}
-
-function docsCell(docs, needsProof){
-  if(!docs.length && !needsProof) return '<span class="muted">\u2014</span>';
-  const type = d => d.doc_type || d.kind || '';
-  const carrier = docs.filter(d => type(d) === 'carrier_receipt');
-  const auto    = docs.filter(d => type(d) === 'client_receipt');
-  const other   = docs.filter(d => !['carrier_receipt','client_receipt'].includes(type(d)));
-  const chip = (bg, fg, txt, id, title) =>
-    '<span class="dchip" style="background:' + bg + ';color:' + fg + '"'
-    + (id ? ' onclick="viewAttachment(\'' + id + '\')"' : '')
-    + (title ? ' title="' + esc(title) + '"' : '') + '>' + txt + '</span>';
-  let out = '';
-  if(carrier.length) out += chip('rgba(47,191,113,.15)', '#7ee2a8', '\u2713 Carrier receipt', carrier[0].id, carrier[0].filename || '');
-  else if(needsProof) out += chip('rgba(224,49,49,.15)', '#ff8f8f', 'No carrier receipt', null, 'Required to complete the audit');
-  if(other.length) out += chip('rgba(77,124,254,.15)', '#8fadff', other.length + ' doc' + (other.length > 1 ? 's' : ''), other[0].id, other.map(type).join(', '));
-  if(auto.length) out += chip('rgba(143,154,196,.14)', '#a8b2d4', auto.length + ' receipt' + (auto.length > 1 ? 's' : ''), auto[0].id, 'Speedy receipt PDF \u2014 generated automatically');
-  return out || '<span class="muted">\u2014</span>';
+// ONE docs button per row. Three chips wrapped in a narrow column and buried the
+// signal; a single button shows the audit state (green = carrier receipt on file,
+// red = missing) plus the file count, and opens the document viewer.
+// Performance: only metadata is held here — file bytes are fetched when a file is clicked.
+const DOC_ROWS = {};
+function docsCell(docs, needsProof, rowKey, title){
+  DOC_ROWS[rowKey] = { docs, title };
+  const hasCarrier = docs.some(d => (d.doc_type || d.kind) === 'carrier_receipt');
+  const n = docs.length;
+  if(!n && !needsProof) return '<span class="muted">\u2014</span>';
+  const cls = hasCarrier ? 'g' : (needsProof ? 'r' : 'b');
+  const label = hasCarrier ? ('\u2713 ' + n + ' file' + (n>1?'s':''))
+              : needsProof ? ('No proof' + (n ? ' \u00b7 ' + n : ''))
+              : (n + ' file' + (n>1?'s':''));
+  return '<span class="docbtn ' + cls + '" onclick="openDocs(\'' + rowKey + '\')">'
+       + '<i class="ti"></i>' + label + '</span>';
 }
 const money = v => isFinite(v) ? '$' + Number(v).toFixed(2) : '—';
 
@@ -766,7 +766,7 @@ function renderAgentView(r){
       for(const x of g.tx){
         const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(String(x.audit_status||'open').replace(/_/g,' '))+'</span>';
         const docs = atts.filter(a => (a.payment_id===x.id) || (a.client_no===x.client_no));
-        const docCell = docsCell(docs, !x.pre_audit && x.audit_status !== 'complete');
+        const docCell = docsCell(docs, !x.pre_audit && x.audit_status !== 'complete', x.id, (x.client_name||('#'+x.client_no))+' \u00b7 '+money(x.amount));
         h += '<tr><td class="muted" style="font-size:12px">'+esc(String(x.ts||'').slice(0,10))+'</td>'
           + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span></td>'
           + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
@@ -840,7 +840,7 @@ async function renderAudit(el){
   if(!rows.length) h += '<tr><td colspan="10" class="muted">No transactions.</td></tr>';
   for(const row of rows){
     const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
-    const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete');
+    const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount));
     const nm = row.client_name ? esc(row.client_name) : '';
     const canComplete = !row.pre_audit && row.audit_status !== 'complete';
     const completeBtn = canComplete ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">+ proof</span>' : '';
@@ -882,6 +882,107 @@ function completeAudit(id){
   const url = '/admin/carrier.html?' + params.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
   window.open(url, '_blank');
 }
+
+/* ---------- Document viewer ----------
+   Opens the files for one payment. PERFORMANCE: the audit list carries metadata only
+   (filename, type, size) — never file bytes. A file's bytes are fetched on click,
+   turned into a Blob URL and rendered inline. Blob URLs are revoked on close so a
+   long session doesn't hold megabytes in memory. */
+let DOC_URLS = [];
+function docKind(d){ return d.doc_type || d.kind || 'document'; }
+function docLabel(k){
+  return k === 'carrier_receipt' ? 'Carrier receipt'
+       : k === 'client_receipt'  ? 'Speedy receipt'
+       : String(k).replace(/_/g, ' ');
+}
+function fmtBytes(b){
+  if(!b) return '';
+  return b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b/1024) + ' KB' : (b/1048576).toFixed(1) + ' MB';
+}
+function openDocs(rowKey){
+  const entry = DOC_ROWS[rowKey];
+  if(!entry) return;
+  const docs = (entry.docs || []).slice().sort((a,b) => {
+    const rank = k => k === 'carrier_receipt' ? 0 : k === 'client_receipt' ? 2 : 1;
+    return rank(docKind(a)) - rank(docKind(b));
+  });
+  let el = document.getElementById('docModal');
+  if(!el){ el = document.createElement('div'); el.id = 'docModal'; document.body.appendChild(el); }
+  el.innerHTML = '<div class="docwrap">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:11px;border-bottom:1px solid var(--line)">'
+    + '<div><div style="font-size:15px;font-weight:700">Documents</div>'
+    + '<div class="muted" style="font-size:12px;margin-top:2px">' + esc(entry.title || '') + ' \u00b7 ' + docs.length + ' file' + (docs.length===1?'':'s') + '</div></div>'
+    + '<div onclick="closeDocs()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">\u2715</div></div>'
+    + '<div class="docgrid"><div class="doclist" id="docList"></div>'
+    + '<div class="docpane" id="docPane"><div class="muted" style="padding:18px;font-size:13px">Select a file to view it.</div></div></div>'
+    + '<div style="display:flex;gap:8px;margin-top:12px;align-items:center">'
+    + '<button class="btn" onclick="docDownload()" id="docDl" style="display:none">Download</button>'
+    + '<button class="btn" onclick="docNewTab()" id="docNt" style="display:none">Open in new tab</button>'
+    + '<div style="flex:1"></div><span class="muted" style="font-size:11.5px" id="docNote"></span></div>'
+    + '</div>';
+  document.getElementById('docList').innerHTML = docs.map((d,i) => {
+    const k = docKind(d);
+    return '<div class="docitem' + (k==='carrier_receipt'?' carrier':'') + '" id="di'+i+'" onclick="showDoc(\''+rowKey+'\','+i+')">'
+      + '<div style="font-size:10.5px;font-weight:700;color:' + (k==='carrier_receipt'?'#7ee2a8':k==='client_receipt'?'#a8b2d4':'#8fadff') + '">'
+      + esc(docLabel(k)).toUpperCase() + '</div>'
+      + '<div style="font-size:12px;margin-top:3px;word-break:break-all">' + esc(d.filename || 'file') + '</div>'
+      + '<div class="muted" style="font-size:10.5px">' + fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed \u2713' : '') + '</div></div>';
+  }).join('') || '<div class="muted" style="font-size:12.5px">No documents yet.</div>';
+  el.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  DOC_SORTED[rowKey] = docs;
+  if(docs.length) showDoc(rowKey, 0);
+}
+const DOC_SORTED = {};
+let DOC_CUR = null;
+async function showDoc(rowKey, i){
+  const docs = DOC_SORTED[rowKey] || [];
+  const d = docs[i]; if(!d) return;
+  document.querySelectorAll('.docitem').forEach(x => x.classList.remove('sel'));
+  const li = document.getElementById('di'+i); if(li) li.classList.add('sel');
+  const pane = document.getElementById('docPane');
+  pane.innerHTML = '<div class="muted" style="padding:18px;font-size:13px">Loading ' + esc(d.filename||'file') + '\u2026</div>';
+  const r = await api('attachment_get&id=' + encodeURIComponent(d.id));
+  if(!r || !r.ok || (!r.file_b64 && !r.blob_url)){
+    pane.innerHTML = '<div style="padding:18px;font-size:13px;color:#a32d2d">No file is stored for this record.</div>';
+    return;
+  }
+  let url = r.blob_url;
+  if(!url){
+    try{
+      let b64 = r.file_b64; if(b64.startsWith('data:')) b64 = b64.split(',')[1] || '';
+      const bin = atob(b64), arr = new Uint8Array(bin.length);
+      for(let j=0;j<bin.length;j++) arr[j] = bin.charCodeAt(j);
+      url = URL.createObjectURL(new Blob([arr], { type: r.mime || 'application/pdf' }));
+      DOC_URLS.push(url);
+    }catch(e){
+      pane.innerHTML = '<div style="padding:18px;font-size:13px;color:#a32d2d">That file could not be opened.</div>';
+      return;
+    }
+  }
+  DOC_CUR = { url, name: r.filename || d.filename || 'document.pdf', mime: r.mime || '' };
+  const isImg = /^image\//.test(DOC_CUR.mime);
+  pane.innerHTML = isImg
+    ? '<img src="' + url + '" style="max-width:100%;max-height:460px;display:block;margin:0 auto;border-radius:9px">'
+    : '<iframe src="' + url + '"></iframe>';
+  document.getElementById('docDl').style.display = '';
+  document.getElementById('docNt').style.display = '';
+  document.getElementById('docNote').textContent = fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed to HawkSoft' : ' \u00b7 not filed to HawkSoft');
+}
+function docDownload(){
+  if(!DOC_CUR) return;
+  const a = document.createElement('a');
+  a.href = DOC_CUR.url; a.download = DOC_CUR.name; a.click();
+}
+function docNewTab(){ if(DOC_CUR) window.open(DOC_CUR.url, '_blank'); }
+function closeDocs(){
+  const el = document.getElementById('docModal');
+  if(el){ el.style.display = 'none'; el.innerHTML = ''; }
+  document.body.style.overflow = '';
+  DOC_URLS.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
+  DOC_URLS = []; DOC_CUR = null;
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeDocs(); });
 
 async function viewAttachment(id){
   const r = await api('attachment_get&id='+encodeURIComponent(id));

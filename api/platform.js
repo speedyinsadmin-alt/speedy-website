@@ -346,7 +346,7 @@ export default async function handler(req, res) {
           // needs proof of payment / audit
           const feeGuess = fee != null ? fee * pct / 100 : null;
           if (r.ts >= monthStart && feeGuess != null) pending += feeGuess;
-          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid', _name: (r.extra && r.extra.clientName) || null });
+          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid', _name: (r.extra && r.extra.clientName) || null, _policy: (r.extra && r.extra.policyNumber) || null, _guid: (r.extra && r.extra.policyGuid) || null });
         }
       }
       // client names for the unfinished list
@@ -356,7 +356,7 @@ export default async function handler(req, res) {
         const cl = await sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`);
         for (const c of (cl.rows || [])) nameMap[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
       }
-      unfinished = unfinished.map(u => ({ ...u, client_name: nameMap[u.client_no] || u._name || null })).slice(0, 50);
+      unfinished = unfinished.map(u => ({ ...u, client_name: nameMap[u.client_no] || u._name || null, policy_number: u._policy || null, policy_guid: u._guid || null })).slice(0, 50);
 
       return res.status(200).json({
         ok: true, email: me, role: who.role,

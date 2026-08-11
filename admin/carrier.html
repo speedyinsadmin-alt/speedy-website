@@ -414,6 +414,12 @@ async function submit(complete){
   const failPart = docsFail ? ' · '+docsFail+' document'+(docsFail>1?'s':'')+' failed (retry)' : '';
   if(mainOk === true){
     msg.className='ok'; msg.textContent = mainMsg + docPart + failPart + '.';
+    if(CTX.payment_id){
+      const back = document.createElement('div');
+      back.style.cssText = 'margin-top:12px;text-align:center';
+      back.innerHTML = '<a href="/admin/portal.html" style="color:#4d7cfe;font-size:13px;text-decoration:none">\u2190 Back to my portal</a>';
+      msg.appendChild(back);
+    }
     if(complete){ /* keep disabled — done */ }
     else { if(saveBtn) saveBtn.disabled=false; }
   } else if(mainOk === null){

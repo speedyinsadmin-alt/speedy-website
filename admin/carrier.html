@@ -266,6 +266,17 @@ function updateSubmit(){
 ['carrier','camt','card'].forEach(id => $('#'+id).addEventListener('input', updateSubmit));
 $('#card').addEventListener('change', updateSubmit);
 
+// Plain-language errors. An agent can act on "the receipt didn't upload";
+// they can't act on "500".
+function friendlyError(status, complete){
+  if(status === 401 || status === 403) return 'Your sign-in expired. Sign in again — nothing you typed is lost.';
+  if(status === 413) return 'That file is too large to upload. Try a smaller photo or PDF.';
+  if(status === 400) return 'Something required is missing — check the carrier, amount and receipt, then try again.';
+  if(status === 404) return 'That client record could not be found. Check the client number.';
+  if(status >= 500) return 'The payment saved, but the confirmation did not come back. Check the Audit tab before submitting again — it may already be recorded.';
+  return 'That did not go through (' + status + '). Try again, or check the Audit tab first.';
+}
+
 async function submit(complete){
   const msg = $('#msg'); msg.className=''; msg.textContent = complete ? 'Submitting to audit…' : 'Saving…';
   const btn = $('#submitBtn'), saveBtn = document.querySelector('.save');
@@ -307,12 +318,12 @@ async function submit(complete){
       mainOk = true;
       mainMsg = complete ? '✓ Audit complete — receipt stored' : '✓ Saved as pending';
     } else {
-      mainMsg = (j && j.error) ? j.error : ('Server returned ' + r.status);
+      mainMsg = (j && j.error) ? j.error : friendlyError(r.status, complete);
     }
   }catch(e){
     // network dropped on the main call — but it may have saved. Tell the truth.
     mainOk = null; // unknown
-    mainMsg = 'Submitted, but the connection dropped before confirmation. Check the Audit tab to verify.';
+    mainMsg = 'The connection dropped before we got confirmation. It may have saved — check the Audit tab before trying again.';
   }
 
   // 2) OPTIONAL documents — each independent, never blocks the main result

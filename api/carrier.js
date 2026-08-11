@@ -5,7 +5,17 @@ import { gzipSync } from 'node:zlib';
 // Auth: Google ID token, allowlist. Reads/writes only our tables + files the receipt to the client's HawkSoft record.
 
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const ALLOWLIST = ['info@speedyins.com'];
+const ADMIN_ALLOWLIST = ['info@speedyins.com'];
+// Agents must be able to file proof for their OWN payments. Previously only info@
+// could, so every agent was locked out of the audit step — which is why 38 charges
+// sat unaudited. Agents are scoped to their own ledger rows below; admin sees all.
+const AGENT_ALLOWLIST = [
+  'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
+  'chris@speedyins.com', 'yasmin@speedyins.com', 'fernando@speedyins.com', 'jesus@speedyins.com',
+  'alejandra@speedyins.com', 'esmeralda@speedyins.com', 'irene@speedyins.com',
+  'tony@speedyins.com', 'lana@speedyins.com',
+];
+const ALLOWLIST = ADMIN_ALLOWLIST;
 const AGENCY_ID = 15112;
 const HS_BASE = 'https://integration.hawksoft.app';
 
@@ -18,8 +28,25 @@ async function verifyGoogle(idToken) {
     if (t.aud !== GOOGLE_CLIENT_ID) return null;
     if (String(t.email_verified) !== 'true') return null;
     const email = String(t.email || '').toLowerCase();
-    return ALLOWLIST.includes(email) ? email : null;
+    if (ADMIN_ALLOWLIST.includes(email)) return email;
+    if (AGENT_ALLOWLIST.includes(email)) return email;
+    return null;
   } catch { return null; }
+}
+
+function isAdmin(email) { return ADMIN_ALLOWLIST.includes(String(email || '').toLowerCase()); }
+
+/* An agent may only file proof against a payment they took. Admin may file against any.
+   Without this, opening the allowlist would let any agent edit anyone's payment. */
+async function mayTouchPayment(s, email, paymentId) {
+  if (isAdmin(email)) return true;
+  if (!paymentId) return true; // no ledger row to guard (document-only upload)
+  try {
+    const r = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=agent`);
+    const row = (r.rows || [])[0];
+    if (!row) return true;
+    return String(row.agent || '').toLowerCase().includes(String(email).toLowerCase());
+  } catch { return false; }
 }
 
 function sb() {
@@ -104,6 +131,9 @@ export default async function handler(req, res) {
     // Lightweight: just store a supporting document (no ledger/carrier logic)
     const { client_no, policy_id, policy_guid, payment_id, doc_type, receipt_b64, receipt_name, receipt_mime } = body;
     if (!client_no || !receipt_b64) return res.status(400).json({ ok: false, error: 'client_no + file required' });
+    if (!(await mayTouchPayment(s, email, payment_id))) {
+      return res.status(403).json({ ok: false, error: 'This payment was taken by another agent — they need to add its documents.' });
+    }
     const buf = b64ToBuf(receipt_b64);
     const hash = await sha256hex(buf);
     const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
@@ -165,6 +195,9 @@ export default async function handler(req, res) {
     } = body;
 
     if (!client_no) return res.status(400).json({ ok: false, error: 'client_no required' });
+    if (!(await mayTouchPayment(s, email, payment_id))) {
+      return res.status(403).json({ ok: false, error: 'This payment was taken by another agent — they need to add its proof.' });
+    }
 
     // Audit-complete requires the carrier receipt
     if (complete && !receipt_b64) {

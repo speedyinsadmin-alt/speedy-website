@@ -548,7 +548,7 @@ export default async function handler(req, res) {
     const q = String(req.query.q || '').trim().toLowerCase();
     const AUDIT_CUTOFF = '2026-07-29'; // proof-of-payment process started ~here; older charges are pre-audit
     const tasks = await sbGet(s, 'audit_tasks?select=*&order=created_at.desc&limit=500');
-    const atts = await sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft&order=created_at.desc&limit=1000');
+    const atts = await sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft,bytes,mime&order=created_at.desc&limit=1000');
     const pays = await sbGet(s, 'bridge_ledger?is_test=is.false&select=*&order=ts.desc&limit=500');
     // client names for the payments (dedupe client ids)
     const ids = [...new Set((pays.rows || []).map(p => p.client_id).filter(x => x != null))];

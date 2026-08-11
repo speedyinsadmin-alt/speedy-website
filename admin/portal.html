@@ -318,6 +318,7 @@ function finishAudit(id){
   const p = new URLSearchParams({
     client: u.client_no || '', name: u.client_name || '', paid: Number(u.amount || 0).toFixed(2),
     method: 'client paid', payment_id: u.id,
+    policy: u.policy_number || '', policy_guid: u.policy_guid || '',
   });
   location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }

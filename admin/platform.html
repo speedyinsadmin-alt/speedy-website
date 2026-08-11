@@ -37,6 +37,7 @@
   td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
   tr:last-child td{border-bottom:0}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+  .dchip{display:inline-block;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:600;margin:0 3px 3px 0;cursor:pointer;white-space:nowrap}
   .pill.g{background:rgba(47,191,113,.15);color:var(--green)}
   .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
   .pill.r{background:rgba(224,49,49,.15);color:var(--red)}
@@ -66,7 +67,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.5</small></h1>
+      <h1>Platform Console <small id="ver">v4.6</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -120,6 +121,36 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ONE docs renderer for every audit table. Anonymous paperclips hid the only document
+// that matters: the carrier receipt gates audit completion, so it gets its own chip
+// (green present / red missing). Auto-generated Speedy receipts collapse to a muted
+// count; supporting documents group together.
+// a declined charge must never read green
+function kindPill(k){
+  const t = String(k || '');
+  if(/declin|fail|error|void|refund/i.test(t)) return 'r';
+  if(/captured|pending/i.test(t)) return 'a';
+  return t.includes('charge') ? 'g' : 'b';
+}
+
+function docsCell(docs, needsProof){
+  if(!docs.length && !needsProof) return '<span class="muted">\u2014</span>';
+  const type = d => d.doc_type || d.kind || '';
+  const carrier = docs.filter(d => type(d) === 'carrier_receipt');
+  const auto    = docs.filter(d => type(d) === 'client_receipt');
+  const other   = docs.filter(d => !['carrier_receipt','client_receipt'].includes(type(d)));
+  const chip = (bg, fg, txt, id, title) =>
+    '<span class="dchip" style="background:' + bg + ';color:' + fg + '"'
+    + (id ? ' onclick="viewAttachment(\'' + id + '\')"' : '')
+    + (title ? ' title="' + esc(title) + '"' : '') + '>' + txt + '</span>';
+  let out = '';
+  if(carrier.length) out += chip('rgba(47,191,113,.15)', '#7ee2a8', '\u2713 Carrier receipt', carrier[0].id, carrier[0].filename || '');
+  else if(needsProof) out += chip('rgba(224,49,49,.15)', '#ff8f8f', 'No carrier receipt', null, 'Required to complete the audit');
+  if(other.length) out += chip('rgba(77,124,254,.15)', '#8fadff', other.length + ' doc' + (other.length > 1 ? 's' : ''), other[0].id, other.map(type).join(', '));
+  if(auto.length) out += chip('rgba(143,154,196,.14)', '#a8b2d4', auto.length + ' receipt' + (auto.length > 1 ? 's' : ''), auto[0].id, 'Speedy receipt PDF \u2014 generated automatically');
+  return out || '<span class="muted">\u2014</span>';
+}
 const money = v => isFinite(v) ? '$' + Number(v).toFixed(2) : '—';
 
 let OPEN_CLIENT = null; // client_no currently open in drill-in
@@ -733,7 +764,7 @@ function renderAgentView(r){
       for(const x of g.tx){
         const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(String(x.audit_status||'open').replace(/_/g,' '))+'</span>';
         const docs = atts.filter(a => (a.payment_id===x.id) || (a.client_no===x.client_no));
-        const docCell = docs.length ? docs.map(d=>'<span class="raw-t" onclick="viewAttachment(\''+d.id+'\')">📎</span>').join(' ') : '<span class="muted">—</span>';
+        const docCell = docsCell(docs, !x.pre_audit && x.audit_status !== 'complete');
         h += '<tr><td class="muted" style="font-size:12px">'+esc(String(x.ts||'').slice(0,10))+'</td>'
           + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span></td>'
           + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
@@ -807,7 +838,7 @@ async function renderAudit(el){
   if(!rows.length) h += '<tr><td colspan="10" class="muted">No transactions.</td></tr>';
   for(const row of rows){
     const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
-    const docCell = docs.length ? docs.map(d=>'<span class="raw-t" onclick="viewAttachment(\''+d.id+'\')" title="'+esc(d.filename||'')+'">📎</span>').join(' ') : '<span class="muted">—</span>';
+    const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete');
     const nm = row.client_name ? esc(row.client_name) : '';
     const canComplete = !row.pre_audit && row.audit_status !== 'complete';
     const completeBtn = canComplete ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">+ proof</span>' : '';

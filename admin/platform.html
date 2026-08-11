@@ -37,7 +37,9 @@
   td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
   tr:last-child td{border-bottom:0}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
-  .dchip{display:inline-block;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:600;margin:0 3px 3px 0;cursor:pointer;white-space:nowrap}
+  .dchip{display:inline-block;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:600;margin:0 0 0 4px;cursor:pointer;white-space:nowrap}
+  .dchip:first-child{margin-left:0}
+  td.docs,th.docs{white-space:nowrap;width:1%;text-align:right}
   .pill.g{background:rgba(47,191,113,.15);color:var(--green)}
   .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
   .pill.r{background:rgba(224,49,49,.15);color:var(--red)}
@@ -67,7 +69,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.6</small></h1>
+      <h1>Platform Console <small id="ver">v4.7</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -759,7 +761,7 @@ function renderAgentView(r){
           + '<input type="number" min="0" max="100" step="0.5" value="'+pct+'" onchange="setAgentPct(\''+g.agent+'\',this.value)" style="width:70px;background:var(--navy);border:1.5px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--ink);font-size:13px">'
           + '<span class="muted">% of fee · fees generated: <b class="amount">'+money(g.fees)+'</b></span></div>';
       }
-      h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th>Fee</th><th>Comm.</th><th>Status</th><th>Docs</th></tr>';
+      h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th>Fee</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
       const atts = r.attachments || [];
       for(const x of g.tx){
         const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(String(x.audit_status||'open').replace(/_/g,' '))+'</span>';
@@ -771,7 +773,7 @@ function renderAgentView(r){
           + '<td class="amount">'+money(x.amount)+'</td>'
           + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'
           + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+'</td>'
-          + '<td>'+st+'</td><td>'+docCell+'</td></tr>';
+          + '<td>'+st+'</td><td class="docs">'+docCell+'</td></tr>';
       }
       h += '</table></div>';
     }
@@ -834,7 +836,7 @@ async function renderAudit(el){
     h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:#e03131">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
   }
 
-  h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th>Docs</th></tr>';
+  h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
   if(!rows.length) h += '<tr><td colspan="10" class="muted">No transactions.</td></tr>';
   for(const row of rows){
     const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
@@ -852,7 +854,7 @@ async function renderAudit(el){
       + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
       + '<td class="amount">'+(row.commission!=null?'<b style="color:#7fa8ff">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+'</td>'
       + '<td>'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 receipt pending</span><br>':'')+statusPill(row)+(completeBtn?'<br>'+completeBtn:'')+'</td>'
-      + '<td>'+docCell+'</td>'
+      + '<td class="docs">'+docCell+'</td>'
       + '</tr>';
   }
   h += '</table>';

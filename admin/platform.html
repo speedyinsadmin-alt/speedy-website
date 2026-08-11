@@ -87,7 +87,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.0</small></h1>
+      <h1>Platform Console <small id="ver">v5.1</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -997,6 +997,7 @@ function openDocs(rowKey){
   document.body.style.overflow = 'hidden';
   DOC_SORTED[rowKey] = docs;
   if(docs.length) showDoc(rowKey, 0);
+  loadThumbs(rowKey);
 }
 const DOC_SORTED = {};
 let DOC_CUR = null;
@@ -1034,6 +1035,24 @@ async function showDoc(rowKey, i){
   document.getElementById('docNt').style.display = '';
   document.getElementById('docNote').textContent = fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed to HawkSoft' : ' \u00b7 not filed to HawkSoft');
 }
+// Thumbnails load after the list is on screen, for this payment only.
+async function loadThumbs(rowKey){
+  try{
+    const r = await api('thumbs&payment_id=' + encodeURIComponent(rowKey));
+    if(!r || !r.ok || !r.thumbs || !r.thumbs.length) return;
+    const map = {}; r.thumbs.forEach(t => map[t.id] = t.thumb_b64);
+    (DOC_SORTED[rowKey] || []).forEach((d, i) => {
+      if(!map[d.id]) return;
+      const li = document.getElementById('di' + i);
+      if(!li || li.querySelector('img')) return;
+      const img = document.createElement('img');
+      img.src = map[d.id]; img.alt = '';
+      img.style.cssText = 'width:100%;height:70px;object-fit:cover;border-radius:6px;margin:5px 0 0;display:block';
+      li.insertBefore(img, li.children[1] || null);
+    });
+  }catch(e){}
+}
+
 function toggleOther(){
   const w = document.getElementById('otherWrap'), h = document.getElementById('otherHdr');
   if(!w) return;

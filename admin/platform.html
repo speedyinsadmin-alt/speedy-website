@@ -34,9 +34,15 @@
   .card h2{font-size:14px;margin:0 0 10px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th{color:var(--mute);text-align:left;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-  td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  td .pill{white-space:nowrap}
+  td.stat{white-space:nowrap}
+  td.cli{max-width:230px}
   tr:last-child td{border-bottom:0}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+  .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
+  .perchip.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  .dinput{background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--ink);font-size:12px}
   .docbtn{display:inline-block;padding:4px 11px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent}
   .docbtn.g{background:rgba(47,191,113,.15);color:#7ee2a8;border-color:rgba(47,191,113,.35)}
   .docbtn.r{background:rgba(224,49,49,.15);color:#ff8f8f;border-color:rgba(224,49,49,.35)}
@@ -81,7 +87,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v4.9</small></h1>
+      <h1>Platform Console <small id="ver">v5.0</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -791,6 +797,21 @@ async function setAgentPct(email, val){
 }
 
 let AUDIT_CACHE = null;
+let AUDIT_PERIOD = 'month';   // default: this month — the number an owner actually wants
+let AUDIT_FROM = '', AUDIT_TO = '';
+function periodLabel(){
+  return AUDIT_PERIOD==='today' ? 'today'
+       : AUDIT_PERIOD==='yesterday' ? 'yesterday'
+       : AUDIT_PERIOD==='month' ? 'this month'
+       : AUDIT_PERIOD==='custom' ? (AUDIT_FROM||'start') + ' to ' + (AUDIT_TO||'now')
+       : 'all time';
+}
+function setPeriod(k){ AUDIT_PERIOD = k; render(); }
+function setRange(){
+  const f = document.getElementById('auditFrom'), t = document.getElementById('auditTo');
+  AUDIT_FROM = f ? f.value : ''; AUDIT_TO = t ? t.value : '';
+  render();
+}
 async function renderAudit(el){
   el.innerHTML = '<h2>Audit — full transaction trail</h2>' + auditSubNav() + '<div class="muted">Loading…</div>';
   let r;
@@ -818,9 +839,25 @@ async function renderAudit(el){
     return '<span class="pill a">needs audit</span>';
   };
 
-  // totals
-  const totFees = rows.reduce((a,x)=> a + (x.fee||0), 0);
-  const totComm = rows.reduce((a,x)=> a + (x.commission||0), 0);
+  // Date filter — "Total fees" with no period read like a business number when it was
+  // really "everything ever recorded". Totals below are always for the selected period.
+  const inPeriod = ts => {
+    if(AUDIT_PERIOD === 'all') return true;
+    const d = String(ts||'').slice(0,10);
+    if(!d) return false;
+    const today = new Date(); const iso = x => x.toISOString().slice(0,10);
+    if(AUDIT_PERIOD === 'today')     return d === iso(today);
+    if(AUDIT_PERIOD === 'yesterday'){ const y = new Date(today); y.setDate(y.getDate()-1); return d === iso(y); }
+    if(AUDIT_PERIOD === 'month')     return d.slice(0,7) === iso(today).slice(0,7);
+    if(AUDIT_PERIOD === 'custom')    return (!AUDIT_FROM || d >= AUDIT_FROM) && (!AUDIT_TO || d <= AUDIT_TO);
+    return true;
+  };
+  const allRows = rows;
+  const periodRows = allRows.filter(x => inPeriod(x.ts));
+
+  const totFees = periodRows.reduce((a,x)=> a + (x.fee||0), 0);
+  const totComm = periodRows.reduce((a,x)=> a + (x.commission||0), 0);
+  const auditedCount = periodRows.filter(x => x.audit_status === 'complete').length;
 
   let h = '<h2>Audit — full transaction trail</h2>' + auditSubNav();
   h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. Commission is earned only when the audit is complete.</div>';
@@ -829,18 +866,34 @@ async function renderAudit(el){
   h += '<input id="auditSearch" placeholder="Search client name, #, transaction ref, agent, purpose…" value="'+esc(AUDIT_Q)+'" '
     + 'style="width:100%;max-width:520px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin-bottom:12px">';
 
+  const chip = (k,label) => '<span class="perchip'+(AUDIT_PERIOD===k?' sel':'')+'" onclick="setPeriod(\''+k+'\')">'+label+'</span>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'
+    + chip('today','Today') + chip('yesterday','Yesterday') + chip('month','This month')
+    + chip('all','All time') + chip('custom','Custom')
+    + (AUDIT_PERIOD==='custom'
+        ? '<span style="display:flex;gap:6px;align-items:center;margin-left:6px">'
+          + '<input type="date" id="auditFrom" value="'+esc(AUDIT_FROM||'')+'" onchange="setRange()" class="dinput">'
+          + '<span class="muted" style="font-size:12px">to</span>'
+          + '<input type="date" id="auditTo" value="'+esc(AUDIT_TO||'')+'" onchange="setRange()" class="dinput"></span>'
+        : '')
+    + '</div>';
   h += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px">'
-    + '<span class="muted">'+rows.length+' transactions</span>'
-    + '<span class="muted">·</span><span>Total fees: <b class="amount">'+money(totFees)+'</b></span>'
-    + '<span class="muted">·</span><span>Commission (earned): <b class="amount" style="color:#7fa8ff">'+money(totComm)+'</b></span></div>';
-  const pendingCount = rows.filter(x=>x.receipt_pending).length;
+    + '<span class="muted">'+periodRows.length+' transaction'+(periodRows.length===1?'':'s')+'</span>'
+    + '<span class="muted">·</span><span>Fees '+esc(periodLabel())+': <b class="amount">'+money(totFees)+'</b></span>'
+    + '<span class="muted">·</span><span>Commission earned: <b class="amount" style="color:#7fa8ff">'+money(totComm)+'</b></span>'
+    + (auditedCount < periodRows.length
+        ? '<span class="muted">·</span><span class="muted" title="Fees only exist once an audit is complete">'
+          + auditedCount + ' of ' + periodRows.length + ' audited</span>'
+        : '')
+    + '</div>';
+  const pendingCount = periodRows.filter(x=>x.receipt_pending).length;
   if(pendingCount){
     h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:#e03131">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
   }
 
   h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
-  if(!rows.length) h += '<tr><td colspan="10" class="muted">No transactions.</td></tr>';
-  for(const row of rows){
+  if(!periodRows.length) h += '<tr><td colspan="10" class="muted">No transactions in this period.</td></tr>';
+  for(const row of periodRows){
     const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
     const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount));
     const nm = row.client_name ? esc(row.client_name) : '';
@@ -848,21 +901,21 @@ async function renderAudit(el){
     const completeBtn = canComplete ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">+ proof</span>' : '';
     h += '<tr>'
       + '<td class="muted" style="font-size:12px">'+esc(String(row.ts||'').replace('T',' ').slice(0,16))+'</td>'
-      + '<td><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span></td>'
+      + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span></td>'
       + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
       + '<td class="amount">'+money(row.amount)+'</td>'
       + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
       + '<td class="amount">'+(row.fee!=null?money(row.fee):'—')+'</td>'
       + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
       + '<td class="amount">'+(row.commission!=null?'<b style="color:#7fa8ff">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+'</td>'
-      + '<td>'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 receipt pending</span><br>':'')+statusPill(row)+(completeBtn?'<br>'+completeBtn:'')+'</td>'
+      + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+'</td>'
       + '<td class="docs">'+docCell+'</td>'
       + '</tr>';
   }
   h += '</table>';
 
   // pre-audit note
-  if(rows.some(x=>x.pre_audit)) h += '<div class="muted" style="font-size:12px;margin-top:10px">— Transactions marked "—" were charged before the proof-of-payment process began; no audit documents are required for them.</div>';
+  if(periodRows.some(x=>x.pre_audit)) h += '<div class="muted" style="font-size:12px;margin-top:10px">— Transactions marked "—" were charged before the proof-of-payment process began; no audit documents are required for them.</div>';
 
   el.innerHTML = h;
   const si = document.getElementById('auditSearch');

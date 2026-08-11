@@ -339,7 +339,8 @@ $('#card').addEventListener('change', updateSubmit);
 // Plain-language errors. An agent can act on "the receipt didn't upload";
 // they can't act on "500".
 function friendlyError(status, complete){
-  if(status === 401 || status === 403) return 'Your sign-in expired. Sign in again — nothing you typed is lost.';
+  if(status === 401) return 'Your sign-in expired. Sign in again — nothing you typed is lost.';
+  if(status === 403) return 'You are not able to add proof for this payment. If it was taken by another agent, they need to finish it.';
   if(status === 413) return 'That file is too large to upload. Try a smaller photo or PDF.';
   if(status === 400) return 'Something required is missing — check the carrier, amount and receipt, then try again.';
   if(status === 404) return 'That client record could not be found. Check the client number.';

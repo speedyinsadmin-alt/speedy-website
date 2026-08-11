@@ -308,7 +308,8 @@ $('#docfile').addEventListener('change', async e => {
 function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
     '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
-    + '<span class="pill" style="background:rgba(77,124,254,.15);color:var(--blue)">' + d.doc_type.replace(/_/g,' ') + '</span>'
+    + '<span class="pill" style="background:' + (d.uploaded ? 'rgba(47,191,113,.15);color:var(--green)' : 'rgba(77,124,254,.15);color:var(--blue)') + '">'
+    + (d.uploaded ? '\u2713 ' : '') + d.doc_type.replace(/_/g,' ') + '</span>'
     + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + d.name + '</span>'
     + (d.note ? '<span style="color:var(--mute);font-size:11px">' + d.note + '</span>' : '')
     + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
@@ -397,22 +398,44 @@ async function submit(complete){
     mainMsg = 'The connection dropped before we got confirmation. It may have saved — check the Audit tab before trying again.';
   }
 
-  // 2) OPTIONAL documents — each independent, never blocks the main result
-  let docsOk = 0, docsFail = 0;
-  for(const d of DOCS){
-    try{
-      const dr = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
-          policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
-          doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
-      let dj=null; try{ dj = await dr.json(); }catch(e){}
-      if(dr.ok && (!dj || dj.ok)) docsOk++; else docsFail++;
-    }catch(e){ docsFail++; }
+  // 2) OPTIONAL documents — each independent, never blocks the main result.
+  //    A multi-photo upload is several sequential requests, so the token can expire
+  //    partway through. Retry once (re-authenticating on 401) and KEEP anything that
+  //    still fails in the list, so the agent can retry without re-picking the file.
+  let docsOk = 0;
+  const stillFailed = [];
+  const postDoc = async d => {
+    const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
+        policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
+        doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
+    let j=null; try{ j = await r.json(); }catch(e){}
+    return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };
+  };
+  for(let i=0;i<DOCS.length;i++){
+    const d = DOCS[i];
+    if(d.uploaded){ docsOk++; continue; }
+    msg.textContent = 'Uploading document ' + (i+1) + ' of ' + DOCS.length + '\u2026';
+    let res = null;
+    try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; }
+    if(!res.ok && res.status === 401){
+      const nt = await reauth();
+      if(nt){ TOKEN = nt; try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; } }
+    } else if(!res.ok){
+      try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; }  // one plain retry
+    }
+    if(res.ok){ d.uploaded = true; docsOk++; }
+    else stillFailed.push({ name: d.name, why: res.error || (res.status === 413 ? 'file too large' : res.status === 403 ? 'not your payment' : 'upload failed') });
   }
+  const docsFail = stillFailed.length;
+  renderDocs();
 
   // 3) Show the real result
   const docPart = docsOk ? ' · '+docsOk+' document'+(docsOk>1?'s':'')+' logged' : '';
-  const failPart = docsFail ? ' · '+docsFail+' document'+(docsFail>1?'s':'')+' failed (retry)' : '';
+  const failPart = docsFail
+    ? ' \u00b7 ' + docsFail + ' failed: ' + stillFailed.map(f => f.name + ' (' + f.why + ')').join(', ')
+      + ' \u2014 still listed below, press Save & finish later to retry just those'
+    : '';
   if(mainOk === true){
     msg.className='ok'; msg.textContent = mainMsg + docPart + failPart + '.';
     if(CTX.payment_id){

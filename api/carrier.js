@@ -171,6 +171,7 @@ export default async function handler(req, res) {
     }
 
     let attachment = null;
+    let blobUrl = null;   // hoisted — the response below reads it outside the upload block
     let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'optional';
 
     if (receipt_b64) {
@@ -179,7 +180,7 @@ export default async function handler(req, res) {
       const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
       const path = `carrier-receipts/${client_no}/${Date.now()}_${(carrier || 'carrier').replace(/[^a-z0-9]/gi, '').slice(0, 20)}.${ext}`;
       const blobRes = await blobPut(path, buf, receipt_mime || 'application/octet-stream');
-      const url = blobRes.url; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
+      blobUrl = blobRes.url; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
 
       // Store attachment row in our vault — file bytes stored INLINE in Supabase (guaranteed, no Blob dependency)
       const dtype = (body.doc_type || 'carrier_receipt');
@@ -194,7 +195,7 @@ export default async function handler(req, res) {
         body: JSON.stringify([{
           client_no, policy_id: policy_id || null, payment_id: payment_id || null,
           kind: dtype, doc_type: dtype, filename: niceName,
-          blob_url: url, file_b64: receipt_b64, sha256: hash, mime: receipt_mime, bytes: buf.length,
+          blob_url: blobUrl, file_b64: receipt_b64, sha256: hash, mime: receipt_mime, bytes: buf.length,
           carrier: carrier || null, amount: carrier_amount != null ? Number(carrier_amount) : null,
           uploaded_by: email,
         }]),
@@ -269,7 +270,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true, email, status,
       attachment_id: attachment && attachment.id,
-      blob_url: url,
+      blob_url: blobUrl,
       blob_status: blobStatus,
       hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_refid: hsRefId,
     });

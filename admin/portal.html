@@ -37,7 +37,9 @@
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
-  #chargeSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  #chargeSheet,#todoSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
+  .todoitem:hover{border-color:var(--amber)}
   .res{border-radius:12px;padding:16px;margin-top:12px}
   .res.good{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.45)}
   .res.bad{background:rgba(224,49,49,.12);border:1px solid rgba(224,49,49,.45)}
@@ -87,7 +89,7 @@
     </div>
 
     <!-- to-do -->
-    <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="alert('Coming in Stage 2 — your unfinished list')">
+    <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openTodo()">
       <div style="font-size:13px;font-weight:700;color:var(--amber)" id="todoText">⚠ You have payments needing proof</div>
       <div style="font-size:11px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
     </div>
@@ -118,9 +120,26 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.8</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.9</span> · you see only your own work</div>
   </div>
 
+</div>
+
+<!-- ===== STAGE 4: UNFINISHED AUDITS ===== -->
+<div id="todoSheet" class="hide">
+  <div style="max-width:560px;margin:0 auto">
+    <div class="card" style="border-color:rgba(245,166,35,.5)">
+      <div class="row" style="align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:16px;font-weight:800">Payments needing proof</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">Tap one to finish it</div>
+        </div>
+        <div onclick="closeTodo()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
+      </div>
+      <div id="todoBody"></div>
+      <button class="btn btn-ghost" onclick="closeTodo()">Close</button>
+    </div>
+  </div>
 </div>
 
 <!-- ===== STAGE 3: CHARGE SHEET — lives OUTSIDE #clientPanel so tab switching never unmounts the Clover card fields ===== -->
@@ -246,6 +265,7 @@ async function loadHome(){
   if(!r || !r.ok) return;
   $('#earned').textContent = money(r.commission.earned_month);
   $('#pending').textContent = money(r.commission.pending_month);
+  UNFINISHED = r.unfinished || [];
   const n = r.unfinished_count || 0;
   if(n){
     $('#todo').classList.remove('hide');
@@ -255,7 +275,54 @@ async function loadHome(){
   }
 }
 
-function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; document.getElementById('chargeSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
+/* ===== STAGE 4 (A): unfinished list — tap a payment to finish its audit =====
+   Opens the existing carrier page with the payment prefilled. One audit codebase,
+   no second copy of the carrier form, and the token is handed over so the agent
+   never has to sign in again. */
+let UNFINISHED = [];
+function openTodo(){
+  if(!UNFINISHED.length){ return; }
+  const sheet = document.getElementById('todoSheet');
+  const money2 = a => '$' + Number(a || 0).toFixed(2);
+  const when = ts => {
+    const d = String(ts || '').slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    return d === today ? 'today' : d === y ? 'yesterday' : d;
+  };
+  document.getElementById('todoBody').innerHTML =
+    '<div class="dim" style="font-size:12px;margin-bottom:10px">Each one needs the carrier cost and a receipt. '
+    + 'Commission is earned once the audit is complete.</div>'
+    + UNFINISHED.map(u => {
+        const started = u.audit_status === 'carrier_pending';
+        return '<div class="todoitem" onclick="finishAudit(\'' + u.id + '\')">'
+          + '<div style="display:flex;justify-content:space-between;gap:10px">'
+          + '<span style="font-size:13.5px;font-weight:600">' + esc(u.client_name || ('#' + u.client_no)) + '</span>'
+          + '<span style="font-size:13.5px;font-weight:700">' + money2(u.amount) + '</span></div>'
+          + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
+          + esc(u.purpose || 'Payment') + ' · ' + when(u.ts) + ' · #' + u.client_no
+          + (started ? ' · <span style="color:var(--amber)">started, not finished</span>' : '')
+          + '</div></div>';
+      }).join('');
+  sheet.classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+}
+function closeTodo(){
+  document.getElementById('todoSheet').classList.add('hide');
+  document.body.style.overflow = '';
+}
+function finishAudit(id){
+  const u = UNFINISHED.find(x => x.id === id);
+  if(!u) return;
+  stashHandoff();
+  const p = new URLSearchParams({
+    client: u.client_no || '', name: u.client_name || '', paid: Number(u.amount || 0).toFixed(2),
+    method: 'client paid', payment_id: u.id,
+  });
+  location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
+}
+
+function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; UNFINISHED=[]; document.getElementById('chargeSheet').classList.add('hide'); document.getElementById('todoSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
 
 // ===== STAGE 2: client search, tabs (max 5), compact card =====
 const MAX_TABS = 5;

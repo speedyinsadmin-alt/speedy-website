@@ -232,10 +232,15 @@ async function ledger(event) {
     const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger`, {
       method: 'POST',
       headers: { apikey: key, Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify(row),
     });
-    return r.status === 201;
+    if (r.status !== 201) return false;
+    try {
+      const rows = await r.json();
+      const id = Array.isArray(rows) && rows[0] ? rows[0].id : null;
+      return id ? { ok: true, id } : true;
+    } catch { return true; }
   } catch { return false; }
 }
 
@@ -284,8 +289,8 @@ async function audit(event) {
       },
       body: JSON.stringify({ ts, ...event }),
     });
-    return r.status === 200;
-  } catch { return false; }
+    return (sb && sb.id) ? sb : (r.status === 200);
+  } catch { return sb; }
 }
 
 async function verifyGoogleToken(idToken) {
@@ -796,7 +801,7 @@ export default async function handler(req, res) {
       } else {
         auditSaved = await audit({ action, who, office, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
-      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved, ledgerId: (auditSaved && auditSaved.id) || null });
     }
 
     /* ---------- Diagnostics: raw invoice list for a client ---------- */
@@ -916,7 +921,7 @@ export default async function handler(req, res) {
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
       const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, amount: total, purpose: purposeFull, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
-      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved });
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, ref, auditSaved, ledgerId: (auditSaved && auditSaved.id) || null });
     }
 
     /* ---------- Charge page: create a secure pay-by-link (72h, amount locked) ---------- */
@@ -1154,7 +1159,7 @@ export default async function handler(req, res) {
       } else {
         auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
-      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved });
+      return res.status(200).json({ ok: out.receipt.ok && out.attachment.ok && out.log.ok, results: out, txnId, authCode, auditSaved, ledgerId: (auditSaved && auditSaved.id) || null });
     }
 
     if (action === 'charge_full_test') {

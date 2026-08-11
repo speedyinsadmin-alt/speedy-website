@@ -823,7 +823,7 @@ export default async function handler(req, res) {
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action, who, office, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action, who, office, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
@@ -948,7 +948,7 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
-      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, amount: total, purpose: purposeFull, ref, policyNumber, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
         await linkReceiptToPayment(out.vault.id, auditSaved.id);
@@ -1189,7 +1189,7 @@ export default async function handler(req, res) {
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {

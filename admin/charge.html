@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.33 · agent-safe</div>
+    <div class="ver">v2.34 · agent-safe</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -419,12 +419,15 @@ async function createClient(){
     }
   }catch(e){ out.textContent = 'Error: '+e; }
 }
+let LEDGER_ID = null;   // bridge_ledger row id of the charge just made — becomes payment_id
+                        // on the carrier page so the audit can close the loop (fee + commission)
 function nextCarrierLink(amt){
   const c = (typeof confirmed!=='undefined' && confirmed) ? confirmed : {};
   const params = new URLSearchParams({
     client: c.clientNumber||'', name: c.name||'',
     paid: (amt!=null?amt:''), method: 'client paid',
-    policy: (c.policyNumber||''), policy_guid: (c.policyGuid||c.policyId||'')
+    policy: (c.policyNumber||''), policy_guid: (c.policyGuid||c.policyId||''),
+    payment_id: (LEDGER_ID||'')
   });
   const base = '/admin/carrier.html?' + params.toString();
   return base + (typeof gToken!=='undefined' && gToken ? '#tok=' + encodeURIComponent(gToken) : '');
@@ -543,6 +546,7 @@ async function chargeLive(){
     out.style.display='none'; out.textContent='';
     const rb = document.getElementById('resultbox');
     if(j.ok){
+      LEDGER_ID = j.ledgerId || null;
       const ch = (j.results && j.results.charge) || {};
       rb.innerHTML = `<div class="result good">
         <h3>\u2713 Payment approved</h3>
@@ -605,6 +609,7 @@ async function chargeCash(method){
       note: noteText(), payMethod: methLabel, altRef: altRef});
     out.style.display='none';
     if(j.ok){
+      LEDGER_ID = j.ledgerId || null;
       rb.innerHTML = `<div class="result good"><h3>\u2713 ${esc(methLabel)} payment recorded</h3>
         <div class="big">$${parseFloat(amt).toFixed(2)}</div>
         <div class="kv"><span>Client</span><b>${esc(confirmed.name||'')} \u00b7 #${confirmed.clientNumber}</b></div>
@@ -740,6 +745,7 @@ async function chargeTerminal(){
       policyNumber: effPolicy(), branchId: document.getElementById('branchSel').value, clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
     out.style.display='none';
     if(j.ok){
+      LEDGER_ID = j.ledgerId || null;
       const ch = (j.results && j.results.charge) || {};
       rb.innerHTML = `<div class="result good"><h3>\u2713 Terminal payment approved</h3>
         <div class="big">$${parseFloat(amt).toFixed(2)}</div>

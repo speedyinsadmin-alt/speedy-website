@@ -33,7 +33,10 @@
   .chips{display:flex;flex-wrap:wrap;gap:5px}
   .chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:12px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
   .chips button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
-  .cf{background:#fff;border-radius:10px;padding:0 10px;min-height:44px}
+  .cf{background:#fff;border-radius:10px;height:48px;padding:2px 10px;margin:6px 0;overflow:hidden}
+  .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
+  .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
+  .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
   #chargeSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
   .res{border-radius:12px;padding:16px;margin-top:12px}
   .res.good{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.45)}
@@ -115,7 +118,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.6</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.7</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -148,7 +151,10 @@
 
         <label style="margin-top:12px">Purpose</label>
         <div id="chgPurp" class="chips"></div>
-        <input id="chgOther" class="hide" placeholder="Describe the payment" style="margin-top:6px" maxlength="60">
+        <div id="chgOtherWrap" class="hide">
+          <label for="chgOther" style="margin-top:10px">What's this payment for?</label>
+          <input id="chgOther" placeholder="e.g. broker fee, reinstatement" maxlength="60" autocomplete="off">
+        </div>
 
         <label for="chgNote" style="margin-top:12px">Note &mdash; optional</label>
         <input id="chgNote" maxlength="120" placeholder="Shows on the receipt" autocomplete="off">
@@ -512,6 +518,7 @@ async function openCharge(no){
   chgEl('chgLoading').classList.add('hide');
   chgEl('chgBody').classList.remove('hide');
   renderChargeForm();
+  chgEl('chgAmt').focus();
 }
 function closeCharge(){
   chgEl('chargeSheet').classList.add('hide');
@@ -602,7 +609,7 @@ function pickPurpose(p, btn){
   CHG_PURPOSE = p;
   document.querySelectorAll('#chgPurp button').forEach(x => x.classList.remove('sel'));
   btn.classList.add('sel');
-  chgEl('chgOther').classList.toggle('hide', p !== 'Other');
+  chgEl('chgOtherWrap').classList.toggle('hide', p !== 'Other');
   if(p === 'Other') chgEl('chgOther').focus();
 }
 function pickChgMethod(m, btn){
@@ -714,7 +721,8 @@ function showChargeResult(amt, rows){
     + rows.filter(r => r[1]).map(r => '<div class="kv"><span class="muted">' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>').join('')
     + '<div class="dim" style="font-size:11.5px;margin-top:8px">Receipt, branded PDF and log note filed to the HawkSoft record.</div>'
     + '<a href="' + carrierLink(parseFloat(amt).toFixed(2)) + '" onclick="stashHandoff()" style="display:block;text-align:center;background:var(--amber);color:#2a1a00;padding:12px;border-radius:11px;font-weight:700;text-decoration:none;font-size:14px;margin-top:12px">Next → Carrier payment &amp; documents</a>'
-    + '<button class="btn btn-ghost" onclick="closeCharge()">Done — close</button>'
+    + '<button class="btn btn-ghost" onclick="closeCharge()">Save &amp; finish later</button>'
+    + '<div class="dim" style="font-size:11.5px;text-align:center;margin-top:2px">The payment is saved either way. Until the carrier cost and proof are added, it stays in your unfinished list — and commission isn\'t earned yet.</div>'
     + '</div>';
 }
 function carrierLink(amt){
@@ -753,7 +761,7 @@ async function createLinkPortal(amt){
       + '<button class="btn btn-ghost" onclick="emailLink()">Email to client (Gmail)</button>'
       + '<div class="dim" id="chgGmailHint" style="font-size:11.5px;margin-top:8px;display:none">Email copied ✓ — in the Gmail window click into the body, press Ctrl+V, then Send.</div>'
       + '<div class="dim" style="font-size:11.5px;margin-top:8px">When the client pays, the receipt, PDF and log file automatically — marked as sent by you.</div>'
-      + '<button class="btn btn-ghost" onclick="closeCharge()">Done — close</button>'
+      + '<button class="btn btn-ghost" onclick="closeCharge()">Close</button>'
       + '</div>';
   }catch(e){ chgFail(String(e)); }
 }

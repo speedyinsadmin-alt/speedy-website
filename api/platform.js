@@ -323,7 +323,7 @@ export default async function handler(req, res) {
     if (view === 'portal_home') {
       const me = who.email;
       // Pull this agent's own ledger rows (match any agent string containing their email)
-      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind&order=ts.desc&limit=500');
+      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
@@ -346,7 +346,7 @@ export default async function handler(req, res) {
           // needs proof of payment / audit
           const feeGuess = fee != null ? fee * pct / 100 : null;
           if (r.ts >= monthStart && feeGuess != null) pending += feeGuess;
-          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid' });
+          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid', _name: (r.extra && r.extra.clientName) || null });
         }
       }
       // client names for the unfinished list
@@ -356,7 +356,7 @@ export default async function handler(req, res) {
         const cl = await sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`);
         for (const c of (cl.rows || [])) nameMap[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
       }
-      unfinished = unfinished.map(u => ({ ...u, client_name: nameMap[u.client_no] || null })).slice(0, 50);
+      unfinished = unfinished.map(u => ({ ...u, client_name: nameMap[u.client_no] || u._name || null })).slice(0, 50);
 
       return res.status(200).json({
         ok: true, email: me, role: who.role,
@@ -598,7 +598,8 @@ export default async function handler(req, res) {
       const pct = commMap[agentEmail] != null ? commMap[agentEmail] : 10;
       const commission = (fee != null && auditStatus === 'complete') ? +(fee * pct / 100).toFixed(2) : null;
       return {
-        id: p.id, ts: p.ts, client_no: p.client_id, client_name: nameMap[p.client_id] || null,
+        id: p.id, ts: p.ts, client_no: p.client_id,
+        client_name: nameMap[p.client_id] || (p.extra && p.extra.clientName) || null,
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
         agent: agentEmail, agent_raw: p.agent, is_admin: isAdmin, secure_link: isSecureLink,
         path, audit_status: auditStatus, pre_audit: preAudit,

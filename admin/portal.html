@@ -118,7 +118,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.7</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.8</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -462,6 +462,8 @@ let CHG_METHOD = 'card';
 let cloverSDK = null, cloverMounted = false;
 let REAUTH = false;
 let _plUrl = '', _plMsg = '', _plEmail = '';
+let LEDGER_ID = null;  // bridge_ledger row id of the charge just made — passed to the
+                       // carrier page as payment_id so the audit closes the loop
 
 const chgEl = id => document.getElementById(id);
 function amtVal(){ return String(chgEl('chgAmt').value || '').replace(/,/g, '').trim(); }
@@ -493,7 +495,7 @@ async function openCharge(no){
   if(!no){ alert('Open a client first — search above, then charge from their card.'); return; }
   CHG = { clientNo: no, confirmed: null };
   CHG_PURPOSE = 'Down payment'; CHG_METHOD = 'card';
-  chgEl('chgResult').innerHTML = '';
+  chgEl('chgResult').innerHTML = ''; LEDGER_ID = null;
   chgEl('chgBody').classList.add('hide');
   chgEl('chgLoading').classList.remove('hide');
   chgEl('chgAuthWarn').classList.add('hide');
@@ -687,6 +689,7 @@ async function chargeCardPortal(amt){
     chgSay('Charging card…');
     const j = await hsPost(Object.assign({ action:'charge_live', source: tk.token }, baseBody(amt)));
     if(j.ok){
+      LEDGER_ID = j.ledgerId || null;
       const ch = (j.results && j.results.charge) || {};
       showChargeResult(amt, [
         ['Card', (ch.brand || 'CARD') + ' •••• ' + (ch.last4 || '')],
@@ -703,7 +706,8 @@ async function chargeCashPortal(amt){
   try{
     const j = await hsPost(Object.assign({ action:'charge_cash', payMethod: label,
       altRef: (CHG_METHOD === 'cash' ? '' : chgEl('chgAltRef').value.trim()) }, baseBody(amt)));
-    if(j.ok) showChargeResult(amt, [['Method', label], ['Reference', j.ref || '']]);
+    if(j.ok){ LEDGER_ID = j.ledgerId || null;
+      showChargeResult(amt, [['Method', label], ['Reference', j.ref || '']]); }
     else chgFail(j.error || 'One or more HawkSoft steps failed.');
   }catch(e){ chgFail(String(e)); }
 }
@@ -729,7 +733,7 @@ function carrierLink(amt){
   const c = CHG.confirmed || {};
   const p = new URLSearchParams({ client: c.clientNumber || '', name: c.name || '', paid: amt,
     method: 'client paid', policy: chgPolicy() || (c.policyNumber || ''),
-    policy_guid: (c.policyGuid || c.policyId || '') });
+    policy_guid: (c.policyGuid || c.policyId || ''), payment_id: (LEDGER_ID || '') });
   return '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
 function stashHandoff(){ try{ if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); }catch(e){} }

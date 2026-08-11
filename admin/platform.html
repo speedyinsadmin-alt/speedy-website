@@ -543,12 +543,20 @@ async function renderOurClient(el, no, _bg) {
   if (other.length) h += section('unk_' + no, 'Unclassified', other.length, policyRows(other, false),
     { defaultOpen: false, note: 'needs review', emptyText: '' });
 
-  const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th>Ref</th></tr>'
+  // one classifier for every ledger "kind" badge: a declined charge must never read green
+  const kindPill = k => {
+    const t = String(k || '');
+    if (/declin|fail|error|void|refund/i.test(t)) return 'r';
+    if (/captured|pending/i.test(t)) return 'a';
+    return t.includes('charge') ? 'g' : 'b';
+  };
+  const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th class="hidemob">Office</th><th>Ref</th></tr>'
     + (r.payments||[]).map(p => '<tr>'
       + '<td>' + esc(String(p.ts).replace('T',' ').slice(0,16)) + '</td>'
-      + '<td><span class="pill ' + (String(p.kind).includes('charge') ? 'g' : 'b') + '">' + esc(p.kind) + '</span></td>'
+      + '<td><span class="pill ' + kindPill(p.kind) + '">' + esc(p.kind) + '</span></td>'
       + '<td class="amount">' + money(p.amount) + '</td>'
       + '<td class="hidemob">' + esc(p.purpose || '—') + '</td>'
+      + '<td class="hidemob">' + esc((p.extra && p.extra.office) || '—') + '</td>'
       + '<td>' + esc(p.ref || '—') + '</td></tr>').join('') + '</table>';
   h += section('pay_' + no, 'Payments', (r.payments||[]).length, payBody,
     { defaultOpen: false, note: 'via Speedy platform', emptyText: 'No payments recorded yet.' });
@@ -641,7 +649,7 @@ async function renderLedger(el) {
           let v = row[c];
           if (c === 'ts' && v) v = String(v).replace('T',' ').slice(0,19);
           if (c === 'amount' && isFinite(v)) return '<td class="amount">' + money(v) + '</td>';
-          if (c === 'invoice_status' || c === 'kind') return '<td><span class="pill ' + (String(v).match(/paid|ok|success/i) ? 'g' : String(v).match(/fail|void|refund/i) ? 'r' : 'a') + '">' + esc(v) + '</span></td>';
+          if (c === 'invoice_status' || c === 'kind') return '<td><span class="pill ' + (String(v).match(/paid|ok|success/i) ? 'g' : String(v).match(/fail|void|refund|declin|error/i) ? 'r' : 'a') + '">' + esc(v) + '</span></td>';
           return '<td>' + esc(v) + '</td>';
         }).join('') + '</tr>').join('') + '</table>';
   }

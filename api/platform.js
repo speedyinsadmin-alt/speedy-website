@@ -323,7 +323,7 @@ export default async function handler(req, res) {
     if (view === 'portal_home') {
       const me = who.email;
       // Pull this agent's own ledger rows (match any agent string containing their email)
-      const all = await sbGet(s, 'bridge_ledger?select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind&order=ts.desc&limit=500');
+      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
@@ -549,7 +549,7 @@ export default async function handler(req, res) {
     const AUDIT_CUTOFF = '2026-07-29'; // proof-of-payment process started ~here; older charges are pre-audit
     const tasks = await sbGet(s, 'audit_tasks?select=*&order=created_at.desc&limit=500');
     const atts = await sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft&order=created_at.desc&limit=1000');
-    const pays = await sbGet(s, 'bridge_ledger?select=*&order=ts.desc&limit=500');
+    const pays = await sbGet(s, 'bridge_ledger?is_test=is.false&select=*&order=ts.desc&limit=500');
     // client names for the payments (dedupe client ids)
     const ids = [...new Set((pays.rows || []).map(p => p.client_id).filter(x => x != null))];
     const nameMap = {};
@@ -621,7 +621,7 @@ export default async function handler(req, res) {
 
   if (view === 'agent_breakdown') {
     const agent = String(req.query.agent || '');
-    const r = await sbGet(s, `bridge_ledger?agent=eq.${encodeURIComponent(agent)}&select=*&order=ts.desc&limit=500`);
+    const r = await sbGet(s, `bridge_ledger?agent=eq.${encodeURIComponent(agent)}&is_test=is.false&select=*&order=ts.desc&limit=500`);
     return res.status(200).json({ ok: true, email, rows: r.rows || [] });
   }
 

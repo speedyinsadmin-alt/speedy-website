@@ -142,7 +142,7 @@
 </div>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null;
+let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null, FILE_THUMB = null;
 let DOCS = [];
 const $ = s => document.querySelector(s);
 const qp = new URLSearchParams(location.search);
@@ -226,36 +226,106 @@ function recalcFee(){
   updateSubmit();
 }
 
-$('#docfile').addEventListener('change', e => {
-  const dtype = $('#dtype').value;
-  [...e.target.files].forEach(f => {
-    const rd = new FileReader();
-    rd.onload = () => { DOCS.push({ doc_type: dtype, name: f.name, mime: f.type, b64: rd.result }); renderDocs(); };
-    rd.readAsDataURL(f);
+/* ---------- Image pipeline — PERFORMANCE FIRST ----------
+   Full-coverage policies mean vehicle photos, and a phone photo is 3-5 MB. Eight of
+   them, base64-inflated by 33%, blows past the 12 MB request limit AND lands in
+   Postgres. So every image is downscaled in the browser BEFORE it is ever uploaded:
+   long edge 1600px at JPEG 0.82 turns ~4 MB into ~250 KB with no visible loss for
+   damage/VIN photos. A 240px thumbnail is generated at the same time so grids never
+   have to load full images. PDFs pass through untouched. */
+const MAX_EDGE = 1600, THUMB_EDGE = 240, JPEG_Q = 0.82;
+
+function readAsDataUrl(file){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('read failed'));
+    r.readAsDataURL(file);
   });
+}
+function drawScaled(img, maxEdge, quality){
+  const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * scale);
+  c.height = Math.round(img.naturalHeight * scale);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', quality);
+}
+function b64Bytes(dataUrl){
+  const i = dataUrl.indexOf(',');
+  return Math.round((dataUrl.length - i - 1) * 3 / 4);
+}
+
+// Returns { b64, thumb, name, mime, bytes, originalBytes, shrunk }
+async function prepareFile(file){
+  const original = file.size;
+  if(!/^image\//i.test(file.type)){
+    return { b64: await readAsDataUrl(file), thumb: null, name: file.name,
+             mime: file.type || 'application/pdf', bytes: original, originalBytes: original, shrunk: false };
+  }
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error('decode failed'));
+      im.src = url;
+    });
+    const full  = drawScaled(img, MAX_EDGE, JPEG_Q);
+    const thumb = drawScaled(img, THUMB_EDGE, 0.6);
+    URL.revokeObjectURL(url);
+    const newBytes = b64Bytes(full);
+    // if the camera already produced something smaller, keep the original
+    if(newBytes >= original){
+      return { b64: await readAsDataUrl(file), thumb, name: file.name, mime: file.type,
+               bytes: original, originalBytes: original, shrunk: false };
+    }
+    const name = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+    return { b64: full, thumb, name, mime: 'image/jpeg', bytes: newBytes, originalBytes: original, shrunk: true };
+  } catch(e){
+    // HEIC or anything the browser can't decode — upload as-is rather than lose the photo
+    return { b64: await readAsDataUrl(file), thumb: null, name: file.name, mime: file.type || 'application/octet-stream',
+             bytes: original, originalBytes: original, shrunk: false };
+  }
+}
+function sizeNote(p){
+  const kb = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b/1024) + ' KB' : (b/1048576).toFixed(1) + ' MB';
+  return p.shrunk ? kb(p.originalBytes) + ' \u2192 ' + kb(p.bytes) : kb(p.bytes);
+}
+
+$('#docfile').addEventListener('change', async e => {
+  const dtype = $('#dtype').value;
+  const files = [...e.target.files];
   e.target.value = '';
+  for(const f of files){
+    const p = await prepareFile(f);
+    DOCS.push({ doc_type: dtype, name: p.name, mime: p.mime, b64: p.b64, thumb: p.thumb, note: sizeNote(p) });
+    renderDocs();
+  }
 });
 function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
     '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
     + '<span class="pill" style="background:rgba(77,124,254,.15);color:var(--blue)">' + d.doc_type.replace(/_/g,' ') + '</span>'
     + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + d.name + '</span>'
+    + (d.note ? '<span style="color:var(--mute);font-size:11px">' + d.note + '</span>' : '')
     + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
   ).join('');
 }
 
-$('#file').addEventListener('change', e => {
+$('#file').addEventListener('change', async e => {
   const f = e.target.files[0]; if(!f) return;
-  FILE_NAME = f.name; FILE_MIME = f.type;
-  const rd = new FileReader();
-  rd.onload = () => {
-    FILE_B64 = rd.result;
-    $('#drop').classList.add('has');
-    $('#dropic').textContent = '✓';
-    $('#droptxt').textContent = f.name;
-    updateSubmit();
-  };
-  rd.readAsDataURL(f);
+  $('#droptxt').textContent = 'Preparing ' + f.name + '\u2026';
+  const p = await prepareFile(f);
+  FILE_B64 = p.b64; FILE_NAME = p.name; FILE_MIME = p.mime; FILE_THUMB = p.thumb;
+  $('#drop').classList.add('has');
+  $('#dropic').textContent = '\u2713';
+  $('#droptxt').textContent = p.name;
+  const hint = $('#drop').querySelector('.hint');
+  if(hint) hint.textContent = sizeNote(p) + (p.shrunk ? ' \u00b7 resized for upload' : '');
+  updateSubmit();
 });
 
 function updateSubmit(){
@@ -289,7 +359,7 @@ async function submit(complete){
     carrier: $('#carrier').value.trim()||null,
     carrier_amount: Number(String($('#camt').value).replace(/,/g,''))||null,
     carrier_card: $('#card').value||null,
-    receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME,
+    receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME, thumb_b64: FILE_THUMB,
     complete: !!complete,
   };
 
@@ -333,7 +403,7 @@ async function submit(complete){
       const dr = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
         body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
           policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
-          doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime }) });
+          doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
       let dj=null; try{ dj = await dr.json(); }catch(e){}
       if(dr.ok && (!dj || dj.ok)) docsOk++; else docsFail++;
     }catch(e){ docsFail++; }

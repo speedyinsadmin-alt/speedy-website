@@ -626,6 +626,15 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, email, rows: r.rows || [] });
   }
 
+  if (view === 'thumbs') {
+    // Thumbnails for ONE payment's documents. Deliberately NOT in the audit list query:
+    // that would ship a thumbnail for every attachment on every page load.
+    const pid = String(req.query.payment_id || '');
+    if (!pid) return res.status(400).json({ ok: false, error: 'payment_id required' });
+    const r = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(pid)}&select=id,thumb_b64`);
+    return res.status(200).json({ ok: true, thumbs: (r.rows || []).filter(x => x.thumb_b64) });
+  }
+
   if (view === 'attachment_get') {
     const id = String(req.query.id || '');
     if (!id) return res.status(400).json({ ok: false, error: 'id required' });

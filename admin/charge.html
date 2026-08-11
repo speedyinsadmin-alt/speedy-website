@@ -749,7 +749,7 @@ async function chargeTerminal(){
         <div class="kv"><span>Clover transaction</span><b>${esc(ch.id||'')}</b></div>
         ${ch.authCode?`<div class="kv"><span>Auth code</span><b>${esc(String(ch.authCode))}</b></div>`:''}
         ${j.results&&j.results.invoiceApply?`<div class="kv"><span>Invoice</span><b>${esc(j.results.invoiceApply)}</b></div>`:''}
-        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt and log filed to HawkSoft.</div>${nextBtnHtml(null)}</div>`;
+        ${j.results&&j.results.confirmationEmail&&String(j.results.confirmationEmail).startsWith("sent")?`<div class="kv"><span>Email</span><b>${esc(j.results.confirmationEmail)}</b></div>`:``}<div class="foot">Receipt, branded PDF and log note filed to HawkSoft.</div>${nextBtnHtml(parseFloat(amt).toFixed(2))}</div>`;
       rb.scrollIntoView({behavior:'smooth'});
       setTimeout(()=>{ signOut(); if(window.google) google.accounts.id.prompt(); }, 4000);
     } else {

@@ -318,6 +318,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, results });
     }
 
+    if (view === 'portal_thumbs') {
+      // Thumbnails for ONE client's documents — small images only, never full files.
+      const no = String(req.query.no || '').replace(/\D/g, '');
+      if (!no) return res.status(400).json({ ok: false, error: 'client no required' });
+      const r = await sbGet(s, `attachments?client_no=eq.${no}&select=id,thumb_b64`);
+      return res.status(200).json({ ok: true, thumbs: (r.rows || []).filter(x => x.thumb_b64) });
+    }
+
+    if (view === 'portal_doc') {
+      // One document's bytes, on demand.
+      const id = String(req.query.id || '');
+      if (!id) return res.status(400).json({ ok: false, error: 'id required' });
+      const r = await sbGet(s, `attachments?id=eq.${encodeURIComponent(id)}&select=filename,mime,file_b64,blob_url`);
+      const row = (r.rows || [])[0];
+      if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+      return res.status(200).json({ ok: true, ...row });
+    }
+
     if (view === 'portal_client') {
       const no = String(req.query.no || '').replace(/\D/g, '');
       if (!no) return res.status(400).json({ ok: false, error: 'client no required' });
@@ -325,9 +343,16 @@ export default async function handler(req, res) {
       const client = (cl.rows || [])[0];
       if (!client) return res.status(404).json({ ok: false, error: 'not found' });
       const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
-      // recent activity: this client's payments from the ledger
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&select=ts,amount,purpose,audit_status,kind&order=ts.desc&limit=6`);
-      return res.status(200).json({ ok: true, client, policies: po.rows || [], recent: pay.rows || [] });
+      // Full payment history + document METADATA. Deliberately no file_b64 and no
+      // thumb_b64 here: bytes are fetched only when a document is opened.
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,carrier_name&order=ts.desc&limit=50`);
+      const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft&order=created_at.desc&limit=200`);
+      return res.status(200).json({
+        ok: true, client, policies: po.rows || [],
+        recent: (pay.rows || []).slice(0, 6),
+        payments: pay.rows || [],
+        documents: docs.rows || [],
+      });
     }
 
     if (view === 'portal_home') {

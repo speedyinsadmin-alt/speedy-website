@@ -38,6 +38,7 @@
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
   #chargeSheet,#todoSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
   .todoitem:hover{border-color:var(--amber)}
   .res{border-radius:12px;padding:16px;margin-top:12px}
@@ -120,7 +121,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v0.9</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.0</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -393,6 +394,7 @@ async function loadClient(no){
   const r = await api('portal_client&no=' + no);
   if(r && r.ok) CLIENT_CACHE[no] = r;
   renderPanel();
+  if(r && r.ok) loadPortalThumbs(no);
 }
 function isExpired(p){
   if(!p.expiration_date) return false;
@@ -504,7 +506,7 @@ async function renderPanel(){
 
       h += '<div style="height:10px"></div>';
     }
-    h += '<div class="dim" style="font-size:11px">Payment history &amp; documents — coming here next.</div>';
+    h += payHistoryHtml(c);
     h += '</div>';
   }
 
@@ -516,6 +518,118 @@ async function renderPanel(){
   h += '</div>';
   el.innerHTML = h;
 }
+/* ---------- Payment history + documents on the client card ----------
+   PERFORMANCE: this renders METADATA only — date, amount, filename, size. No file
+   bytes and no thumbnails travel with the client load. Thumbnails arrive in a second
+   small call once the card is on screen; a document's bytes are fetched only when the
+   agent taps it. */
+function docType(d){ return d.doc_type || d.kind || 'document'; }
+function docTypeLabel(k){
+  return k === 'carrier_receipt' ? 'Carrier receipt'
+       : k === 'client_receipt'  ? 'Speedy receipt'
+       : String(k).replace(/_/g, ' ');
+}
+function bytesLabel(b){
+  if(!b) return '';
+  return b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b/1024) + ' KB' : (b/1048576).toFixed(1) + ' MB';
+}
+function payHistoryHtml(c){
+  const pays = c.payments || [];
+  const docs = c.documents || [];
+  if(!pays.length && !docs.length) return '<div class="dim" style="font-size:11px">No payments recorded for this client yet.</div>';
+
+  const byPay = {};
+  docs.forEach(d => { const k = d.payment_id || '_client'; (byPay[k] = byPay[k] || []).push(d); });
+
+  let h = '<div style="font-size:10px;color:var(--mute);letter-spacing:.06em;margin:14px 0 8px">PAYMENTS &amp; DOCUMENTS</div>';
+  h += pays.map(p => {
+    const mine = String(p.agent || '').toLowerCase().includes(String(EMAIL || '').toLowerCase());
+    const dl = byPay[p.id] || [];
+    const complete = p.audit_status === 'complete';
+    const hasCarrier = dl.some(d => docType(d) === 'carrier_receipt');
+    return '<div style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:7px">'
+      + '<div class="row" style="align-items:flex-start">'
+      + '<div><b style="font-size:14px">$' + Number(p.amount||0).toFixed(2) + '</b>'
+      + ' <span class="dim" style="font-size:11.5px">' + esc(p.purpose || '') + '</span></div>'
+      + '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;'
+      + (complete ? 'background:rgba(47,191,113,.15);color:var(--green)' : 'background:rgba(245,166,35,.15);color:var(--amber)')
+      + '">' + (complete ? 'audited' : 'needs proof') + '</span></div>'
+      + '<div class="dim" style="font-size:11px;margin-top:2px">'
+      + esc(String(p.ts||'').slice(0,10))
+      + (p.ref ? ' · ' + esc(p.ref) : '')
+      + ' · ' + esc((p.agent || '').split('(').pop().replace(')','').split('@')[0] || 'agent')
+      + (mine ? '' : ' (another agent)')
+      + (p.carrier_name ? ' · carrier ' + esc(p.carrier_name) : '')
+      + '</div>'
+      + (dl.length
+          ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">'
+            + dl.map(d => '<span class="docchip" id="pd' + d.id + '" onclick="openPortalDoc(\'' + d.id + '\')">'
+                + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '') + '</span>').join('')
+            + '</div>'
+          : (!complete ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber)">No documents yet</div>' : ''))
+      + (!complete && mine
+          ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + (c.client && c.client.client_no ? c.client.client_no : 0) + ',' + Number(p.amount||0) + ')" '
+            + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
+          : '')
+      + '</div>';
+  }).join('');
+
+  const loose = byPay['_client'] || [];
+  if(loose.length){
+    h += '<div class="dim" style="font-size:11px;margin:8px 0 5px">Other documents on this client</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:5px">'
+      + loose.map(d => '<span class="docchip" id="pd' + d.id + '" onclick="openPortalDoc(\'' + d.id + '\')">'
+          + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '') + '</span>').join('')
+      + '</div>';
+  }
+  return h;
+}
+
+// Thumbnails: a second small call, after the card is already visible.
+async function loadPortalThumbs(no){
+  try{
+    const r = await api('portal_thumbs&no=' + encodeURIComponent(no));
+    if(!r || !r.ok || !r.thumbs || !r.thumbs.length) return;
+    r.thumbs.forEach(t => {
+      const chip = document.getElementById('pd' + t.id);
+      if(!chip || chip.dataset.thumbed) return;
+      chip.dataset.thumbed = '1';
+      chip.style.padding = '0';
+      chip.style.overflow = 'hidden';
+      const img = document.createElement('img');
+      img.src = t.thumb_b64; img.alt = '';
+      img.style.cssText = 'width:64px;height:48px;object-fit:cover;display:block';
+      chip.textContent = '';
+      chip.appendChild(img);
+    });
+  }catch(e){}
+}
+
+// A document's bytes are fetched here and nowhere else.
+async function openPortalDoc(id){
+  const r = await api('portal_doc&id=' + encodeURIComponent(id));
+  if(!r || !r.ok || (!r.file_b64 && !r.blob_url)){ alert('No file is stored for this document.'); return; }
+  if(r.blob_url){ window.open(r.blob_url, '_blank'); return; }
+  try{
+    let b64 = r.file_b64; if(b64.startsWith('data:')) b64 = b64.split(',')[1] || '';
+    const bin = atob(b64), arr = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: r.mime || 'application/pdf' }));
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }catch(e){ alert('That document could not be opened.'); }
+}
+
+function finishAuditFor(paymentId, clientNo, amount){
+  stashHandoff();
+  const tab = OPEN_TABS.find(t => t.client_no === clientNo);
+  const p = new URLSearchParams({
+    client: clientNo || '', name: (tab && tab.name) || '', paid: Number(amount||0).toFixed(2),
+    method: 'client paid', payment_id: paymentId,
+  });
+  location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
+}
+
 function toggleFull(no){ FULL_OPEN[no] = !FULL_OPEN[no]; renderPanel(); }
 
 /* ===================== STAGE 3 — CHARGE INSIDE THE PORTAL =====================

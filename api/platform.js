@@ -1,4 +1,4 @@
-export const config = { maxDuration: 30 };
+export const config = { maxDuration: 300 };
 // /api/platform — backend for the Platform Console (admin/platform.html).
 // ACCESS: Google ID token (header x-id-token), allowlist below.
 // GET  = reads (HawkSoft ZZTEST, our clients/policies/events, ledger, tables)
@@ -207,10 +207,15 @@ async function runDeltaSync(s, actor) {
   if (hs.error || hs.status !== 200) return { ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status) };
   const ids = Array.isArray(hs.body) ? hs.body.map(Number).filter(isFinite) : [];
 
-  let clients = 0, pols = 0;
+  let clients = 0, pols = 0, done = 0;
+  const began = Date.now();
+  const BUDGET_MS = 240000;   // stop well inside the function limit and report progress
+  let ranOut = false;
   for (let i = 0; i < ids.length; i += 25) {
+    if (Date.now() - began > BUDGET_MS) { ranOut = true; break; }
     const batch = ids.slice(i, i + 25);
     const b = await hsClientBatch(batch);
+    done = i + batch.length;
     if (b.error || b.status !== 200) continue;
     for (const c of (Array.isArray(b.body) ? b.body : [])) {
       const r = await upsertHsClient(s, c);
@@ -218,13 +223,18 @@ async function runDeltaSync(s, actor) {
     }
   }
 
-  await fetch(`${s.base}/rest/v1/sync_state?key=eq.hawksoft_clients`, {
-    method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-    body: JSON.stringify({ last_sync: startedAt, last_count: clients, note: 'delta sync', updated_at: startedAt }),
-  });
+  // Only advance the watermark when the whole window was processed. If we ran out of
+  // time, leave it where it was so the next press picks up the same window and keeps
+  // going — a four-day gap is caught up by pressing the button a few times.
+  if (!ranOut) {
+    await fetch(`${s.base}/rest/v1/sync_state?key=eq.hawksoft_clients`, {
+      method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify({ last_sync: startedAt, last_count: clients, note: 'delta sync', updated_at: startedAt }),
+    });
+  }
   await sbInsert(s, 'events', [{ actor, kind: 'sync.completed', source: 'hawksoft_sync',
     payload: { changed_ids: ids.length, clients_updated: clients, policies_updated: pols, as_of: asOf } }]);
-  return { ok: true, changed: ids.length, clients, policies: pols, as_of: asOf };
+  return { ok: true, changed: ids.length, clients, policies: pols, as_of: asOf, partial: ranOut, processed: done };
 }
 
 async function sbPatch(s, path, obj) {

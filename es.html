@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Speedy Insurance Agency — Auto, Home & Seguro Comercial | Inland Empire CA</title>
-<meta name="description" content="Fast insurance quotes from 20+ carriers. Auto, home, SR-22, commercial & DMV services. 4 locations in Moreno Valley, Riverside & Lake Elsinore. Hablamos Español.">
-<meta name="keywords" content="insurance, auto insurance, home insurance, SR-22, commercial insurance, Moreno Valley, Riverside, Lake Elsinore, Inland Empire, California, español">
+<meta name="description" content="Cotizaciones rápidas con más de 150 opciones de cobertura. Auto, hogar, SR-22, comercial y servicios DMV. 5 sucursales en Moreno Valley, Riverside, Lake Elsinore y Colton. Hablamos Español.">
+<meta name="keywords" content="insurance, auto insurance, home insurance, SR-22, commercial insurance, Moreno Valley, Riverside, Lake Elsinore, Colton, Inland Empire, California, español">
 <meta property="og:title" content="Speedy Insurance Agency — Insurance You Can Count On">
-<meta property="og:description" content="Fast quotes from 20+ carriers. Auto, home, SR-22, commercial & DMV. 4 locations across the Inland Empire.">
+<meta property="og:description" content="Cotizaciones rápidas con más de 150 opciones de cobertura. Auto, hogar, SR-22, comercial y DMV. 5 sucursales en el Inland Empire.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://speedyins.com">
 <link rel="icon" type="image/png" href="images/icon.png">
@@ -192,7 +192,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 
 /* TEAM / BRANCHES */
 .team{background:var(--cream) !important}
-.team-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px}
+.team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:32px}
 .branch-card{background:rgba(255,255,255,0.05);border-radius:var(--radius-xl);padding:28px;border:1.5px solid rgba(255,255,255,0.1);text-align:center;transition:all 0.3s;cursor:pointer;position:relative;overflow:hidden}
 .branch-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;transition:transform 0.3s;transform:scaleX(0);transform-origin:left}
 .branch-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(0,0,0,0.3);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.1)}
@@ -208,6 +208,8 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 .branch-card-phone i{font-size:13px}
 .branch-card-btn{background:var(--red);color:white;border:none;padding:10px 24px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.2s;width:100%;display:flex;align-items:center;justify-content:center;gap:6px}
 .branch-card-btn:hover{background:var(--red-dark)}
+.branch-card-dir{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:7px;padding:9px 24px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:transparent;color:rgba(255,255,255,0.75);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;text-decoration:none;font-family:'Outfit',sans-serif;cursor:pointer;transition:all 0.2s}
+.branch-card-dir:hover{border-color:var(--red);color:white}
 .branch-card-status{display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:500;margin-top:10px}
 .branch-card-status-dot{width:7px;height:7px;border-radius:50%;animation:pulse 2s infinite}
 
@@ -389,10 +391,11 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       <div class="nav-dropdown">
         <a href="#locations" class="nav-link nav-dropdown-toggle">Sucursales <i class="fas fa-chevron-down" style="font-size:10px;margin-left:3px"></i></a>
         <div class="nav-dropdown-menu">
-          <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Moreno Valley HQ</a>
+          <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Moreno Valley</a>
           <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Riverside — Van Buren</a>
           <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Riverside — Magnolia</a>
           <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Lake Elsinore</a>
+          <a href="#locations" class="nav-dropdown-item" onclick="document.getElementById('mobileMenu').classList.remove('open')"><i class="fas fa-map-marker-alt"></i> Colton</a>
         </div>
       </div>
       <a href="#about" class="nav-link">Nosotros</a>
@@ -408,10 +411,11 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <a href="#services" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Servicios</a>
     <a href="cotizar.html" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Get a Quote</a>
     <a href="#locations" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Sucursales</a>
-    <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Moreno Valley HQ</a>
+    <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Moreno Valley</a>
     <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Riverside — Van Buren</a>
     <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Riverside — Magnolia</a>
     <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Lake Elsinore</a>
+    <a href="#locations" class="mobile-locations-sub" onclick="document.getElementById('mobileMenu').classList.remove('open')">📍 Colton</a>
     <a href="#about" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Nosotros</a>
     <a href="#blog" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Blog</a>
     <a href="#privacy" class="nav-link" onclick="document.getElementById('mobileMenu').classList.remove('open')">Política de Privacidad</a>
@@ -428,16 +432,16 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="hero-content fade-up">
       <div class="hero-badge"><i class="fas fa-shield-alt"></i> Serving Southern California Since 2005</div>
       <h1 class="hero-title">Insurance<br><span>You Can</span><br>Count On</h1>
-      <p class="hero-sub">Fast quotes from 20+ top carriers. Honest prices. Real people who care. 4 convenient locations across the Inland Empire.</p>
+      <p class="hero-sub">Cotizaciones rápidas con más de 150 opciones de cobertura. Precios honestos. Gente real que se preocupa. 5 sucursales convenientes en el Inland Empire.</p>
       <div class="hero-btns">
-        <a href="cotizar.html" class="btn-primary"><i class="fas fa-bolt"></i> Obtener Cotización Gratis</a>
+        <a href="cotizar.html" class="btn-primary"><i class="fas fa-bolt"></i> Obtener Mi Cotización Gratis Ahora</a>
         <a href="tel:9516951500" class="btn-secondary"><i class="fas fa-phone"></i> Call Us Now</a>
       </div>
       <div class="hero-stats">
-        <div class="hero-stat"><span class="stat-num">4</span><span class="stat-label">Sucursales</span></div>
-        <div class="hero-stat"><span class="stat-num">12</span><span class="stat-label">Agents</span></div>
-        <div class="hero-stat"><span class="stat-num">20+</span><span class="stat-label">Aseguradoras</span></div>
-        <div class="hero-stat"><span class="stat-num">5.0</span><span class="stat-label">★ Google</span></div>
+        <div class="hero-stat"><span class="stat-num">5</span><span class="stat-label">Sucursales</span></div>
+        <div class="hero-stat"><span class="stat-num">20+</span><span class="stat-label">Años</span></div>
+        <div class="hero-stat"><span class="stat-num">150+</span><span class="stat-label">Opciones de Cobertura</span></div>
+        <div class="hero-stat"><span class="stat-num" style="font-size:26px;letter-spacing:1px">★★★★★</span><span class="stat-label">Google</span></div>
       </div>
     </div>
     <div class="hero-right fade-up fade-up-d2">
@@ -460,7 +464,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="trust-item"><i class="fas fa-globe-americas"></i>Hablamos Español</div>
     <div class="trust-item"><i class="fas fa-shield-alt"></i>Aceptamos Todos los Conductores</div>
     <div class="trust-item"><i class="fas fa-bolt"></i>SR-22 el Mismo Día</div>
-    <div class="trust-item"><i class="fas fa-star"></i>4.9★ Calificación Google</div>
+    <div class="trust-item"><i class="fas fa-star"></i>★★★★★ Calificación Google</div>
     <div class="trust-item"><i class="fas fa-car"></i>Seguro de Auto</div>
     <div class="trust-item"><i class="fas fa-home"></i>Seguro de Hogar</div>
     <div class="trust-item"><i class="fas fa-file-alt"></i>SR-22</div>
@@ -470,89 +474,17 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="trust-item"><i class="fas fa-globe-americas"></i>Hablamos Español</div>
     <div class="trust-item"><i class="fas fa-shield-alt"></i>Aceptamos Todos los Conductores</div>
     <div class="trust-item"><i class="fas fa-bolt"></i>SR-22 el Mismo Día</div>
-    <div class="trust-item"><i class="fas fa-star"></i>4.9★ Calificación Google</div>
+    <div class="trust-item"><i class="fas fa-star"></i>★★★★★ Calificación Google</div>
   </div>
 </div>
 
 <!-- OUR BRANCHES -->
 <section class="quote-section" id="locations">
   <div class="container">
-    <div class="section-label" style="color:var(--red-light)">Nuestras 4 Sucursales</div>
+    <div class="section-label" style="color:var(--red-light)">Nuestras 5 Sucursales</div>
     <h2 class="section-title" style="color:white">Hable Con Nuestro Equipo</h2>
-    <p class="section-sub" style="color:rgba(255,255,255,0.5)">Elija la sucursal más cercana — llame, envíe un mensaje o chatee. Aceptamos visitas sin cita. Todos los agentes están listos para ayudarle.</p>
-    <div class="team-grid" id="teamGrid">
-      <!-- Moreno Valley -->
-      <div class="branch-card" onclick="openBranchModal('mv')" style="cursor:pointer;position:relative">
-        <div class="branch-card-icon" style="background:#D42B2B"><i class="fas fa-map-marker-alt"></i></div>
-        <div class="branch-card-name">Moreno Valley</div>
-        <div class="branch-card-agents">4 agentes &middot; 12625 Frederick St #i-1</div>
-        <div class="branch-card-avatars">
-          <div class="branch-card-av" style="background:#D42B2B">SR</div>
-          <div class="branch-card-av" style="background:#1A4FA0">LF</div>
-          <div class="branch-card-av" style="background:#7C3AED">YH</div>
-          <div class="branch-card-av" style="background:#059669">JR</div>
-        </div>
-        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 472-0927</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-          <a href="tel:9514720927" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Llamar Ahora</span><span class="branch-action-num">(951) 472-0927</span></div></a>
-          <a href="sms:9514720927" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Enviar Texto</span><span class="branch-action-num">(951) 472-0927</span></div></a>
-          <button onclick="event.stopPropagation();currentBranch=BRANCHES[0];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Chat en Vivo</span><span class="branch-action-num">Chatear con equipo Moreno Valley</span></div></button>
-        </div>
-      </div>
-
-      <!-- Van Buren -->
-      <div class="branch-card" onclick="openBranchModal('r1')" style="cursor:pointer;position:relative">
-        <div class="branch-card-icon" style="background:#1A4FA0"><i class="fas fa-map-marker-alt"></i></div>
-        <div class="branch-card-name">Riverside — Van Buren</div>
-        <div class="branch-card-agents">3 agentes &middot; 2955 Van Buren Blvd Ste A7</div>
-        <div class="branch-card-avatars">
-          <div class="branch-card-av" style="background:#D42B2B">YA</div>
-          <div class="branch-card-av" style="background:#1A4FA0">FS</div>
-          <div class="branch-card-av" style="background:#7C3AED">JV</div>
-        </div>
-        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 695-1500</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-          <a href="tel:9516951500" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Llamar Ahora</span><span class="branch-action-num">(951) 695-1500</span></div></a>
-          <a href="sms:9516951500" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Enviar Texto</span><span class="branch-action-num">(951) 695-1500</span></div></a>
-          <button onclick="event.stopPropagation();currentBranch=BRANCHES[1];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Chat en Vivo</span><span class="branch-action-num">Chatear con equipo Van Buren</span></div></button>
-        </div>
-      </div>
-
-      <!-- Magnolia -->
-      <div class="branch-card" onclick="openBranchModal('r2')" style="cursor:pointer;position:relative">
-        <div class="branch-card-icon" style="background:#7C3AED"><i class="fas fa-map-marker-alt"></i></div>
-        <div class="branch-card-name">Riverside — Magnolia</div>
-        <div class="branch-card-agents">3 agentes &middot; 7010 Magnolia Ave</div>
-        <div class="branch-card-avatars">
-          <div class="branch-card-av" style="background:#D42B2B">AS</div>
-          <div class="branch-card-av" style="background:#1A4FA0">EH</div>
-          <div class="branch-card-av" style="background:#7C3AED">IH</div>
-        </div>
-        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 977-9400</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-          <a href="tel:9519779400" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Llamar Ahora</span><span class="branch-action-num">(951) 977-9400</span></div></a>
-          <a href="sms:9519779400" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Enviar Texto</span><span class="branch-action-num">(951) 977-9400</span></div></a>
-          <button onclick="event.stopPropagation();currentBranch=BRANCHES[2];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Chat en Vivo</span><span class="branch-action-num">Chatear con equipo Magnolia</span></div></button>
-        </div>
-      </div>
-
-      <!-- Lake Elsinore -->
-      <div class="branch-card" onclick="openBranchModal('le')" style="cursor:pointer;position:relative">
-        <div class="branch-card-icon" style="background:#059669"><i class="fas fa-map-marker-alt"></i></div>
-        <div class="branch-card-name">Lake Elsinore</div>
-        <div class="branch-card-agents">1 agente &middot; 32285 Mission Trail P5</div>
-        <div class="branch-card-avatars">
-          <div class="branch-card-av" style="background:#059669">CA</div>
-        </div>
-        <div class="branch-card-phone"><i class="fas fa-phone"></i> (951) 579-4095</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-          <a href="tel:9515794095" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Llamar Ahora</span><span class="branch-action-num">(951) 579-4095</span></div></a>
-          <a href="sms:9515794095" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Enviar Texto</span><span class="branch-action-num">(951) 579-4095</span></div></a>
-          <button onclick="event.stopPropagation();currentBranch=BRANCHES[3];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Chat en Vivo</span><span class="branch-action-num">Chatear con equipo Lake Elsinore</span></div></button>
-        </div>
-      </div>
-
-    </div>
+    <p class="section-sub" style="color:rgba(255,255,255,0.5)">Elija la sucursal más cercana — llame, envíe un mensaje o chatee. Aceptamos visitas sin cita.</p>
+    <div class="team-grid" id="teamGrid"></div>
   </div>
 </section>
 
@@ -565,7 +497,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <h2 class="section-title">Obtenga Su Mejor<br>Tarifa En 60 Segundos</h2>
         <p class="section-sub">Comparamos tarifas de más de 20 aseguradoras para que obtenga el mejor precio — garantizado. Sin obligación, sin presión, solo ahorros.</p>
         <div style="margin-top:28px;display:flex;flex-direction:column;gap:14px">
-          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Compare 20+ carriers side by side</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Compare más de 150 opciones de cobertura lado a lado</span></div>
           <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Quotes in under 60 seconds</span></div>
           <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">No obligation — 100% free</span></div>
           <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-check-circle" style="color:var(--success);font-size:18px"></i><span style="color:var(--gray-500);font-size:14px">Hablamos Español</span></div>
@@ -573,7 +505,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       </div>
       <div class="quote-form fade-up">
         <div class="quote-form-title">Cotización Gratis</div>
-        <div class="quote-form-sub">Compare más de 20 aseguradoras en minutos — sin obligación</div>
+        <div class="quote-form-sub">Compare más de 150 opciones de cobertura en minutos — sin obligación</div>
         <a href="cotizar.html" class="form-submit" style="display:flex;align-items:center;justify-content:center;gap:9px;text-decoration:none;margin-bottom:18px"><i class="fas fa-bolt"></i> Comenzar Mi Cotización</a>
         <p style="font-size:11px;color:var(--gray-500);text-align:center;margin-bottom:18px">Toma unos 3 minutos · No se requiere tarjeta de crédito</p>
         <!-- Google Review Cards -->
@@ -700,7 +632,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="cta-inner">
       <div class="cta-text">
         <h3>¿Listo Para Ahorrar en Su Seguro?</h3>
-        <p>Call any of our 4 branches or get a free online quote in 60 seconds.</p>
+        <p>Llame a cualquiera de nuestras 5 sucursales u obtenga una cotización gratis en línea en 60 segundos.</p>
       </div>
       <a href="tel:9516951500" class="btn-white"><i class="fas fa-phone"></i> Call (951) 695-1500</a>
     </div>
@@ -765,7 +697,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       <div class="svc-card featured fade-up fade-up-d3">
         <div class="svc-icon"><i class="fas fa-bolt"></i></div>
         <div class="svc-name">Cotización Gratis</div>
-        <div class="svc-desc">Compare rates from 20+ top carriers instantly. No obligation. Fast, easy, and free — see your best price in 60 seconds.</div>
+        <div class="svc-desc">Compare más de 150 opciones de cobertura al instante. Sin obligación. Rápido, fácil y gratis — vea su mejor precio en 60 segundos.</div>
         <a href="cotizar.html" class="svc-cta">Start Now <i class="fas fa-arrow-right"></i></a>
       </div>
     </div>
@@ -789,7 +721,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
           We love helping new clients explore their options and match policies to their personal needs. Our top priority is confident, satisfied customers. Speedy Insurance Agency was founded — and is still fueled by — a vision to educate and assist clients navigating the complex world of insurance. <strong>Insurance shopping doesn't have to be difficult.</strong>
         </p>
         <p style="font-size:16px;color:var(--gray-500);line-height:1.7;margin-bottom:24px">
-          Our bilingual team speaks English and Spanish. We are open <span id="aboutHours">Lun–Vie 9am–7pm, Sáb 10am–5pm, Dom 10am–5pm (solo Moreno Valley)</span>, across 4 locations in Moreno Valley, Riverside, and Lake Elsinore.
+          Our bilingual team speaks English and Spanish. We are open <span id="aboutHours">Lun–Vie 9am–7pm, Sáb 10am–5pm, Dom 10am–5pm (solo Moreno Valley)</span>, en 5 sucursales en Moreno Valley, Riverside, Lake Elsinore y Colton.
         </p>
         <a href="cotizar.html" class="btn-primary"><i class="fas fa-bolt"></i> Cotización Gratis</a>
       </div>
@@ -799,12 +731,12 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
           <div style="font-size:13px;font-weight:600;color:var(--navy);letter-spacing:1px;text-transform:uppercase">Años Sirviendo SoCal</div>
         </div>
         <div style="background:white;border-radius:var(--radius-lg);padding:24px;text-align:center;border:1px solid var(--gray-200)">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--red);letter-spacing:2px">4</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--red);letter-spacing:2px">5</div>
           <div style="font-size:13px;font-weight:600;color:var(--navy);letter-spacing:1px;text-transform:uppercase">Sucursales</div>
         </div>
         <div style="background:white;border-radius:var(--radius-lg);padding:24px;text-align:center;border:1px solid var(--gray-200)">
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--red);letter-spacing:2px">20+</div>
-          <div style="font-size:13px;font-weight:600;color:var(--navy);letter-spacing:1px;text-transform:uppercase">Top Aseguradoras</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--red);letter-spacing:2px">150+</div>
+          <div style="font-size:13px;font-weight:600;color:var(--navy);letter-spacing:1px;text-transform:uppercase">Opciones de Cobertura</div>
         </div>
         <div style="background:white;border-radius:var(--radius-lg);padding:24px;text-align:center;border:1px solid var(--gray-200)">
           <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--red);letter-spacing:2px">7</div>
@@ -1034,7 +966,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <div class="footer-brand">
           <img src="/assets/logo.png" alt="Speedy Insurance Agency" style="height:48px;width:auto">
         </div>
-        <p class="footer-desc">Independent insurance agency serving Southern California since 2005. We compare rates from 20+ carriers to find you the best coverage at the best price.</p>
+        <p class="footer-desc">Independent insurance agency serving Southern California since 2005. Comparamos más de 150 opciones de cobertura para encontrarle la mejor protección al mejor precio.</p>
       </div>
       <div>
         <div class="footer-title">Servicios</div>
@@ -1057,6 +989,7 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <a href="tel:9516951500" class="footer-link"><i class="fas fa-phone"></i> Riverside 01</a>
         <a href="tel:9519779400" class="footer-link"><i class="fas fa-phone"></i> Riverside 02</a>
         <a href="tel:9515794095" class="footer-link"><i class="fas fa-phone"></i> Lake Elsinore</a>
+        <a href="tel:9095876001" class="footer-link"><i class="fas fa-phone"></i> Colton</a>
       </div>
       <div>
         <div class="footer-title">Contacto</div>
@@ -1083,12 +1016,6 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <div class="popup-title">Talk to an Agent</div>
     <div class="popup-sub">Available now · Click to call</div>
     <button class="popup-close" onclick="document.getElementById('agentPopup').classList.remove('open')"><i class="fas fa-times"></i></button>
-  </div>
-  <div class="popup-tabs">
-    <div class="popup-tab active" onclick="filterAgents('all',this)">All</div>
-    <div class="popup-tab" onclick="filterAgents('mv',this)">Moreno Valley</div>
-    <div class="popup-tab" onclick="filterAgents('r1',this)">Riverside</div>
-    <div class="popup-tab" onclick="filterAgents('le',this)">Lake Elsinore</div>
   </div>
   <div class="popup-agents" id="popupAgents"></div>
   <div class="popup-footer">
@@ -1409,27 +1336,24 @@ function renderTeamGrid() {
     'mv': 'Moreno Valley',
     'r1': 'Van Buren',
     'r2': 'Magnolia',
-    'le': 'Lake Elsinore'
+    'le': 'Lake Elsinore',
+    'ct': 'Colton'
   };
 
   var cards = '';
   for (var i = 0; i < BRANCHES.length; i++) {
     var b = BRANCHES[i];
     var dept = deptMap[b.id] || b.name;
-    var avatars = '';
-    for (var j = 0; j < Math.min(b.agents.length, 4); j++) {
-      avatars += '<div class="branch-card-av" style="background:' + b.agents[j].color + '">' + b.agents[j].initials + '</div>';
-    }
     cards += '<div class="branch-card" onclick="openBranchModal(\'' + b.id + '\')" style="cursor:pointer;position:relative">'
       + '<div class="branch-card-icon" style="background:' + b.color + '"><i class="fas fa-map-marker-alt"></i></div>'
       + '<div class="branch-card-name">' + b.name + '</div>'
-      + '<div class="branch-card-agents">' + b.agents.length + ' agente' + (b.agents.length > 1 ? 's' : '') + ' &middot; ' + b.address.split(',')[0] + '</div>'
-      + '<div class="branch-card-avatars">' + avatars + '</div>'
+      + '<div class="branch-card-agents">' + b.staff + ' agente' + (b.staff > 1 ? 's' : '') + ' &middot; ' + b.address.split(',')[0] + '</div>'
       + '<div class="branch-card-phone"><i class="fas fa-phone"></i> ' + b.phone + '</div>'
       + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">'
       + '<a href="tel:' + b.phonePlain + '" onclick="event.stopPropagation()" class="branch-action call"><div class="branch-action-icon"><i class="fas fa-phone"></i></div><div><span class="branch-action-label">Llamar Ahora</span><span class="branch-action-num">' + b.phone + '</span></div></a>'
       + '<a href="sms:' + b.phonePlain + '" onclick="event.stopPropagation()" class="branch-action text"><div class="branch-action-icon"><i class="fas fa-comment-sms"></i></div><div><span class="branch-action-label">Enviar Texto</span><span class="branch-action-num">' + b.phone + '</span></div></a>'
       + '<button onclick="event.stopPropagation();currentBranch=BRANCHES[' + i + '];openBranchChat();" class="branch-action chat" style="border:none;width:100%;text-align:left;cursor:pointer"><div class="branch-action-icon"><i class="fas fa-comments"></i></div><div><span class="branch-action-label">Chat en Vivo</span><span class="branch-action-num">Chatear con ' + dept + ' equipo</span></div></button>'
+      + '<a class="branch-card-dir" href="' + b.mapsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="fas fa-location-arrow"></i> Cómo Llegar</a>'
       + '</div></div>';
   }
   grid.innerHTML = cards;
@@ -1446,12 +1370,7 @@ const BRANCHES = [
     mapsUrl:'https://maps.google.com/maps/search/?api=1&query=12625+Frederick+St+Moreno+Valley+CA+92553',
     mapQuery:'Speedy+Insurance+Moreno+Valley+CA',
     color:'#D42B2B', bg:'#FEF2F2', headerBg:'linear-gradient(135deg,#D42B2B,#a81f1f)',
-    agents:[
-      {name:'Sammy R.',initials:'SR',color:'#D42B2B',bg:'#FEF2F2'},
-      {name:'Laura F.',initials:'LF',color:'#1A4FA0',bg:'#EFF6FF'},
-      {name:'Yolanda H.',initials:'YH',color:'#7C3AED',bg:'#F5F3FF'},
-      {name:'Jorge R.',initials:'JR',color:'#D42B2B',bg:'#FEF2F2'},
-    ]
+    staff:3
   },
   {
     id:'r1', name:'Van Buren, Riverside', phone:'(951) 695-1500', phonePlain:'9516951500',
@@ -1459,11 +1378,7 @@ const BRANCHES = [
     mapsUrl:'https://maps.google.com/maps/search/?api=1&query=2955+Van+Buren+Blvd+Riverside+CA+92503',
     mapQuery:'Speedy+Insurance+Riverside+CA',
     color:'#1A4FA0', bg:'#EFF6FF', headerBg:'linear-gradient(135deg,#1A4FA0,#153d7a)',
-    agents:[
-      {name:'Fernando S.',initials:'FS',color:'#1A4FA0',bg:'#EFF6FF'},
-      {name:'Jesus V.',initials:'JV',color:'#059669',bg:'#ECFDF5'},
-      {name:'Yasmin A.',initials:'YA',color:'#D42B2B',bg:'#FEF2F2'},
-    ]
+    staff:3
   },
   {
     id:'r2', name:'Magnolia, Riverside', phone:'(951) 977-9400', phonePlain:'9519779400',
@@ -1471,11 +1386,7 @@ const BRANCHES = [
     mapsUrl:'https://maps.google.com/maps/search/?api=1&query=7010+Magnolia+Ave+Riverside+CA+92504',
     mapQuery:'Speedy+Insurance+Agency+Riverside+CA',
     color:'#7C3AED', bg:'#F5F3FF', headerBg:'linear-gradient(135deg,#7C3AED,#5B21B6)',
-    agents:[
-      {name:'Alejandra S.',initials:'AS',color:'#7C3AED',bg:'#F5F3FF'},
-      {name:'Esmeralda A.',initials:'EA',color:'#1A4FA0',bg:'#EFF6FF'},
-      {name:'Irene A.',initials:'IA',color:'#059669',bg:'#ECFDF5'},
-    ]
+    staff:3
   },
   {
     id:'le', name:'Lake Elsinore', phone:'(951) 579-4095', phonePlain:'9515794095',
@@ -1483,9 +1394,15 @@ const BRANCHES = [
     mapsUrl:'https://maps.google.com/maps/search/?api=1&query=32285+Mission+Trail+Lake+Elsinore+CA+92530',
     mapQuery:'Speedy+Insurance+Lake+Elsinore+CA',
     color:'#059669', bg:'#ECFDF5', headerBg:'linear-gradient(135deg,#059669,#047857)',
-    agents:[
-      {name:'Chris A.',initials:'CA',color:'#D42B2B',bg:'#FEF2F2'},
-    ]
+    staff:1
+  },
+  {
+    id:'ct', name:'Colton', phone:'(909) 587-6001', phonePlain:'9095876001',
+    address:'1047 N Mount Vernon Ave, Colton, CA 92324',
+    mapsUrl:'https://maps.google.com/maps/search/?api=1&query=1047+N+Mount+Vernon+Ave+Colton+CA+92324',
+    mapQuery:'Speedy+Insurance+Colton+CA',
+    color:'#D97706', bg:'#FFFBEB', headerBg:'linear-gradient(135deg,#D97706,#B45309)',
+    staff:1
   }
 ];
 
@@ -1499,12 +1416,10 @@ function renderBranches(){
       <div style="position:absolute;top:0;left:0;right:0;height:4px;background:${b.color};transform:scaleX(0);transition:transform 0.3s" class="branch-card-bar"></div>
       <div class="branch-card-icon" style="background:rgba(255,255,255,0.08);color:${b.color}"><i class="fas fa-building"></i></div>
       <div class="branch-card-name">${b.name}</div>
-      <div class="branch-card-agents">${b.agents.length} agent${b.agents.length>1?'s':''} · <i class="fas fa-map-marker-alt" style="font-size:10px"></i> ${b.address}</div>
-      <div class="branch-card-avatars">
-        ${b.agents.map(a => `<div class="branch-card-av" style="background:${a.color}">${a.initials}</div>`).join('')}
-      </div>
+      <div class="branch-card-agents">${b.staff} agent${b.staff>1?'s':''} · <i class="fas fa-map-marker-alt" style="font-size:10px"></i> ${b.address}</div>
       <div class="branch-card-phone" style="color:${b.color}"><i class="fas fa-phone"></i> ${b.phone}</div>
       <button class="branch-card-btn"><i class="fas fa-headset"></i> Call · Text · Chat</button>
+      <a class="branch-card-dir" href="${b.mapsUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="fas fa-location-arrow"></i> Cómo Llegar</a>
       <div class="branch-card-status"><div class="branch-card-status-dot" style="background:#22C55E"></div><span style="color:#22C55E">Available now</span></div>
     </div>
   `).join('');
@@ -1524,14 +1439,12 @@ function openBranchModal(branchId){
   document.getElementById('modalIcon').style.background = 'rgba(255,255,255,0.2)';
   document.getElementById('modalIcon').style.color = 'white';
   document.getElementById('modalName').textContent = b.name;
-  document.getElementById('modalSub').textContent = `${b.agents.length} agente${b.agents.length>1?'s':''} listo${b.agents.length>1?'s':''} para ayudar`;
+  document.getElementById('modalSub').textContent = `${b.staff} agente${b.staff>1?'s':''} listo${b.staff>1?'s':''} para ayudar`;
   document.getElementById('modalPhone').textContent = b.phone;
   document.getElementById('modalTextNum').textContent = b.phone;
   document.getElementById('modalCall').href = `tel:${b.phonePlain}`;
   document.getElementById('modalText').href = `sms:${b.phonePlain}`;
-  document.getElementById('modalAgents').innerHTML = b.agents.map(a => `
-    <div class="modal-agent-pill"><div class="modal-agent-av" style="background:${a.color}">${a.initials}</div>${a.name}</div>
-  `).join('');
+  document.getElementById('modalAgents').innerHTML = '';
   document.getElementById('modalMap').innerHTML = `
     <div style="background:linear-gradient(135deg,var(--navy) 0%,#0d1f38 100%);padding:16px 20px;border-bottom:3px solid var(--red)">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
@@ -1608,33 +1521,24 @@ function sendChat(){
 }
 
 // Render popup agents for floating bubble
-function renderPopupAgents(filter){
+function renderPopupAgents(){
   const container = document.getElementById('popupAgents');
-  const allAgents = [];
-  BRANCHES.forEach(b => b.agents.forEach(a => allAgents.push({...a, branchName:b.name, branchId:b.id})));
-  const filtered = filter === 'all' ? allAgents : allAgents.filter(a => a.branchId === filter);
-  container.innerHTML = filtered.map(a => `
+  container.innerHTML = BRANCHES.map(b => `
     <div class="popup-agent">
-      <div class="popup-av" style="background:${a.bg};color:${a.color}">${a.initials}</div>
+      <div class="popup-av" style="background:${b.bg};color:${b.color}"><i class="fas fa-map-marker-alt"></i></div>
       <div class="popup-info">
-        <div class="popup-name">${a.name}</div>
-        <div class="popup-role">${a.branchName}</div>
-        <div class="popup-status"><div class="popup-sd"></div> Available</div>
+        <div class="popup-name">${b.name}</div>
+        <div class="popup-role">${b.phone}</div>
+        <div class="popup-status"><div class="popup-sd"></div> Disponible ahora</div>
       </div>
-      <button class="popup-call" onclick="openBranchModal('${a.branchId}')"><i class="fas fa-phone"></i></button>
+      <button class="popup-call" onclick="openBranchModal('${b.id}')"><i class="fas fa-phone"></i></button>
     </div>
   `).join('');
 }
 
-function filterAgents(branch, el){
-  document.querySelectorAll('.popup-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  renderPopupAgents(branch);
-}
-
 // Init
 renderBranches();
-renderPopupAgents('all');
+renderPopupAgents();
 
 // Scroll animations
 const observer = new IntersectionObserver((entries) => {

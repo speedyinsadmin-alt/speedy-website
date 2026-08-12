@@ -121,7 +121,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.0</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.01</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -506,7 +506,7 @@ async function renderPanel(){
 
       h += '<div style="height:10px"></div>';
     }
-    h += payHistoryHtml(c);
+    h += payHistoryHtml(r);
     h += '</div>';
   }
 
@@ -568,7 +568,7 @@ function payHistoryHtml(c){
             + '</div>'
           : (!complete ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber)">No documents yet</div>' : ''))
       + (!complete && mine
-          ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + (c.client && c.client.client_no ? c.client.client_no : 0) + ',' + Number(p.amount||0) + ')" '
+          ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
           : '')
       + '</div>';

@@ -81,15 +81,23 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 .mobile-menu{display:none}
 
 /* SERVICE ICON STRIP */
-.svc-strip{background:var(--white);border-bottom:1px solid var(--gray-200)}
-.svc-strip .container{display:flex;justify-content:center;gap:4px;padding-top:6px;padding-bottom:12px;flex-wrap:wrap}
-.svc-tab{text-align:center;padding:10px 20px;min-width:86px;border-bottom:2px solid transparent;text-decoration:none;border-radius:6px 6px 0 0;transition:all 0.2s}
-.svc-tab i{font-size:22px;color:var(--navy);transition:color 0.2s}
-.svc-tab span{display:block;font-size:10px;color:var(--gray-700);margin-top:8px;letter-spacing:1.1px;font-weight:600;text-transform:uppercase}
-.svc-tab:hover{background:#F7F6F2;border-bottom-color:var(--red)}
-.svc-tab:hover i{color:var(--red)}
-.svc-tab:hover span{color:var(--navy)}
-
+.svc-strip{background:var(--navy)}
+.svc-strip .container{display:flex;align-items:center;justify-content:space-between;gap:6px;padding-top:14px;padding-bottom:14px}
+.svc-tab{display:inline-flex;align-items:center;gap:10px;padding:9px 12px;border-radius:7px;text-decoration:none;transition:all 0.2s;white-space:nowrap}
+.svc-tab i{font-size:28px;color:rgba(255,255,255,0.85);transition:color 0.2s}
+.svc-tab span{font-size:13px;font-weight:600;color:rgba(255,255,255,0.85);letter-spacing:0.4px}
+.svc-tab:hover{background:rgba(255,255,255,0.09)}
+.svc-tab:hover i{color:#fff}
+.svc-tab:hover span{color:#fff}
+.quote-strip{background:var(--cream);border-bottom:1px solid var(--gray-200)}
+.quote-strip .container{display:flex;align-items:center;justify-content:center;gap:16px;padding-top:18px;padding-bottom:18px;flex-wrap:wrap}
+.quote-strip p{font-size:14px;color:var(--gray-700);font-weight:500;margin:0}
+.quote-strip-btn{display:inline-flex;align-items:center;gap:9px;background:var(--red);color:#fff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:15px 30px;border-radius:8px;transition:all 0.2s}
+.quote-strip-btn:hover{background:var(--red-dark);transform:translateY(-1px);box-shadow:0 8px 24px rgba(212,43,43,0.28)}
+@media(max-width:980px){
+  .svc-strip .container{flex-wrap:wrap;justify-content:center}
+  .quote-strip .container{flex-direction:column;gap:12px;text-align:center}
+}
 /* HERO */
 .hero{background:var(--cream);padding:80px 0 70px;position:relative;overflow:hidden}
 .hero::before{content:'';position:absolute;top:-50%;right:-20%;width:80%;height:200%;background:radial-gradient(circle,rgba(212,43,43,0.04) 0%,transparent 70%);pointer-events:none}
@@ -445,6 +453,13 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
     <a href="#services" class="svc-tab"><i class="fas fa-id-card"></i><span>DMV</span></a>
     <a href="#services" class="svc-tab"><i class="fas fa-ship"></i><span>Bote &middot; RV</span></a>
     <a href="#services" class="svc-tab"><i class="fas fa-shield-alt"></i><span>Fianzas</span></a>
+  </div>
+</div>
+
+<div class="quote-strip">
+  <div class="container">
+    <p>Compare m&aacute;s de 150 opciones de cobertura en menos de 60 segundos &mdash;</p>
+    <a href="cotizar.html" class="quote-strip-btn"><i class="fas fa-bolt"></i> Cotizaci&oacute;n Gratis Al Instante</a>
   </div>
 </div>
 

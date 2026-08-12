@@ -87,7 +87,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.1</small></h1>
+      <h1>Platform Console <small id="ver">v5.2</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -257,8 +257,15 @@ async function renderClients(el) {
     const rr = await apiPostBody({ action: 'delta_sync' });
     b.disabled = false; b.textContent = '⟳ Sync changes now';
     const line = $('#syncline');
-    if (rr && rr.ok) { line.textContent = 'Just synced — ' + rr.clients + ' clients and ' + rr.policies + ' policies updated (' + (rr.changed || 0) + ' changed in HawkSoft).'; }
-    else { line.textContent = 'Sync failed' + (rr && rr.error ? ': ' + rr.error : '') + '.'; }
+    if (rr && rr.ok) {
+      line.textContent = rr.partial
+        ? 'Synced ' + rr.processed + ' of ' + rr.changed + ' changed clients so far (' + rr.clients + ' updated). Press Sync again to continue — a long gap takes a few passes.'
+        : 'Just synced — ' + rr.clients + ' clients and ' + rr.policies + ' policies updated (' + (rr.changed || 0) + ' changed in HawkSoft).';
+    }
+    else {
+      line.textContent = 'Sync failed' + (rr && rr.error ? ': ' + rr.error
+        : ' — it did not finish in time. Press Sync again; it continues where it stopped.') + '.';
+    }
   };
   loadSyncStatus();
   (async () => { const st = await api('job_status'); if (st && st.job && (st.job.status==='running'||st.job.status==='pending')) pollResync(); })();

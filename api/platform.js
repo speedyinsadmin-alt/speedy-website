@@ -6,6 +6,24 @@ export const config = { maxDuration: 300 };
 
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 const ADMIN_ALLOWLIST = ['info@speedyins.com'];
+/* Producer code -> agent. Sourced from OUR clients table, so this keeps working
+   after HawkSoft is retired. The producer is a record of who wrote the client and is
+   NEVER rewritten by us — commission_to is a separate field we own. */
+const PRODUCER_MAP = {
+  SSM: 'sammy@speedyins.com',     JEV: 'jesus@speedyins.com',   THD: 'info@speedyins.com',
+  AES: 'alejandra@speedyins.com', YVA: 'yasmin@speedyins.com',  LIF: 'lfigueroa@speedyins.com',
+  JLR: 'jorge@speedyins.com',     CMA: 'chris@speedyins.com',   YYH: 'yolanda@speedyins.com',
+  FSS: 'fernando@speedyins.com',  EHA: 'esmeralda@speedyins.com',
+};
+const AGENT_NAME = {
+  'sammy@speedyins.com':'Sammy Rodriguez','jesus@speedyins.com':'Jesus Velarde','info@speedyins.com':'Tony Dabouqi',
+  'alejandra@speedyins.com':'Alejandra Salas','yasmin@speedyins.com':'Yasmin Alfaro','lfigueroa@speedyins.com':'Laura Figueroa',
+  'jorge@speedyins.com':'Jorge Ramos','chris@speedyins.com':'Christian Aguilar','yolanda@speedyins.com':'Yolanda Hernandez',
+  'fernando@speedyins.com':'Fernando Salgado','esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
+  'tony@speedyins.com':'Tony Dabouqi','lana@speedyins.com':'Lana D',
+};
+const agentEmailOf = v => { const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i); return m ? m[0].toLowerCase() : null; };
+const owns = (row, email) => (row.commission_to || agentEmailOf(row.agent)) === email;
 // Agents can sign into the PORTAL and see ONLY their own data (never admin views, never other agents).
 const AGENT_ALLOWLIST = [
   'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
@@ -293,7 +311,7 @@ export default async function handler(req, res) {
   // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
   // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
   const view = String(req.query.view || '');
-  const portalViews = ['portal_home', 'portal_search', 'portal_client'];
+  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
@@ -316,6 +334,13 @@ export default async function handler(req, res) {
         phone: c.phone || null, branch: c.branch || null,
       }));
       return res.status(200).json({ ok: true, results });
+    }
+
+    if (view === 'portal_staff') {
+      // agent list for the "commission to" picker — no HawkSoft dependency
+      return res.status(200).json({ ok: true,
+        staff: Object.entries(AGENT_NAME).map(([email, name]) => ({ email, name })),
+        producers: PRODUCER_MAP });
     }
 
     if (view === 'portal_thumbs') {
@@ -345,12 +370,22 @@ export default async function handler(req, res) {
       const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
       // Full payment history + document METADATA. Deliberately no file_b64 and no
       // thumb_b64 here: bytes are fetched only when a document is opened.
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,carrier_name&order=ts.desc&limit=50`);
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code&order=ts.desc&limit=50`);
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft&order=created_at.desc&limit=200`);
       return res.status(200).json({
         ok: true, client, policies: po.rows || [],
         recent: (pay.rows || []).slice(0, 6),
-        payments: pay.rows || [],
+        payments: (pay.rows || []).map(r => ({
+          id: r.id, ts: r.ts, amount: r.amount, purpose: r.purpose, audit_status: r.audit_status,
+          kind: r.kind, ref: r.ref,
+          charged_by: AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent) || null,
+          commission_to: r.commission_to || agentEmailOf(r.agent) || null,
+          commission_to_name: AGENT_NAME[r.commission_to || agentEmailOf(r.agent)] || null,
+          carrier_name: r.carrier_name, service_cost: r.service_cost, fee_amount: r.fee_amount,
+          // NOTE: no commission figures here — the client log is shared with every agent
+        })),
+        producer_code: client && client.extras ? (client.extras.producer || null) : null,
+        producer_name: client && client.extras ? (AGENT_NAME[PRODUCER_MAP[client.extras.producer]] || null) : null,
         documents: docs.rows || [],
       });
     }
@@ -363,7 +398,7 @@ export default async function handler(req, res) {
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
 
-      const mine = (all.rows || []).filter(r => String(r.agent || '').toLowerCase().includes(me));
+      const mine = (all.rows || []).filter(r => owns(r, me) || String(r.agent || '').toLowerCase().includes(me));
       // month boundary (America/Los_Angeles approx via UTC month is fine for display)
       const now = new Date();
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
@@ -378,14 +413,28 @@ export default async function handler(req, res) {
         if (/declin|fail|void|refund/i.test(String(r.kind || ''))) continue;
         const fee = r.fee_amount != null ? Number(r.fee_amount)
           : (r.service_cost != null ? Number(r.amount) - Number(r.service_cost) : null);
+        const isOwner = owns(r, me);
         const complete = r.audit_status === 'complete';
         if (complete && fee != null) {
-          if (r.ts >= monthStart) earned += fee * pct / 100;
+          // only the commission owner earns; a helper who ran the charge earns nothing
+          // unless the owner shared, which is applied below
+          if (isOwner && r.ts >= monthStart) {
+            const share = Number(r.helper_share_pct || 0);
+            earned += fee * pct / 100 * (1 - share / 100);
+          }
+          if (!isOwner && r.helper_email === me && r.ts >= monthStart) {
+            earned += fee * pct / 100 * Number(r.helper_share_pct || 0) / 100;
+          }
         } else if (r.kind !== 'charge_captured' || r.audit_status) {
           // needs proof of payment / audit
           const feeGuess = fee != null ? fee * pct / 100 : null;
-          if (r.ts >= monthStart && feeGuess != null) pending += feeGuess;
-          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid', _name: (r.extra && r.extra.clientName) || null, _policy: (r.extra && r.extra.policyNumber) || null, _guid: (r.extra && r.extra.policyGuid) || null });
+          if (isOwner && r.ts >= monthStart && feeGuess != null) pending += feeGuess;
+          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount),
+            purpose: r.purpose, audit_status: r.audit_status || 'client_paid',
+            mine: isOwner,
+            charged_by: AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent) || null,
+            owner_name: AGENT_NAME[r.commission_to] || r.commission_to || null,
+            _name: (r.extra && r.extra.clientName) || null, _policy: (r.extra && r.extra.policyNumber) || null, _guid: (r.extra && r.extra.policyGuid) || null });
         }
       }
       // client names for the unfinished list
@@ -406,7 +455,14 @@ export default async function handler(req, res) {
     }
   }
 
-  const email = await verifyGoogle(req.headers['x-id-token']);
+  // Agent-reachable POST actions (each enforces its own scoping below)
+  const AGENT_ACTIONS = ['reassign_commission'];
+  const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
+  let email = await verifyGoogle(req.headers['x-id-token']);
+  if (!email && AGENT_ACTIONS.includes(bodyAction)) {
+    const who = await verifyPortal(req.headers['x-id-token']);
+    if (who) email = who.email;
+  }
   if (!email) return res.status(401).json({ ok: false, error: 'Not authorized' });
 
   /* ============ POST actions ============ */
@@ -489,6 +545,52 @@ export default async function handler(req, res) {
         body: JSON.stringify([{ agent_email, percentage: Number(percentage), updated_by: email, updated_at: new Date().toISOString() }]),
       });
       return res.status(200).json({ ok: true, email, agent_email, percentage: Number(percentage) });
+    }
+
+    if (action === 'reassign_commission') {
+      /* Giving away is safe; taking is not. An agent may hand a payment to anyone if they
+         charged it or currently own it. Setting YOURSELF as owner on a payment you neither
+         charged nor own would be taking someone else's commission — admin only. */
+      const paymentId = String((req.body || {}).payment_id || '');
+      const toEmail = agentEmailOf((req.body || {}).to_email);
+      if (!paymentId || !toEmail) return res.status(400).json({ ok: false, error: 'payment_id and to_email required' });
+      if (!AGENT_NAME[toEmail]) return res.status(400).json({ ok: false, error: 'Unknown agent' });
+
+      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=id,agent,commission_to,audit_status,amount,client_id,share_locked_at`);
+      const row = (cur.rows || [])[0];
+      if (!row) return res.status(404).json({ ok: false, error: 'Payment not found' });
+
+      const me = String(email).toLowerCase();
+      const isAdmin = ADMIN_ALLOWLIST.includes(me);
+      const currentOwner = row.commission_to || agentEmailOf(row.agent);
+      const iCharged = agentEmailOf(row.agent) === me;
+      const iOwn = currentOwner === me;
+
+      if (!isAdmin) {
+        if (!iCharged && !iOwn) {
+          return res.status(403).json({ ok: false, error: 'You can only reassign a payment you charged or currently own.' });
+        }
+        if (toEmail === me && !iOwn) {
+          return res.status(403).json({ ok: false, error: 'You cannot assign a payment to yourself. Ask the owner or Tony.' });
+        }
+        if (row.share_locked_at) {
+          return res.status(403).json({ ok: false, error: 'This payment is locked — its commission split has been set. Ask Tony to change it.' });
+        }
+      }
+
+      const up = await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ commission_to: toEmail }),
+      });
+      if (up.status >= 300) return res.status(502).json({ ok: false, error: 'Could not save the change.' });
+
+      await fetch(`${s.base}/rest/v1/events`, {
+        method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: new Date().toISOString(), actor: me, kind: 'commission.reassigned',
+          client_no: row.client_id, source: 'portal',
+          payload: { payment_id: paymentId, amount: row.amount, from: currentOwner, to: toEmail, by: me } }),
+      });
+      return res.status(200).json({ ok: true, commission_to: toEmail, name: AGENT_NAME[toEmail] });
     }
 
     if (action === 'delta_sync') {

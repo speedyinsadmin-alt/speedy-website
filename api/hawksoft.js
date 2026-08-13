@@ -8,6 +8,19 @@ import { createHmac } from 'node:crypto';
 //        Actions: create_test_client, add_log, lookup_client (returns MASKED field shapes only).
 
 const AGENCY_ID = 15112;
+/* Producer code -> agent. Lives in OUR system, not HawkSoft: the codes are synced into
+   the clients table, so commission attribution keeps working when HawkSoft is retired. */
+const PRODUCER_MAP = {
+  SSM: 'sammy@speedyins.com',     JEV: 'jesus@speedyins.com',   THD: 'info@speedyins.com',
+  AES: 'alejandra@speedyins.com', YVA: 'yasmin@speedyins.com',  LIF: 'lfigueroa@speedyins.com',
+  JLR: 'jorge@speedyins.com',     CMA: 'chris@speedyins.com',   YYH: 'yolanda@speedyins.com',
+  FSS: 'fernando@speedyins.com',  EHA: 'esmeralda@speedyins.com',
+};
+const STAFF_EMAILS = Object.values(PRODUCER_MAP).concat(['irene@speedyins.com', 'tony@speedyins.com', 'lana@speedyins.com']);
+function normaliseAgentEmail(v) {
+  const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i);
+  return m ? m[0].toLowerCase() : null;
+}
 
 /* SINGLE SOURCE for reading a money value off the wire.
    parseFloat('1,602.40') === 1 — a typed or pasted comma would silently charge $1.00
@@ -236,6 +249,10 @@ async function ledger(event) {
     const row = {
       kind,
       audit_status: auditStatusFor(kind),
+      // who earns this: chosen by the agent, defaulting to whoever is charging
+      commission_to: normaliseAgentEmail(event.commissionTo) || normaliseAgentEmail(event.who) || null,
+      // snapshot of the client's producer at the time of charge — never rewritten later
+      producer_code: event.producerCode ? String(event.producerCode).slice(0, 8) : null,
       client_id: Number.isFinite(parseInt(event.clientId, 10)) ? parseInt(event.clientId, 10) : null,
       amount: (typeof event.amount === 'number') ? event.amount : null,
       purpose: event.purpose ? String(event.purpose).slice(0, 120) : null,
@@ -840,7 +857,7 @@ export default async function handler(req, res) {
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action, who, office, clientId, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
@@ -965,7 +982,7 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
-      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
         await linkReceiptToPayment(out.vault.id, auditSaved.id);
@@ -1206,7 +1223,7 @@ export default async function handler(req, res) {
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, commissionTo: (req.body||{}).commissionTo, producerCode: (req.body||{}).producerCode, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {

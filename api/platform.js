@@ -368,10 +368,14 @@ export default async function handler(req, res) {
       const now = new Date();
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 
+      const NON_PAYMENT = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
       let earned = 0, pending = 0, unfinished = [];
       for (const r of mine) {
         const dateStr = String(r.ts || '').slice(0, 10);
         if (dateStr < AUDIT_CUTOFF) continue; // pre-audit: no commission expected
+        // no money received => never ask an agent for proof, never count commission
+        if (NON_PAYMENT.includes(r.audit_status)) continue;
+        if (/declin|fail|void|refund/i.test(String(r.kind || ''))) continue;
         const fee = r.fee_amount != null ? Number(r.fee_amount)
           : (r.service_cost != null ? Number(r.amount) - Number(r.service_cost) : null);
         const complete = r.audit_status === 'complete';
@@ -605,7 +609,11 @@ export default async function handler(req, res) {
     const comm = await sbGet(s, 'agent_commission?select=*');
     const commMap = {}; for (const c of (comm.rows || [])) commMap[c.agent_email] = Number(c.percentage);
 
-    let rows = (pays.rows || []).map(p => {
+    const NON_PAYMENT_STATUS = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
+    let rows = (pays.rows || [])
+      .filter(p => !NON_PAYMENT_STATUS.includes(p.audit_status)
+                && !/declin|fail|void|refund/i.test(String(p.kind || '')))
+      .map(p => {
       const dateStr = String(p.ts || '').slice(0, 10);
       const preAudit = dateStr < AUDIT_CUTOFF;
       const purpose = String(p.purpose || '').toLowerCase();

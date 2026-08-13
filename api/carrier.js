@@ -129,7 +129,14 @@ export default async function handler(req, res) {
 
   if (action === 'add_document') {
     // Lightweight: just store a supporting document (no ledger/carrier logic)
-    const { client_no, policy_id, policy_guid, payment_id, doc_type, receipt_b64, receipt_name, receipt_mime } = body;
+    const { client_no, policy_id, policy_guid, doc_type, receipt_b64, receipt_name, receipt_mime } = body;
+    let payment_id = body.payment_id;
+    if (!payment_id && client_no) {
+      const open = await sbGet(s, `bridge_ledger?client_id=eq.${client_no}`
+        + `&audit_status=in.(client_paid,carrier_pending)&is_test=is.false`
+        + `&select=id&order=ts.desc&limit=2`);
+      if ((open.rows || []).length === 1) payment_id = open.rows[0].id;
+    }
     if (!client_no || !receipt_b64) return res.status(400).json({ ok: false, error: 'client_no + file required' });
     if (!(await mayTouchPayment(s, email, payment_id))) {
       return res.status(403).json({ ok: false, error: 'This payment was taken by another agent — they need to add its documents.' });
@@ -188,13 +195,33 @@ export default async function handler(req, res) {
 
   if (action === 'save_carrier_leg') {
     const {
-      client_no, policy_id, policy_guid, payment_id,
+      client_no, policy_id, policy_guid,
       carrier, carrier_amount, carrier_card,
       receipt_b64, receipt_name, receipt_mime,
       complete, // true = submit to audit (receipt required); false = save partial
     } = body;
+    let payment_id = body.payment_id;   // resolved below if the page didn't pass one
 
     if (!client_no) return res.status(400).json({ ok: false, error: 'client_no required' });
+
+    /* If the page was opened without a payment reference, the proof would file against
+       the client but never close the audit — the charge stays "needs proof" forever even
+       though the receipt is on file. Resolve it from the client's own open payments
+       instead of relying on the link being passed. */
+    if (!payment_id) {
+      const open = await sbGet(s, `bridge_ledger?client_id=eq.${client_no}`
+        + `&audit_status=in.(client_paid,carrier_pending)&is_test=is.false`
+        + `&select=id,ts,amount,agent,commission_to&order=ts.desc&limit=5`);
+      const cands = open.rows || [];
+      if (cands.length === 1) payment_id = cands[0].id;
+      else if (cands.length > 1) {
+        // more than one open payment: match on the amount the client paid, else newest
+        const paid = Number(body.client_paid_amount || body.paid || 0);
+        const exact = paid ? cands.filter(r => Math.abs(Number(r.amount) - paid) < 0.01) : [];
+        payment_id = (exact.length === 1 ? exact[0] : cands[0]).id;
+      }
+    }
+
     if (!(await mayTouchPayment(s, email, payment_id))) {
       return res.status(403).json({ ok: false, error: 'This payment was taken by another agent — they need to add its proof.' });
     }

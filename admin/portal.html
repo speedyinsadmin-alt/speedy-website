@@ -124,7 +124,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.2</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.3</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -733,6 +733,7 @@ async function reassignPayment(paymentId, currentOwner){
   const list = staffList().filter(s => s.email !== currentOwner);
   if(!(idx >= 0 && idx < list.length)) return;
   const to = list[idx];
+  if(to.email === currentOwner){ alert('This payment already belongs to ' + to.name + '.'); return; }
   const r = await apiPost({ action: 'reassign_commission', payment_id: paymentId, to_email: to.email });
   if(r && r.ok){
     alert('Commission moved to ' + r.name + '.');

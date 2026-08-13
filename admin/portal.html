@@ -124,7 +124,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.1</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.2</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -313,13 +313,27 @@ function openTodo(){
     + 'Commission is earned once the audit is complete.</div>'
     + UNFINISHED.map(u => {
         const started = u.audit_status === 'carrier_pending';
-        return '<div class="todoitem" onclick="finishAudit(\'' + u.id + '\')">'
+        // This list is where an agent notices "this isn't mine" — so the change
+        // control belongs here, not only buried on the client card.
+        return '<div class="todoitem">'
+          + '<div onclick="finishAudit(\'' + u.id + '\')">'
           + '<div style="display:flex;justify-content:space-between;gap:10px">'
           + '<span style="font-size:13.5px;font-weight:600">' + esc(u.client_name || ('#' + u.client_no)) + '</span>'
           + '<span style="font-size:13.5px;font-weight:700">' + money2(u.amount) + '</span></div>'
           + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
           + esc(u.purpose || 'Payment') + ' · ' + when(u.ts) + ' · #' + u.client_no
           + (started ? ' · <span style="color:var(--amber)">started, not finished</span>' : '')
+          + '</div></div>'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)">'
+          + '<span class="dim" style="font-size:11px">'
+          + (u.mine
+              ? (u.charged_by && !u.charged_by.toLowerCase().includes((EMAIL||'').split('@')[0])
+                  ? 'Yours &mdash; charged by ' + esc(u.charged_by.split(' ')[0])
+                  : 'Your payment')
+              : 'You charged this &mdash; ' + esc(u.owner_name || 'another agent') + ' earns it')
+          + '</span>'
+          + '<span style="color:var(--blue-l);font-size:11px;cursor:pointer;text-decoration:underline" '
+          + 'onclick="event.stopPropagation();reassignPayment(\'' + u.id + '\',\'' + esc(u.owner_email || '') + '\')">Not mine &mdash; change</span>'
           + '</div></div>';
       }).join('');
   sheet.classList.remove('hide');
@@ -723,7 +737,11 @@ async function reassignPayment(paymentId, currentOwner){
   if(r && r.ok){
     alert('Commission moved to ' + r.name + '.');
     if(ACTIVE_TAB) { delete CLIENT_CACHE[ACTIVE_TAB]; openClient(ACTIVE_TAB); }
-    loadHome();
+    await loadHome();
+    const sheet = document.getElementById('todoSheet');
+    if(sheet && !sheet.classList.contains('hide')){
+      if(UNFINISHED.length) openTodo(); else closeTodo();
+    }
   } else alert((r && r.error) || 'Could not change it.');
 }
 async function apiPost(body){

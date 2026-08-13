@@ -434,6 +434,7 @@ export default async function handler(req, res) {
             mine: isOwner,
             charged_by: AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent) || null,
             owner_name: AGENT_NAME[r.commission_to] || r.commission_to || null,
+            owner_email: r.commission_to || agentEmailOf(r.agent) || null,
             _name: (r.extra && r.extra.clientName) || null, _policy: (r.extra && r.extra.policyNumber) || null, _guid: (r.extra && r.extra.policyGuid) || null });
         }
       }

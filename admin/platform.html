@@ -87,7 +87,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.2</small></h1>
+      <h1>Platform Console <small id="ver">v5.3</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -97,6 +97,7 @@
       <button data-tab="calls">Calls</button>
       <button data-tab="audit">Audit</button>
       <button data-tab="tables">Tables</button>
+      <button data-tab="health">Health</button>
     </nav>
     <div id="view" class="card"><div class="load">Loading…</div></div>
   </div>
@@ -172,6 +173,7 @@ async function render() {
   if (TAB === 'ledger') return renderLedger(el);
   if (TAB === 'calls') return renderCalls(el);
   if (TAB === 'audit') return renderAudit(el);
+  if (TAB === 'health') return renderHealth(el);
   if (TAB === 'tables') return renderTables(el);
 }
 function openClient(no) {
@@ -1261,6 +1263,53 @@ async function loadLegs(sid) {
         + '<td>' + hhmm(l.started_at) + '</td><td>' + hhmm(l.answered_at) + '</td><td>' + hhmm(l.ended_at) + '</td>'
         + '<td>' + (l.duration_seconds ?? '—') + '</td></tr>').join('')
       + '</table>';
+}
+
+async function renderHealth(el) {
+  el.innerHTML = '<div class="card"><div class="muted">Reconciling money against paperwork…</div></div>';
+  const r = await api('health_check');
+  if (!r || !r.ok) { el.innerHTML = '<div class="card"><div class="muted">Could not run the check.</div></div>'; return; }
+
+  const sevPill = s => s === 'high'
+    ? '<span class="pill r">needs attention</span>'
+    : '<span class="pill a">worth a look</span>';
+
+  let h = '<div class="card">';
+  h += '<div class="row" style="align-items:flex-start;margin-bottom:6px"><div>'
+    + '<h2 style="margin:0">Health check</h2>'
+    + '<div class="muted" style="font-size:12.5px;margin-top:3px">Where the money and the paperwork disagree. '
+    + esc(r.checked) + ' payments and ' + esc(r.documents) + ' documents examined.</div></div>'
+    + '<button class="btn" onclick="render()">Run again</button></div>';
+
+  if (!r.issues.length) {
+    h += '<div style="background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.4);border-radius:12px;padding:16px;margin-top:10px">'
+      + '<div style="font-size:15px;font-weight:800;color:var(--green)">✓ Everything reconciles</div>'
+      + '<div class="muted" style="font-size:12.5px;margin-top:3px">Every charge has its receipt, every audit its figures, every payment an owner.</div></div>';
+  } else {
+    for (const i of r.issues) {
+      h += '<div style="border:1px solid ' + (i.sev === 'high' ? 'rgba(224,49,49,.4)' : 'rgba(245,166,35,.4)')
+        + ';border-radius:12px;padding:13px;margin-top:10px">'
+        + '<div class="row" style="align-items:flex-start"><div>'
+        + '<div style="font-size:14px;font-weight:800">' + esc(i.title) + '</div>'
+        + '<div class="muted" style="font-size:12px;margin-top:2px">' + esc(i.why) + '</div></div>'
+        + '<div style="text-align:right"><div style="font-size:19px;font-weight:800">' + i.count + '</div>'
+        + sevPill(i.sev) + '</div></div>';
+      h += '<table style="margin-top:9px"><tr><th>When</th><th>Client</th><th>Detail</th><th></th></tr>';
+      for (const row of i.rows) {
+        h += '<tr><td>' + esc(String(row.ts || '').slice(0, 10)) + '</td>'
+          + '<td><span class="raw-t" onclick="openClient(' + (row.client_no || 0) + ')">#' + esc(row.client_no || '—') + '</span></td>'
+          + '<td>' + (row.filename ? esc(row.filename) : money(row.amount) + ' · ' + esc(row.kind || ''))
+          + (row.audit_status ? ' · ' + esc(row.audit_status) : '') + '</td>'
+          + '<td class="muted">' + esc(row.agent ? String(row.agent).split('@')[0] : '') + '</td></tr>';
+      }
+      h += '</table>';
+      if (i.count > i.rows.length) h += '<div class="muted" style="font-size:11.5px;margin-top:6px">Showing ' + i.rows.length + ' of ' + i.count + '.</div>';
+      h += '</div>';
+    }
+  }
+  h += '<div class="muted" style="font-size:11px;margin-top:12px">Receipts have only been stored since Aug 5, so earlier charges are not reported as missing one.</div>';
+  h += '</div>';
+  el.innerHTML = h;
 }
 
 async function renderTables(el) {

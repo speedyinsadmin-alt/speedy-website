@@ -211,14 +211,31 @@ const STAFF = {
 /* ---------- Independent audit log (Vercel Blob) — survives HawkSoft outages ---------- */
 /* Speedy's OWN payment ledger (Supabase) — dual-write on every bridge event.
    Foundation for reporting + eventual AMS independence. Fail-soft: never blocks a charge. */
+/* The audit_status column defaults to 'client_paid', which is only correct for a real
+   payment. Declines, pay-link creation and client creation were inheriting it and
+   landing in the agents' audit queue demanding proof for money that never arrived.
+   Status is now derived from the event, never left to the default. */
+function auditStatusFor(kind) {
+  const k = String(kind || '');
+  if (/declin|fail|void|refund/i.test(k)) return 'declined';
+  if (k === 'paylink_create') return 'link_sent';
+  if (k === 'charge_create_client') return 'not_a_payment';
+  // charge_captured is the safety-net row written the instant Clover confirms — real
+  // money, receipt still pending. It must NEVER be filtered out of the audit queue.
+  if (/^(charge_live|charge_cash|charge_card|terminal_charge|paylink_charge|charge_captured)$/.test(k)) return 'client_paid';
+  return 'not_a_payment';   // anything that isn't a known money event stays out of the queue
+}
+
 async function ledger(event) {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
     || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return false;
   try {
+    const kind = event.action || 'event';
     const row = {
-      kind: event.action || 'event',
+      kind,
+      audit_status: auditStatusFor(kind),
       client_id: Number.isFinite(parseInt(event.clientId, 10)) ? parseInt(event.clientId, 10) : null,
       amount: (typeof event.amount === 'number') ? event.amount : null,
       purpose: event.purpose ? String(event.purpose).slice(0, 120) : null,

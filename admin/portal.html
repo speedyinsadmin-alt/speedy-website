@@ -95,8 +95,11 @@
       <div style="font-size:11px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
     </div>
 
-    <!-- commission -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <!-- commission — hideable so an agent can help a client with someone beside them -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:5px">
+      <span onclick="toggleEarnings()" id="eyeBtn" style="cursor:pointer;color:var(--mute);font-size:11.5px">Hide my earnings</span>
+    </div>
+    <div id="earnWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div style="background:linear-gradient(135deg,rgba(47,191,113,.15),rgba(77,124,254,.08));border:1px solid rgba(47,191,113,.3);border-radius:12px;padding:13px">
         <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Earned this month</div>
         <div style="font-size:22px;font-weight:800;color:var(--green)" id="earned">$0.00</div>
@@ -121,7 +124,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.01</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.1</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -182,6 +185,19 @@
         <div id="chgPolWrap" class="hide" style="margin-top:12px">
           <label for="chgPolSel">Apply to policy &mdash; files the receipt under that policy tab</label>
           <select id="chgPolSel"></select>
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="chgComm">Commission to</label>
+          <select id="chgComm" onchange="onCommChange()"></select>
+          <div id="chgProdNote" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px">
+            <div style="font-size:11.5px;color:var(--amber)" id="chgProdText"></div>
+            <div class="dim" style="font-size:11px;margin-top:2px">Is this your job, or are you charging for someone?</div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button type="button" class="btn btn-ghost" style="margin:0;padding:7px" onclick="giveToProducer()" id="chgGiveBtn"></button>
+              <button type="button" class="btn btn-ghost" style="margin:0;padding:7px" onclick="document.getElementById('chgComm').focus()">Someone else…</button>
+            </div>
+          </div>
         </div>
 
         <label style="margin-top:12px">Method</label>
@@ -267,6 +283,7 @@ async function loadHome(){
   $('#earned').textContent = money(r.commission.earned_month);
   $('#pending').textContent = money(r.commission.pending_month);
   UNFINISHED = r.unfinished || [];
+  restoreEarningsPref();
   const n = r.unfinished_count || 0;
   if(n){
     $('#todo').classList.remove('hide');
@@ -541,9 +558,12 @@ function payHistoryHtml(c){
   const byPay = {};
   docs.forEach(d => { const k = d.payment_id || '_client'; (byPay[k] = byPay[k] || []).push(d); });
 
-  let h = '<div style="font-size:10px;color:var(--mute);letter-spacing:.06em;margin:14px 0 8px">PAYMENTS &amp; DOCUMENTS</div>';
+  let h = '<div style="font-size:10px;color:var(--mute);letter-spacing:.06em;margin:14px 0 8px">PAYMENTS &amp; DOCUMENTS'
+    + (c.producer_name ? ' <span style="text-transform:none;letter-spacing:0;color:var(--mute)">· producer ' + esc(c.producer_name) + '</span>' : '')
+    + '</div>';
   h += pays.map(p => {
-    const mine = String(p.agent || '').toLowerCase().includes(String(EMAIL || '').toLowerCase());
+    const mine = (p.commission_to === EMAIL)
+      || String(p.charged_by || '').toLowerCase().includes(String(EMAIL || '').split('@')[0]);
     const dl = byPay[p.id] || [];
     const complete = p.audit_status === 'complete';
     const hasCarrier = dl.some(d => docType(d) === 'carrier_receipt');
@@ -557,9 +577,16 @@ function payHistoryHtml(c){
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
       + (p.ref ? ' · ' + esc(p.ref) : '')
-      + ' · ' + esc((p.agent || '').split('(').pop().replace(')','').split('@')[0] || 'agent')
-      + (mine ? '' : ' (another agent)')
-      + (p.carrier_name ? ' · carrier ' + esc(p.carrier_name) : '')
+      + (p.charged_by ? ' · charged by ' + esc(p.charged_by.split(' ')[0]) : '')
+      + (p.carrier_name ? ' · carrier ' + esc(p.carrier_name)
+          + (p.service_cost != null ? ' $' + Number(p.service_cost).toFixed(2) : '') : '')
+      + (p.fee_amount != null ? ' · Speedy kept $' + Number(p.fee_amount).toFixed(2) : '')
+      + '</div>'
+      + '<div class="dim" style="font-size:11px;margin-top:3px">Commission to <b style="color:var(--ink)">'
+      + esc(p.commission_to_name || 'unassigned') + '</b>'
+      + ((p.commission_to === EMAIL || (p.charged_by && p.charged_by.toLowerCase().includes((EMAIL||'').split('@')[0])))
+          ? ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();reassignPayment(\'' + p.id + '\',\'' + esc(p.commission_to||'') + '\')">change</span>'
+          : '')
       + '</div>'
       + (dl.length
           ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">'
@@ -628,6 +655,96 @@ function finishAuditFor(paymentId, clientNo, amount){
     method: 'client paid', payment_id: paymentId,
   });
   location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
+}
+
+/* Earnings visibility. Remembered per browser so it stays hidden once chosen —
+   an agent who hides it should not have it reappear next morning. */
+/* ---------- Commission ownership ----------
+   Whoever does the job earns it, so this defaults to the agent charging. The client's
+   producer is shown as a PROMPT, never as a silent default: producer codes are
+   historical and were wrong for roughly half the payments we checked. The producer
+   itself is read-only and never rewritten by us. */
+let PRODUCERS = {}, CHG_PRODUCER = null;
+const staffList = () => Object.entries(STAFF)
+  .filter(([e]) => e !== 'tony@speedyins.com')          // info@ already represents Tony
+  .map(([email, v]) => ({ email, name: v[0] }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+async function loadStaff(){
+  if(Object.keys(PRODUCERS).length) return;
+  try{
+    const r = await api('portal_staff');
+    if(r && r.ok) PRODUCERS = r.producers || {};
+  }catch(e){}
+}
+function agentLabel(email){ return (STAFF[email] && STAFF[email][0]) || email; }
+function fillCommission(clientCache){
+  const sel = chgEl('chgComm');
+  const me = EMAIL;
+  sel.innerHTML = staffList().map(s =>
+    '<option value="' + esc(s.email) + '"' + (s.email === me ? ' selected' : '') + '>'
+    + esc(s.name) + (s.email === me ? ' — you' : '') + '</option>').join('');
+  sel.value = me;
+
+  // producer prompt — only when the client's producer is somebody else
+  const code = clientCache && clientCache.producer_code;
+  CHG_PRODUCER = code ? (PRODUCERS[code] || null) : null;
+  const note = chgEl('chgProdNote');
+  if(CHG_PRODUCER && CHG_PRODUCER !== me){
+    chgEl('chgProdText').innerHTML = 'HawkSoft shows <b>' + esc(agentLabel(CHG_PRODUCER)) + ' (' + esc(code) + ')</b> as this client\'s producer.';
+    chgEl('chgGiveBtn').textContent = 'Give to ' + agentLabel(CHG_PRODUCER).split(' ')[0];
+    note.classList.remove('hide');
+  } else note.classList.add('hide');
+}
+function giveToProducer(){
+  if(!CHG_PRODUCER) return;
+  chgEl('chgComm').value = CHG_PRODUCER;
+  onCommChange();
+}
+function onCommChange(){
+  const v = chgEl('chgComm').value;
+  const note = chgEl('chgProdNote');
+  if(v !== EMAIL) note.classList.add('hide');
+  else if(CHG_PRODUCER && CHG_PRODUCER !== EMAIL) note.classList.remove('hide');
+}
+
+/* Reassigning an existing payment. Giving away is allowed; taking is not —
+   the server enforces it too, this is only the friendly half. */
+async function reassignPayment(paymentId, currentOwner){
+  await loadStaff();
+  const opts = staffList().filter(s => s.email !== currentOwner)
+    .map((s,i) => (i+1) + '. ' + s.name).join('\n');
+  const pick = prompt('Who should earn this payment?\n\n' + opts + '\n\nEnter a number:');
+  if(!pick) return;
+  const idx = parseInt(pick, 10) - 1;
+  const list = staffList().filter(s => s.email !== currentOwner);
+  if(!(idx >= 0 && idx < list.length)) return;
+  const to = list[idx];
+  const r = await apiPost({ action: 'reassign_commission', payment_id: paymentId, to_email: to.email });
+  if(r && r.ok){
+    alert('Commission moved to ' + r.name + '.');
+    if(ACTIVE_TAB) { delete CLIENT_CACHE[ACTIVE_TAB]; openClient(ACTIVE_TAB); }
+    loadHome();
+  } else alert((r && r.error) || 'Could not change it.');
+}
+async function apiPost(body){
+  const r = await fetch('/api/platform', { method:'POST',
+    headers:{ 'x-id-token': TOKEN, 'Content-Type':'application/json' },
+    body: JSON.stringify(body) });
+  return r.json();
+}
+
+function toggleEarnings(force){
+  const w = document.getElementById('earnWrap'), b = document.getElementById('eyeBtn');
+  if(!w || !b) return;
+  const hidden = (force != null) ? force : (w.style.display !== 'none' ? true : false);
+  w.style.display = hidden ? 'none' : 'grid';
+  b.textContent = hidden ? 'Show my earnings' : 'Hide my earnings';
+  try{ localStorage.setItem('speedy_hide_earnings', hidden ? '1' : '0'); }catch(e){}
+}
+function restoreEarningsPref(){
+  let hidden = false;
+  try{ hidden = localStorage.getItem('speedy_hide_earnings') === '1'; }catch(e){}
+  if(hidden) toggleEarnings(true);
 }
 
 function toggleFull(no){ FULL_OPEN[no] = !FULL_OPEN[no]; renderPanel(); }
@@ -701,7 +818,9 @@ async function openCharge(no){
   chgEl('chgSub').textContent = '#' + (j.result.clientNumber || no) + ' · ' + OFFICE;
   chgEl('chgLoading').classList.add('hide');
   chgEl('chgBody').classList.remove('hide');
+  await loadStaff();
   renderChargeForm();
+  fillCommission(CLIENT_CACHE[no]);
   chgEl('chgAmt').focus();
 }
 function closeCharge(){
@@ -857,7 +976,9 @@ function baseBody(amt){
   const c = CHG.confirmed;
   return { clientId: c.clientNumber, clientName: c.name || '', amount: amt,
     purpose: chgPurposeText(), note: chgNoteText(), policyNumber: chgPolicy(),
-    clientEmail: (c.emails && c.emails[0]) || '', office: OFFICE };
+    clientEmail: (c.emails && c.emails[0]) || '', office: OFFICE,
+    commissionTo: chgEl('chgComm').value || EMAIL,
+    producerCode: (CLIENT_CACHE[CHG.clientNo] && CLIENT_CACHE[CHG.clientNo].producer_code) || '' };
 }
 async function chargeCardPortal(amt){
   const btn = chgEl('chgGo');

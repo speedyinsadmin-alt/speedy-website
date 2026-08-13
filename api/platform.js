@@ -790,6 +790,85 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, filename: a.filename, mime: a.mime, file_b64: a.file_b64, blob_url: a.blob_url });
   }
 
+  if (view === 'health_check') {
+    /* Money-vs-paperwork reconciliation. Every check here exists because a real bug
+       reached production: proof filed without closing the audit, documents with no
+       payment, the ledger id never returned, declines counted as money. Cutoffs matter
+       — the receipt vault only began 2026-08-05, so earlier charges legitimately have
+       no stored copy and must not be reported as faults. */
+    const VAULT_START = '2026-08-05';
+    const AUDIT_START = '2026-07-24';
+    const [led, att] = await Promise.all([
+      sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,kind,audit_status,txn_id,carrier_name,service_cost,fee_amount,commission_to,agent&order=ts.desc&limit=1000'),
+      sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,created_at&order=created_at.desc&limit=1000'),
+    ]);
+    const rows = led.rows || [], docs = att.rows || [];
+    const dtype = d => d.doc_type || d.kind || '';
+    const docsFor = id => docs.filter(d => d.payment_id === id);
+    const day = t => String(t || '').slice(0, 10);
+    const money = r => Number(r.amount || 0);
+    const issues = [];
+    const add = (sev, title, why, list) => { if (list.length) issues.push({ sev, title, why, count: list.length, rows: list.slice(0, 25) }); };
+    const brief = r => ({ id: r.id, ts: r.ts, client_no: r.client_id, amount: money(r), kind: r.kind,
+                          agent: r.commission_to || r.agent, audit_status: r.audit_status });
+
+    // 1) proof is on file but the audit never closed — the bug that hid Sammy's work
+    add('high', 'Proof on file, audit still open',
+      'A carrier receipt exists but the payment is not marked complete, so no fee or commission was recorded.',
+      rows.filter(r => ['client_paid','carrier_pending'].includes(r.audit_status)
+        && docsFor(r.id).some(d => dtype(d) === 'carrier_receipt')).map(brief));
+
+    // 2) documents floating free of any payment
+    const orphans = docs.filter(d => !d.payment_id);
+    if (orphans.length) issues.push({ sev: 'high', title: 'Documents not linked to a payment',
+      why: 'These files are stored against the client but not against a charge, so they cannot close an audit.',
+      count: orphans.length,
+      rows: orphans.slice(0, 25).map(d => ({ id: d.id, ts: d.created_at, client_no: d.client_no, filename: d.filename, kind: dtype(d) })) });
+
+    // 3) money captured with no receipt stored (only since the vault existed)
+    add('high', 'Charge with no receipt stored',
+      'Money was captured but no Speedy receipt PDF is on file for it.',
+      rows.filter(r => r.txn_id && day(r.ts) >= VAULT_START
+        && !docsFor(r.id).some(d => dtype(d) === 'client_receipt')).map(brief));
+
+    // 4) completed audits missing their numbers
+    add('high', 'Audit complete but figures missing',
+      'Marked complete without a carrier cost or fee — commission cannot be calculated.',
+      rows.filter(r => r.audit_status === 'complete' && (r.fee_amount == null || r.service_cost == null)).map(brief));
+
+    // 5) nobody owns the commission
+    add('med', 'Payment with no commission owner',
+      'No agent is credited, so it will not appear in anyone\'s queue.',
+      rows.filter(r => !r.commission_to && ['client_paid','carrier_pending','complete'].includes(r.audit_status)).map(brief));
+
+    // 6) a fee bigger than the charge means the numbers were entered wrongly
+    add('high', 'Carrier cost exceeds what the client paid',
+      'The carrier cost is higher than the payment, which produces a negative fee.',
+      rows.filter(r => r.service_cost != null && Number(r.service_cost) > money(r) + 0.005).map(brief));
+
+    // 7) possible double charge
+    const dupes = [];
+    for (const a of rows) {
+      if (!a.txn_id) continue;
+      for (const b of rows) {
+        if (a.id >= b.id || !b.txn_id) continue;
+        if (a.client_id === b.client_id && Math.abs(money(a) - money(b)) < 0.005
+            && Math.abs(new Date(a.ts) - new Date(b.ts)) < 2 * 3600 * 1000) dupes.push(brief(a));
+      }
+    }
+    add('high', 'Possible duplicate charge', 'Same client, same amount, both captured within two hours.', dupes);
+
+    // 8) work waiting too long
+    add('med', 'Open more than 14 days',
+      'Payments still without proof after two weeks.',
+      rows.filter(r => r.audit_status === 'client_paid' && day(r.ts) >= AUDIT_START
+        && (Date.now() - new Date(r.ts)) > 14 * 86400000).map(brief));
+
+    const worst = issues.some(i => i.sev === 'high') ? 'attention' : issues.length ? 'minor' : 'clean';
+    return res.status(200).json({ ok: true, status: worst, checked: rows.length,
+      documents: docs.length, checked_at: new Date().toISOString(), issues });
+  }
+
   if (view === 'system_health') {
     // Call the Postgres RPC for sizes
     let health = null;

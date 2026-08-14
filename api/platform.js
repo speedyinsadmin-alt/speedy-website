@@ -421,9 +421,11 @@ if (view === 'portal_share_due') {
     if (view === 'portal_news') {
       /* Notifications, built from the events we already write. Nothing new is stored
          except a "last seen" marker per agent, so this stays cheap. */
+      // NOTE: kind values contain dots. PostgREST treats "." as a separator inside
+      // in.(), so each value must be double-quoted or the filter matches nothing.
       const since = new Date(Date.now() - 30 * 86400000).toISOString();
       const ev = await sbGet(s, `events?ts=gte.${since}`
-        + `&kind=in.(commission.reassigned,commission.shared,audit.repaired,client.corrected,client.correction_rejected)`
+        + `&kind=in.("commission.reassigned","commission.shared","audit.repaired","client.corrected","client.correction_rejected")`
         + `&select=id,ts,actor,kind,client_no,payload&order=ts.desc&limit=100`);
 
       const seenRow = await sbGet(s, `agent_prefs?agent_email=eq.${encodeURIComponent(me)}&select=news_seen_at`);
@@ -1280,4 +1282,5 @@ if (view === 'portal_share_due') {
 
   return res.status(400).json({ ok: false, error: 'Unknown view' });
 }
+
 

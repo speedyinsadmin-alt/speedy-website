@@ -87,7 +87,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.5</small></h1>
+      <h1>Platform Console <small id="ver">v5.6</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -832,7 +832,7 @@ async function renderAudit(el){
   if(!r.ok){ el.innerHTML = auditSubNav() + '<div class="err">Server error: ' + esc(r.error||'unknown') + '</div>'; return; }
   AUDIT_CACHE = r;
   if(AUDIT_SUB === 'agents'){
-    try { el.innerHTML = '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); }
+    try { el.innerHTML = (await renderCorrections()) + '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); }
     catch(e){ el.innerHTML = auditSubNav() + '<div class="err">By-agent render error: ' + esc(String(e&&e.message||e)) + '</div>'; }
     return;
   }
@@ -1274,6 +1274,33 @@ async function overrideShare(id, current){
   if(!Number.isFinite(n) || n < 0 || n > 100){ alert('Enter a number between 0 and 100.'); return; }
   const r = await apiPostBody({ action:'set_share', payment_id:id, pct:n });
   if(r && r.ok){ render(); } else alert((r && r.error) || 'Could not save it.');
+}
+
+async function renderCorrections(){
+  const r = await api('pending_corrections');
+  if(!r || !r.ok || !r.rows.length) return '';
+  return '<div class="card" style="border-color:rgba(245,166,35,.5);margin-bottom:14px">'
+    + '<h2 style="margin:0 0 3px">Wrong-client corrections waiting for you</h2>'
+    + '<div class="muted" style="font-size:12.5px;margin-bottom:10px">The money is unchanged — only which client the payment sits on. Approving writes a correction note to both records.</div>'
+    + r.rows.map(x =>
+        '<div style="background:var(--navy);border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:7px">'
+        + '<div style="font-size:13.5px"><b>' + money(x.amount) + '</b> · ' + esc(x.purpose || '') + '</div>'
+        + '<div style="font-size:12.5px;margin-top:4px">'
+        + '<span class="muted">from</span> ' + esc(x.from_name || '') + ' #' + x.client_id
+        + ' <span class="muted">→ to</span> <b>' + esc(x.to_name || '(unknown)') + ' #' + x.correction_to_client + '</b></div>'
+        + '<div class="muted" style="font-size:11.5px;margin-top:3px">'
+        + esc(String(x.correction_requested_by || '').split('@')[0]) + ' · ' + esc(String(x.correction_requested_at || '').slice(0,16).replace('T',' '))
+        + (x.correction_note ? ' · "' + esc(x.correction_note) + '"' : '') + '</div>'
+        + '<div style="display:flex;gap:7px;margin-top:9px">'
+        + '<button class="btn" style="margin:0" onclick="decideCorrection(\'' + x.id + '\',true)">Approve the move</button>'
+        + '<button class="btn btn-ghost" style="margin:0" onclick="decideCorrection(\'' + x.id + '\',false)">Reject</button>'
+        + '</div></div>').join('')
+    + '</div>';
+}
+async function decideCorrection(id, approve){
+  if(!confirm(approve ? 'Move this payment to the other client and note it on both records?' : 'Reject this correction?')) return;
+  const r = await apiPostBody({ action:'decide_correction', payment_id:id, approve });
+  if(r && r.ok) render(); else alert((r && r.error) || 'Could not save it.');
 }
 
 async function renderHealth(el) {

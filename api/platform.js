@@ -343,7 +343,25 @@ export default async function handler(req, res) {
         producers: PRODUCER_MAP });
     }
 
-if (view === 'portal_news') {
+if (view === 'portal_share_due') {
+      /* Completed audits where this agent owns the commission, somebody else ran the
+         charge, and no share decision has been made. Asked at completion because that
+         is the first moment the fee — and so the commission — is a real number. */
+      const r = await sbGet(s, `bridge_ledger?commission_to=eq.${encodeURIComponent(me)}`
+        + `&audit_status=eq.complete&share_locked_at=is.null&is_test=is.false`
+        + `&select=id,ts,client_id,amount,agent,fee_amount&order=ts.desc&limit=10`);
+      const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
+      const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
+      const due = (r.rows || [])
+        .filter(x => agentEmailOf(x.agent) && agentEmailOf(x.agent) !== me && x.fee_amount != null)
+        .map(x => ({ id: x.id, ts: x.ts, client_no: x.client_id, amount: Number(x.amount),
+          fee: Number(x.fee_amount), commission: +(Number(x.fee_amount) * pct / 100).toFixed(2),
+          helper_email: agentEmailOf(x.agent),
+          helper_name: AGENT_NAME[agentEmailOf(x.agent)] || agentEmailOf(x.agent) }));
+      return res.status(200).json({ ok: true, rate: pct, due });
+    }
+
+    if (view === 'portal_news') {
       /* Notifications, built from the events we already write. Nothing new is stored
          except a "last seen" marker per agent, so this stays cheap. */
       const since = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -1095,3 +1113,4 @@ if (view === 'portal_news') {
 
   return res.status(400).json({ ok: false, error: 'Unknown view' });
 }
+

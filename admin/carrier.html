@@ -37,6 +37,7 @@
   .drop{border:1.5px dashed rgba(245,166,35,.5);border-radius:12px;background:rgba(245,166,35,.06);padding:18px;text-align:center;cursor:pointer;transition:.15s}
   .drop:hover{border-color:var(--amber);background:rgba(245,166,35,.1)}
   .drop.has{border-style:solid;border-color:var(--green);background:rgba(47,191,113,.08)}
+  .drop.over{border-color:var(--blue);background:rgba(77,124,254,.14);border-style:solid;transform:scale(1.01)}
   .drop .ic{font-size:26px;color:var(--amber)}
   .drop.has .ic{color:var(--green)}
   .btns{display:flex;gap:10px;margin-top:16px}
@@ -106,7 +107,7 @@
       <div class="eyebrow"><span style="color:var(--green)">◆</span> Carrier receipt <span class="pill a">required for audit</span></div>
       <div class="drop" id="drop" onclick="document.getElementById('file').click()">
         <div class="ic" id="dropic">⇪</div>
-        <div id="droptxt" style="font-size:13px;margin-top:6px">Tap to upload the carrier's receipt</div>
+        <div id="droptxt" style="font-size:13px;margin-top:6px">Drag the receipt here, or tap to choose</div>
         <div class="hint">PDF or photo — this is the proof of payment</div>
       </div>
       <input type="file" id="file" accept="application/pdf,image/*" style="display:none">
@@ -125,7 +126,7 @@
       </select>
       <div class="drop" id="docdrop" onclick="document.getElementById('docfile').click()" style="margin-top:10px">
         <div class="ic" style="color:var(--blue)">+</div>
-        <div style="font-size:13px;margin-top:6px">Tap to add documents</div>
+        <div style="font-size:13px;margin-top:6px">Drag documents here, or tap to choose</div>
         <div class="hint">PDF or photos · you can add several</div>
       </div>
       <input type="file" id="docfile" accept="application/pdf,image/*" multiple style="display:none">
@@ -295,15 +296,61 @@ function sizeNote(p){
   return p.shrunk ? kb(p.originalBytes) + ' \u2192 ' + kb(p.bytes) : kb(p.bytes);
 }
 
-$('#docfile').addEventListener('change', async e => {
+/* ---------- Drag and drop ----------
+   Agents work on desktops with the carrier PDF already open, so dropping it straight
+   onto the page saves a file dialog every time. Files land in exactly the same
+   pipeline as the picker, so photos are still downscaled before upload. dragover must
+   call preventDefault or the browser navigates away to the dropped file. */
+function wireDrop(zoneId, handler){
+  const z = document.getElementById(zoneId);
+  if(!z) return;
+  ['dragenter','dragover'].forEach(ev => z.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation(); z.classList.add('over');
+  }));
+  ['dragleave','drop'].forEach(ev => z.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation();
+    if(ev === 'dragleave' && z.contains(e.relatedTarget)) return;
+    z.classList.remove('over');
+  }));
+  z.addEventListener('drop', e => {
+    const files = [...((e.dataTransfer && e.dataTransfer.files) || [])];
+    if(files.length) handler(files);
+  });
+}
+// Dropping anywhere BUT a zone would otherwise make the browser open the file
+wireDrop('drop', acceptReceiptFiles);
+wireDrop('docdrop', acceptDocFiles);
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+async function acceptReceiptFiles(files){
+  const f = files[0];
+  if(!f) return;
+  if(files.length > 1) msgLine('Only the first file was used as the carrier receipt — add the rest under Documents.');
+  $('#droptxt').textContent = 'Preparing ' + f.name + '…';
+  const p = await prepareFile(f);
+  FILE_B64 = p.b64; FILE_NAME = p.name; FILE_MIME = p.mime; FILE_THUMB = p.thumb;
+  $('#drop').classList.add('has');
+  $('#dropic').textContent = '\u2713';
+  $('#droptxt').textContent = p.name;
+  const hint = $('#drop').querySelector('.hint');
+  if(hint) hint.textContent = sizeNote(p) + (p.shrunk ? ' · resized for upload' : '');
+  updateSubmit();
+}
+async function acceptDocFiles(files){
   const dtype = $('#dtype').value;
-  const files = [...e.target.files];
-  e.target.value = '';
   for(const f of files){
     const p = await prepareFile(f);
     DOCS.push({ doc_type: dtype, name: p.name, mime: p.mime, b64: p.b64, thumb: p.thumb, note: sizeNote(p) });
     renderDocs();
   }
+}
+function msgLine(t){ const m = $('#msg'); if(m){ m.className = ''; m.textContent = t; } }
+
+$('#docfile').addEventListener('change', async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  await acceptDocFiles(files);
 });
 function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
@@ -317,16 +364,9 @@ function renderDocs(){
 }
 
 $('#file').addEventListener('change', async e => {
-  const f = e.target.files[0]; if(!f) return;
-  $('#droptxt').textContent = 'Preparing ' + f.name + '\u2026';
-  const p = await prepareFile(f);
-  FILE_B64 = p.b64; FILE_NAME = p.name; FILE_MIME = p.mime; FILE_THUMB = p.thumb;
-  $('#drop').classList.add('has');
-  $('#dropic').textContent = '\u2713';
-  $('#droptxt').textContent = p.name;
-  const hint = $('#drop').querySelector('.hint');
-  if(hint) hint.textContent = sizeNote(p) + (p.shrunk ? ' \u00b7 resized for upload' : '');
-  updateSubmit();
+  const files = [...e.target.files];
+  e.target.value = '';
+  await acceptReceiptFiles(files);
 });
 
 function updateSubmit(){

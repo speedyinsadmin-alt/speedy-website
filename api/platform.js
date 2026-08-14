@@ -73,7 +73,9 @@ async function applyClientMove(s, row, toClient, actor, reason, wasApproved) {
     body: JSON.stringify({ ts: new Date().toISOString(), actor, kind: 'client.corrected',
       client_no: toClient, source: 'platform',
       payload: { payment_id: row.id, amount: row.amount, from: fromClient, to: toClient,
-                 reason, approved_by_owner: !!wasApproved, hawksoft_notes: !!notes.ok } }) });
+                 reason, approved_by_owner: !!wasApproved, hawksoft_notes: !!notes.ok,
+                 requested_by: row.correction_requested_by || actor,
+                 owner: row.commission_to || agentEmailOf(row.agent) } }) });
 
   return { from: fromClient, to: toClient, hawksoft_notes: !!notes.ok };
 }
@@ -421,7 +423,7 @@ if (view === 'portal_share_due') {
          except a "last seen" marker per agent, so this stays cheap. */
       const since = new Date(Date.now() - 30 * 86400000).toISOString();
       const ev = await sbGet(s, `events?ts=gte.${since}`
-        + `&kind=in.(commission.reassigned,commission.shared,audit.repaired,ledger.status_corrected)`
+        + `&kind=in.(commission.reassigned,commission.shared,audit.repaired,client.corrected,client.correction_rejected)`
         + `&select=id,ts,actor,kind,client_no,payload&order=ts.desc&limit=100`);
 
       const seenRow = await sbGet(s, `agent_prefs?agent_email=eq.${encodeURIComponent(me)}&select=news_seen_at`);
@@ -447,6 +449,20 @@ if (view === 'portal_share_due') {
           items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
             title: nameOf(p.owner) + ' shared commission with you',
             detail: p.pct + '% of $' + Number(p.fee || 0).toFixed(2) });
+        } else if (e.kind === 'client.corrected') {
+          // tell whoever asked for it, once someone else acted on it
+          if ((p.requested_by === me || p.owner === me) && actor !== me) {
+            items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: p.to,
+              title: 'Your wrong-client correction was approved',
+              detail: '$' + Number(p.amount || 0).toFixed(2) + ' moved from #' + p.from + ' to #' + p.to,
+              action: 'Back in your list — it still needs proof' });
+          }
+        } else if (e.kind === 'client.correction_rejected') {
+          if (p.requested_by === me) {
+            items.push({ id: e.id, ts: e.ts, tone: 'amber', client_no: e.client_no,
+              title: 'Your wrong-client correction was not approved',
+              detail: 'The payment stays on client #' + e.client_no });
+          }
         } else if (e.kind === 'audit.repaired' && p.entered_by === me) {
           items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
             title: 'An audit was repaired for you',

@@ -311,7 +311,7 @@ export default async function handler(req, res) {
   // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
   // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
   const view = String(req.query.view || '');
-  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news'];
+  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
@@ -498,7 +498,7 @@ if (view === 'portal_news') {
   }
 
   // Agent-reachable POST actions (each enforces its own scoping below)
-  const AGENT_ACTIONS = ['reassign_commission', 'news_seen'];
+  const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -587,6 +587,43 @@ if (view === 'portal_news') {
         body: JSON.stringify([{ agent_email, percentage: Number(percentage), updated_by: email, updated_at: new Date().toISOString() }]),
       });
       return res.status(200).json({ ok: true, email, agent_email, percentage: Number(percentage) });
+    }
+
+    if (action === 'set_share') {
+      /* One decision, then locked. Skipping counts as 0% — otherwise a forgotten prompt
+         would leave commission unresolved forever. Only the owner decides; Tony can
+         override a locked split from the Audit tab. */
+      const paymentId = String((req.body || {}).payment_id || '');
+      const pctRaw = Number((req.body || {}).pct);
+      const pct = Number.isFinite(pctRaw) ? Math.max(0, Math.min(100, pctRaw)) : 0;
+      if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required' });
+
+      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=id,agent,commission_to,share_locked_at,fee_amount,client_id`);
+      const row = (cur.rows || [])[0];
+      if (!row) return res.status(404).json({ ok: false, error: 'Payment not found' });
+
+      const me2 = String(email).toLowerCase();
+      const isAdmin = ADMIN_ALLOWLIST.includes(me2);
+      if (!isAdmin) {
+        if (row.commission_to !== me2) return res.status(403).json({ ok: false, error: 'Only the agent who earns this can share it.' });
+        if (row.share_locked_at) return res.status(403).json({ ok: false, error: 'This split is already set. Ask Tony if it needs changing.' });
+      }
+
+      const helper = agentEmailOf(row.agent);
+      const patch = { helper_share_pct: pct, share_locked_at: new Date().toISOString(), share_set_by: me2,
+                      helper_email: pct > 0 ? helper : null };
+      const up = await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+      if (up.status >= 300) return res.status(502).json({ ok: false, error: 'Could not save it.' });
+
+      await fetch(`${s.base}/rest/v1/events`, {
+        method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: new Date().toISOString(), actor: me2, kind: 'commission.shared',
+          client_no: row.client_id, source: 'portal',
+          payload: { payment_id: paymentId, owner: row.commission_to, helper, pct,
+                     fee: row.fee_amount, by: me2, admin_override: isAdmin } }),
+      });
+      return res.status(200).json({ ok: true, pct, helper_name: AGENT_NAME[helper] || helper });
     }
 
     if (action === 'news_seen') {
@@ -798,6 +835,10 @@ if (view === 'portal_news') {
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
         agent: agentEmail, agent_raw: p.agent, is_admin: isAdmin, secure_link: isSecureLink,
         path, audit_status: auditStatus, pre_audit: preAudit,
+        commission_to: p.commission_to || agentEmailOf(p.agent) || null,
+        helper_email: p.helper_email || null,
+        helper_share_pct: p.helper_share_pct != null ? Number(p.helper_share_pct) : null,
+        share_locked_at: p.share_locked_at || null,
         receipt_pending: (p.kind === 'charge_captured') || !!(p.extra && p.extra.receipt_pending === true),
         service_cost: cost, fee, pct, commission, doc_count: docs.length, task_id: task ? task.id : null,
       };

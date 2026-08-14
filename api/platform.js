@@ -311,7 +311,7 @@ export default async function handler(req, res) {
   // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
   // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
   const view = String(req.query.view || '');
-  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff'];
+  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
@@ -341,6 +341,47 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true,
         staff: Object.entries(AGENT_NAME).map(([email, name]) => ({ email, name })),
         producers: PRODUCER_MAP });
+    }
+
+if (view === 'portal_news') {
+      /* Notifications, built from the events we already write. Nothing new is stored
+         except a "last seen" marker per agent, so this stays cheap. */
+      const since = new Date(Date.now() - 30 * 86400000).toISOString();
+      const ev = await sbGet(s, `events?ts=gte.${since}`
+        + `&kind=in.(commission.reassigned,commission.shared,audit.repaired,ledger.status_corrected)`
+        + `&select=id,ts,actor,kind,client_no,payload&order=ts.desc&limit=100`);
+
+      const seenRow = await sbGet(s, `agent_prefs?agent_email=eq.${encodeURIComponent(me)}&select=news_seen_at`);
+      const seenAt = (seenRow.rows && seenRow.rows[0]) ? seenRow.rows[0].news_seen_at : null;
+
+      const nameOf = e => AGENT_NAME[e] || (e ? String(e).split('@')[0] : 'someone');
+      const items = [];
+      for (const e of (ev.rows || [])) {
+        const p = e.payload || {};
+        const actor = agentEmailOf(e.actor);
+        if (e.kind === 'commission.reassigned') {
+          if (p.to === me && actor !== me) {
+            items.push({ id: e.id, ts: e.ts, tone: 'amber', client_no: e.client_no,
+              title: nameOf(actor) + ' gave you a payment',
+              detail: '$' + Number(p.amount || 0).toFixed(2) + ' — they charged it, you earn it',
+              action: 'Needs your proof of payment' });
+          } else if (p.from === me && actor !== me) {
+            items.push({ id: e.id, ts: e.ts, tone: 'grey', client_no: e.client_no,
+              title: nameOf(actor) + ' moved a payment off your list',
+              detail: '$' + Number(p.amount || 0).toFixed(2) + ' now belongs to ' + nameOf(p.to) });
+          }
+        } else if (e.kind === 'commission.shared' && p.helper === me) {
+          items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
+            title: nameOf(p.owner) + ' shared commission with you',
+            detail: p.pct + '% of $' + Number(p.fee || 0).toFixed(2) });
+        } else if (e.kind === 'audit.repaired' && p.entered_by === me) {
+          items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
+            title: 'An audit was repaired for you',
+            detail: p.carrier + ' $' + Number(p.carrier_amount || 0).toFixed(2) + ' — fee $' + Number(p.fee || 0).toFixed(2) });
+        }
+      }
+      const unread = seenAt ? items.filter(i => i.ts > seenAt).length : items.length;
+      return res.status(200).json({ ok: true, unread, items: items.slice(0, 25), seen_at: seenAt });
     }
 
     if (view === 'portal_thumbs') {
@@ -393,7 +434,7 @@ export default async function handler(req, res) {
     if (view === 'portal_home') {
       const me = who.email;
       // Pull this agent's own ledger rows (match any agent string containing their email)
-      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra&order=ts.desc&limit=500');
+      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
@@ -457,7 +498,7 @@ export default async function handler(req, res) {
   }
 
   // Agent-reachable POST actions (each enforces its own scoping below)
-  const AGENT_ACTIONS = ['reassign_commission'];
+  const AGENT_ACTIONS = ['reassign_commission', 'news_seen'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -546,6 +587,14 @@ export default async function handler(req, res) {
         body: JSON.stringify([{ agent_email, percentage: Number(percentage), updated_by: email, updated_at: new Date().toISOString() }]),
       });
       return res.status(200).json({ ok: true, email, agent_email, percentage: Number(percentage) });
+    }
+
+    if (action === 'news_seen') {
+      await fetch(`${s.base}/rest/v1/agent_prefs`, {
+        method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify([{ agent_email: String(email).toLowerCase(), news_seen_at: new Date().toISOString() }]),
+      });
+      return res.status(200).json({ ok: true });
     }
 
     if (action === 'reassign_commission') {

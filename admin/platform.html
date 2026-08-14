@@ -43,6 +43,14 @@
   .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
   .perchip.sel{background:var(--blue);border-color:var(--blue);color:#fff}
   .dinput{background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--ink);font-size:12px}
+  .abtn{display:inline-block;border:0;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.12s}
+  .abtn.go{background:var(--green,#2fbf71);color:#04220f}
+  .abtn.go:hover{filter:brightness(1.08)}
+  .abtn.no{background:transparent;color:var(--mute);border:1px solid var(--line)}
+  .abtn.no:hover{color:#ff8f8f;border-color:rgba(224,49,49,.5)}
+  .agentcard{border:1px solid var(--line);border-radius:12px;margin-bottom:9px;overflow:hidden;transition:.12s}
+  .agentcard:hover{border-color:rgba(127,168,255,.45)}
+  .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;color:#0b1220;flex-shrink:0}
   .docbtn{display:inline-block;padding:4px 11px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent}
   .docbtn.g{background:rgba(47,191,113,.15);color:#7ee2a8;border-color:rgba(47,191,113,.35)}
   .docbtn.r{background:rgba(224,49,49,.15);color:#ff8f8f;border-color:rgba(224,49,49,.35)}
@@ -87,7 +95,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.6</small></h1>
+      <h1>Platform Console <small id="ver">v5.7</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -727,6 +735,12 @@ function agentName(email){
     'chris@speedyins.com':'Christian Aguilar' };
   return M[email] || (email||'').split('@')[0] || email;
 }
+const AGENT_LABEL = {
+  'sammy@speedyins.com':'Samuel Rodriguez','jesus@speedyins.com':'Jesus Velarde','info@speedyins.com':'Tony Dabouqi (owner)',
+  'alejandra@speedyins.com':'Alejandra Salas','yasmin@speedyins.com':'Yasmin Alfaro','lfigueroa@speedyins.com':'Laura Figueroa',
+  'jorge@speedyins.com':'Jorge Ramos','chris@speedyins.com':'Christian Aguilar','yolanda@speedyins.com':'Yolanda Hernandez',
+  'fernando@speedyins.com':'Fernando Salgado','esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
+};
 function renderAgentView(r){
   const rows = r.rows || [];
   const commMap = {}; for(const c of (r.commissions||[])) commMap[c.agent_email] = Number(c.percentage);
@@ -758,15 +772,29 @@ function renderAgentView(r){
     const open = AGENT_OPEN === g.agent;
     const period = (g.first && g.last) ? (g.first===g.last ? g.first : g.first+' → '+g.last) : '—';
 
-    // header card
-    h += '<div style="border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden">';
-    h += '<div onclick="toggleAgent(\''+g.agent+'\')" style="cursor:pointer;display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--navy)">'
-      + '<span style="color:var(--mute);width:12px">'+(open?'▾':'▸')+'</span>'
+    // header card — the flat list gave no sense of who is carrying the work, so each
+    // agent now shows an initials badge and how much of their book is actually audited
+    const done = g.tx.filter(x => x.audit_status === 'complete').length;
+    const pctDone = g.tx.length ? Math.round(done / g.tx.length * 100) : 0;
+    const nm = (AGENT_LABEL[g.agent] || g.agent);
+    const initials = nm.split(/[\s@.]+/).filter(Boolean).slice(0,2).map(x => x[0].toUpperCase()).join('');
+    const hue = [...g.agent].reduce((a,c) => a + c.charCodeAt(0), 0) % 360;
+    h += '<div class="agentcard">';
+    h += '<div onclick="toggleAgent(\''+g.agent+'\')" style="cursor:pointer;display:flex;align-items:center;gap:13px;padding:13px 16px;background:var(--navy)">'
+      + '<span style="color:var(--mute);width:10px;font-size:11px">'+(open?'▾':'▸')+'</span>'
+      + '<span class="avatar" style="background:hsl('+hue+',55%,68%)">'+esc(initials)+'</span>'
       + '<div style="flex:1"><b style="font-size:15px">'+esc(agentName(g.agent))+'</b>'
       + (g.agent==='info@speedyins.com'?' <span class="pill a" style="font-size:10px">admin</span>':'')
-      + '<div class="muted" style="font-size:12px">'+g.tx.length+' transactions · '+esc(period)+' · '+esc(g.agent)+'</div></div>'
-      + '<div style="text-align:right"><div class="muted" style="font-size:11px">Earned</div><b class="amount" style="color:#7fa8ff;font-size:16px">'+money(g.earned)+'</b></div>'
-      + '<div style="text-align:right"><div class="muted" style="font-size:11px">Pending</div><span class="amount muted">'+money(g.pending)+'</span></div>'
+      + '<div class="muted" style="font-size:11.5px;margin-top:2px">'+g.tx.length+' payments · '+esc(period)+'</div>'
+      + '<div style="display:flex;align-items:center;gap:7px;margin-top:6px">'
+      + '<div style="flex:1;max-width:150px;height:4px;background:rgba(255,255,255,.09);border-radius:99px;overflow:hidden">'
+      + '<div style="width:'+pctDone+'%;height:100%;background:'+(pctDone===100?'var(--green)':pctDone>=50?'#7fa8ff':'var(--amber)')+'"></div></div>'
+      + '<span class="muted" style="font-size:10.5px">'+done+' of '+g.tx.length+' audited</span></div>'
+      + '</div>'
+      + '<div style="text-align:right"><div class="muted" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.04em">Earned</div>'
+      + '<b class="amount" style="color:#7fa8ff;font-size:17px">'+money(g.earned)+'</b></div>'
+      + '<div style="text-align:right;min-width:74px"><div class="muted" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.04em">Pending</div>'
+      + '<span class="amount" style="color:'+(g.pending>0?'var(--amber)':'var(--mute)')+'">'+money(g.pending)+'</span></div>'
       + '</div>';
 
     if(open){
@@ -1292,8 +1320,8 @@ async function renderCorrections(){
         + esc(String(x.correction_requested_by || '').split('@')[0]) + ' · ' + esc(String(x.correction_requested_at || '').slice(0,16).replace('T',' '))
         + (x.correction_note ? ' · "' + esc(x.correction_note) + '"' : '') + '</div>'
         + '<div style="display:flex;gap:7px;margin-top:9px">'
-        + '<button class="btn" style="margin:0" onclick="decideCorrection(\'' + x.id + '\',true)">Approve the move</button>'
-        + '<button class="btn btn-ghost" style="margin:0" onclick="decideCorrection(\'' + x.id + '\',false)">Reject</button>'
+        + '<button class="abtn go" onclick="decideCorrection(\'' + x.id + '\',true)">Approve the move</button>'
+        + '<button class="abtn no" onclick="decideCorrection(\'' + x.id + '\',false)">Reject</button>'
         + '</div></div>').join('')
     + '</div>';
 }

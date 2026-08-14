@@ -133,6 +133,30 @@
       <div id="doclist" style="margin-top:10px"></div>
     </div>
 
+    <div id="reviewSheet" class="hide" style="position:fixed;inset:0;background:rgba(6,9,24,.92);z-index:70;overflow-y:auto;padding:16px">
+      <div style="max-width:520px;margin:0 auto">
+        <div class="card" style="border-color:var(--blue)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:1px solid var(--line)">
+            <div>
+              <div style="font-size:15px;font-weight:800" id="revTitle">What is each one?</div>
+              <div class="muted" style="font-size:11.5px;margin-top:2px" id="revSub"></div>
+            </div>
+            <div onclick="cancelReview()" style="cursor:pointer;color:var(--mute);font-size:19px;padding:0 4px">&#10005;</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)">
+            <span class="muted" style="font-size:11.5px">Set all to</span>
+            <select id="revAll" onchange="setAllTypes(this.value)" style="margin:0;flex:1"></select>
+          </div>
+          <div id="revBody"></div>
+          <div id="revWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:10px;font-size:11.5px;color:var(--amber)"></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-ghost" style="margin:0;flex:1" onclick="cancelReview()">Cancel</button>
+            <button class="btn" style="margin:0;flex:1.5" id="revAdd" onclick="confirmReview()">Add documents</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="btns">
       <button class="save" onclick="submit(false)">Save &amp; finish later</button>
       <button class="submit" id="submitBtn" onclick="submit(true)" disabled>Submit to audit</button>
@@ -337,13 +361,120 @@ async function acceptReceiptFiles(files){
   if(hint) hint.textContent = sizeNote(p) + (p.shrunk ? ' · resized for upload' : '');
   updateSubmit();
 }
-async function acceptDocFiles(files){
-  const dtype = $('#dtype').value;
-  for(const f of files){
-    const p = await prepareFile(f);
-    DOCS.push({ doc_type: dtype, name: p.name, mime: p.mime, b64: p.b64, thumb: p.thumb, note: sizeNote(p) });
-    renderDocs();
+/* ---------- Review before adding ----------
+   The document type used to be chosen before the files, so one label was stamped on a
+   whole batch — drop an application, a licence and six photos and all eight came out
+   the same. Each file now gets its own type. A filename guess is offered but must be
+   confirmed: an unconfirmed guess is exactly the silent mislabel we are trying to
+   avoid, so the Add button stays locked until every guess is acknowledged. */
+const DOC_TYPES = [
+  ['carrier_application','Carrier application'], ['vehicle_photo','Vehicle photo'],
+  ['property_photo','Property photo'], ['driver_license','Driver license'],
+  ['dec_page','Dec page'], ['other','Other'],
+];
+let REVIEW_FILES = [];
+
+function guessType(name){
+  const n = String(name || '').toLowerCase();
+  if(/licen[cs]e|dl[_-]|\bid\b/.test(n))              return 'driver_license';
+  if(/applicat|signed[_-]?app|\bapp\b/.test(n))       return 'carrier_application';
+  if(/dec[_-]?page|declarat/.test(n))                  return 'dec_page';
+  // property words are checked first: "roof_damage" is a property photo, and
+  // "damage" alone would otherwise claim it for vehicles
+  if(/propert|home|roof|dwelling|kitchen|garage/.test(n)) return 'property_photo';
+  if(/vehicle|vin|bumper|odom|damage|car[_-]/.test(n))    return 'vehicle_photo';
+  return null;
+}
+function typeOptions(sel){
+  return DOC_TYPES.map(t => '<option value="' + t[0] + '"' + (t[0] === sel ? ' selected' : '') + '>' + t[1] + '</option>').join('');
+}
+function openReview(prepared){
+  const fallback = $('#dtype').value;
+  REVIEW_FILES = prepared.map((p, i) => {
+    const g = guessType(p.name);
+    return { i, p, type: g || fallback, guessed: !!g, confirmed: !g };
+  });
+  $('#revAll').innerHTML = typeOptions(fallback);
+  $('#revSub').textContent = prepared.length + ' files · '
+    + Math.round(prepared.reduce((a, p) => a + p.bytes, 0) / 1024) + ' KB after resizing · nothing uploaded yet';
+  $('#revTitle').textContent = prepared.length + ' files — what is each one?';
+  renderReview();
+  $('#reviewSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+}
+function renderReview(){
+  $('#revBody').innerHTML = REVIEW_FILES.map(r => {
+    const p = r.p;
+    const thumb = p.thumb
+      ? '<img src="' + p.thumb + '" alt="" style="width:46px;height:36px;object-fit:cover;border-radius:6px;display:block">'
+      : '<div style="width:46px;height:36px;background:var(--field);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px">📄</div>';
+    const needs = r.guessed && !r.confirmed;
+    return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)">'
+      + thumb
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.name) + '</div>'
+      + '<div class="muted" style="font-size:10.5px">' + esc(sizeNote(p)) + '</div>'
+      + (needs ? '<div style="color:var(--amber);font-size:10.5px;margin-top:2px;cursor:pointer" onclick="confirmGuess(' + r.i + ')">guessed — tap to confirm</div>' : '')
+      + '</div>'
+      + '<select onchange="setType(' + r.i + ',this.value)" style="margin:0;width:auto;min-width:130px;'
+      + (needs ? 'border-color:var(--amber)' : '') + '">' + typeOptions(r.type) + '</select>'
+      + '<span onclick="dropFile(' + r.i + ')" style="cursor:pointer;color:var(--mute);font-size:15px">✕</span>'
+      + '</div>';
+  }).join('');
+  const pending = REVIEW_FILES.filter(r => r.guessed && !r.confirmed).length;
+  const warn = $('#revWarn'), add = $('#revAdd');
+  if(pending){
+    warn.classList.remove('hide');
+    warn.textContent = pending + ' file' + (pending > 1 ? 's were' : ' was') + ' labelled from the filename. Confirm or change ' + (pending > 1 ? 'them' : 'it') + ' before adding.';
+    add.disabled = true; add.style.opacity = '.5';
+  } else {
+    warn.classList.add('hide');
+    add.disabled = false; add.style.opacity = '';
   }
+  add.textContent = 'Add ' + REVIEW_FILES.length + ' document' + (REVIEW_FILES.length === 1 ? '' : 's');
+}
+function setType(i, v){
+  const r = REVIEW_FILES.find(x => x.i === i); if(!r) return;
+  r.type = v; r.confirmed = true; renderReview();
+}
+function confirmGuess(i){
+  const r = REVIEW_FILES.find(x => x.i === i); if(!r) return;
+  r.confirmed = true; renderReview();
+}
+function setAllTypes(v){
+  REVIEW_FILES.forEach(r => { r.type = v; r.confirmed = true; });
+  renderReview();
+}
+function dropFile(i){
+  REVIEW_FILES = REVIEW_FILES.filter(x => x.i !== i);
+  if(!REVIEW_FILES.length){ cancelReview(); return; }
+  renderReview();
+}
+function cancelReview(){
+  REVIEW_FILES = [];
+  $('#reviewSheet').classList.add('hide');
+  document.body.style.overflow = '';
+}
+function confirmReview(){
+  if(REVIEW_FILES.some(r => r.guessed && !r.confirmed)) return;
+  for(const r of REVIEW_FILES){
+    DOCS.push({ doc_type: r.type, name: r.p.name, mime: r.p.mime, b64: r.p.b64, thumb: r.p.thumb, note: sizeNote(r.p) });
+  }
+  cancelReview();
+  renderDocs();
+}
+
+async function acceptDocFiles(files){
+  // one file: no interruption, use the type already chosen
+  if(files.length === 1){
+    const p = await prepareFile(files[0]);
+    DOCS.push({ doc_type: $('#dtype').value, name: p.name, mime: p.mime, b64: p.b64, thumb: p.thumb, note: sizeNote(p) });
+    renderDocs();
+    return;
+  }
+  const prepared = [];
+  for(const f of files) prepared.push(await prepareFile(f));   // resize first, so sizes shown are real
+  openReview(prepared);
 }
 function msgLine(t){ const m = $('#msg'); if(m){ m.className = ''; m.textContent = t; } }
 

@@ -129,7 +129,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.5</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.6</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -636,6 +636,7 @@ function payHistoryHtml(c){
       + esc(p.commission_to_name || 'unassigned') + '</b>'
       + ((p.commission_to === EMAIL || (p.charged_by && p.charged_by.toLowerCase().includes((EMAIL||'').split('@')[0])))
           ? ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();reassignPayment(\'' + p.id + '\',\'' + esc(p.commission_to||'') + '\')">change</span>'
+            + ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();moveClient(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')">wrong client</span>'
           : '')
       + '</div>'
       + (dl.length
@@ -891,6 +892,28 @@ async function setShare(pct){
   const r = await apiPost({ action:'set_share', payment_id: c.id, pct });
   if(!r || !r.ok){ alert((r && r.error) || 'Could not save it.'); return; }
   showNextShare();
+}
+
+/* ---------- Wrong client ----------
+   The money is right; only the record is wrong. Within 15 minutes the agent who took
+   the payment fixes their own slip; after that Tony decides. Either way the Clover
+   transaction is untouched and both HawkSoft records get a correction note. */
+async function moveClient(paymentId, fromClientNo, amount){
+  const q = prompt('This payment is on client #' + fromClientNo + '.\n\nWhich client number should it be on?');
+  if(!q) return;
+  const to = parseInt(String(q).replace(/\D/g,''), 10);
+  if(!to){ alert('Enter the client number.'); return; }
+  if(to === fromClientNo){ alert('That is the same client.'); return; }
+  const why = prompt('Briefly, what happened? (Tony will see this)') || '';
+  if(!confirm('Move $' + Number(amount||0).toFixed(2) + ' from client #' + fromClientNo + ' to #' + to + '?\n\n'
+    + 'No money moves — the card charge stays exactly as it is. Both client records get a correction note.')) return;
+  const r = await apiPost({ action:'move_client', payment_id: paymentId, to_client: to, reason: why });
+  if(!r || !r.ok){ alert((r && r.error) || 'Could not do that.'); return; }
+  alert(r.pending ? r.message : 'Moved to client #' + r.to + '. Both records have a correction note.');
+  if(ACTIVE_TAB){ delete CLIENT_CACHE[ACTIVE_TAB]; openClient(ACTIVE_TAB); }
+  await loadHome();
+  const sheet = document.getElementById('todoSheet');
+  if(sheet && !sheet.classList.contains('hide')){ if(UNFINISHED.length) openTodo(); else closeTodo(); }
 }
 
 function toggleEarnings(force){

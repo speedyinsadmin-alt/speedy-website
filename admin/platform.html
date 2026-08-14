@@ -87,7 +87,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.4</small></h1>
+      <h1>Platform Console <small id="ver">v5.5</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -785,7 +785,9 @@ function renderAgentView(r){
         const docs = atts.filter(a => (a.payment_id===x.id) || (a.client_no===x.client_no));
         const docCell = docsCell(docs, !x.pre_audit && x.audit_status !== 'complete', x.id, (x.client_name||('#'+x.client_no))+' \u00b7 '+money(x.amount));
         h += '<tr><td class="muted" style="font-size:12px">'+esc(String(x.ts||'').slice(0,10))+'</td>'
-          + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span></td>'
+          + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span>'
+            + (x.charged_by_other ? '<div class="muted" style="font-size:10.5px">charged by ' + esc(String(x.charged_by||'').split(' ')[0]) + '</div>' : '')
+            + '</td>'
           + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
           + '<td class="amount">'+money(x.amount)+'</td>'
           + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'

@@ -37,7 +37,7 @@
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
-  #chargeSheet,#todoSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  #chargeSheet,#todoSheet,#newsSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
   .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
   .todoitem:hover{border-color:var(--amber)}
@@ -90,6 +90,11 @@
     </div>
 
     <!-- to-do -->
+    <div id="newsBell" class="hide" onclick="openNews()" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-bottom:8px;cursor:pointer">
+      <span style="color:var(--blue-l);font-size:12.5px">What's new</span>
+      <span id="newsCount" style="background:var(--red);color:#fff;font-size:10.5px;font-weight:800;border-radius:99px;padding:1px 7px">0</span>
+    </div>
+
     <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openTodo()">
       <div style="font-size:13px;font-weight:700;color:var(--amber)" id="todoText">⚠ You have payments needing proof</div>
       <div style="font-size:11px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
@@ -124,9 +129,25 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.3</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.4</span> · you see only your own work</div>
   </div>
 
+</div>
+
+<div id="newsSheet" class="hide">
+  <div style="max-width:520px;margin:0 auto">
+    <div class="card" style="border-color:var(--blue)">
+      <div class="row" style="align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:16px;font-weight:800">What's new</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">Changes that affect your work</div>
+        </div>
+        <div onclick="closeNews()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
+      </div>
+      <div id="newsBody"></div>
+      <button class="btn btn-ghost" onclick="markNewsSeen()">Mark all as read</button>
+    </div>
+  </div>
 </div>
 
 <!-- ===== STAGE 4: UNFINISHED AUDITS ===== -->
@@ -284,6 +305,7 @@ async function loadHome(){
   $('#pending').textContent = money(r.commission.pending_month);
   UNFINISHED = r.unfinished || [];
   restoreEarningsPref();
+  loadNews();
   const n = r.unfinished_count || 0;
   if(n){
     $('#todo').classList.remove('hide');
@@ -750,6 +772,56 @@ async function apiPost(body){
     headers:{ 'x-id-token': TOKEN, 'Content-Type':'application/json' },
     body: JSON.stringify(body) });
   return r.json();
+}
+
+/* ---------- Notifications ----------
+   A reassignment used to happen silently: the payment simply appeared in someone's
+   queue with nothing to say why. These read the events already written for the audit
+   trail, so no new writing happens except a per-agent "last seen" marker. */
+let NEWS = [], NEWS_SEEN = null;
+async function loadNews(){
+  try{
+    const r = await api('portal_news');
+    if(!r || !r.ok) return;
+    NEWS = r.items || []; NEWS_SEEN = r.seen_at;
+    const bell = document.getElementById('newsBell'), cnt = document.getElementById('newsCount');
+    if(!NEWS.length){ bell.classList.add('hide'); return; }
+    bell.classList.remove('hide');
+    if(r.unread > 0){ cnt.textContent = r.unread; cnt.style.display = ''; }
+    else cnt.style.display = 'none';
+  }catch(e){}
+}
+function openNews(){
+  const tone = t => t === 'amber' ? 'var(--amber)' : t === 'green' ? 'var(--green)' : 'var(--mute)';
+  const ago = ts => {
+    const m = Math.round((Date.now() - new Date(ts)) / 60000);
+    return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m/60) + ' hr ago' : Math.round(m/1440) + ' days ago';
+  };
+  document.getElementById('newsBody').innerHTML = NEWS.length
+    ? NEWS.map(n => {
+        const isNew = !NEWS_SEEN || n.ts > NEWS_SEEN;
+        return '<div style="background:var(--field);border-left:2px solid ' + tone(n.tone) + ';border-radius:8px;padding:10px 11px;margin-bottom:7px;'
+          + (isNew ? '' : 'opacity:.6;') + (n.client_no ? 'cursor:pointer"onclick="closeNews();openClient(' + n.client_no + ')"' : '"')
+          + '>'
+          + '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>'
+          + '<div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(n.detail || '') + '</div>'
+          + (n.action ? '<div style="color:var(--amber);font-size:11px;margin-top:4px">' + esc(n.action) + ' →</div>' : '')
+          + '<div class="dim" style="font-size:10.5px;margin-top:3px">' + ago(n.ts)
+          + (n.client_no ? ' · #' + n.client_no : '') + (isNew ? '' : ' · read') + '</div></div>';
+      }).join('')
+    : '<div class="dim" style="font-size:12.5px">Nothing new.</div>';
+  document.getElementById('newsSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+}
+function closeNews(){
+  document.getElementById('newsSheet').classList.add('hide');
+  document.body.style.overflow = '';
+}
+async function markNewsSeen(){
+  await apiPost({ action: 'news_seen' });
+  NEWS_SEEN = new Date().toISOString();
+  document.getElementById('newsCount').style.display = 'none';
+  closeNews();
 }
 
 function toggleEarnings(force){

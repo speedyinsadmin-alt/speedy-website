@@ -875,9 +875,17 @@ if (view === 'portal_share_due') {
   }
 
   if (view === 'agent_breakdown') {
+    /* Group by who EARNS the commission, not who ran the charge. Grouping by charger
+       made a reassigned payment show under the wrong agent — Angela Cervantes stayed
+       under Jesus after he handed it to Sammy. */
     const agent = String(req.query.agent || '');
-    const r = await sbGet(s, `bridge_ledger?agent=eq.${encodeURIComponent(agent)}&is_test=is.false&select=*&order=ts.desc&limit=500`);
-    return res.status(200).json({ ok: true, email, rows: r.rows || [] });
+    const em = agentEmailOf(agent);
+    const r = await sbGet(s, 'bridge_ledger?is_test=is.false&select=*&order=ts.desc&limit=500');
+    const rows = (r.rows || []).filter(x => (x.commission_to || agentEmailOf(x.agent)) === em)
+      .map(x => ({ ...x,
+        charged_by: AGENT_NAME[agentEmailOf(x.agent)] || agentEmailOf(x.agent) || null,
+        charged_by_other: agentEmailOf(x.agent) !== em }));
+    return res.status(200).json({ ok: true, email, rows });
   }
 
   if (view === 'thumbs') {

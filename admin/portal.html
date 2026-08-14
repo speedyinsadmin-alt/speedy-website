@@ -37,7 +37,7 @@
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
-  #chargeSheet,#todoSheet,#newsSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  #chargeSheet,#todoSheet,#newsSheet,#shareSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
   .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
   .todoitem:hover{border-color:var(--amber)}
@@ -129,9 +129,22 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.4</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.5</span> · you see only your own work</div>
   </div>
 
+</div>
+
+<div id="shareSheet" class="hide">
+  <div style="max-width:460px;margin:0 auto">
+    <div class="card" style="border-color:var(--green)">
+      <div style="font-size:16px;font-weight:800">Share this commission?</div>
+      <div class="muted" style="font-size:12px;margin-top:2px" id="shareWho">—</div>
+      <div id="shareBody" style="margin-top:12px"></div>
+      <div class="dim" style="font-size:11px;text-align:center;margin-top:10px">
+        This is the only time you can set it. Choosing nothing keeps all of it.
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="newsSheet" class="hide">
@@ -306,6 +319,7 @@ async function loadHome(){
   UNFINISHED = r.unfinished || [];
   restoreEarningsPref();
   loadNews();
+  checkShareDue();
   const n = r.unfinished_count || 0;
   if(n){
     $('#todo').classList.remove('hide');
@@ -822,6 +836,61 @@ async function markNewsSeen(){
   NEWS_SEEN = new Date().toISOString();
   document.getElementById('newsCount').style.display = 'none';
   closeNews();
+}
+
+/* ---------- Commission sharing ----------
+   Asked once, when the audit completes — that is the first moment the fee is a real
+   number. The owner decides; skipping means 0%. Locked afterwards so it cannot drift,
+   with Tony able to override from the Audit tab. */
+let SHARE_QUEUE = [], SHARE_CUR = null;
+async function checkShareDue(){
+  try{
+    const r = await api('portal_share_due');
+    if(!r || !r.ok || !r.due || !r.due.length) return;
+    SHARE_QUEUE = r.due;
+    showNextShare();
+  }catch(e){}
+}
+function showNextShare(){
+  SHARE_CUR = SHARE_QUEUE.shift();
+  if(!SHARE_CUR){ document.getElementById('shareSheet').classList.add('hide'); document.body.style.overflow=''; loadHome(); return; }
+  const c = SHARE_CUR;
+  document.getElementById('shareWho').innerHTML =
+    esc(c.helper_name) + ' ran this charge for you · $' + c.amount.toFixed(2)
+    + ' · #' + c.client_no;
+  const opt = (pct,label) => '<div onclick="setShare(' + pct + ')" style="flex:1;background:'
+    + (pct===0 ? 'var(--field)' : 'rgba(47,191,113,.15)') + ';border:1px solid '
+    + (pct===0 ? 'var(--line)' : 'rgba(47,191,113,.4)')
+    + ';border-radius:10px;padding:12px 6px;text-align:center;cursor:pointer">'
+    + '<div style="font-size:15px;font-weight:800;color:' + (pct===0?'var(--mute)':'var(--green)') + '">' + label + '</div>'
+    + '<div class="dim" style="font-size:11px;margin-top:2px">$' + (c.commission*pct/100).toFixed(2) + '</div></div>';
+  document.getElementById('shareBody').innerHTML =
+    '<div style="background:var(--field);border-radius:10px;padding:11px;margin-bottom:11px">'
+    + '<div class="row" style="font-size:12.5px"><span class="muted">Fee kept by Speedy</span><b>$' + c.fee.toFixed(2) + '</b></div>'
+    + '<div class="row" style="font-size:12.5px;margin-top:3px"><span class="muted">Your commission</span><b style="color:var(--green)">$' + c.commission.toFixed(2) + '</b></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:6px">' + opt(0,'Keep all') + opt(25,'25%') + opt(50,'50%') + '</div>'
+    + '<button class="btn btn-ghost" onclick="customShare()">Another amount…</button>';
+  document.getElementById('shareSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+}
+function customShare(){
+  const v = prompt('What percentage of YOUR commission should ' + SHARE_CUR.helper_name + ' receive? (0-100)');
+  if(v === null) return;
+  const n = parseFloat(String(v).replace(/[^0-9.]/g,''));
+  if(!Number.isFinite(n) || n < 0 || n > 100){ alert('Enter a number between 0 and 100.'); return; }
+  setShare(n);
+}
+async function setShare(pct){
+  if(!SHARE_CUR) return;
+  const c = SHARE_CUR;
+  const msg = pct > 0
+    ? c.helper_name + ' will receive $' + (c.commission*pct/100).toFixed(2) + ' of your $' + c.commission.toFixed(2) + '.\n\nThis cannot be changed afterwards. Continue?'
+    : 'Keep all $' + c.commission.toFixed(2) + '?\n\nThis cannot be changed afterwards.';
+  if(!confirm(msg)) return;
+  const r = await apiPost({ action:'set_share', payment_id: c.id, pct });
+  if(!r || !r.ok){ alert((r && r.error) || 'Could not save it.'); return; }
+  showNextShare();
 }
 
 function toggleEarnings(force){

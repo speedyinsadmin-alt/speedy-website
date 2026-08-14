@@ -589,6 +589,42 @@ export default async function handler(req, res) {
       }});
     }
 
+    /* ---------- Correct a payment posted to the wrong client ----------
+       HawkSoft has no delete, so nothing is removed: a correction note is written to
+       BOTH records. The wrong client keeps an honest "posted in error" trail and the
+       right client gets the payment with its history. The Clover transaction is never
+       touched — the money is correct, only the filing was wrong. */
+    if (action === 'move_client_notes') {
+      const b = req.body || {};
+      const fromId = parseInt(b.fromClient, 10);
+      const toId = parseInt(b.toClient, 10);
+      const amount = parseMoney(b.amount);
+      const who = String(b.who || 'Speedy payment bridge').slice(0, 80);
+      const why = String(b.reason || '').slice(0, 120);
+      const ref = String(b.txnId || b.ref || '').slice(0, 40);
+      if (!fromId || !toId) return res.status(400).json({ ok: false, error: 'fromClient and toClient required' });
+
+      const stampNow = new Date().toISOString();
+      const note = async (clientId, text) => {
+        const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+          method: 'POST', body: JSON.stringify({
+            refId: crypto.randomUUID(), ts: stampNow, channel: 32,
+            note: text,
+          }) });
+        return { ok: r.status === 200 || r.status === 202, status: r.status };
+      };
+
+      const out = {};
+      out.fromNote = await note(fromId,
+        `CORRECTION — the $${amount.toFixed(2)} payment logged here on this record was posted to the wrong client in error `
+        + `and has been moved to client #${toId}. No money was refunded or re-charged; the card transaction is unchanged`
+        + `${ref ? ' (Clover ' + ref + ')' : ''}. Corrected by ${who}${why ? ' — ' + why : ''}.`);
+      out.toNote = await note(toId,
+        `CORRECTION — a $${amount.toFixed(2)} payment originally logged under client #${fromId} in error belongs to this client `
+        + `and has been moved here${ref ? ' (Clover ' + ref + ')' : ''}. Corrected by ${who}${why ? ' — ' + why : ''}.`);
+      return res.status(200).json({ ok: out.fromNote.ok && out.toNote.ok, results: out });
+    }
+
     /* ---------- Charge page: create a new client (charge-first workflow) ---------- */
     if (action === 'charge_create_client') {
       const b = req.body || {};

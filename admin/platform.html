@@ -87,7 +87,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.3</small></h1>
+      <h1>Platform Console <small id="ver">v5.4</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -1263,6 +1263,15 @@ async function loadLegs(sid) {
         + '<td>' + hhmm(l.started_at) + '</td><td>' + hhmm(l.answered_at) + '</td><td>' + hhmm(l.ended_at) + '</td>'
         + '<td>' + (l.duration_seconds ?? '—') + '</td></tr>').join('')
       + '</table>';
+}
+
+async function overrideShare(id, current){
+  const v = prompt('Adjust the share for the agent who ran this charge (0-100).\n\nCurrently ' + current + '%.\nThis is an owner override and will be logged.', String(current));
+  if(v === null) return;
+  const n = parseFloat(String(v).replace(/[^0-9.]/g,''));
+  if(!Number.isFinite(n) || n < 0 || n > 100){ alert('Enter a number between 0 and 100.'); return; }
+  const r = await apiPostBody({ action:'set_share', payment_id:id, pct:n });
+  if(r && r.ok){ render(); } else alert((r && r.error) || 'Could not save it.');
 }
 
 async function renderHealth(el) {

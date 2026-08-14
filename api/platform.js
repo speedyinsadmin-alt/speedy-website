@@ -1,4 +1,5 @@
 export const config = { maxDuration: 300 };
+import { randomUUID } from 'node:crypto';
 // /api/platform — backend for the Platform Console (admin/platform.html).
 // ACCESS: Google ID token (header x-id-token), allowlist below.
 // GET  = reads (HawkSoft ZZTEST, our clients/policies/events, ledger, tables)
@@ -23,6 +24,60 @@ const AGENT_NAME = {
   'tony@speedyins.com':'Tony Dabouqi','lana@speedyins.com':'Lana D',
 };
 const agentEmailOf = v => { const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i); return m ? m[0].toLowerCase() : null; };
+/* Move a payment to the correct client. Nothing is deleted: the original client number
+   is preserved on the row and a correction note is written to BOTH HawkSoft records,
+   because HawkSoft offers no way to remove what was posted in error. */
+async function applyClientMove(s, row, toClient, actor, reason, wasApproved) {
+  const fromClient = row.client_id;
+  await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(row.id)}`, {
+    method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      client_id: toClient,
+      moved_from_client: row.moved_from_client != null ? row.moved_from_client : fromClient,
+      correction_status: 'moved', correction_to_client: null,
+      correction_decided_by: actor, correction_decided_at: new Date().toISOString(),
+      correction_note: reason || row.correction_note || null,
+    }) });
+
+  // documents follow the payment
+  await fetch(`${s.base}/rest/v1/attachments?payment_id=eq.${encodeURIComponent(row.id)}`, {
+    method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+    body: JSON.stringify({ client_no: toClient }) });
+
+  // Correction notes straight to HawkSoft — this module already holds the credentials,
+  // so no internal HTTP hop (which the other endpoint's auth would have rejected).
+  const amt = Number(row.amount || 0).toFixed(2);
+  const ref = row.txn_id || row.ref || '';
+  const stampNow = new Date().toISOString();
+  const postNote = async (clientNo, text) => {
+    const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${clientNo}/log?version=4.0`, {
+      method: 'POST',
+      body: JSON.stringify({ refId: randomUUID(), ts: stampNow, channel: 32, note: text }),
+    });
+    return r.status === 200 || r.status === 202;
+  };
+  let notesOk = false;
+  try {
+    const a = await postNote(fromClient,
+      `CORRECTION — the $${amt} payment logged on this record was posted to the wrong client in error and has been `
+      + `moved to client #${toClient}. No refund and no re-charge; the card transaction is unchanged`
+      + `${ref ? ' (Clover ' + ref + ')' : ''}. Corrected by ${actor}${reason ? ' — ' + reason : ''}.`);
+    const b = await postNote(toClient,
+      `CORRECTION — a $${amt} payment originally logged under client #${fromClient} in error belongs to this client and `
+      + `has been moved here${ref ? ' (Clover ' + ref + ')' : ''}. Corrected by ${actor}${reason ? ' — ' + reason : ''}.`);
+    notesOk = a && b;
+  } catch { notesOk = false; }
+  const notes = { ok: notesOk };
+
+  await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+    body: JSON.stringify({ ts: new Date().toISOString(), actor, kind: 'client.corrected',
+      client_no: toClient, source: 'platform',
+      payload: { payment_id: row.id, amount: row.amount, from: fromClient, to: toClient,
+                 reason, approved_by_owner: !!wasApproved, hawksoft_notes: !!notes.ok } }) });
+
+  return { from: fromClient, to: toClient, hawksoft_notes: !!notes.ok };
+}
+
 const owns = (row, email) => (row.commission_to || agentEmailOf(row.agent)) === email;
 // Agents can sign into the PORTAL and see ONLY their own data (never admin views, never other agents).
 const AGENT_ALLOWLIST = [
@@ -452,7 +507,7 @@ if (view === 'portal_share_due') {
     if (view === 'portal_home') {
       const me = who.email;
       // Pull this agent's own ledger rows (match any agent string containing their email)
-      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct&order=ts.desc&limit=500');
+      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
@@ -469,6 +524,7 @@ if (view === 'portal_share_due') {
         if (dateStr < AUDIT_CUTOFF) continue; // pre-audit: no commission expected
         // no money received => never ask an agent for proof, never count commission
         if (NON_PAYMENT.includes(r.audit_status)) continue;
+        if (r.correction_status === 'pending') continue;  // waiting on Tony — nobody should work it
         if (/declin|fail|void|refund/i.test(String(r.kind || ''))) continue;
         const fee = r.fee_amount != null ? Number(r.fee_amount)
           : (r.service_cost != null ? Number(r.amount) - Number(r.service_cost) : null);
@@ -516,7 +572,7 @@ if (view === 'portal_share_due') {
   }
 
   // Agent-reachable POST actions (each enforces its own scoping below)
-  const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share'];
+  const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share', 'move_client'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -605,6 +661,78 @@ if (view === 'portal_share_due') {
         body: JSON.stringify([{ agent_email, percentage: Number(percentage), updated_by: email, updated_at: new Date().toISOString() }]),
       });
       return res.status(200).json({ ok: true, email, agent_email, percentage: Number(percentage) });
+    }
+
+    if (action === 'move_client') {
+      /* Payment filed against the wrong client. The money is correct — only the record
+         is wrong — so nothing is refunded and the Clover transaction is untouched.
+         Within 15 minutes the agent who charged it can fix their own slip immediately
+         (Tony is told, not asked). After that it becomes a request for Tony, and the
+         payment leaves the audit queue so nobody works on it meanwhile. */
+      const paymentId = String((req.body || {}).payment_id || '');
+      const toClient = parseInt((req.body || {}).to_client, 10);
+      const reason = String((req.body || {}).reason || '').slice(0, 200);
+      if (!paymentId || !toClient) return res.status(400).json({ ok: false, error: 'payment_id and to_client required' });
+
+      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=*`);
+      const row = (cur.rows || [])[0];
+      if (!row) return res.status(404).json({ ok: false, error: 'Payment not found' });
+      if (row.client_id === toClient) return res.status(400).json({ ok: false, error: 'That is already the client on this payment.' });
+
+      const me2 = String(email).toLowerCase();
+      const isAdmin = ADMIN_ALLOWLIST.includes(me2);
+      const iCharged = agentEmailOf(row.agent) === me2;
+      const iOwn = (row.commission_to || agentEmailOf(row.agent)) === me2;
+      if (!isAdmin && !iCharged && !iOwn) {
+        return res.status(403).json({ ok: false, error: 'You can only correct a payment you took.' });
+      }
+
+      const chk = await sbGet(s, `clients?client_no=eq.${toClient}&select=client_no,first_name,last_name,business_name`);
+      const dest = (chk.rows || [])[0];
+      if (!dest) return res.status(400).json({ ok: false, error: 'No client #' + toClient + ' in our records. Check the number.' });
+
+      const ageMin = (Date.now() - new Date(row.ts)) / 60000;
+      const selfServe = isAdmin || (iCharged && ageMin <= 15 && row.audit_status !== 'complete');
+
+      if (!selfServe) {
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ correction_status: 'pending', correction_to_client: toClient,
+            correction_requested_by: me2, correction_requested_at: new Date().toISOString(), correction_note: reason }) });
+        await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ ts: new Date().toISOString(), actor: me2, kind: 'client.correction_requested',
+            client_no: row.client_id, source: 'portal',
+            payload: { payment_id: paymentId, amount: row.amount, from: row.client_id, to: toClient, reason } }) });
+        return res.status(200).json({ ok: true, pending: true,
+          message: 'Sent to Tony to approve. It will stay out of your list until he decides.' });
+      }
+
+      const applied = await applyClientMove(s, row, toClient, me2, reason, false);
+      return res.status(200).json({ ok: true, pending: false, ...applied });
+    }
+
+    if (action === 'decide_correction') {
+      if (!ADMIN_ALLOWLIST.includes(String(email).toLowerCase())) {
+        return res.status(403).json({ ok: false, error: 'Owner only' });
+      }
+      const paymentId = String((req.body || {}).payment_id || '');
+      const approve = (req.body || {}).approve === true;
+      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=*`);
+      const row = (cur.rows || [])[0];
+      if (!row || row.correction_status !== 'pending') return res.status(404).json({ ok: false, error: 'No pending correction on that payment.' });
+
+      if (!approve) {
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ correction_status: 'rejected', correction_decided_by: email, correction_decided_at: new Date().toISOString() }) });
+        await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ ts: new Date().toISOString(), actor: email, kind: 'client.correction_rejected',
+            client_no: row.client_id, source: 'console',
+            payload: { payment_id: paymentId, requested_by: row.correction_requested_by, to: row.correction_to_client } }) });
+        return res.status(200).json({ ok: true, approved: false });
+      }
+      const applied = await applyClientMove(s, row, row.correction_to_client, email, row.correction_note || '', true);
+      return res.status(200).json({ ok: true, approved: true, ...applied });
     }
 
     if (action === 'set_share') {
@@ -818,6 +946,7 @@ if (view === 'portal_share_due') {
 
     const NON_PAYMENT_STATUS = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
     let rows = (pays.rows || [])
+      .filter(p => p.correction_status !== 'pending')
       .filter(p => !NON_PAYMENT_STATUS.includes(p.audit_status)
                 && !/declin|fail|void|refund/i.test(String(p.kind || '')))
       .map(p => {
@@ -904,6 +1033,20 @@ if (view === 'portal_share_due') {
     const a = (r.rows || [])[0];
     if (!a) return res.status(404).json({ ok: false, error: 'not found' });
     return res.status(200).json({ ok: true, filename: a.filename, mime: a.mime, file_b64: a.file_b64, blob_url: a.blob_url });
+  }
+
+  if (view === 'pending_corrections') {
+    const r = await sbGet(s, 'bridge_ledger?correction_status=eq.pending&is_test=is.false'
+      + '&select=id,ts,client_id,amount,purpose,agent,correction_to_client,correction_requested_by,correction_requested_at,correction_note&order=correction_requested_at.desc');
+    const rows = r.rows || [];
+    const ids = [...new Set(rows.flatMap(x => [x.client_id, x.correction_to_client]).filter(Boolean))];
+    const names = {};
+    if (ids.length) {
+      const cl = await sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`);
+      for (const c of (cl.rows || [])) names[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
+    }
+    return res.status(200).json({ ok: true, rows: rows.map(x => ({ ...x,
+      from_name: names[x.client_id] || null, to_name: names[x.correction_to_client] || null })) });
   }
 
   if (view === 'health_check') {

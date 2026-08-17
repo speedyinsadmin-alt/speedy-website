@@ -129,7 +129,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.6</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.7</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -211,6 +211,12 @@
         <div id="chgOtherWrap" class="hide">
           <label for="chgOther" style="margin-top:10px">What's this payment for?</label>
           <input id="chgOther" placeholder="e.g. broker fee, reinstatement" maxlength="60" autocomplete="off">
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="chgTotal">Total owed &mdash; leave blank if paying in full</label>
+          <input id="chgTotal" inputmode="decimal" placeholder="Same as amount" autocomplete="off" oninput="showBalance()">
+          <div id="chgBal" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px;font-size:12.5px;color:var(--amber)"></div>
         </div>
 
         <label for="chgNote" style="margin-top:12px">Note &mdash; optional</label>
@@ -319,7 +325,6 @@ async function loadHome(){
   UNFINISHED = r.unfinished || [];
   restoreEarningsPref();
   loadNews();
-  checkShareDue();
   const n = r.unfinished_count || 0;
   if(n){
     $('#todo').classList.remove('hide');
@@ -620,6 +625,9 @@ function payHistoryHtml(c){
     return '<div style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:7px">'
       + '<div class="row" style="align-items:flex-start">'
       + '<div><b style="font-size:14px">$' + Number(p.amount||0).toFixed(2) + '</b>'
+      + ((p.total_owed && p.total_owed > (p.collected || p.amount))
+          ? '<span style="color:var(--amber);font-size:11.5px"> · $'
+            + (p.total_owed - (p.collected || p.amount)).toFixed(2) + ' still owed</span>' : '')
       + ' <span class="dim" style="font-size:11.5px">' + esc(p.purpose || '') + '</span></div>'
       + '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;'
       + (complete ? 'background:rgba(47,191,113,.15);color:var(--green)' : 'background:rgba(245,166,35,.15);color:var(--amber)')
@@ -916,6 +924,25 @@ async function moveClient(paymentId, fromClientNo, amount){
   if(sheet && !sheet.classList.contains('hide')){ if(UNFINISHED.length) openTodo(); else closeTodo(); }
 }
 
+/* Partial payments. Blank "total owed" means paid in full — the common case needs no
+   thought from the agent, and a balance only exists when they deliberately enter one.
+   Commission then releases in proportion to what is actually collected. */
+function showBalance(){
+  const amt = parseFloat(String(chgEl('chgAmt').value).replace(/[^0-9.]/g,'')) || 0;
+  const tot = parseFloat(String(chgEl('chgTotal').value).replace(/[^0-9.]/g,'')) || 0;
+  const box = chgEl('chgBal');
+  if(tot > amt && amt > 0){
+    const bal = tot - amt;
+    box.innerHTML = 'Balance left <b>$' + bal.toFixed(2) + '</b>'
+      + '<div class="dim" style="font-size:11px;margin-top:2px;color:var(--mute)">'
+      + 'Commission releases as the balance is collected. The next payment applies to it.</div>';
+    box.classList.remove('hide');
+  } else if(tot > 0 && tot < amt){
+    box.innerHTML = 'Total owed is less than the amount being collected — check the numbers.';
+    box.classList.remove('hide');
+  } else box.classList.add('hide');
+}
+
 function toggleEarnings(force){
   const w = document.getElementById('earnWrap'), b = document.getElementById('eyeBtn');
   if(!w || !b) return;
@@ -1005,13 +1032,14 @@ async function openCharge(no){
   renderChargeForm();
   fillCommission(CLIENT_CACHE[no]);
   chgEl('chgAmt').focus();
+  chgEl('chgAmt').oninput = showBalance;
 }
 function closeCharge(){
   chgEl('chargeSheet').classList.add('hide');
   document.body.style.overflow = '';
   CHG = null;
   chgEl('chgAmt').value = ''; chgEl('chgNote').value = '';
-  chgEl('chgOther').value = ''; chgEl('chgAltRef').value = '';
+  chgEl('chgOther').value = ''; chgEl('chgAltRef').value = ''; chgEl('chgTotal').value = ''; chgEl('chgBal').classList.add('hide');
   chgEl('chgGo').disabled = false;
   loadHome();
 }
@@ -1161,6 +1189,7 @@ function baseBody(amt){
     purpose: chgPurposeText(), note: chgNoteText(), policyNumber: chgPolicy(),
     clientEmail: (c.emails && c.emails[0]) || '', office: OFFICE,
     commissionTo: chgEl('chgComm').value || EMAIL,
+    totalOwed: chgEl('chgTotal').value || '',
     producerCode: (CLIENT_CACHE[CHG.clientNo] && CLIENT_CACHE[CHG.clientNo].producer_code) || '' };
 }
 async function chargeCardPortal(amt){

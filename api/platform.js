@@ -1239,6 +1239,61 @@ if (view === 'portal_share_due') {
     return res.status(200).json({ ok: r.ok, email, rows: r.rows || [] });
   }
 
+  /* ---- Recording probe (read-only, diagnostic) ----
+     Telephony session events do NOT carry recording IDs — 10 days of webhook
+     data has zero. Recordings live on the call-log API instead. This proves
+     they exist and are fetchable BEFORE any storage gets built. */
+  if (view === 'rec_probe') {
+    const RC = (process.env.RC_SERVER_URL || 'https://platform.ringcentral.com').replace(/\/$/, '');
+    try {
+      const basic = Buffer.from(process.env.RC_CLIENT_ID + ':' + process.env.RC_CLIENT_SECRET).toString('base64');
+      const ar = await fetch(RC + '/restapi/oauth/token', {
+        method: 'POST',
+        headers: { Authorization: 'Basic ' + basic, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: process.env.RC_JWT,
+        }),
+      });
+      const aj = await ar.json().catch(() => ({}));
+      if (!ar.ok) return res.status(200).json({ ok: false, step: 'auth', status: ar.status, detail: aj.error_description || aj.error });
+
+      const hours = Math.min(720, Math.max(1, Number(req.query.hours) || 48));
+      const from = new Date(Date.now() - hours * 3600000).toISOString();
+
+      const lr = await fetch(RC + '/restapi/v1.0/account/~/call-log'
+        + '?dateFrom=' + encodeURIComponent(from)
+        + '&recordingType=All&perPage=25&view=Detailed', {
+        headers: { Authorization: 'Bearer ' + aj.access_token },
+      });
+      const lj = await lr.json().catch(() => ({}));
+      if (!lr.ok) return res.status(200).json({ ok: false, step: 'call-log', status: lr.status, detail: lj.message || lj.errorCode });
+
+      const recs = (lj.records || []).filter(r => r.recording && r.recording.id);
+
+      return res.status(200).json({
+        ok: true,
+        windowHours: hours,
+        callsReturned: (lj.records || []).length,
+        withRecording: recs.length,
+        verdict: recs.length
+          ? 'Recordings ARE available — safe to build the pull.'
+          : 'No recordings in this window. Either recording is not enabled on these extensions, or nothing recorded recently. Check Admin Portal > Call Recording before building.',
+        sample: recs.slice(0, 3).map(r => ({
+          telephonySessionId: r.telephonySessionId,
+          startTime: r.startTime,
+          durationSec: r.duration,
+          direction: r.direction,
+          recordingId: r.recording.id,
+          recordingType: r.recording.type,
+          hasContentUri: !!r.recording.contentUri,
+        })),
+      });
+    } catch (e) {
+      return res.status(200).json({ ok: false, step: 'exception', detail: String(e.message || e) });
+    }
+  }
+
   /* ---- Calls (RingCentral) ---- */
   if (view === 'call_legs') {
     const sid = String(req.query.session || '');

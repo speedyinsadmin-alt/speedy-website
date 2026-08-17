@@ -129,7 +129,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.7</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.8</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -200,6 +200,7 @@
       <div id="chgLoading" class="dim" style="font-size:13px">Loading client from HawkSoft&hellip;</div>
 
       <div id="chgBody" class="hide">
+        <div id="chgOpenBal" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.45);border-radius:10px;padding:11px 12px;margin-bottom:12px"></div>
         <div id="chgNamePick"></div>
         <div id="chgInv"></div>
 
@@ -927,6 +928,51 @@ async function moveClient(paymentId, fromClientNo, amount){
 /* Partial payments. Blank "total owed" means paid in full — the common case needs no
    thought from the agent, and a balance only exists when they deliberately enter one.
    Commission then releases in proportion to what is actually collected. */
+/* ---------- Paying down an earlier balance ----------
+   A follow-up payment has to be LINKED to the charge it pays off, otherwise it looks
+   like a separate sale: the original keeps showing money outstanding, commission never
+   fully releases, and the agent is asked to audit a payment that has no carrier cost
+   of its own. HawkSoft cannot create invoices, so the balance lives in our ledger. */
+let CHG_BALANCE_OF = null;
+function openBalances(cache){
+  const pays = (cache && cache.payments) || [];
+  return pays.filter(p => {
+    if(!p.total_owed) return false;
+    const got = p.collected != null ? Number(p.collected) : Number(p.amount || 0);
+    return Number(p.total_owed) > got + 0.005;
+  }).map(p => {
+    const got = p.collected != null ? Number(p.collected) : Number(p.amount || 0);
+    return { id: p.id, ts: p.ts, owed: Number(p.total_owed), got, left: +(Number(p.total_owed) - got).toFixed(2) };
+  });
+}
+function renderOpenBalance(cache){
+  const box = chgEl('chgOpenBal');
+  const bals = openBalances(cache);
+  CHG_BALANCE_OF = null;
+  if(!bals.length){ box.classList.add('hide'); box.innerHTML = ''; return; }
+  box.innerHTML = '<div style="font-size:12.5px;font-weight:700;color:var(--amber)">This client still owes money</div>'
+    + bals.map(b =>
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
+        + '<div><b style="font-size:13px">$' + b.left.toFixed(2) + '</b>'
+        + '<div class="dim" style="font-size:11px">of $' + b.owed.toFixed(2) + ' from ' + esc(String(b.ts).slice(0,10)) + '</div></div>'
+        + '<button type="button" class="btn btn-ghost" style="margin:0;padding:7px 12px;width:auto" '
+        + 'onclick="applyToBalance(\'' + b.id + '\',' + b.left + ')">Pay this balance</button></div>').join('')
+    + '<div class="dim" id="chgBalPicked" style="font-size:11px;margin-top:8px">Or ignore this and charge something new.</div>';
+  box.classList.remove('hide');
+}
+function applyToBalance(id, left){
+  CHG_BALANCE_OF = id;
+  chgEl('chgAmt').value = left.toFixed(2);
+  chgEl('chgTotal').value = '';           // the total lives on the original charge
+  showBalance();
+  chgEl('chgBalPicked').innerHTML = '<span style="color:var(--green)">\u2713 This payment will pay down that balance</span>'
+    + ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="clearBalance()">not that</span>';
+}
+function clearBalance(){
+  CHG_BALANCE_OF = null;
+  chgEl('chgBalPicked').textContent = 'Or ignore this and charge something new.';
+}
+
 function showBalance(){
   const amt = parseFloat(String(chgEl('chgAmt').value).replace(/[^0-9.]/g,'')) || 0;
   const tot = parseFloat(String(chgEl('chgTotal').value).replace(/[^0-9.]/g,'')) || 0;
@@ -1031,6 +1077,7 @@ async function openCharge(no){
   await loadStaff();
   renderChargeForm();
   fillCommission(CLIENT_CACHE[no]);
+  renderOpenBalance(CLIENT_CACHE[no]);
   chgEl('chgAmt').focus();
   chgEl('chgAmt').oninput = showBalance;
 }
@@ -1190,6 +1237,7 @@ function baseBody(amt){
     clientEmail: (c.emails && c.emails[0]) || '', office: OFFICE,
     commissionTo: chgEl('chgComm').value || EMAIL,
     totalOwed: chgEl('chgTotal').value || '',
+    balanceOf: CHG_BALANCE_OF || '',
     producerCode: (CLIENT_CACHE[CHG.clientNo] && CLIENT_CACHE[CHG.clientNo].producer_code) || '' };
 }
 async function chargeCardPortal(amt){

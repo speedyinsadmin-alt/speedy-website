@@ -80,6 +80,30 @@ async function applyClientMove(s, row, toClient, actor, reason, wasApproved) {
   return { from: fromClient, to: toClient, hawksoft_notes: !!notes.ok };
 }
 
+/* ---------- Partial payments (Tony's rule, Aug 2026) ----------
+   Commission accrues in proportion to what the agency has actually COLLECTED, not to
+   what the client owes. The carrier is paid in full at binding, so there is ONE audit
+   and ONE fee for the whole obligation; commission is released as the money arrives.
+   Nothing is ever reversed: if a balance is never paid, that slice simply never
+   releases. total_owed blank (or equal to the amount) means paid in full. */
+function collectedFor(row, allRows) {
+  const paid = Number(row.amount || 0);
+  const follow = (allRows || []).filter(r => r.balance_of === row.id)
+    .reduce((a, r) => a + Number(r.amount || 0), 0);
+  return +(paid + follow).toFixed(2);
+}
+function owedFor(row) {
+  const total = row.total_owed != null ? Number(row.total_owed) : null;
+  const amt = Number(row.amount || 0);
+  return (total != null && total > amt) ? total : amt;   // blank => paid in full
+}
+// share of the fee that has actually been collected, 0..1
+function collectedRatio(row, allRows) {
+  const owed = owedFor(row);
+  if (!(owed > 0)) return 1;
+  return Math.min(1, collectedFor(row, allRows) / owed);
+}
+
 const owns = (row, email) => (row.commission_to || agentEmailOf(row.agent)) === email;
 // Agents can sign into the PORTAL and see ONLY their own data (never admin views, never other agents).
 const AGENT_ALLOWLIST = [
@@ -502,7 +526,7 @@ if (view === 'portal_share_due') {
       const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
       // Full payment history + document METADATA. Deliberately no file_b64 and no
       // thumb_b64 here: bytes are fetched only when a document is opened.
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code&order=ts.desc&limit=50`);
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of&order=ts.desc&limit=50`);
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft&order=created_at.desc&limit=200`);
       return res.status(200).json({
         ok: true, client, policies: po.rows || [],
@@ -510,6 +534,8 @@ if (view === 'portal_share_due') {
         payments: (pay.rows || []).map(r => ({
           id: r.id, ts: r.ts, amount: r.amount, purpose: r.purpose, audit_status: r.audit_status,
           kind: r.kind, ref: r.ref,
+          total_owed: r.total_owed != null ? Number(r.total_owed) : null,
+          collected: collectedFor(r, pay.rows || []),
           charged_by: AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent) || null,
           commission_to: r.commission_to || agentEmailOf(r.agent) || null,
           commission_to_name: AGENT_NAME[r.commission_to || agentEmailOf(r.agent)] || null,
@@ -525,7 +551,7 @@ if (view === 'portal_share_due') {
     if (view === 'portal_home') {
       const me = who.email;
       // Pull this agent's own ledger rows (match any agent string containing their email)
-      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status&order=ts.desc&limit=500');
+      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status,total_owed,balance_of&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
@@ -551,12 +577,17 @@ if (view === 'portal_share_due') {
         if (complete && fee != null) {
           // only the commission owner earns; a helper who ran the charge earns nothing
           // unless the owner shared, which is applied below
+          const ratio = collectedRatio(r, all.rows || []);
+          const full = fee * pct / 100;
           if (isOwner && r.ts >= monthStart) {
             const share = Number(r.helper_share_pct || 0);
-            earned += fee * pct / 100 * (1 - share / 100);
+            earned  += full * ratio * (1 - share / 100);
+            pending += full * (1 - ratio) * (1 - share / 100);   // waiting on the balance
           }
           if (!isOwner && r.helper_email === me && r.ts >= monthStart) {
-            earned += fee * pct / 100 * Number(r.helper_share_pct || 0) / 100;
+            const share = Number(r.helper_share_pct || 0) / 100;
+            earned  += full * ratio * share;
+            pending += full * (1 - ratio) * share;
           }
         } else if (r.kind !== 'charge_captured' || r.audit_status) {
           // needs proof of payment / audit
@@ -1000,6 +1031,9 @@ if (view === 'portal_share_due') {
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
         agent: agentEmail, agent_raw: p.agent, is_admin: isAdmin, secure_link: isSecureLink,
         path, audit_status: auditStatus, pre_audit: preAudit,
+        total_owed: p.total_owed != null ? Number(p.total_owed) : null,
+        collected: collectedFor(p, pays.rows || []),
+        collected_ratio: collectedRatio(p, pays.rows || []),
         commission_to: p.commission_to || agentEmailOf(p.agent) || null,
         helper_email: p.helper_email || null,
         helper_share_pct: p.helper_share_pct != null ? Number(p.helper_share_pct) : null,

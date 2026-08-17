@@ -1232,7 +1232,9 @@ async function renderCalls(el) {
   h += '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
     + [1,7,30].map(d => '<button class="mini' + (CALL_DAYS===d?' on':'') + '" onclick="CALL_DAYS=' + d + ';CALL_OPEN=null;render()">'
         + (d===1?'Today':d+' days') + '</button>').join('')
-    + '<a href="/admin/calls.html" style="margin-left:auto;color:var(--blue);font-size:13px;text-decoration:none;align-self:center">Full Calls console →</a></div>';
+    + '<button class="mini" style="margin-left:auto" onclick="recProbe()">Check recordings</button>'
+    + '<a href="/admin/calls.html" style="color:var(--blue);font-size:13px;text-decoration:none;align-self:center">Full Calls console →</a></div>'
+    + '<div id="recProbeOut"></div>';
 
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:10px;margin-bottom:16px">'
     + [['Calls', st.total||0, ''],
@@ -1289,6 +1291,42 @@ async function renderCalls(el) {
   }
   el.innerHTML = h;
   if (CALL_OPEN) loadLegs(CALL_OPEN);
+}
+
+async function recProbe() {
+  const box = document.getElementById('recProbeOut');
+  if (!box) return;
+  box.innerHTML = '<div class="muted" style="margin:10px 0">Checking RingCentral for recordings\u2026</div>';
+  const r = await api('rec_probe&hours=48');
+  if (!r) { box.innerHTML = '<div class="err">Probe failed to run.</div>'; return; }
+
+  if (!r.ok) {
+    box.innerHTML = '<div class="err" style="margin:10px 0">Probe failed at step: <b>' + esc(r.step) + '</b>'
+      + (r.status ? ' (HTTP ' + esc(r.status) + ')' : '')
+      + (r.detail ? '<div style="margin-top:4px">' + esc(r.detail) + '</div>' : '') + '</div>';
+    return;
+  }
+
+  const good = r.withRecording > 0;
+  let h = '<div style="margin:10px 0;padding:12px;border-radius:9px;background:#0a0f26;border:1px solid '
+    + (good ? 'rgba(47,191,113,.35)' : 'rgba(245,166,35,.35)') + '">'
+    + '<div style="font-weight:600;margin-bottom:6px">' + (good ? '\u2713 ' : '\u26a0 ') + esc(r.verdict) + '</div>'
+    + '<div class="muted" style="font-size:13px">Last ' + esc(r.windowHours) + 'h \u00b7 '
+    + esc(r.callsReturned) + ' calls checked \u00b7 <b>' + esc(r.withRecording) + '</b> with a recording</div>';
+
+  if ((r.sample || []).length) {
+    h += '<table style="font-size:12px;margin-top:10px"><tr><th>Started</th><th>Dir</th><th>Secs</th>'
+      + '<th>Recording ID</th><th>Type</th><th>Fetchable</th></tr>'
+      + r.sample.map(x => '<tr><td>' + esc(String(x.startTime || '').replace('T',' ').slice(0,19)) + '</td>'
+        + '<td class="muted">' + esc(x.direction || '\u2014') + '</td>'
+        + '<td>' + esc(x.durationSec ?? '\u2014') + '</td>'
+        + '<td>' + esc(x.recordingId) + '</td>'
+        + '<td class="muted">' + esc(x.recordingType || '\u2014') + '</td>'
+        + '<td>' + (x.hasContentUri ? '<span class="pill g">yes</span>' : '<span class="pill r">no</span>') + '</td></tr>').join('')
+      + '</table>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
 }
 
 async function toggleCall(sid) {

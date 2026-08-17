@@ -95,7 +95,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.7</small></h1>
+      <h1>Platform Console <small id="ver">v5.8</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -156,6 +156,18 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 // red = missing) plus the file count, and opens the document viewer.
 // Performance: only metadata is held here — file bytes are fetched when a file is clicked.
 const DOC_ROWS = {};
+/* A partial payment must be visible to the owner: the charge amount alone hides that
+   money is still outstanding and that commission is only part-released. */
+function balanceCell(r){
+  const owed = r.total_owed != null ? Number(r.total_owed) : null;
+  const got  = r.collected != null ? Number(r.collected) : Number(r.amount || 0);
+  if(owed == null || owed <= got + 0.005) return '';
+  const left = owed - got;
+  const pct = Math.round((got / owed) * 100);
+  return '<div style="font-size:10.5px;color:var(--amber);white-space:nowrap">'
+    + money(left) + ' still owed \u00b7 ' + pct + '% collected</div>';
+}
+
 function docsCell(docs, needsProof, rowKey, title){
   const own   = docs.filter(d => d.payment_id === rowKey);
   const other = docs.filter(d => d.payment_id !== rowKey);
@@ -817,7 +829,7 @@ function renderAgentView(r){
             + (x.charged_by_other ? '<div class="muted" style="font-size:10.5px">charged by ' + esc(String(x.charged_by||'').split(' ')[0]) + '</div>' : '')
             + '</td>'
           + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
-          + '<td class="amount">'+money(x.amount)+'</td>'
+          + '<td class="amount">'+money(x.amount)+balanceCell(x)+'</td>'
           + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'
           + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+'</td>'
           + '<td>'+st+'</td><td class="docs">'+docCell+'</td></tr>';
@@ -942,7 +954,7 @@ async function renderAudit(el){
       + '<td class="muted" style="font-size:12px">'+esc(String(row.ts||'').replace('T',' ').slice(0,16))+'</td>'
       + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span></td>'
       + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
-      + '<td class="amount">'+money(row.amount)+'</td>'
+      + '<td class="amount">'+money(row.amount)+balanceCell(row)+'</td>'
       + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
       + '<td class="amount">'+(row.fee!=null?money(row.fee):'—')+'</td>'
       + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'

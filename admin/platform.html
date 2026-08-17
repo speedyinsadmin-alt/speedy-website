@@ -158,7 +158,16 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const DOC_ROWS = {};
 /* A partial payment must be visible to the owner: the charge amount alone hides that
    money is still outstanding and that commission is only part-released. */
+// how much of an earned commission has actually been released by collections
+function releasedNote(r){
+  const ratio = r.collected_ratio != null ? Number(r.collected_ratio) : 1;
+  if(r.commission == null || ratio >= 0.995) return '';
+  return '<div style="font-size:10.5px;color:var(--amber);font-weight:400;white-space:nowrap">'
+    + money(r.commission * ratio) + ' released</div>';
+}
+
 function balanceCell(r){
+
   const owed = r.total_owed != null ? Number(r.total_owed) : null;
   const got  = r.collected != null ? Number(r.collected) : Number(r.amount || 0);
   if(owed == null || owed <= got + 0.005) return '';
@@ -831,7 +840,7 @@ function renderAgentView(r){
           + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
           + '<td class="amount">'+money(x.amount)+balanceCell(x)+'</td>'
           + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'
-          + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+'</td>'
+          + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+releasedNote(x)+'</td>'
           + '<td>'+st+'</td><td class="docs">'+docCell+'</td></tr>';
       }
       h += '</table></div>';
@@ -958,7 +967,7 @@ async function renderAudit(el){
       + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
       + '<td class="amount">'+(row.fee!=null?money(row.fee):'—')+'</td>'
       + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
-      + '<td class="amount">'+(row.commission!=null?'<b style="color:#7fa8ff">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+'</td>'
+      + '<td class="amount">'+(row.commission!=null?'<b style="color:#7fa8ff">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
       + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+'</td>'
       + '<td class="docs">'+docCell+'</td>'
       + '</tr>';

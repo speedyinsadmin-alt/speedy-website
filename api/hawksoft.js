@@ -25,6 +25,12 @@ function normaliseAgentEmail(v) {
 /* SINGLE SOURCE for reading a money value off the wire.
    parseFloat('1,602.40') === 1 — a typed or pasted comma would silently charge $1.00
    instead of $1,602.40. Every amount from every charge path goes through here. */
+/* ZZTEST fixture. Every payment on this client is a test — no real money.
+   is_test is read in 9 places across platform.js and carrier.js but nothing ever
+   wrote it (column default false), so once manual flagging stopped, test charges
+   counted as revenue and commission and sat in agents' unfinished-audit queues. */
+const TEST_CLIENT_ID = 26081;
+
 function parseMoney(v, dflt = 0) {
   const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.]/g, ''));
   return Number.isFinite(n) ? n : dflt;
@@ -267,6 +273,9 @@ async function ledger(event) {
       auth_code: event.authCode ? String(event.authCode) : null,
       ref: event.ref || null,
       invoice_status: event.invoiceApply || (event.hawksoft && event.hawksoft.invoiceApply) || null,
+      // Set here, not by the caller — every path writes through ledger(), so the
+      // flag cannot drift no matter which page or action created the row.
+      is_test: parseInt(event.clientId, 10) === TEST_CLIENT_ID,
       extra: event,
     };
     const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger`, {
@@ -836,6 +845,7 @@ export default async function handler(req, res) {
                 amount: total, purpose: purpose ? String(purpose).slice(0, 120) : null,
                 agent: who ? String(who).slice(0, 120) : null, txn_id: txnId,
                 auth_code: authCode ? String(authCode) : null, ref: refNum || null,
+                is_test: parseInt(clientId, 10) === TEST_CLIENT_ID,
                 extra: { safety_net: true, receipt_pending: true, brand, last4, office },
               }),
             });
@@ -1219,6 +1229,7 @@ export default async function handler(req, res) {
               amount: total, purpose: purpose ? String(purpose).slice(0, 120) : null,
               agent: who ? String(who).slice(0, 120) : null, txn_id: txnId,
               auth_code: authCode ? String(authCode) : null, ref: refNum || null,
+              is_test: parseInt(clientId, 10) === TEST_CLIENT_ID,
               extra: { safety_net: true, receipt_pending: true, terminal: true, branch: branch.branch, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, brand, last4 },
             }),
           });

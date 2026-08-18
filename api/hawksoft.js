@@ -357,8 +357,28 @@ async function audit(event) {
   } catch { return sb; }
 }
 
-async function verifyGoogleToken(idToken) {
-  if (!idToken || GOOGLE_CLIENT_ID === 'NOT_CONFIGURED') return null;
+/* Verified-claims cache.
+   The tokeninfo round trip to Google ran on EVERY request - client search fires
+   one per keystroke. This remembers Google's answer briefly, keyed by the token.
+
+   Three rules make it safe:
+   1. It caches CLAIMS (who Google says this is), never an authorization decision.
+      Every caller still applies its own allowlist on the result, so a token
+      verified for one endpoint cannot inherit another endpoint's permissions.
+   2. An entry NEVER outlives the token itself - ttl is capped by the token's own
+      exp claim. A token with 10s left is cached for 10s, not 60.
+   3. Failures are never cached. A rejected token is re-checked every time, so
+      fixing an allowlist or revoking access takes effect immediately. */
+const _claimsCache = new Map();
+const CLAIMS_TTL_MS = 60000;
+
+async function googleClaims(idToken) {
+  if (!idToken) return null;
+  const hit = _claimsCache.get(idToken);
+  if (hit) {
+    if (hit.until > Date.now()) return hit.claims;
+    _claimsCache.delete(idToken);
+  }
   try {
     const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken));
     if (r.status !== 200) return null;
@@ -366,9 +386,24 @@ async function verifyGoogleToken(idToken) {
     if (t.aud !== GOOGLE_CLIENT_ID) return null;
     if (String(t.email_verified) !== 'true') return null;
     const email = String(t.email || '').toLowerCase();
-    if (!email.endsWith('@speedyins.com')) return null;
-    return email;
+    if (!email) return null;
+    const expMs = Number(t.exp) * 1000;
+    const ttl = Math.min(CLAIMS_TTL_MS, (expMs || 0) - Date.now());
+    const claims = { email };
+    if (ttl > 0) {
+      if (_claimsCache.size > 500) _claimsCache.clear();
+      _claimsCache.set(idToken, { claims, until: Date.now() + ttl });
+    }
+    return claims;
   } catch { return null; }
+}
+
+async function verifyGoogleToken(idToken) {
+  if (GOOGLE_CLIENT_ID === 'NOT_CONFIGURED') return null;
+  const c = await googleClaims(idToken);
+  if (!c) return null;
+  if (!c.email.endsWith('@speedyins.com')) return null;
+  return c.email;
 }
 const BASE = 'https://integration.hawksoft.app';
 

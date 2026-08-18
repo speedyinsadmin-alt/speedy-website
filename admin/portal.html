@@ -60,6 +60,12 @@
     Your sign-in expired. <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="reauth()">Sign in again</span> &mdash; nothing you typed is lost.
   </div>
 
+  <div id="updWarn" class="hide" style="background:rgba(77,124,254,.12);border:1px solid rgba(77,124,254,.45);border-radius:10px;padding:11px 13px;font-size:12.5px;margin-bottom:12px;color:var(--blue-l);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="flex:1;min-width:190px">A newer version of the portal is ready.</span>
+    <span onclick="location.reload()" style="cursor:pointer;background:var(--blue);color:#fff;padding:6px 14px;border-radius:8px">Reload now</span>
+    <span onclick="dismissUpdate()" style="cursor:pointer;color:var(--dim)">Later</span>
+  </div>
+
   <!-- ===== GATE: sign in ===== -->
   <div id="gate">
     <div class="card" style="text-align:center;padding:30px 20px">
@@ -139,7 +145,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.0</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.1</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -353,6 +359,7 @@ function confirmOffice(){
   $('#home').classList.remove('hide');
   loadHome();
   initSearch();
+  startUpdateWatch();
 }
 
 async function loadHome(){
@@ -1394,6 +1401,54 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/admin/sw.js')
       .catch(function (e) { console.warn('SW registration failed', e); });
   });
+}
+
+/* Update detection.
+   A running page cannot swap its own code, so a window left open across a deploy
+   keeps running the old portal. This notices and OFFERS a reload.
+
+   It NEVER reloads on its own. An agent may have card fields filled, or may have
+   just submitted and be waiting on Clover - a surprise reload either loses their
+   typing or makes them think the charge failed and run it twice. For the same
+   reason the banner stays hidden while a charge sheet is open. */
+var BUILD_ID = null, BUILD_ID_LATEST = null, UPD_SEEN = null, updTimer = null;
+
+async function fetchBuildId(){
+  try{
+    const r = await fetch('/api/version', { cache: 'no-store' });
+    if(!r.ok) return null;
+    const j = await r.json();
+    return j && j.id ? j.id : null;
+  }catch{ return null; }
+}
+function chargeSheetOpen(){
+  var el = document.getElementById('chargeSheet');
+  return !!(el && !el.classList.contains('hide'));
+}
+function showUpdate(){
+  var el = document.getElementById('updWarn');
+  if(el) el.classList.remove('hide');
+}
+function dismissUpdate(){
+  UPD_SEEN = BUILD_ID_LATEST;
+  var el = document.getElementById('updWarn');
+  if(el) el.classList.add('hide');
+}
+async function checkUpdate(){
+  const live = await fetchBuildId();
+  if(!live) return;
+  if(!BUILD_ID){ BUILD_ID = live; return; }
+  if(live === BUILD_ID) return;
+  BUILD_ID_LATEST = live;
+  if(UPD_SEEN === live) return;      // dismissed this exact version
+  if(chargeSheetOpen()) return;      // never interrupt a charge
+  showUpdate();
+}
+function startUpdateWatch(){
+  if(updTimer) return;
+  checkUpdate();
+  updTimer = setInterval(checkUpdate, 15 * 60 * 1000);
+  window.addEventListener('focus', checkUpdate);
 }
 </script>
 </body>

@@ -1138,9 +1138,12 @@ if (view === 'portal_share_due') {
        no stored copy and must not be reported as faults. */
     const VAULT_START = '2026-08-05';
     const AUDIT_START = '2026-07-24';
-    const [led, att] = await Promise.all([
+    const TEST_CLIENT_ID = 26081; // ZZTEST fixture — no real money is ever taken on it
+    const [led, att, testRows] = await Promise.all([
       sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,kind,audit_status,txn_id,carrier_name,service_cost,fee_amount,commission_to,agent&order=ts.desc&limit=1000'),
       sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,created_at&order=created_at.desc&limit=1000'),
+      // deliberately NOT filtered by is_test — this check exists to find rows the filter misses
+      sbGet(s, `bridge_ledger?client_id=eq.${TEST_CLIENT_ID}&is_test=is.false&select=id,ts,client_id,amount,kind,audit_status,commission_to,agent&order=ts.desc&limit=100`),
     ]);
     const rows = led.rows || [], docs = att.rows || [];
     const dtype = d => d.doc_type || d.kind || '';
@@ -1203,6 +1206,40 @@ if (view === 'portal_share_due') {
       'Payments still without proof after two weeks.',
       rows.filter(r => r.audit_status === 'client_paid' && day(r.ts) >= AUDIT_START
         && (Date.now() - new Date(r.ts)) > 14 * 86400000).map(brief));
+
+    /* 9) test money counted as real.
+       is_test is read in 9 places but for a long time nothing wrote it: the column
+       default is false, so the early rows had been flagged BY HAND. Once that stopped,
+       ZZTEST charges became real revenue, real commission, and phantom unfinished
+       audits in agents' queues. Every other check on this page filters is_test out,
+       which is exactly why this one must not. */
+    add('high', 'Test charge counted as real money',
+      `Payments on the ZZTEST fixture (#${TEST_CLIENT_ID}) that are not flagged as test. They inflate revenue, credit commission nobody earned, and sit in an agent's unfinished queue.`,
+      (testRows.rows || []).map(brief));
+
+    /* 10) a column nothing appears to write.
+       The recurring failure in this codebase is a column with a DEFAULT and no writer:
+       audit_status defaulted to client_paid, is_test defaulted to false. It reads as a
+       real value, so nothing looks wrong until the numbers are wrong. A column that
+       never varies across hundreds of rows is the data-side signature of that bug.
+       This is a HINT, not proof — a column can be legitimately constant. */
+    const NEVER_VARIES_WATCH = ['audit_status', 'kind', 'commission_to'];
+    const stuck = [];
+    if (rows.length >= 50) {
+      for (const col of NEVER_VARIES_WATCH) {
+        const seen = new Set(rows.map(r => (r[col] === undefined || r[col] === null) ? '\u2205' : String(r[col])));
+        if (seen.size === 1) {
+          // shaped to use the renderer's filename branch, so it prints as a sentence
+          // rather than as "$0.00 · column"
+          stuck.push({ id: col, ts: null, client_no: null,
+                       filename: `${col} — all ${rows.length} recent payments read "${[...seen][0]}"`,
+                       agent: '' });
+        }
+      }
+    }
+    add('med', 'Column never varies — may have no writer',
+      'Across every recent payment this column holds one single value. Usually that means code reads it but nothing sets it, so it is silently sitting at its database default.',
+      stuck);
 
     const worst = issues.some(i => i.sev === 'high') ? 'attention' : issues.length ? 'minor' : 'clean';
     return res.status(200).json({ ok: true, status: worst, checked: rows.length,

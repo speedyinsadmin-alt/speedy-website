@@ -27,3 +27,5 @@ export default async function handler(req, res) {
     sha: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 8) || null
   });
 }
+
+// Deploy marker: update-banner end-to-end test, Aug 18 2026. No behaviour change.

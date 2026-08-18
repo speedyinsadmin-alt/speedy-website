@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Speedy Portal</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#131d3a">
+<link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Agent Portal">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://checkout.clover.com/sdk.js"></script>
 <style>
@@ -129,7 +135,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.8</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.9</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -1350,6 +1356,14 @@ window.addEventListener('load', () => {
     google.accounts.id.renderButton($('#gsibtn'), { theme:'filled_blue', size:'large', shape:'pill', text:'signin_with' });
   }, 150);
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/admin/sw.js')
+      .catch(function (e) { console.warn('SW registration failed', e); });
+  });
+}
 </script>
 </body>
 </html>

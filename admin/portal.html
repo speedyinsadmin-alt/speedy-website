@@ -56,6 +56,10 @@
 <body>
 <div class="wrap">
 
+  <div id="authWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:11px 13px;font-size:12.5px;margin-bottom:12px;color:var(--amber)">
+    Your sign-in expired. <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="reauth()">Sign in again</span> &mdash; nothing you typed is lost.
+  </div>
+
   <!-- ===== GATE: sign in ===== -->
   <div id="gate">
     <div class="card" style="text-align:center;padding:30px 20px">
@@ -135,7 +139,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v1.9</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.0</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -293,13 +297,40 @@ const money = n => '$' + Number(n||0).toFixed(2);
 function jwtEmail(t){ try{ return JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email.toLowerCase(); }catch{ return null; } }
 
 async function api(view){
-  try{ const r = await fetch('/api/platform?view='+view, { headers:{ 'x-id-token': TOKEN } }); return await r.json(); }
+  try{
+    const r = await fetch('/api/platform?view='+view, { headers:{ 'x-id-token': TOKEN } });
+    if(r.status === 401){ onAuthExpired(); return null; }
+    return await r.json();
+  }
   catch{ return null; }
+}
+
+let REAUTH = false;
+
+/* Sign-in expired. Reads are retried for the agent after they sign back in;
+   WRITES ARE NEVER RETRIED AUTOMATICALLY - a payment must be re-submitted
+   deliberately by the person, never by a recovery path. */
+function onAuthExpired(){
+  REAUTH = true;
+  var g = document.getElementById('authWarn'); if(g) g.classList.remove('hide');
+  var c = document.getElementById('chgAuthWarn');
+  var sheet = document.getElementById('chargeSheet');
+  if(c && sheet && !sheet.classList.contains('hide')) c.classList.remove('hide');
+}
+function clearAuthWarn(){
+  var g = document.getElementById('authWarn'); if(g) g.classList.add('hide');
+  var c = document.getElementById('chgAuthWarn'); if(c) c.classList.add('hide');
+}
+function retryReads(){
+  if(!OFFICE) return;
+  loadHome();
+  var box = document.getElementById('searchBox');
+  if(box && box.value.trim().length >= 2) runSearch(box.value.trim());
 }
 
 function onCred(resp){
   // Re-auth mid-charge: refresh the token only, keep the sheet and everything typed
-  if(REAUTH){ TOKEN = resp.credential; REAUTH = false; var w = document.getElementById('chgAuthWarn'); if(w) w.classList.add('hide'); return; }
+  if(REAUTH){ TOKEN = resp.credential; REAUTH = false; clearAuthWarn(); retryReads(); return; }
   TOKEN = resp.credential; EMAIL = jwtEmail(TOKEN);
   const staff = STAFF[EMAIL];
   const home = staff ? staff[1] : 'Moreno Valley';
@@ -403,7 +434,7 @@ function finishAudit(id){
   location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
 
-function signOut(){ TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; UNFINISHED=[]; document.getElementById('chargeSheet').classList.add('hide'); document.getElementById('todoSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
+function signOut(){ clearAuthWarn(); TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; UNFINISHED=[]; document.getElementById('chargeSheet').classList.add('hide'); document.getElementById('todoSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
 
 // ===== STAGE 2: client search, tabs (max 5), compact card =====
 const MAX_TABS = 5;
@@ -801,6 +832,7 @@ async function apiPost(body){
   const r = await fetch('/api/platform', { method:'POST',
     headers:{ 'x-id-token': TOKEN, 'Content-Type':'application/json' },
     body: JSON.stringify(body) });
+  if(r.status === 401) onAuthExpired();
   return r.json();
 }
 
@@ -1021,7 +1053,6 @@ let CHG = null;            // { clientNo, confirmed } — one charge at a time
 let CHG_PURPOSE = 'Down payment';
 let CHG_METHOD = 'card';
 let cloverSDK = null, cloverMounted = false;
-let REAUTH = false;
 let _plUrl = '', _plMsg = '', _plEmail = '';
 let LEDGER_ID = null;  // bridge_ledger row id of the charge just made — passed to the
                        // carrier page as payment_id so the audit closes the loop
@@ -1046,7 +1077,7 @@ async function hsPost(body){
     headers: { 'Content-Type':'application/json', 'x-user-token': TOKEN },
     body: JSON.stringify(body)
   });
-  if(r.status === 401){ REAUTH = true; chgEl('chgAuthWarn').classList.remove('hide'); }
+  if(r.status === 401) onAuthExpired();
   return r.json();
 }
 function reauth(){ if(window.google) google.accounts.id.prompt(); }

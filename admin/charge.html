@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.34 · agent-safe</div>
+    <div class="ver">v2.35 · agent-safe</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -190,9 +190,10 @@
     <label for="noteText" style="margin-top:12px;display:block">Note <span class="hint" style="font-weight:400">— optional (shows on receipt &amp; log)</span></label>
     <input type="text" id="noteText" maxlength="120" placeholder="e.g. partial payment, policy #, reinstatement" autocomplete="off" style="width:100%;box-sizing:border-box">
     
-    <div id="polToggleWrap" class="hide" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px">
-      <span class="hint" id="polToggleLabel" style="margin:0">Include policy # on receipt</span>
-      <label class="tgl"><input type="checkbox" id="polToggle" checked><span class="sl"></span></label>
+    <div id="polPickWrap" class="hide" style="margin-top:12px">
+      <label for="polSel" style="display:block">Apply to policy</label>
+      <select id="polSel" style="width:100%;box-sizing:border-box"></select>
+      <div class="hint" id="polPickHint" style="margin-top:5px"></div>
     </div>
     <label style="margin-top:14px;display:block">Payment method</label>
     <div class="purpose" id="payMethodRow">
@@ -479,22 +480,62 @@ function pickInvoice(i, btn){
   document.getElementById('amount').value = iv.bal.toFixed(2);
   if(iv.policyNumber){
     document.getElementById('hsPolicyNumber').value = iv.policyNumber;
-    document.getElementById('polToggle').checked = true;
     updatePolToggle();
   }
   document.querySelectorAll('#invList button').forEach(x=>x.classList.remove('sel'));
   btn.classList.add('sel');
 }
+/* Policy picker.
+   Previously this was a toggle that only appeared when HawkLink flooded a policy
+   number - which happens only if the agent launched CHARGE from a policy tab.
+   Launched from the Client tab, no policy was ever sent and the receipt, PDF and
+   log all filed at client level (Pol 0). Now the client's real policies are always
+   offered, matching the portal, and "file at client level" is a deliberate choice. */
 function updatePolToggle(){
-  const pol = document.getElementById('hsPolicyNumber').value.trim();
-  const w = document.getElementById('polToggleWrap');
-  if(pol){ w.classList.remove('hide');
-    document.getElementById('polToggleLabel').textContent = 'Include policy ' + pol + ' on receipt'; }
-  else { w.classList.add('hide'); }
+  const flooded = document.getElementById('hsPolicyNumber').value.trim();
+  const wrap = document.getElementById('polPickWrap');
+  const sel  = document.getElementById('polSel');
+  const hint = document.getElementById('polPickHint');
+  if(!wrap || !sel) return;
+
+  const pols = (confirmed && Array.isArray(confirmed.policies)) ? confirmed.policies : [];
+  const prev = sel.value;
+
+  let html = '';
+  const seen = [];
+  pols.forEach(p => {
+    if(!p.number || seen.indexOf(p.number) !== -1) return;
+    seen.push(p.number);
+    html += '<option value="' + esc(p.number) + '">' + esc(p.number)
+          + (p.carrier ? ' \u2014 ' + esc(p.carrier) : '')
+          + (p.expired ? ' (expired)' : '') + '</option>';
+  });
+  if(flooded && seen.indexOf(flooded) === -1){
+    html = '<option value="' + esc(flooded) + '">' + esc(flooded) + ' \u2014 from HawkLink</option>' + html;
+    seen.unshift(flooded);
+  }
+  html += '<option value="">No policy \u2014 file at client level</option>';
+  sel.innerHTML = html;
+
+  if(flooded)            sel.value = flooded;
+  else if(prev && seen.indexOf(prev) !== -1) sel.value = prev;
+  else if(seen.length === 1) sel.value = seen[0];
+
+  if(seen.length){
+    wrap.classList.remove('hide');
+    hint.textContent = flooded
+      ? 'Filled from HawkSoft \u2014 change it if this payment is for another policy.'
+      : 'The receipt, PDF and log all file under whichever policy you pick.';
+  } else {
+    wrap.classList.add('hide');
+    sel.value = '';
+    hint.textContent = '';
+  }
 }
 function effPolicy(){
-  const pol = document.getElementById('hsPolicyNumber').value.trim();
-  return (pol && document.getElementById('polToggle').checked) ? pol : '';
+  const sel = document.getElementById('polSel');
+  if(sel && !document.getElementById('polPickWrap').classList.contains('hide')) return sel.value || '';
+  return document.getElementById('hsPolicyNumber').value.trim();
 }
 function pick(b){document.querySelectorAll('#purp button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');purpose=b.textContent;
   document.getElementById('otherWrap').classList.toggle('hide', purpose!=='Other');

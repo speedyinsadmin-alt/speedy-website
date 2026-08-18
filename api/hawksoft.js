@@ -624,9 +624,25 @@ export default async function handler(req, res) {
       // The named insured drives the displayed client name (overrides people[0] if found)
       const insured = peopleList.find(p => p.role === 'named insured');
       if (insured) name = insured.name;
+      /* Policy list for the charge page's picker.
+         This data was already fetched and used for polNumById - it was simply not
+         returned. Without it charge.html only knew a policy when HawkLink happened
+         to supply one, which depends on which HawkSoft tab the agent launched from,
+         so payments filed at client level (Pol 0) at random. */
+      const todayISO = new Date().toISOString().slice(0, 10);
+      const policyList = allPolicies.map(pl => {
+        const exp = String(pl.expirationDate || pl.ExpirationDate || '').slice(0, 10);
+        return {
+          number: String(pl.policyNumber || pl.PolicyNumber || '').trim(),
+          carrier: String(pl.carrier || pl.Carrier || pl.company || '').trim().slice(0, 40),
+          expired: !!(exp && exp < todayISO),
+        };
+      }).filter(p => p.number);
+
       return res.status(200).json({ ok: true, result: {
         clientNumber: b.clientNumber || clientId, name: name || '(no name on file)',
         phones, emails, officeId, status, openInvoices, people: peopleList,
+        policies: policyList,
       }});
     }
 
@@ -928,7 +944,10 @@ export default async function handler(req, res) {
               invoice_status: out.invoiceApply || null,
               extra: { safety_net: true, receipt_pending: false, finalized: true, brand, last4,
                        receipt: out.receipt, attachment: out.attachment, log: out.log,
-                       followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail },
+                       followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail,
+                       /* Recorded so "did this file under the policy or at client level?"
+                          is answerable from our own data instead of by reading HawkSoft. */
+                       policyNumber: policyNumber || null, policyLink: out.policyLink || null },
             }),
           });
           auditSaved = pr.status === 200 || pr.status === 204;
@@ -993,6 +1012,7 @@ export default async function handler(req, res) {
         invPick = pickInvoices(pc.body, total, policyGuid);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
+      out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
       out.invoiceApply = invPick.how;
 
       const receipt = [{
@@ -1219,6 +1239,7 @@ export default async function handler(req, res) {
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
+      out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
       out.invoiceApply = invPick.how;
 
       const receipt = [{
@@ -1294,7 +1315,8 @@ export default async function handler(req, res) {
             body: JSON.stringify({
               kind: 'terminal_charge', purpose: purpose ? String(purpose).slice(0, 120) : null,
               invoice_status: out.invoiceApply || null,
-              extra: { safety_net: true, receipt_pending: false, finalized: true, terminal: true, branch: branch.branch, brand, last4, receipt: out.receipt, log: out.log, confirmationEmail: out.confirmationEmail },
+              extra: { safety_net: true, receipt_pending: false, finalized: true, terminal: true, branch: branch.branch, brand, last4, receipt: out.receipt, log: out.log, confirmationEmail: out.confirmationEmail,
+                       policyNumber: policyNumber || null, policyLink: out.policyLink || null },
             }),
           });
           auditSaved = pr.status === 200 || pr.status === 204;

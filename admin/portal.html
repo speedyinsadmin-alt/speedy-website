@@ -145,7 +145,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.2</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.3</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -241,7 +241,12 @@
 
         <div id="chgPolWrap" class="hide" style="margin-top:12px">
           <label for="chgPolSel">Apply to policy &mdash; files the receipt under that policy tab</label>
-          <select id="chgPolSel"></select>
+          <select id="chgPolSel" onchange="updatePolicyPreview()"></select>
+          <div id="chgPolOdd" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:9px;padding:9px 10px;margin-top:7px;font-size:12px;color:var(--amber)"></div>
+          <div id="chgPolPrev" class="hide" style="background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-top:7px">
+            <div class="dim" style="font-size:11px">Receipt will show</div>
+            <div id="chgPolPrevVal" style="font-size:12.5px;margin-top:3px"></div>
+          </div>
         </div>
 
         <div style="margin-top:12px">
@@ -1112,6 +1117,36 @@ function chgPurposeText(){
   return t ? 'Other: ' + t : 'Other';
 }
 function chgNoteText(){ return chgEl('chgNote').value.trim(); }
+
+/* Same guard as charge.html. The receipt is what the client keeps and HawkSoft has
+   no receipt-modify endpoint, so the exact string is shown BEFORE charging and an
+   odd-looking value is called out. Never blocks — sometimes it really is the number.
+   A rule on long digit strings was tried and REMOVED: it fired on 4,668 of 45,621
+   real policies (Infinity, Mapfre). A warning agents learn to ignore is worse than none.
+   NOTE: this logic exists twice, here and in charge.html. That duplication is the
+   reason the policy picker was missing from charge.html for months. Merge them. */
+function policyLooksOdd(pn){
+  if(!pn) return '';
+  if(pn.indexOf('::') !== -1) return 'This looks like a carrier reference, not a policy number.';
+  if(pn.length >= 60) return 'This is unusually long and may have been cut short.';
+  return '';
+}
+function updatePolicyPreview(){
+  const w = chgEl('chgPolWrap'), sel = chgEl('chgPolSel');
+  const prev = chgEl('chgPolPrev'), val = chgEl('chgPolPrevVal'), odd = chgEl('chgPolOdd');
+  if(!w || !sel || !prev || !val || !odd) return;
+  if(w.classList.contains('hide')){ prev.classList.add('hide'); odd.classList.add('hide'); return; }
+  const pn = sel.value || '';
+  const label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
+  prev.classList.remove('hide');
+  val.innerHTML = pn ? ('Policy # <b>' + esc(label) + '</b>') : '<b>No policy</b> — filing at client level';
+  const msg = policyLooksOdd(pn);
+  if(msg){
+    odd.classList.remove('hide');
+    odd.textContent = msg + " It will print on the client's receipt exactly as shown. Check HawkSoft if you are not sure — you can still continue.";
+  } else { odd.classList.add('hide'); }
+}
+
 function chgPolicy(){
   const w = chgEl('chgPolWrap');
   if(w.classList.contains('hide')) return '';
@@ -1226,6 +1261,7 @@ function renderChargeForm(){
     chgEl('chgPolSel').innerHTML = '<option value="">No policy — file at client level</option>';
     w.classList.add('hide');
   }
+  updatePolicyPreview();
 
   applyMethodUI();
 }
@@ -1246,6 +1282,7 @@ function pickInv(i, btn){
     if(!found){ sel.insertBefore(new Option(iv.policyNumber + ' — from invoice', iv.policyNumber), sel.firstChild); }
     sel.value = iv.policyNumber;
     chgEl('chgPolWrap').classList.remove('hide');
+    updatePolicyPreview();
   }
   document.querySelectorAll('#chgInv button').forEach(x => x.classList.remove('sel'));
   btn.classList.add('sel');

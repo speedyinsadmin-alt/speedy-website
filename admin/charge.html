@@ -90,7 +90,7 @@
 <div class="wrap">
   <div class="top">
     <div class="brand"><span class="s">SPEEDY</span> <span class="i">CHARGE</span></div>
-    <div class="ver">v2.35 · agent-safe</div>
+    <div class="ver">v2.36 · agent-safe</div>
   </div>
   <h1>Charge client</h1>
   <div class="sub">Launched from HawkSoft — HawkLink fills the client, you confirm, then charge.</div>
@@ -194,6 +194,11 @@
       <label for="polSel" style="display:block">Apply to policy</label>
       <select id="polSel" style="width:100%;box-sizing:border-box"></select>
       <div class="hint" id="polPickHint" style="margin-top:5px"></div>
+      <div id="polOdd" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:8px;padding:10px 12px;margin-top:7px;font-size:12px;color:#b8860b"></div>
+      <div id="polPreview" class="hide" style="background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.10);border-radius:8px;padding:9px 11px;margin-top:7px">
+        <div style="font-size:11px;color:#888">Receipt will show</div>
+        <div id="polPreviewVal" style="font-size:12.5px;margin-top:3px"></div>
+      </div>
     </div>
     <label style="margin-top:14px;display:block">Payment method</label>
     <div class="purpose" id="payMethodRow">
@@ -521,6 +526,7 @@ function updatePolToggle(){
   else if(prev && seen.indexOf(prev) !== -1) sel.value = prev;
   else if(seen.length === 1) sel.value = seen[0];
 
+  sel.onchange = updatePolicyPreview;
   if(seen.length){
     wrap.classList.remove('hide');
     hint.textContent = flooded
@@ -531,6 +537,38 @@ function updatePolToggle(){
     sel.value = '';
     hint.textContent = '';
   }
+  updatePolicyPreview();
+}
+
+/* The receipt is the thing the client keeps, and HawkSoft has no receipt-modify
+   endpoint — once it is sent it cannot be corrected. So show the exact string the
+   client will see BEFORE charging, and say something when it does not look like a
+   policy number. Never block: sometimes the odd-looking value really is the number.
+   A rule on long digit strings was tried and REMOVED: it fired on 4,668 of 45,621
+   real policies (Infinity, Mapfre). A warning agents learn to ignore is worse than none. */
+function policyLooksOdd(pn){
+  if(!pn) return '';
+  if(pn.indexOf('::') !== -1) return 'This looks like a carrier reference, not a policy number.';
+  if(pn.length >= 60) return 'This is unusually long and may have been cut short.';
+  return '';
+}
+function updatePolicyPreview(){
+  var sel = document.getElementById('polSel');
+  var wrap = document.getElementById('polPickWrap');
+  var prev = document.getElementById('polPreview');
+  var val  = document.getElementById('polPreviewVal');
+  var odd  = document.getElementById('polOdd');
+  if(!sel || !prev || !val || !odd) return;
+  if(!wrap || wrap.classList.contains('hide')){ prev.classList.add('hide'); odd.classList.add('hide'); return; }
+  var pn = sel.value || '';
+  var label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
+  prev.classList.remove('hide');
+  val.innerHTML = pn ? ('Policy # <b>' + esc(label) + '</b>') : '<b>No policy</b> — filing at client level';
+  var msg = policyLooksOdd(pn);
+  if(msg){
+    odd.classList.remove('hide');
+    odd.textContent = msg + " It will print on the client's receipt exactly as shown. Check HawkSoft if you are not sure — you can still continue.";
+  } else { odd.classList.add('hide'); }
 }
 function effPolicy(){
   const sel = document.getElementById('polSel');

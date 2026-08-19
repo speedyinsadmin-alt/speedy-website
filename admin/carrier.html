@@ -85,7 +85,9 @@
       <div class="row">
         <div>
           <label>Carrier paid</label>
-          <input id="carrier" placeholder="e.g. ANCHOR DIAMOND" autocomplete="off">
+          <select id="carrierSel" onchange="onCarrierPick()"><option value="">Loading&hellip;</option></select>
+          <input id="carrier" class="hide" placeholder="Who was paid?" autocomplete="off" maxlength="60" style="margin-top:8px">
+          <div id="carrierProg" class="hide hint" style="margin-top:6px"></div>
         </div>
         <div>
           <label>Amount to carrier</label>
@@ -117,7 +119,7 @@
     <div class="card">
       <div class="eyebrow"><span style="color:var(--blue)">◆</span> Documents <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional — application, photos, license</span></div>
       <label>Document type</label>
-      <select id="dtype">
+      <select id="dtype" onchange="onDtypePick()">
         <option value="carrier_application">Carrier application</option>
         <option value="vehicle_photo">Vehicle photo</option>
         <option value="property_photo">Property photo</option>
@@ -125,6 +127,8 @@
         <option value="dec_page">Dec page</option>
         <option value="other">Other</option>
       </select>
+      <input id="dtypeOther" class="hide" placeholder="What is this document?" autocomplete="off" maxlength="41" oninput="onDtypeText()" style="margin-top:8px">
+      <div id="dtypeCount" class="hide hint" style="margin-top:5px"></div>
       <div class="drop" id="docdrop" onclick="document.getElementById('docfile').click()" style="margin-top:10px">
         <div class="ic" style="color:var(--blue)">+</div>
         <div style="font-size:13px;margin-top:6px">Drag documents here, or tap to choose</div>
@@ -242,6 +246,8 @@ function fillCtx(){
   $('#cpaid').textContent = CTX.paid ? '$'+Number(CTX.paid).toFixed(2) : '$0.00';
   $('#cmeth').textContent = CTX.method;
   recalcFee();
+  loadCarriers();   // both sign-in paths land here, and TOKEN is set by now
+  onDtypePick();
 }
 
 $('#camt').addEventListener('input', recalcFee);
@@ -483,7 +489,7 @@ async function acceptDocFiles(files){
   // one file: no interruption, use the type already chosen
   if(files.length === 1){
     const p = await prepareFile(files[0]);
-    DOCS.push({ doc_type: $('#dtype').value, name: p.name, mime: p.mime, b64: p.b64, thumb: p.thumb, note: sizeNote(p) });
+    DOCS.push({ doc_type: $('#dtype').value, doc_label: effDocLabel(), name: p.name, mime: p.mime, b64: p.b64, thumb: p.thumb, note: sizeNote(p) });
     renderDocs();
     return;
   }
@@ -492,6 +498,101 @@ async function acceptDocFiles(files){
   openReview(prepared);
 }
 function msgLine(t){ const m = $('#msg'); if(m){ m.className = ''; m.textContent = t; } }
+
+/* ---- Carrier paid: a list, not a free-text box ----
+   Thirteen audits produced ASPIRE / Aspire General / "Aspire General Insurance
+   Services", ONWARD INS / ONWARD INSURANCE, Bluefire against a book that says
+   BLUE FIRE, and one policy number pasted into the field. Carrier totals are
+   impossible when one carrier is spelled three ways. The list comes from the
+   policy book, so it maintains itself.
+
+   "Other" remains, because an agent must always be able to record what actually
+   happened — but what they type stays on the payment and does NOT join the list.
+   Otherwise the first Bluefire typed becomes a permanent option for everyone.
+
+   NOTE: this page has no esc() or post() helper. Both were assumed once before
+   and blanked the page. Escaping is done locally here. */
+function escAttr(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function effCarrier(){
+  const sel = $('#carrierSel');
+  if(!sel || sel.classList.contains('hide')) return ($('#carrier').value || '').trim() || null;
+  if(sel.value === '__other__') return ($('#carrier').value || '').trim() || null;
+  return sel.value || null;
+}
+function onCarrierPick(){
+  const sel = $('#carrierSel'), other = $('#carrier');
+  if(!sel || !other) return;
+  const isOther = sel.value === '__other__';
+  other.classList.toggle('hide', !isOther);
+  if(isOther) other.focus();
+}
+async function loadCarriers(){
+  const sel = $('#carrierSel');
+  if(!sel) return;
+  let r = null;
+  try{
+    const resp = await fetch('/api/carrier', {
+      method:'POST', headers:{ 'x-id-token': TOKEN, 'Content-Type':'application/json' },
+      body: JSON.stringify({ action:'carrier_list', client_no: CTX.client_no || null, payment_id: CTX.payment_id || null })
+    });
+    r = await resp.json();
+  }catch(e){}
+  if(!r || !r.ok){
+    // never trap the agent: fall back to the free-text box
+    sel.classList.add('hide');
+    $('#carrier').classList.remove('hide');
+    $('#carrier').placeholder = 'Carrier paid';
+    return;
+  }
+  const opt = (v,l) => '<option value="' + escAttr(v) + '">' + escAttr(l) + '</option>';
+  let html = '<option value="">Select the carrier\u2026</option>';
+  if(r.onThisClient && r.onThisClient.length)
+    html += '<optgroup label="On this client">' + r.onThisClient.map(n => opt(n,n)).join('') + '</optgroup>';
+  if(r.carriers && r.carriers.length){
+    html += '<optgroup label="Most used">' + r.carriers.slice(0,40).map(c => opt(c.name,c.name)).join('') + '</optgroup>';
+    if(r.carriers.length > 40)
+      html += '<optgroup label="All others">' + r.carriers.slice(40).map(c => opt(c.name,c.name)).join('') + '</optgroup>';
+  }
+  html += '<optgroup label="Other payee">' + opt('DMV','DMV') + opt('__other__','Other \u2014 type it in') + '</optgroup>';
+  sel.innerHTML = html;
+
+  if(r.suggested){
+    if(![...sel.options].some(o => o.value === r.suggested))
+      sel.insertBefore(new Option(r.suggested, r.suggested), sel.options[1] || null);
+    sel.value = r.suggested;
+  }
+  // Program is HawkSoft's own field on the policy. Shown, never asked for: the
+  // system already knows it, and asking would only create a chance to pick wrong.
+  if(r.program){
+    $('#carrierProg').textContent = 'Program: ' + r.program + ' \u2014 from the policy';
+    $('#carrierProg').classList.remove('hide');
+  }
+  onCarrierPick();
+}
+
+/* ---- Document type "Other": say what it is ----
+   The text becomes the description in HawkSoft, which caps at 41 characters.
+   The counter stops the agent rather than letting it be cut silently on upload. */
+function onDtypePick(){
+  const d = $('#dtype'); if(!d) return;
+  const isOther = d.value === 'other';
+  $('#dtypeOther').classList.toggle('hide', !isOther);
+  $('#dtypeCount').classList.toggle('hide', !isOther);
+  if(isOther){ $('#dtypeOther').focus(); onDtypeText(); }
+}
+function onDtypeText(){
+  const v = ($('#dtypeOther').value || '');
+  $('#dtypeCount').textContent = v.length + '/41 characters';
+}
+function effDocLabel(){
+  const d = $('#dtype');
+  if(!d || d.value !== 'other') return null;
+  return ($('#dtypeOther').value || '').trim() || null;
+}
 
 $('#docfile').addEventListener('change', async e => {
   const files = [...e.target.files];
@@ -502,7 +603,7 @@ function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
     '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
     + '<span class="pill" style="background:' + (d.uploaded ? 'rgba(47,191,113,.15);color:var(--green)' : 'rgba(77,124,254,.15);color:var(--blue)') + '">'
-    + (d.uploaded ? '\u2713 ' : '') + d.doc_type.replace(/_/g,' ') + '</span>'
+    + (d.uploaded ? '\u2713 ' : '') + escAttr(d.doc_label || d.doc_type.replace(/_/g,' ')) + '</span>'
     + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + d.name + '</span>'
     + (d.note ? '<span style="color:var(--mute);font-size:11px">' + d.note + '</span>' : '')
     + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
@@ -586,7 +687,7 @@ async function submit(complete){
     action: 'save_carrier_leg',
     client_no: Number(CTX.client_no)||null,
     policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, payment_id: CTX.payment_id||null,
-    carrier: $('#carrier').value.trim()||null,
+    carrier: effCarrier(),
     carrier_amount: Number(String($('#camt').value).replace(/,/g,''))||null,
     carrier_card: $('#card').value||null,
     receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME, thumb_b64: FILE_THUMB,
@@ -636,7 +737,7 @@ async function submit(complete){
     const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
       body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
         policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
-        doc_type:d.doc_type, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
+        doc_type:d.doc_type, doc_label:d.doc_label || null, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
     return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };
   };

@@ -161,9 +161,65 @@ export default async function handler(req, res) {
   let body = {}; try { body = req.body || {}; } catch {}
   const action = body.action || '';
 
+  /* Carrier list for the "Carrier paid" dropdown.
+     This field was free text. Thirteen audits produced ASPIRE / Aspire General /
+     "Aspire General Insurance Services", ONWARD INS / ONWARD INSURANCE, Bluefire
+     against a book that says BLUE FIRE, and one policy number pasted into the box.
+     You cannot total carrier payments when one carrier has three spellings.
+
+     The list is derived from the policy book, so it maintains itself — a carrier
+     the agency starts writing appears here once its first policy syncs. Nothing
+     for an agent to maintain, nothing to go stale.
+
+     Cheap by construction: names only, no client or policy rows, and the result is
+     small enough to send whole. */
+  if (action === 'carrier_list') {
+    const client_no = parseInt(body.client_no, 10) || null;
+
+    /* What the charge already knew. hawksoft.js resolves the policy's carrier and
+       program at charge time; both are now recorded on the ledger row, so the audit
+       step can prefill instead of asking the agent to retype what we already have.
+       Read from the payment rather than the URL so a link saved by "finish later"
+       still prefills correctly. */
+    let suggested = null, program = null;
+    if (body.payment_id) {
+      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name`);
+      const row = p.rows && p.rows[0];
+      if (row) {
+        const ex = row.extra || {};
+        suggested = row.carrier_name || ex.policyCarrier || (ex.hawksoft && ex.hawksoft.policyCarrier) || null;
+        program   = ex.policyProgram || (ex.hawksoft && ex.hawksoft.policyProgram) || null;
+      }
+    }
+
+    // carriers already on this client's policies go to the top — nearly always the answer
+    let mine = [];
+    if (client_no) {
+      const r = await sbGet(s, `policies?client_no=eq.${client_no}&select=carrier&carrier=not.is.null&limit=50`);
+      mine = [...new Set((r.rows || []).map(x => String(x.carrier || '').trim()).filter(Boolean))];
+    }
+
+    // carrier_directory is a view that does the grouping in Postgres. Counting in JS
+    // here would mean pulling ~46,000 policy rows over the wire on every page load;
+    // this is 178 short rows, about 5 KB.
+    const all = await sbGet(s, 'carrier_directory?select=name,policies&order=policies.desc&limit=400');
+    const ranked = (all.rows || [])
+      .map(r => ({ name: String(r.name || '').trim(), policies: r.policies }))
+      .filter(x => x.name && mine.indexOf(x.name) === -1);
+
+    return res.status(200).json({ ok: true, suggested, program, onThisClient: mine, carriers: ranked });
+  }
+
   if (action === 'add_document') {
     // Lightweight: just store a supporting document (no ledger/carrier logic)
-    const { client_no, policy_id, policy_guid, doc_type, receipt_b64, receipt_name, receipt_mime } = body;
+    const { client_no, policy_id, policy_guid, doc_type, doc_label, receipt_b64, receipt_name, receipt_mime } = body;
+    /* When the agent chose document type "Other" they were asked what it is.
+       Use their words — "other" tells nobody anything six months later.
+       Declared HERE, above both readers (the attachments insert and the HawkSoft
+       Desc). It was written 18 lines below its first use and would have thrown a
+       ReferenceError on the first upload. HawkSoft caps Desc at 41 characters;
+       the page counts to 41 so the slice below should never actually bite. */
+    const label = String(doc_label || '').trim();
     let payment_id = body.payment_id;
     if (!payment_id && client_no) {
       const open = await sbGet(s, `bridge_ledger?client_id=eq.${client_no}`
@@ -187,7 +243,7 @@ export default async function handler(req, res) {
       method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
       body: JSON.stringify([{
         client_no, policy_id: policy_id || null, payment_id: payment_id || null,
-        kind: dtype, doc_type: dtype, filename: niceName,
+        kind: dtype, doc_type: dtype, doc_label: label || null, filename: niceName,
         file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
         sha256: hash, mime: receipt_mime, bytes: buf.length,
         uploaded_by: email,
@@ -202,7 +258,7 @@ export default async function handler(req, res) {
       const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
       hsRefId = crypto.randomUUID();
       const fname = niceName.replace(/\.[^.]+$/, '').slice(0, 60);
-      const desc = `${dtype.replace(/_/g,' ')}`.slice(0, 41);
+      const desc = (label || dtype.replace(/_/g,' ')).slice(0, 41);
       try {
         const r2 = await fetch(`${HS_BASE}/vendor/agency/${AGENCY_ID}/client/${client_no}/attachment?version=4.0`, {
           method: 'POST',

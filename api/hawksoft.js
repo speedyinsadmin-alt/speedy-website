@@ -875,7 +875,7 @@ export default async function handler(req, res) {
       }
 
       // Resolve policy GUID + matching open invoice (fail-soft on both)
-      let policyGuid = null, policyCarrier = null, invPick = { invoices: null, how: 'lookup failed' };
+      let policyGuid = null, policyCarrier = null, policyProgram = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
         if (policyNumber) {
@@ -885,6 +885,10 @@ export default async function handler(req, res) {
           if (hit) {
             policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
             policyCarrier = String(hit.carrier || hit.Carrier || hit.writingCarrier || '').trim().slice(0, 30) || null;
+            // HawkSoft keeps the program separate from the carrier (ANCHOR GENERAL /
+            // GEMINI). Carry it so the audit step can SHOW it without asking the agent
+            // to pick something we already know.
+            policyProgram = String(hit.program || hit.Program || '').trim().slice(0, 40) || null;
           }
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
@@ -979,13 +983,16 @@ export default async function handler(req, res) {
                        followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail,
                        /* Recorded so "did this file under the policy or at client level?"
                           is answerable from our own data instead of by reading HawkSoft. */
-                       policyNumber: policyNumber || null, policyLink: out.policyLink || null },
+                       policyNumber: policyNumber || null, policyLink: out.policyLink || null,
+                       // the audit step reads these to prefill "Carrier paid" — without
+                       // them the value is resolved here and then thrown away
+                       policyCarrier: policyCarrier || null, policyProgram: policyProgram || null },
             }),
           });
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
@@ -1032,7 +1039,7 @@ export default async function handler(req, res) {
       const ref = altRef ? (refPrefix + altRef.replace(/[^a-z0-9]/gi, '').slice(0, 20).toUpperCase()) : (refPrefix + crypto.randomUUID().slice(0, 10).toUpperCase());
       const out = {};
 
-      let policyGuid = null, policyCarrier = null, invPick = { invoices: null, how: 'lookup failed' };
+      let policyGuid = null, policyCarrier = null, policyProgram = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
         if (policyNumber) {
@@ -1042,6 +1049,10 @@ export default async function handler(req, res) {
           if (hit) {
             policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
             policyCarrier = String(hit.carrier || hit.Carrier || hit.writingCarrier || '').trim().slice(0, 30) || null;
+            // HawkSoft keeps the program separate from the carrier (ANCHOR GENERAL /
+            // GEMINI). Carry it so the audit step can SHOW it without asking the agent
+            // to pick something we already know.
+            policyProgram = String(hit.program || hit.Program || '').trim().slice(0, 40) || null;
           }
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
@@ -1114,7 +1125,7 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
-      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
         await linkReceiptToPayment(out.vault.id, auditSaved.id);
@@ -1262,7 +1273,7 @@ export default async function handler(req, res) {
           safetyLedgerId = srj && srj[0] ? srj[0].id : null;
         }
       } catch (e) { /* never block on the safety net */ }
-      let policyGuid = null, policyCarrier = null, invPick = { invoices: null, how: 'lookup failed' };
+      let policyGuid = null, policyCarrier = null, policyProgram = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
         if (policyNumber) {
@@ -1272,6 +1283,10 @@ export default async function handler(req, res) {
           if (hit) {
             policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
             policyCarrier = String(hit.carrier || hit.Carrier || hit.writingCarrier || '').trim().slice(0, 30) || null;
+            // HawkSoft keeps the program separate from the carrier (ANCHOR GENERAL /
+            // GEMINI). Carry it so the audit step can SHOW it without asking the agent
+            // to pick something we already know.
+            policyProgram = String(hit.program || hit.Program || '').trim().slice(0, 40) || null;
           }
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
@@ -1355,13 +1370,16 @@ export default async function handler(req, res) {
               kind: 'terminal_charge', purpose: purpose ? String(purpose).slice(0, 120) : null,
               invoice_status: out.invoiceApply || null,
               extra: { safety_net: true, receipt_pending: false, finalized: true, terminal: true, branch: branch.branch, brand, last4, receipt: out.receipt, log: out.log, confirmationEmail: out.confirmationEmail,
-                       policyNumber: policyNumber || null, policyLink: out.policyLink || null },
+                       policyNumber: policyNumber || null, policyLink: out.policyLink || null,
+                       // the audit step reads these to prefill "Carrier paid" — without
+                       // them the value is resolved here and then thrown away
+                       policyCarrier: policyCarrier || null, policyProgram: policyProgram || null },
             }),
           });
           auditSaved = pr.status === 200 || pr.status === 204;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, commissionTo: (req.body||{}).commissionTo, producerCode: (req.body||{}).producerCode, totalOwed: (req.body||{}).totalOwed, balanceOf: (req.body||{}).balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, commissionTo: (req.body||{}).commissionTo, producerCode: (req.body||{}).producerCode, totalOwed: (req.body||{}).totalOwed, balanceOf: (req.body||{}).balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {

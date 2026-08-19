@@ -31,6 +31,13 @@ function normaliseAgentEmail(v) {
    counted as revenue and commission and sat in agents' unfinished-audit queues. */
 const TEST_CLIENT_ID = 26081;
 
+/* Policy numbers were cut at 25 characters. The lookup is an EXACT string match,
+   so a longer number was truncated, failed to match, and the payment filed at
+   client level with nothing said. Five policies in the book sit exactly at 25.
+   This value is only used for matching and for display on the receipt — it is
+   never written back to HawkSoft as a policy number — so a generous cap is free. */
+const POLICY_NUM_MAX = 60;
+
 function parseMoney(v, dflt = 0) {
   const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.]/g, ''));
   return Number.isFinite(n) ? n : dflt;
@@ -476,18 +483,30 @@ async function buildReceiptPdf(o) {
   ctr('PAYMENT RECEIPT', y, bold, 11, NAVY); y -= 26;
   ctr(`$${o.total.toFixed(2)}`, y, bold, 26, BLACK); y -= 15;
   ctr(o.headline, y, bold, 9, GREEN); y -= 22;
+  /* Values are right-aligned with no wrapping, so an over-long one would run off
+     the 306pt page or collide with its label. Trim to the space actually left after
+     the label rather than to a character count — a character cap cannot know the
+     font width. Nothing the caller passes can break the receipt. */
   const row = (label, value, isBold) => {
     page.drawText(label, { x: 29, y, font: helv, size: 8.5, color: GRAY });
     const f = isBold ? bold : helv;
-    const vw = f.widthOfTextAtSize(value, 8.5);
-    page.drawText(value, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
+    const avail = W - 29 - 29 - helv.widthOfTextAtSize(label, 8.5) - 10;
+    let v = String(value);
+    if (f.widthOfTextAtSize(v, 8.5) > avail) {
+      while (v.length > 1 && f.widthOfTextAtSize(v + '\u2026', 8.5) > avail) v = v.slice(0, -1);
+      v += '\u2026';
+    }
+    const vw = f.widthOfTextAtSize(v, 8.5);
+    page.drawText(v, { x: W - 29 - vw, y, font: f, size: 8.5, color: BLACK });
     y -= 12;
   };
   row('Date / Time', o.stamp + ' PT');
   row('Client', o.clientName || ('Client #' + o.clientId), true);
   row('Client #', String(o.clientId));
   row('Payment for', String(o.purpose).slice(0, 38));
-  if (o.policyNumber) row('Policy #', o.policyNumber, true);
+  // Carrier alongside the number: "RIB01013493 — RELIANT" means something to a
+  // client; a bare string does not, and a wrong bare string looks like our error.
+  if (o.policyNumber) row('Policy #', o.policyNumber + (o.policyCarrier ? '  —  ' + o.policyCarrier : ''), true);
   y -= 4; dash(y); y -= 14;
   for (const r of (o.detailRows || [])) row(r[0], r[1], r[2]);
   y -= 4; solid(y); y -= 14;
@@ -766,7 +785,7 @@ export default async function handler(req, res) {
         clientId = parseInt(tok.c, 10);
         total = Math.round(parseMoney(tok.a) * 100) / 100;
         purpose = String(tok.p || 'Payment').slice(0, 80);
-        policyNumber = String(tok.pol || '').trim().slice(0, 25);
+        policyNumber = String(tok.pol || '').trim().slice(0, POLICY_NUM_MAX);
         clientName = String(tok.n || '').slice(0, 40);
         const byFull = String(tok.by || 'agent').includes('@') ? String(tok.by) : String(tok.by || 'agent') + '@speedyins.com';
         who = `Client — secure link (sent by ${byFull.slice(0, 40)})`;
@@ -775,7 +794,7 @@ export default async function handler(req, res) {
         clientId = parseInt(b.clientId, 10);
         total = Math.round(parseMoney(b.amount) * 100) / 100;
         purpose = String(b.purpose || 'Down payment').slice(0, 80);
-        policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+        policyNumber = String(b.policyNumber || '').trim().slice(0, POLICY_NUM_MAX);
         clientName = String(b.clientName || '').slice(0, 40);
         who = userEmail
           ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
@@ -856,14 +875,17 @@ export default async function handler(req, res) {
       }
 
       // Resolve policy GUID + matching open invoice (fail-soft on both)
-      let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
+      let policyGuid = null, policyCarrier = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
         if (policyNumber) {
           const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
-          if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+          if (hit) {
+            policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+            policyCarrier = String(hit.carrier || hit.Carrier || hit.writingCarrier || '').trim().slice(0, 30) || null;
+          }
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
@@ -901,7 +923,7 @@ export default async function handler(req, res) {
 
       // 3) Branded receipt PDF -> attachment + vault (shared: buildReceiptPdf / fileReceiptPdf)
       const pdfBuf = await buildReceiptPdf({
-        total, stamp, clientName, clientId, purpose, policyNumber,
+        total, stamp, clientName, clientId, purpose, policyNumber, policyCarrier,
         branchName: b.branchName || 'Speedy Insurance Agency',
         headline: 'APPROVED',
         detailRows: [
@@ -999,7 +1021,7 @@ export default async function handler(req, res) {
       const office = String(b.office || '').slice(0, 40) || null; // branch the agent selected in the portal
       // purpose shown on receipt includes the note when present
       const purposeFull = note ? `${purpose} — ${note}` : purpose;
-      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, POLICY_NUM_MAX);
       const clientName = String(b.clientName || '').slice(0, 40);
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
       const taskEmail = userEmail || 'info@speedyins.com';
@@ -1010,14 +1032,17 @@ export default async function handler(req, res) {
       const ref = altRef ? (refPrefix + altRef.replace(/[^a-z0-9]/gi, '').slice(0, 20).toUpperCase()) : (refPrefix + crypto.randomUUID().slice(0, 10).toUpperCase());
       const out = {};
 
-      let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
+      let policyGuid = null, policyCarrier = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
         if (policyNumber) {
           const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
-          if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+          if (hit) {
+            policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+            policyCarrier = String(hit.carrier || hit.Carrier || hit.writingCarrier || '').trim().slice(0, 30) || null;
+          }
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
@@ -1052,7 +1077,7 @@ export default async function handler(req, res) {
       out.followUpTask = receipt[0].task ? `assigned to ${taskEmail}` : (invPick.invoices ? 'not needed — invoice applied' : 'none');
 
       const pdfBuf = await buildReceiptPdf({
-        total, stamp, clientName, clientId, purpose: purposeFull, policyNumber,
+        total, stamp, clientName, clientId, purpose: purposeFull, policyNumber, policyCarrier,
         branchName: 'Speedy Insurance Agency',
         headline: 'RECEIVED \u2014 ' + payMethod.toUpperCase(),
         detailRows: [
@@ -1120,7 +1145,7 @@ export default async function handler(req, res) {
       }
       const tok = makeToken({
         c: clientId, a: total, p: String(b.purpose || 'Payment').slice(0, 40),
-        pol: String(b.policyNumber || '').trim().slice(0, 25),
+        pol: String(b.policyNumber || '').trim().slice(0, POLICY_NUM_MAX),
         by: byShort, exp: Date.now() + 72 * 3600 * 1000,
       }, KEY);
       // Auto-log the link creation to the client file
@@ -1174,7 +1199,7 @@ export default async function handler(req, res) {
       if (!total || total < 0.5) return res.status(400).json({ ok: false, error: 'Amount must be at least $0.50.' });
       const branch = CLOVER_BRANCHES[String(b.branchId || '1')] || CLOVER_BRANCHES[1];
       const purpose = ((n)=>{ const p=String(b.purpose||'Down payment').slice(0,80); return n?`${p} — ${n}`:p; })(String(b.note||'').slice(0,120).trim());
-      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, POLICY_NUM_MAX);
       let clientName = String(b.clientName || '').slice(0, 40);
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
       const now = new Date();
@@ -1237,14 +1262,17 @@ export default async function handler(req, res) {
           safetyLedgerId = srj && srj[0] ? srj[0].id : null;
         }
       } catch (e) { /* never block on the safety net */ }
-      let policyGuid = null, invPick = { invoices: null, how: 'lookup failed' };
+      let policyGuid = null, policyCarrier = null, invPick = { invoices: null, how: 'lookup failed' };
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
         if (policyNumber) {
           const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
-          if (hit) policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+          if (hit) {
+            policyGuid = hit.id || hit.policyId || hit.guid || hit.Id || null;
+            policyCarrier = String(hit.carrier || hit.Carrier || hit.writingCarrier || '').trim().slice(0, 30) || null;
+          }
         }
         invPick = pickInvoices(pc.body, total, policyGuid);
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
@@ -1278,7 +1306,7 @@ export default async function handler(req, res) {
       // Branded receipt PDF -> attachment + vault. Terminal previously skipped this
       // entirely, so card-present charges filed a receipt + log but no PDF.
       const pdfBuf = await buildReceiptPdf({
-        total, stamp, clientName, clientId, purpose, policyNumber,
+        total, stamp, clientName, clientId, purpose, policyNumber, policyCarrier,
         branchName: branch.branch ? ('Speedy Insurance \u2014 ' + branch.branch) : 'Speedy Insurance Agency',
         headline: 'APPROVED',
         detailRows: [
@@ -1353,7 +1381,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Test amounts capped at $10.00' });
       }
       const purpose = ((n)=>{ const p=String(b.purpose||'Down payment').slice(0,80); return n?`${p} — ${n}`:p; })(String(b.note||'').slice(0,120).trim());
-      const policyNumber = String(b.policyNumber || '').trim().slice(0, 25);
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, POLICY_NUM_MAX);
       const who = userEmail
         ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
         : 'admin key';
@@ -1869,7 +1897,7 @@ export default async function handler(req, res) {
         ...(b.policyNumber ? {
           policy: {
             applicationType: ['Personal', 'Commercial', 'Life', 'Health'].includes(b.applicationType) ? b.applicationType : 'Personal',
-            policyNumber: String(b.policyNumber).trim().slice(0, 25),
+            policyNumber: String(b.policyNumber).trim().slice(0, POLICY_NUM_MAX),
             ...(b.effectiveDate ? { effectiveDate: String(b.effectiveDate).trim() } : {}),
             ...(b.lob ? { LOBs: [mapLob(b.lob)] } : {}),
             state: 'CA',
@@ -1877,7 +1905,7 @@ export default async function handler(req, res) {
         } : {}),
         log: {
           channel: 31,
-          note: 'Client created via Speedy admin intake' + (b.policyNumber ? ` with policy shell ${String(b.policyNumber).trim().slice(0, 25)}` : '') + '. Complete policy details in CMS from the dec page.',
+          note: 'Client created via Speedy admin intake' + (b.policyNumber ? ` with policy shell ${String(b.policyNumber).trim().slice(0, POLICY_NUM_MAX)}` : '') + '. Complete policy details in CMS from the dec page.',
           ts: new Date().toISOString(),
         },
       };

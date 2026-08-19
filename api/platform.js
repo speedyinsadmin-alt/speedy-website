@@ -322,7 +322,7 @@ async function upsertHsClient(s, c) {
 }
 
 
-async function runDeltaSync(s, actor) {
+async function runDeltaSync(s, actor, budgetMs) {
   const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
   const last = (st.rows && st.rows[0] && st.rows[0].last_sync) || '2026-07-23T00:00:00Z';
   // 30-min safety overlap so nothing slips between runs
@@ -335,7 +335,8 @@ async function runDeltaSync(s, actor) {
 
   let clients = 0, pols = 0, done = 0;
   const began = Date.now();
-  const BUDGET_MS = 240000;   // stop well inside the function limit and report progress
+  // Cron can afford to grind; a button cannot. Caller decides.
+  const BUDGET_MS = Number(budgetMs) > 0 ? Number(budgetMs) : 240000;
   let ranOut = false;
   for (let i = 0; i < ids.length; i += 25) {
     if (Date.now() - began > BUDGET_MS) { ranOut = true; break; }
@@ -419,7 +420,7 @@ export default async function handler(req, res) {
   // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
   // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
   const view = String(req.query.view || '');
-  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due'];
+  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
@@ -442,6 +443,32 @@ export default async function handler(req, res) {
         phone: c.phone || null, branch: c.branch || null,
       }));
       return res.status(200).json({ ok: true, results });
+    }
+
+    if (view === 'portal_refresh_clients') {
+      /* "Refresh client list" — the escape hatch when an agent has just created a
+         client in HawkSoft and cannot find them yet. Search reads OUR clients table,
+         which the cron fills at 09:00 UTC (2am Pacific), so a client added during the
+         day was invisible until the next night. HawkSoft has no webhooks; polling is
+         the only model they offer.
+
+         Two guards, because thirteen agents share this button:
+         - cooldown lives in the DATABASE, not memory. Vercel runs many function
+           instances, so an in-process guard would not hold across them.
+         - a short budget. The cron can grind for four minutes; nobody waits that long
+           for a button. A run that does not finish simply leaves the watermark alone
+           and gets picked up next time, so stopping early is always safe. */
+      const COOLDOWN_MS = 60000;
+      const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=last_sync');
+      const last = st.rows && st.rows[0] && st.rows[0].last_sync;
+      if (last && (Date.now() - new Date(last).getTime()) < COOLDOWN_MS) {
+        return res.status(200).json({ ok: true, skipped: true, reason: 'cooldown',
+          seconds_ago: Math.round((Date.now() - new Date(last).getTime()) / 1000) });
+      }
+      const out = await runDeltaSync(s, who.email, 25000);
+      if (!out.ok) return res.status(200).json({ ok: false, error: out.error || 'sync failed' });
+      return res.status(200).json({ ok: true, changed: out.changed, clients: out.clients,
+        policies: out.policies, partial: out.partial });
     }
 
     if (view === 'portal_staff') {

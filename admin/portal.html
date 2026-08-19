@@ -145,7 +145,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.1</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.2</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -469,11 +469,51 @@ async function runSearch(q){
   box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">Searching…</div>';
   const r = await api('portal_search&q=' + encodeURIComponent(q));
   if(!r || !r.ok){ box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">Search failed</div>'; return; }
-  if(!r.results.length){ box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">No clients found</div>'; return; }
+  if(!r.results.length){ box.innerHTML = emptySearchHtml(q); return; }
+  renderSearchResults(r.results);
+}
+
+function renderSearchResults(results){
+  const box = document.getElementById('searchResults');
   box.innerHTML = '<div style="background:var(--navy);border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:8px">'
-    + r.results.map(c => '<div onclick="openClient('+c.client_no+',\''+esc(c.name).replace(/\x27/g,"")+'\')" style="padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)">'
+    + results.map(c => '<div onclick="openClient('+c.client_no+',\''+esc(c.name).replace(/\x27/g,"")+'\')" style="padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)">'
         + '<b>'+esc(c.name)+'</b> <span class="dim" style="font-size:11px">· #'+c.client_no+(c.branch?' · '+esc(c.branch):'')+'</span></div>').join('')
     + '</div>';
+}
+
+/* Empty search state.
+   Search reads OUR clients table, not HawkSoft directly. The nightly cron fills it,
+   so a client created in HawkSoft this morning is not here yet. This lets the agent
+   pull the change themselves instead of asking Saif or Tony to run a resync.
+   HawkSoft only exposes a client once the file has been SAVED in CMS — which is why
+   the "nothing new" message says so rather than leaving them clicking. */
+function emptySearchHtml(q){
+  return '<div class="dim" style="font-size:12px;padding:8px 0">No clients found</div>'
+    + '<div id="refreshBox" style="background:var(--card);border:1px solid var(--line);border-radius:9px;padding:12px 13px;margin-top:2px">'
+    + '<div class="dim" style="font-size:12.5px;margin-bottom:9px">A client added in HawkSoft in the last few minutes may not be here yet.</div>'
+    + '<span id="refreshBtn" onclick="refreshClients(\'' + esc(q).replace(/\x27/g,'') + '\')" '
+    + 'style="display:inline-block;cursor:pointer;font-size:12.5px;background:var(--blue);color:#fff;padding:8px 15px;border-radius:8px">'
+    + 'Refresh client list</span></div>';
+}
+
+async function refreshClients(q){
+  const box = document.getElementById('refreshBox');
+  if(box) box.innerHTML = '<div class="dim" style="font-size:12.5px">Refreshing from HawkSoft… this can take a few seconds.</div>';
+  const r = await api('portal_refresh_clients');
+  if(!r || !r.ok){
+    if(box) box.innerHTML = '<div style="font-size:12.5px;color:var(--amber)">Could not reach HawkSoft just now. Try again in a moment.</div>';
+    return;
+  }
+  // re-run the search either way — a sync skipped by cooldown may still have new rows
+  const again = await api('portal_search&q=' + encodeURIComponent(q));
+  const found = again && again.ok && again.results.length;
+  if(found){ renderSearchResults(again.results); return; }
+  if(box){
+    box.innerHTML = r.skipped
+      ? '<div class="dim" style="font-size:12.5px">Client list was refreshed moments ago. If the client is brand new, make sure their file has been saved in HawkSoft.</div>'
+      : '<div class="dim" style="font-size:12.5px">Client list is up to date' + (r.clients ? ' — ' + r.clients + ' updated' : '')
+        + '. If the client is brand new, make sure their file has been saved in HawkSoft.</div>';
+  }
 }
 
 // --- tabs ---

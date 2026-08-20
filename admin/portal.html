@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.6</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.7</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -842,9 +842,12 @@ async function openPortalDoc(id){
 function finishAuditFor(paymentId, clientNo, amount){
   stashHandoff();
   const tab = OPEN_TABS.find(t => t.client_no === clientNo);
+  const cached = CLIENT_CACHE[clientNo] || {};
+  const pay = ((cached.payments) || []).find(r => r.id === paymentId) || {};
   const p = new URLSearchParams({
     client: clientNo || '', name: (tab && tab.name) || '', paid: Number(amount||0).toFixed(2),
     method: 'client paid', payment_id: paymentId,
+    policy: pay.policy_number || '', policy_guid: pay.policy_guid || '',
   });
   location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
@@ -1294,10 +1297,16 @@ function renderChargeForm(){
   // so the portal offers the real list instead of guessing.
   const cached = CLIENT_CACHE[CHG.clientNo];
   const all  = ((cached && cached.policies) || []).filter(p => p.policy_number);
-  const ins  = all.filter(p => p.record_type !== 'dmv_service');
-  const dmvs = all.filter(p => p.record_type === 'dmv_service');
+  const ins  = all.filter(p => p.record_type !== 'dmv_service').sort(byTab);
+  const dmvs = all.filter(p => p.record_type === 'dmv_service').sort(byTab);
   const pols = ins.concat(dmvs);
-  const opt  = p => '<option value="' + esc(p.policy_number) + '">' + esc(p.policy_number)
+  const tabNo = p => {
+    const i = p.carrier_extras && p.carrier_extras.policyIndex;
+    return (i === 0 || i > 0) ? 'Tab ' + (Number(i) + 1) + ' · ' : '';
+  };
+  const byTab = (a, b) => Number((a.carrier_extras||{}).policyIndex ?? 999)
+                        - Number((b.carrier_extras||{}).policyIndex ?? 999);
+  const opt  = p => '<option value="' + esc(p.policy_number) + '">' + tabNo(p) + esc(p.policy_number)
       + ' — ' + esc(p.carrier || (p.record_type === 'dmv_service' ? 'DMV service' : ''))
       + (isExpired(p) ? ' (expired)' : '') + '</option>';
   const w = chgEl('chgPolWrap');

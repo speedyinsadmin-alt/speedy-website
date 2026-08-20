@@ -529,6 +529,7 @@ function onCarrierPick(){
   const isOther = sel.value === '__other__';
   other.classList.toggle('hide', !isOther);
   if(isOther) other.focus();
+  updateSubmit();
 }
 async function loadCarriers(){
   const sel = $('#carrierSel');
@@ -618,10 +619,11 @@ $('#file').addEventListener('change', async e => {
 
 function updateSubmit(){
   // audit submit needs: carrier, amount, card, receipt
-  const ok = $('#carrier').value.trim() && Number(String($('#camt').value).replace(/,/g,''))>0 && $('#card').value && FILE_B64;
+  const ok = !!effCarrier() && Number(String($('#camt').value).replace(/,/g,''))>0 && $('#card').value && FILE_B64;
   $('#submitBtn').disabled = !ok;
 }
 ['carrier','camt','card'].forEach(id => $('#'+id).addEventListener('input', updateSubmit));
+$('#carrierSel').addEventListener('change', updateSubmit);
 $('#card').addEventListener('change', updateSubmit);
 
 // Plain-language errors. An agent can act on "the receipt didn't upload";

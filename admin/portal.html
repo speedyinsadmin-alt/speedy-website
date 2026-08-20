@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.5</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.6</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -309,7 +309,7 @@ const STAFF = {
 };
 let TOKEN = null, EMAIL = null, OFFICE = null;
 
-const HL = { client:null, policy:'', armed:false };
+const HL = { client:null, policy:'', last:'', armed:false };
 (function readLaunch(){
   try{
     var q = new URLSearchParams(location.search);
@@ -318,10 +318,11 @@ const HL = { client:null, policy:'', armed:false };
     if(!n || !isFinite(n)) return;
     HL.client = String(n);
     HL.policy = (q.get('policy') || '').trim();
+    HL.last = (q.get('last') || '').trim().slice(0, 40);
     HL.armed = true;
     var el = document.getElementById('hlName');
     if(el){
-      el.textContent = 'Client #' + HL.client;
+      el.textContent = (HL.last ? HL.last + ' — ' : '') + 'Client #' + HL.client;
       document.getElementById('hlFound').classList.remove('hide');
     }
   }catch(e){ HL.armed = false; }
@@ -378,7 +379,7 @@ function onCred(resp){
   $('#gate').classList.add('hide');
   if(HL.armed && HL.client){
     applyOffice(home);
-    openClient(HL.client, '#' + HL.client);
+    openClient(HL.client, HL.last || ('#' + HL.client));
     openCharge(HL.client);
     return;
   }
@@ -1292,12 +1293,18 @@ function renderChargeForm(){
   // charge_lookup does not return a policy number (charge.html gets it from HawkLink),
   // so the portal offers the real list instead of guessing.
   const cached = CLIENT_CACHE[CHG.clientNo];
-  const pols = ((cached && cached.policies) || []).filter(p => p.record_type !== 'dmv_service' && p.policy_number);
+  const all  = ((cached && cached.policies) || []).filter(p => p.policy_number);
+  const ins  = all.filter(p => p.record_type !== 'dmv_service');
+  const dmvs = all.filter(p => p.record_type === 'dmv_service');
+  const pols = ins.concat(dmvs);
+  const opt  = p => '<option value="' + esc(p.policy_number) + '">' + esc(p.policy_number)
+      + ' — ' + esc(p.carrier || (p.record_type === 'dmv_service' ? 'DMV service' : ''))
+      + (isExpired(p) ? ' (expired)' : '') + '</option>';
   const w = chgEl('chgPolWrap');
   if(pols.length){
-    chgEl('chgPolSel').innerHTML = pols.map(p =>
-        '<option value="' + esc(p.policy_number) + '">' + esc(p.policy_number) + ' — ' + esc(p.carrier || '')
-        + (isExpired(p) ? ' (expired)' : '') + '</option>').join('')
+    chgEl('chgPolSel').innerHTML =
+        (ins.length  ? '<optgroup label="Insurance policies">' + ins.map(opt).join('')  + '</optgroup>' : '')
+      + (dmvs.length ? '<optgroup label="DMV services">'      + dmvs.map(opt).join('') + '</optgroup>' : '')
       + '<option value="">No policy — file at client level</option>';
     if(HL.armed && HL.policy && String(CHG.clientNo) === String(HL.client)){
       const want = HL.policy.trim().toUpperCase();

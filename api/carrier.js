@@ -181,14 +181,15 @@ export default async function handler(req, res) {
        step can prefill instead of asking the agent to retype what we already have.
        Read from the payment rather than the URL so a link saved by "finish later"
        still prefills correctly. */
-    let suggested = null, program = null;
+    let suggested = null, program = null, purpose = null;
     if (body.payment_id) {
-      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name`);
+      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose`);
       const row = p.rows && p.rows[0];
       if (row) {
         const ex = row.extra || {};
         suggested = row.carrier_name || ex.policyCarrier || (ex.hawksoft && ex.hawksoft.policyCarrier) || null;
         program   = ex.policyProgram || (ex.hawksoft && ex.hawksoft.policyProgram) || null;
+        purpose   = row.purpose || null;
       }
     }
 
@@ -207,7 +208,7 @@ export default async function handler(req, res) {
       .map(r => ({ name: String(r.name || '').trim(), policies: r.policies }))
       .filter(x => x.name && mine.indexOf(x.name) === -1);
 
-    return res.status(200).json({ ok: true, suggested, program, onThisClient: mine, carriers: ranked });
+    return res.status(200).json({ ok: true, suggested, program, purpose, onThisClient: mine, carriers: ranked });
   }
 
   if (action === 'add_document') {
@@ -286,7 +287,7 @@ export default async function handler(req, res) {
   if (action === 'save_carrier_leg') {
     const {
       client_no, policy_id, policy_guid,
-      carrier, carrier_amount, carrier_card,
+      carrier, carrier_amount, carrier_card, carrier_zero_ack,
       receipt_b64, receipt_name, receipt_mime,
       complete, // true = submit to audit (receipt required); false = save partial
     } = body;
@@ -387,6 +388,7 @@ export default async function handler(req, res) {
 
     // Update ledger lifecycle if we have a payment_id
     const status = complete ? 'complete' : 'carrier_pending';
+    let chargeAmtSeen = null;
     if (payment_id) {
       // fetch the charge amount to compute the fee
       const svcCost = (body.service_cost != null) ? Number(body.service_cost)
@@ -394,6 +396,7 @@ export default async function handler(req, res) {
       let feeAmt = null;
       const led = await sbGet(s, `bridge_ledger?id=eq.${payment_id}&select=amount`);
       const chargeAmt = led.rows && led.rows[0] ? Number(led.rows[0].amount) : null;
+      chargeAmtSeen = chargeAmt;
       if (chargeAmt != null && svcCost != null) feeAmt = +(chargeAmt - svcCost).toFixed(2);
       await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${payment_id}`, {
         method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
@@ -401,6 +404,10 @@ export default async function handler(req, res) {
           audit_status: status,
           carrier_name: carrier || null,
           carrier_paid_amount: carrier_amount != null ? Number(carrier_amount) : null,
+          /* An acknowledged $0.00 must never be indistinguishable from a zero some future
+             bug wrote. The flag is the difference between a claim we can audit and a
+             number nobody can explain. */
+          carrier_zero_ack: carrier_zero_ack === true ? true : null,
           carrier_card: carrier_card || null,
           service_cost: svcCost,
           fee_amount: feeAmt,
@@ -418,6 +425,21 @@ export default async function handler(req, res) {
         payload: { carrier, carrier_amount, carrier_card, status, hawksoft_filed: hsFiled, attachment_id: attachment && attachment.id },
       }]),
     });
+
+    /* Separate row, not a field on the audit event: the acknowledgement is a statement
+       the agent made, and it needs to be findable on its own. */
+    if (carrier_zero_ack === true) {
+      await fetch(`${s.base}/rest/v1/events`, {
+        method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify([{
+          actor: email, kind: 'carrier.zero_acknowledged',
+          client_no, policy_id: policy_id || null, source: 'carrier_capture',
+          payload: { payment_id: payment_id || null, carrier: carrier || null,
+                     purpose: body.purpose || null, doc_type: body.doc_type || null,
+                     charge_amount: chargeAmtSeen },
+        }]),
+      });
+    }
 
     return res.status(200).json({
       ok: true, email, status,

@@ -103,15 +103,21 @@
         <option>Trust</option>
         <option>Cash</option>
       </select>
-      <div class="fee"><span class="mute">Speedy keeps (fee)</span><b id="fee">—</b></div>
+      <div id="zeroWrap" class="hide" style="margin-top:10px;border:1px solid var(--amber);border-radius:8px;padding:10px 12px">
+        <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;margin:0">
+          <input type="checkbox" id="zeroAck" style="margin:2px 0 0 0;flex:none;width:auto">
+          <span id="zeroAckTxt" style="font-size:13px;line-height:1.5"></span>
+        </label>
+      </div>
+      <div class="fee"><span class="mute">Speedy keeps (fee)</span><b id="fee">&mdash;</b></div>
     </div>
 
     <div class="card">
-      <div class="eyebrow"><span style="color:var(--green)">◆</span> Carrier receipt <span class="pill a">required for audit</span></div>
+      <div class="eyebrow"><span style="color:var(--green)">◆</span> <span id="recTitle">Carrier receipt</span> <span class="pill a">required for audit</span></div>
       <div class="drop" id="drop" onclick="document.getElementById('file').click()">
         <div class="ic" id="dropic">⇪</div>
         <div id="droptxt" style="font-size:13px;margin-top:6px">Drag the receipt here, or tap to choose</div>
-        <div class="hint">PDF or photo — this is the proof of payment</div>
+        <div class="hint" id="recHint">PDF or photo — this is the proof of payment</div>
       </div>
       <input type="file" id="file" accept="application/pdf,image/*" style="display:none">
     </div>
@@ -185,6 +191,19 @@ const CTX = {
   policy_guid: qp.get('policy_guid') || '',
   payment_id: qp.get('payment_id') || '',
   policy_num: qp.get('policy') || '',
+  purpose: '',   // filled from the payment row by carrier_list, never from the URL
+};
+
+/* The REQUIRED slot is hardcoded "Carrier receipt", so on a zero-payment endorsement
+   there is no carrier receipt to upload and the agent files whatever they have under
+   a label that says "proof of payment". That is how ENDO DOCS.pdf landed in HawkSoft
+   mislabelled, and HawkSoft has no modify endpoint. Label follows the charge purpose. */
+const NOPAY_DOC = {
+  'Endorsement':  ['Endorsement paperwork',  'endorsement_no_payment'],
+  'Cancellation': ['Cancellation paperwork', 'cancellation_no_payment'],
+  'Renewal':      ['Renewal paperwork',      'renewal_no_payment'],
+  'DMV':          ['DMV paperwork',          'dmv_no_payment'],
+  'Down payment': ['Supporting paperwork',   'supporting_no_payment'],
 };
 
 window.addEventListener('load', () => {
@@ -252,8 +271,15 @@ function fillCtx(){
 
 $('#camt').addEventListener('input', recalcFee);
 function recalcFee(){
-  const paid = Number(String(CTX.paid||0).replace(/,/g,'')), cAmt = Number(String($('#camt').value||0).replace(/,/g,''));
-  const fee = paid && cAmt ? paid - cAmt : null;
+  const paid = Number(String(CTX.paid||0).replace(/,/g,''));
+  const raw = String($('#camt').value == null ? '' : $('#camt').value).trim();
+  const cAmt = raw === '' ? null : Number(raw.replace(/,/g,''));
+  /* A carrier cost of 0.00 is a REAL case (endorsements, cancellations): the whole
+     charge is agency fee. The old test was `paid && cAmt`, and 0 is falsy — so the fee
+     blanked to em-dash at exactly the moment it equalled the entire charge. That is
+     half of why agents typed 0.01 to get a number back. Test for empty, not falsy. */
+  const fee = (paid > 0 && cAmt != null && Number.isFinite(cAmt)) ? paid - cAmt : null;
+  syncZeroAck(cAmt, paid);
   $('#fee').textContent = fee!=null ? '$'+fee.toFixed(2) : '—';
   updateSubmit();
 }
@@ -561,6 +587,10 @@ async function loadCarriers(){
   html += '<optgroup label="Other payee">' + opt('DMV','DMV') + opt('__other__','Other \u2014 type it in') + '</optgroup>';
   sel.innerHTML = html;
 
+  /* purpose comes off the ledger row, not the URL: a "finish later" link saved days
+     ago still resolves correctly, and nothing extra lands in browser history. */
+  if(r.purpose){ CTX.purpose = r.purpose; syncDocSlot(carrierAmt() === 0); }
+
   if(r.suggested){
     if(![...sel.options].some(o => o.value === r.suggested))
       sel.insertBefore(new Option(r.suggested, r.suggested), sel.options[1] || null);
@@ -617,13 +647,69 @@ $('#file').addEventListener('change', async e => {
   await acceptReceiptFiles(files);
 });
 
-function updateSubmit(){
-  // audit submit needs: carrier, amount, card, receipt
-  const ok = !!effCarrier() && Number(String($('#camt').value).replace(/,/g,''))>0 && $('#card').value && FILE_B64;
-  $('#submitBtn').disabled = !ok;
+function zeroAcked(){ const b = $('#zeroAck'); return !!(b && b.checked && !$('#zeroWrap').classList.contains('hide')); }
+function carrierAmt(){
+  const raw = String($('#camt').value == null ? '' : $('#camt').value).trim();
+  if(raw === '') return null;
+  const n = Number(raw.replace(/,/g,''));
+  return Number.isFinite(n) ? n : null;
 }
+function updateSubmit(){
+  /* audit submit needs: carrier, amount, card, receipt.
+     Amount of exactly 0 passes ONLY when the agent ticks the acknowledgement, and a
+     zero payment has no card, so "Paid with" accepts the not-applicable option there.
+     A gate that refuses a legitimate case does not stop the agent - it makes them lie
+     to it in the smallest increment that passes. That is where 0.01 came from. */
+  const amt = carrierAmt(), ack = zeroAcked();
+  const amtOk  = (amt != null) && (amt > 0 || (amt === 0 && ack));
+  const cardOk = amt === 0 && ack ? true : !!$('#card').value;
+  $('#submitBtn').disabled = !(!!effCarrier() && amtOk && cardOk && FILE_B64);
+}
+/* Shows the acknowledgement only on an exact zero, and carries the live amount so the
+   agent reads the real consequence, not a generic warning. No purpose gate: zero is
+   legitimate on endorsements, cancellations and more, and guessing which would just
+   recreate the 0.01 for whichever purpose we guessed wrong about. */
+function syncZeroAck(cAmt, paid){
+  const wrap = $('#zeroWrap'); if(!wrap) return;
+  const show = cAmt === 0;
+  wrap.classList.toggle('hide', !show);
+  if(!show){ const b = $('#zeroAck'); if(b) b.checked = false; }
+  else {
+    const p = Number(paid || 0);
+    $('#zeroAckTxt').innerHTML = 'The agency paid <b>$0.00</b> to the carrier &mdash; the full <b>$'
+      + (p>0 ? p.toFixed(2) : '0.00') + '</b> is agency fee.';
+  }
+  syncCardNA(show);
+  syncDocSlot(show);
+}
+function syncCardNA(zero){
+  const sel = $('#card'); if(!sel) return;
+  let na = sel.querySelector('option[value="__na__"]');
+  if(zero && !na){
+    na = document.createElement('option');
+    na.value = '__na__'; na.textContent = 'Not applicable \u2014 no carrier payment';
+    sel.appendChild(na);
+  }
+  if(!zero && na){ if(sel.value === '__na__') sel.value = ''; na.remove(); }
+}
+function nopayDoc(){
+  const p = String(CTX.purpose || '').trim();
+  return NOPAY_DOC[p] || ['Supporting paperwork', 'supporting_no_payment'];
+}
+function syncDocSlot(zero){
+  const t = $('#recTitle'), h = $('#recHint'); if(!t || !h) return;
+  if(zero){
+    t.textContent = nopayDoc()[0];
+    h.textContent = 'no carrier payment \u2014 this is not proof of payment';
+  } else {
+    t.textContent = 'Carrier receipt';
+    h.textContent = 'PDF or photo \u2014 this is the proof of payment';
+  }
+}
+function receiptDocType(){ return (carrierAmt() === 0 && zeroAcked()) ? nopayDoc()[1] : 'carrier_receipt'; }
 ['carrier','camt','card'].forEach(id => $('#'+id).addEventListener('input', updateSubmit));
 $('#carrierSel').addEventListener('change', updateSubmit);
+$('#zeroAck').addEventListener('change', updateSubmit);
 $('#card').addEventListener('change', updateSubmit);
 
 // Plain-language errors. An agent can act on "the receipt didn't upload";
@@ -690,7 +776,10 @@ async function submit(complete){
     client_no: Number(CTX.client_no)||null,
     policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, payment_id: CTX.payment_id||null,
     carrier: effCarrier(),
-    carrier_amount: Number(String($('#camt').value).replace(/,/g,''))||null,
+    carrier_amount: carrierAmt(),
+    carrier_zero_ack: (carrierAmt() === 0 && zeroAcked()) || null,
+    doc_type: receiptDocType(),
+    purpose: CTX.purpose || null,
     carrier_card: $('#card').value||null,
     receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME, thumb_b64: FILE_THUMB,
     complete: !!complete,

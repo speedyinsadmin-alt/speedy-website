@@ -1167,7 +1167,7 @@ if (view === 'portal_share_due') {
     const AUDIT_START = '2026-07-24';
     const TEST_CLIENT_ID = 26081; // ZZTEST fixture — no real money is ever taken on it
     const [led, att, testRows] = await Promise.all([
-      sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,kind,audit_status,txn_id,carrier_name,service_cost,fee_amount,commission_to,agent&order=ts.desc&limit=1000'),
+      sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,kind,audit_status,txn_id,carrier_name,carrier_paid_amount,carrier_zero_ack,purpose,service_cost,fee_amount,commission_to,agent&order=ts.desc&limit=1000'),
       sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,created_at&order=created_at.desc&limit=1000'),
       // deliberately NOT filtered by is_test — this check exists to find rows the filter misses
       sbGet(s, `bridge_ledger?client_id=eq.${TEST_CLIENT_ID}&is_test=is.false&select=id,ts,client_id,amount,kind,audit_status,commission_to,agent&order=ts.desc&limit=100`),
@@ -1267,6 +1267,26 @@ if (view === 'portal_share_due') {
     add('med', 'Column never varies — may have no writer',
       'Across every recent payment this column holds one single value. Usually that means code reads it but nothing sets it, so it is silently sitting at its database default.',
       stuck);
+
+    /* 11) a zero the agent confirmed, on a purpose where zero is suspicious.
+       Zero carrier cost is legitimate — endorsements and cancellations often cost the
+       agency nothing — so the form allows it behind a checkbox rather than refusing it.
+       A gate that refuses a legitimate case does not stop the agent, it makes them type
+       0.01. But a down payment with nothing paid to the carrier is a different claim,
+       and it belongs in review here rather than as a block at the counter. */
+    const zeroCents = r => r.carrier_paid_amount != null && Number(r.carrier_paid_amount) === 0;
+    add('med', 'Zero carrier cost confirmed on a down payment',
+      'The agent ticked "the agency paid $0.00" on a down payment. That is legitimate on an endorsement or cancellation but unusual here — check the paperwork before the fee stands.',
+      rows.filter(r => r.carrier_zero_ack === true && String(r.purpose || '').toLowerCase().startsWith('down payment')).map(brief));
+
+    /* 12) a zero nobody confirmed.
+       This is the reason carrier_zero_ack exists. A confirmed 0.00 and a 0.00 written by
+       a bug are the same number; only the flag tells them apart. Rows from before the
+       flag existed are excluded by ZERO_ACK_START — they predate the question. */
+    const ZERO_ACK_START = '2026-08-21';
+    add('high', 'Zero carrier cost with no acknowledgement',
+      'The carrier amount is 0.00 but no agent confirmed it. Either the acknowledgement was bypassed or something wrote a zero on its own — the second is the failure this flag exists to catch.',
+      rows.filter(r => zeroCents(r) && r.carrier_zero_ack !== true && day(r.ts) >= ZERO_ACK_START).map(brief));
 
     const worst = issues.some(i => i.sev === 'high') ? 'attention' : issues.length ? 'minor' : 'clean';
     return res.status(200).json({ ok: true, status: worst, checked: rows.length,

@@ -13,6 +13,7 @@ const AGENT_ALLOWLIST = [
   'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
   'chris@speedyins.com', 'yasmin@speedyins.com', 'fernando@speedyins.com', 'jesus@speedyins.com',
   'alejandra@speedyins.com', 'esmeralda@speedyins.com', 'irene@speedyins.com',
+  'malcolm@speedyins.com',
   'tony@speedyins.com', 'lana@speedyins.com',
 ];
 const ALLOWLIST = ADMIN_ALLOWLIST;

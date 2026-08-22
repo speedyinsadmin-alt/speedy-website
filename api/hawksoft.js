@@ -221,10 +221,10 @@ function pickInvoices(clientBody, total, policyGuid) {
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 const STAFF = {
   'sammy@speedyins.com':     ['Samuel Rodriguez', 'Moreno Valley'],
-  'yolanda@speedyins.com':   ['Yolanda Hernandez', 'Moreno Valley'],
+  'yolanda@speedyins.com':   ['Yolanda Hernandez', 'Lake Elsinore'],
   'jorge@speedyins.com':     ['Jorge Ramos', 'Moreno Valley'],
   'lfigueroa@speedyins.com': ['Laura Figueroa', 'Moreno Valley'],
-  'chris@speedyins.com':     ['Christian Aguilar', 'Lake Elsinore'],
+  'chris@speedyins.com':     ['Christian Aguilar', 'Colton'],
   'yasmin@speedyins.com':    ['Yasmin Alfaro', 'Riverside Van Buren'],
   'fernando@speedyins.com':  ['Fernando Salgado', 'Riverside Van Buren'],
   'jesus@speedyins.com':     ['Jesus Velarde', 'Riverside Van Buren'],

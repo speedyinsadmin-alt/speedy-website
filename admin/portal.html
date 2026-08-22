@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.8</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.9</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -309,7 +309,7 @@ const STAFF = {
 };
 let TOKEN = null, EMAIL = null, OFFICE = null;
 
-const HL = { client:null, policy:'', last:'', armed:false };
+const HL = { client:null, policy:'', last:'', armed:false, opened:false };
 (function readLaunch(){
   try{
     var q = new URLSearchParams(location.search);
@@ -377,10 +377,11 @@ function onCred(resp){
   $('#homeName').innerHTML = name + ' <span class="beta">BETA</span>';
   OFFICE = home;
   $('#gate').classList.add('hide');
-  if(HL.armed && HL.client){
+  /* The picker is skipped on a launch ONLY for a known staff member. With no STAFF
+     entry there is no home branch to trust, and skipping would stamp 'Moreno Valley'
+     on a real payment with nothing on screen to say so. Unknown => always pick. */
+  if(HL.armed && HL.client && staff){
     applyOffice(home);
-    openClient(HL.client, HL.last || ('#' + HL.client));
-    openCharge(HL.client);
     return;
   }
   $('#officePick').classList.remove('hide');
@@ -396,6 +397,13 @@ function applyOffice(office){
   loadHome();
   initSearch();
   startUpdateWatch();
+  /* A launched client opens through here so BOTH paths -- picker and auto-lock --
+     open it after an office is settled, through ONE function. */
+  if(HL.armed && HL.client && !HL.opened){
+    HL.opened = true;
+    openClient(HL.client, HL.last || ('#' + HL.client));
+    openCharge(HL.client);
+  }
 }
 
 async function loadHome(){

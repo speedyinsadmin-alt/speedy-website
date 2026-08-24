@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speedy Insurance — IT Support Ticket</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --navy:#0a1628;--navy2:#112040;--navy3:#1a2d50;
+  --red:#d42b2b;--blue:#1a4fa0;
+  --critical:#ef4444;--high:#f97316;--medium:#eab308;--low:#22c55e;
+  --white:#ffffff;--light:#e8edf5;--gray:#8a9bb5;--muted:#4a6080;
+  --border:rgba(255,255,255,0.08);
+}
+body{background:var(--navy);font-family:'Barlow',sans-serif;min-height:100vh}
+
+/* HEADER */
+.header{background:var(--navy2);border-bottom:2px solid var(--red);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:34px;height:34px;background:var(--red);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:14px;color:white;letter-spacing:1px}
+.logo-text{font-family:'Bebas Neue',sans-serif;font-size:17px;color:white;letter-spacing:2px}
+.logo-sub{font-size:9px;color:var(--gray);letter-spacing:2px;text-transform:uppercase}
+.header-right{display:flex;align-items:center;gap:10px}
+.dashboard-link{font-size:10px;color:var(--gray);text-decoration:none;letter-spacing:1px;text-transform:uppercase;padding:5px 10px;border:1px solid var(--border);border-radius:4px;transition:all 0.2s}
+.dashboard-link:hover{color:white;border-color:rgba(255,255,255,0.2)}
+
+/* MAIN */
+.main{max-width:660px;margin:0 auto;padding:28px 20px 60px}
+
+/* STATUS STRIP */
+.status-strip{background:rgba(26,79,160,0.12);border:1px solid rgba(26,79,160,0.25);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;margin-bottom:22px;font-size:11px;color:var(--gray);flex-wrap:wrap;gap:6px}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--low);flex-shrink:0;box-shadow:0 0 5px var(--low);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* PAGE TITLE */
+.page-eyebrow{font-size:10px;color:var(--red);font-weight:600;letter-spacing:3px;text-transform:uppercase;margin-bottom:5px}
+.page-heading{font-family:'Bebas Neue',sans-serif;font-size:34px;color:white;letter-spacing:2px;line-height:1;margin-bottom:5px}
+.page-sub{font-size:12px;color:var(--gray);margin-bottom:24px;line-height:1.5}
+
+/* CARD */
+.card{background:var(--navy2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:14px}
+.card-title{font-size:9px;color:var(--gray);font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* FORM */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.form-group{margin-bottom:12px}
+label{display:block;font-size:10px;font-weight:600;color:var(--gray);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px}
+.req{color:var(--red)}
+input,select,textarea{
+  width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--border);
+  border-radius:6px;padding:9px 12px;font-size:12px;color:white;
+  font-family:'Barlow',sans-serif;transition:border-color 0.2s;
+  -webkit-appearance:none;appearance:none;
+}
+input::placeholder,textarea::placeholder{color:var(--muted);font-size:12px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(212,43,43,0.5);background:rgba(212,43,43,0.04)}
+select option{background:#112040;color:white}
+textarea{resize:vertical;min-height:90px;line-height:1.5}
+.opt-label{font-size:9px;color:var(--gray);margin-left:4px;font-weight:500}
+
+/* PRIORITY */
+.priority-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.p-btn{background:rgba(255,255,255,0.04);border:1.5px solid var(--border);border-radius:8px;padding:10px 6px;text-align:center;cursor:pointer;transition:all 0.15s;user-select:none}
+.p-btn:hover{background:rgba(255,255,255,0.08)}
+.p-dot{width:9px;height:9px;border-radius:50%;margin:0 auto 6px}
+.p-label{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.p-desc{font-size:8px;color:var(--muted);margin-top:2px;line-height:1.3}
+.sel-critical{background:rgba(239,68,68,0.15)!important;border-color:var(--critical)!important}
+.sel-high{background:rgba(249,115,22,0.15)!important;border-color:var(--high)!important}
+.sel-medium{background:rgba(234,179,8,0.15)!important;border-color:var(--medium)!important}
+.sel-low{background:rgba(34,197,94,0.15)!important;border-color:var(--low)!important}
+
+.file-wrap{position:relative;overflow:hidden}
+.file-wrap input[type="file"]{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;top:0;left:0}
+
+/* SUBMIT */
+.submit-btn{width:100%;background:var(--red);color:white;border:none;padding:13px;border-radius:8px;font-family:'Barlow',sans-serif;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px}
+.submit-btn:hover{background:#b82323}
+.submit-btn:disabled{background:var(--muted);cursor:not-allowed}
+.submit-note{text-align:center;font-size:10px;color:var(--muted);margin-top:8px}
+
+/* SUCCESS */
+.success{display:none;text-align:center;padding:48px 20px}
+.success-icon{font-size:52px;margin-bottom:14px}
+.success-title{font-family:'Bebas Neue',sans-serif;font-size:30px;color:var(--low);letter-spacing:2px;margin-bottom:6px}
+.ticket-id-box{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px 20px;display:inline-block;font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--low);letter-spacing:3px;margin:12px 0}
+.success-sub{font-size:12px;color:var(--gray);line-height:1.6;max-width:320px;margin:0 auto 20px}
+.new-btn{background:transparent;border:1px solid var(--border);color:var(--light);padding:9px 22px;border-radius:6px;font-family:'Barlow',sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:1px;text-transform:uppercase;transition:all 0.2s}
+.new-btn:hover{background:rgba(255,255,255,0.07)}
+
+@media(max-width:500px){
+  .form-row{grid-template-columns:1fr}
+  .priority-grid{grid-template-columns:1fr 1fr}
+  .main{padding:20px 14px 48px}
+  .page-heading{font-size:28px}
+  .header{padding:12px 16px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-mark">SI</div>
+    <div>
+      <div class="logo-text">Speedy Insurance</div>
+      <div class="logo-sub">IT Support</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <a href="https://speedy-hub.vercel.app/" class="dashboard-link">← Back to Hub</a>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- SUCCESS -->
+  <div class="success" id="successScreen">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Ticket submitted!</div>
+    <div class="ticket-id-box" id="ticketIdDisplay">SPD-0000</div>
+    <div class="success-sub">Your ticket has been sent to Saif. For urgent issues call <strong style="color:white">Ext 12</strong> directly.</div>
+    <button class="new-btn" onclick="resetForm()">Submit another ticket</button>
+  </div>
+
+  <!-- FORM -->
+  <div id="formWrap">
+    <div class="status-strip">
+      <div class="status-dot"></div>
+      <span>IT Support: Mon–Fri 10am–5pm · Sat 10am–3pm · Urgent: <strong style="color:white">Ext 12</strong></span>
+    </div>
+
+    <div class="page-eyebrow">IT Support</div>
+    <div class="page-heading">Report an issue</div>
+    <div class="page-sub">Select your name and branch, describe the issue, and submit.</div>
+
+    <form id="ticketForm" onsubmit="submitTicket(event)">
+
+      <!-- AGENT INFO -->
+      <div class="card">
+        <div class="card-title">Your info</div>
+        <div class="form-group">
+          <label>Your name <span class="req">*</span></label>
+          <select id="agentName" required>
+            <option value="">Select your name</option>
+            <option value="Alejandra Salas">Alejandra Salas</option>
+            <option value="Christian Aguilar">Christian Aguilar</option>
+            <option value="Esmeralda Ayala Hernandez">Esmeralda Ayala Hernandez</option>
+            <option value="Fernando Salgado">Fernando Salgado</option>
+            <option value="Irene Ayala Hernandez">Irene Ayala Hernandez</option>
+            <option value="Jesus Velarde">Jesus Velarde</option>
+            <option value="Jorge Ramos">Jorge Ramos</option>
+            <option value="Lana D.">Lana D.</option>
+            <option value="Laura Figueroa">Laura Figueroa</option>
+            <option value="Malcolm Reese">Malcolm Reese</option>
+            <option value="Saif Ayoob">Saif Ayoob</option>
+            <option value="Samuel Rodriguez">Samuel Rodriguez</option>
+            <option value="Tony Dabouqi">Tony Dabouqi</option>
+            <option value="Yasmin Alfaro">Yasmin Alfaro</option>
+            <option value="Yolanda Hernandez">Yolanda Hernandez</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div>
+            <label>Branch <span class="req">*</span></label>
+            <select id="branch" required>
+              <option value="">Select branch</option>
+              <option>Moreno Valley</option>
+              <option>Riverside Van Buren</option>
+              <option>Riverside Magnolia</option>
+              <option>Lake Elsinore</option>
+              <option>Colton</option>
+            </select>
+          </div>
+          <div>
+            <label>Your email <span class="opt-label">(optional)</span></label>
+            <input type="email" id="agentEmail" placeholder="you@speedyins.com" />
+          </div>
+        </div>
+      </div>
+
+      <!-- ISSUE -->
+      <div class="card">
+        <div class="card-title">Issue details</div>
+        <div class="form-row">
+          <div>
+            <label>Category <span class="req">*</span></label>
+            <select id="category" required>
+              <option value="">Select category</option>
+              <option>HawkSoft</option>
+              <option>HawkLink</option>
+              <option>RingCentral — Screen Pop</option>
+              <option>RingCentral — Calls / Audio</option>
+              <option>RingCentral — SMS</option>
+              <option>TurboRater</option>
+              <option>AgencyBuzz</option>
+              <option>Computer / Hardware</option>
+              <option>Internet / Network</option>
+              <option>Printer / Scanner</option>
+              <option>Login / Password</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div>
+            <label>Workstation</label>
+            <input type="text" id="workstation" placeholder="e.g. Desk 2, Laptop" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Issue title <span class="req">*</span></label>
+          <input type="text" id="issueTitle" placeholder="Brief summary of the problem" required />
+        </div>
+        <div class="form-group">
+          <label>Describe the issue <span class="req">*</span></label>
+          <textarea id="issueDesc" placeholder="What happened? What were you doing? Any error messages?" required></textarea>
+        </div>
+      </div>
+
+      <!-- PRIORITY -->
+      <div class="card">
+        <div class="card-title">Priority <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— required</span></div>
+        <div class="priority-grid">
+          <div class="p-btn" onclick="selectP('critical',this)">
+            <div class="p-dot" style="background:var(--critical)"></div>
+            <div class="p-label" style="color:var(--critical)">Critical</div>
+            <div class="p-desc">System down · can't work</div>
+          </div>
+          <div class="p-btn" onclick="selectP('high',this)">
+            <div class="p-dot" style="background:var(--high)"></div>
+            <div class="p-label" style="color:var(--high)">High</div>
+            <div class="p-desc">Major issue · slowing work</div>
+          </div>
+          <div class="p-btn" onclick="selectP('medium',this)">
+            <div class="p-dot" style="background:var(--medium)"></div>
+            <div class="p-label" style="color:var(--medium)">Medium</div>
+            <div class="p-desc">Minor issue · workaround exists</div>
+          </div>
+          <div class="p-btn" onclick="selectP('low',this)">
+            <div class="p-dot" style="background:var(--low)"></div>
+            <div class="p-label" style="color:var(--low)">Low</div>
+            <div class="p-desc">Question or suggestion</div>
+          </div>
+        </div>
+        <input type="hidden" id="priority" />
+      </div>
+      <!-- SUBMIT -->
+      <button type="submit" class="submit-btn" id="submitBtn">
+        <span>🎫</span><span>Submit ticket to Saif</span>
+      </button>
+      <p class="submit-note">Sends directly to IT · No email app needed · Ext 12 for urgent issues</p>
+      <p class="submit-note" style="opacity:.55">Ticket form v1.1 · Aug 24, 2026</p>
+
+    </form>
+  </div>
+</div>
+
+<script>
+let selectedPriority = '';
+
+function selectP(level, el) {
+  document.querySelectorAll('.p-btn').forEach(b => b.className = 'p-btn');
+  el.classList.add(`sel-${level}`);
+  selectedPriority = level;
+  document.getElementById('priority').value = level;
+}
+
+function generateId() {
+  return 'SPD-' + Date.now().toString().slice(-4);
+}
+
+async function submitTicket(e) {
+  e.preventDefault();
+  if(!selectedPriority){alert('Please select a priority level.');return;}
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span><span>Submitting ticket...</span>';
+
+  const ticketId = generateId();
+  const pEmoji = {critical:'🔴',high:'🟠',medium:'🟡',low:'🟢'};
+  const pLabel = {critical:'CRITICAL',high:'HIGH',medium:'MEDIUM',low:'LOW'};
+
+  const agent  = document.getElementById('agentName').value;
+  const branch = document.getElementById('branch').value;
+  const email  = document.getElementById('agentEmail').value;
+  const cat    = document.getElementById('category').value;
+  const ws     = document.getElementById('workstation').value;
+  const title  = document.getElementById('issueTitle').value;
+  const desc   = document.getElementById('issueDesc').value;
+  const time   = new Date().toLocaleString('en-US',{timeZone:'America/Los_Angeles',dateStyle:'full',timeStyle:'short'});
+
+  try {
+    const screenshotPayload = '—';
+
+    const response = await fetch('https://formspree.io/f/xjgzqdln', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        _subject: `🎫 ${ticketId} — ${pEmoji[selectedPriority]} ${pLabel[selectedPriority]} — ${title} (${agent} · ${branch})`,
+        ticket_id: ticketId,
+        priority: `${pEmoji[selectedPriority]} ${pLabel[selectedPriority]}`,
+        submitted: time,
+        agent_name: agent,
+        branch: branch,
+        agent_email: email,
+        workstation: ws || 'Not specified',
+        category: cat,
+        issue_title: title,
+        description: desc,
+        screenshot: screenshotPayload,
+        _reply_to: email,
+      })
+    });
+
+    if(response.ok) {
+      document.getElementById('ticketIdDisplay').textContent = ticketId;
+      document.getElementById('formWrap').style.display = 'none';
+      document.getElementById('successScreen').style.display = 'block';
+      window.scrollTo({top:0,behavior:'smooth'});
+    } else {
+      throw new Error('Submission failed');
+    }
+  } catch(err) {
+    btn.disabled = false;
+    btn.innerHTML = '<span>🎫</span><span>Submit ticket to Saif</span>';
+    alert('Something went wrong. Please try again or call Ext 12 directly.');
+  }
+}
+
+function resetForm() {
+  document.getElementById('ticketForm').reset();
+  selectedPriority = '';
+  document.querySelectorAll('.p-btn').forEach(b=>b.className='p-btn');
+  document.getElementById('formWrap').style.display = 'block';
+  document.getElementById('successScreen').style.display = 'none';
+  document.getElementById('submitBtn').disabled = false;
+  document.getElementById('submitBtn').innerHTML = '<span>🎫</span><span>Submit ticket to Saif</span>';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>

@@ -99,6 +99,56 @@ async function sbGet(s, path) {
   } catch { return { rows: [] }; }
 }
 
+/* ---------- Resolve the policy a document belongs to — SERVER SIDE ----------
+   Every document ever uploaded filed at CLIENT level (Pol 0) because this API
+   trusted the page to hand it a GUID and the page always sent an empty string:
+   charge.html read `c.policyGuid || c.policyId`, and NOTHING in charge.html ever
+   wrote either key. 0 of 107 attachments carried a policy. The charge path was
+   never affected — api/hawksoft.js resolves the policy itself, which is exactly
+   what this does now.
+
+   Order: trust a real GUID from the page, else the ledger row, else look it up.
+   FAIL-SOFT: any miss returns null and the caller omits PolicyId, which is
+   today's behaviour. This can make filing better, never worse.
+
+   The single-match rule is deliberate. Client 16810 has two records numbered
+   4CQF020; filing on the wrong policy is worse than filing at client level. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolvePolicyGuid(s, { policy_guid, client_no, payment_id, policy_num }) {
+  try {
+    if (policy_guid && UUID_RE.test(String(policy_guid).trim())) {
+      return { guid: String(policy_guid).trim(), via: 'page' };
+    }
+    if (!s || !client_no) return { guid: null, via: 'no_client' };
+
+    let num = (policy_num || '').toString().trim();
+
+    /* The ledger row already holds both. Cash charges store policyGuid; card
+       charges store only policyNumber. Read whichever is there. */
+    if (payment_id) {
+      const r = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(payment_id)}`
+        + `&select=policy_guid:extra->>policyGuid,policy_number:extra->>policyNumber`);
+      const row = (r.rows || [])[0] || {};
+      if (row.policy_guid && UUID_RE.test(String(row.policy_guid).trim())) {
+        return { guid: String(row.policy_guid).trim(), via: 'ledger_guid' };
+      }
+      if (!num && row.policy_number) num = String(row.policy_number).trim();
+    }
+    if (!num) return { guid: null, via: 'no_policy_number' };
+
+    const q = await sbGet(s, `policies?client_no=eq.${encodeURIComponent(client_no)}`
+      + `&select=policy_number,hs_policy_guid`);
+    const want = num.toUpperCase();
+    const hits = (q.rows || []).filter(p =>
+      String(p.policy_number || '').trim().toUpperCase() === want && p.hs_policy_guid);
+
+    if (hits.length === 1) return { guid: hits[0].hs_policy_guid, via: 'lookup' };
+    if (hits.length > 1) return { guid: null, via: 'ambiguous' };
+    return { guid: null, via: 'not_found' };
+  } catch { return { guid: null, via: 'error' }; }
+}
+
 async function blobPut(path, buf, contentType) {
   const tok = process.env.BLOB_READ_WRITE_TOKEN;
   if (!tok) return { url: null, status: 'no_token' };
@@ -230,9 +280,18 @@ export default async function handler(req, res) {
       if ((open.rows || []).length === 1) payment_id = open.rows[0].id;
     }
     if (!client_no || !receipt_b64) return res.status(400).json({ ok: false, error: 'client_no + file required' });
-    if (!(await mayTouchPayment(s, email, payment_id))) {
-      return res.status(403).json({ ok: false, error: 'This payment was taken by another agent — they need to add its documents.' });
-    }
+
+    /* Any agent may ADD a document to any payment (Saif, Aug 24). Adding paperwork
+       is follow-up finishing, not a money change: this branch never touches
+       commission_to, fee_amount or audit_status. `uploaded_by` records who did it
+       and the portal shows that name on every chip, which is what keeps it honest.
+       save_carrier_leg — which DOES move money — keeps mayTouchPayment below. */
+
+    /* Which policy does this belong to? Resolved here, server-side. */
+    const pol = await resolvePolicyGuid(s, {
+      policy_guid, client_no, payment_id, policy_num: body.policy_num,
+    });
+
     const buf = b64ToBuf(receipt_b64);
     const hash = await sha256hex(buf);
     const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
@@ -244,7 +303,9 @@ export default async function handler(req, res) {
     const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
       method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
       body: JSON.stringify([{
-        client_no, policy_id: policy_id || null, payment_id: payment_id || null,
+        client_no,
+        policy_id: pol.guid || (UUID_RE.test(String(policy_id || '')) ? policy_id : null),
+        payment_id: payment_id || null,
         kind: dtype, doc_type: dtype, doc_label: label || null, filename: niceName,
         file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
         sha256: hash, mime: receipt_mime, bytes: buf.length,
@@ -269,7 +330,7 @@ export default async function handler(req, res) {
             RefId: hsRefId, TS: new Date().toISOString(), Desc: b64h(desc),
             LogNote: b64h(`${dtype} filed by Speedy platform. Uploaded by ${email}.`),
             FileName: b64h(fname), FileExt: ext, Channel: '32',
-            ...(policy_guid ? { PolicyId: policy_guid } : {}),
+            ...(pol.guid ? { PolicyId: pol.guid } : {}),
           },
           body: gzipSync(buf),
         });
@@ -323,6 +384,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: 'Carrier receipt is required to submit to audit' });
     }
 
+    /* Which policy the carrier receipt belongs to. Declared above BOTH readers —
+       the attachments insert and the HawkSoft PolicyId header. Resolved after
+       payment_id, because the ledger row is one of the places it looks. */
+    const polLeg = await resolvePolicyGuid(s, {
+      policy_guid, client_no, payment_id, policy_num: body.policy_num,
+    });
+
     let attachment = null;
     let blobUrl = null;   // hoisted — the response below reads it outside the upload block
     let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'optional';
@@ -346,7 +414,9 @@ export default async function handler(req, res) {
       const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
         method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
         body: JSON.stringify([{
-          client_no, policy_id: policy_id || null, payment_id: payment_id || null,
+          client_no,
+          policy_id: polLeg.guid || (UUID_RE.test(String(policy_id || '')) ? policy_id : null),
+          payment_id: payment_id || null,
           kind: dtype, doc_type: dtype, filename: niceName,
           blob_url: blobUrl, file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
           sha256: hash, mime: receipt_mime, bytes: buf.length,
@@ -371,7 +441,7 @@ export default async function handler(req, res) {
             Desc: b64h(desc),
             LogNote: b64h(`Carrier payment receipt filed by Speedy platform. ${carrier} $${Number(carrier_amount || 0).toFixed(2)} paid via ${carrier_card || 'company card'}. Uploaded by ${email}.`),
             FileName: b64h(fname), FileExt: ext, Channel: '32',
-            ...(policy_guid ? { PolicyId: policy_guid } : {}),
+            ...(polLeg.guid ? { PolicyId: polLeg.guid } : {}),
           },
           body: gzipSync(buf),
         });

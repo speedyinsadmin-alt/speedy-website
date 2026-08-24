@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v2.9</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.0</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -791,12 +791,21 @@ function payHistoryHtml(c){
       + (dl.length
           ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">'
             + dl.map(d => '<span class="docchip" id="pd' + d.id + '" onclick="openPortalDoc(\'' + d.id + '\')">'
-                + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '') + '</span>').join('')
+                + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '')
+                + (d.uploaded_by ? ' · ' + esc(uploaderShort(d.uploaded_by)) : '') + '</span>').join('')
             + '</div>'
           : (!complete ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber)">No documents yet</div>' : ''))
       + (!complete && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
+          : '')
+      /* Audited payments used to be a dead end: the button above is gated on
+         !complete, so an agent who noticed a missing document after submitting had
+         no way back in. Open to ANY agent — adding paperwork is follow-up finishing,
+         not a money change, and every chip above names its uploader. */
+      + (complete
+          ? '<div onclick="addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
+            + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">+ Add more documents</div>'
           : '')
       + '</div>';
   }).join('');
@@ -845,6 +854,30 @@ async function openPortalDoc(id){
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }catch(e){ alert('That document could not be opened.'); }
+}
+
+/* First name of whoever uploaded a document. The chip is small and the full email
+   would push the size off the row, so: alejandra@speedyins.com -> Alejandra. */
+function uploaderShort(email){
+  const local = String(email || '').split('@')[0].split(/[._-]/)[0];
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : '';
+}
+
+/* The way back into an already-audited payment. Same page the agent knows, opened
+   with docs=1 so it shows ONLY the document uploader — no carrier cost, no fee, no
+   submit-to-audit. Append-only by construction. */
+function addDocsFor(paymentId, clientNo, amount){
+  stashHandoff();
+  const tab = OPEN_TABS.find(t => t.client_no === clientNo);
+  const cached = CLIENT_CACHE[clientNo] || {};
+  const pay = ((cached.payments) || []).find(r => r.id === paymentId) || {};
+  const p = new URLSearchParams({
+    client: clientNo || '', name: (tab && tab.name) || '', paid: Number(amount||0).toFixed(2),
+    method: 'client paid', payment_id: paymentId,
+    policy: pay.policy_number || '', policy_guid: pay.policy_guid || '',
+    docs: '1',
+  });
+  location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
 
 function finishAuditFor(paymentId, clientNo, amount){

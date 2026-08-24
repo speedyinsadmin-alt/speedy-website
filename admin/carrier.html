@@ -81,6 +81,7 @@
         </div>
       </div>
 
+      <div id="carrierWrap">
       <div class="eyebrow" style="margin-top:14px"><span style="color:var(--amber)">◆</span> Carrier payment</div>
       <div class="row">
         <div>
@@ -110,9 +111,13 @@
         </label>
       </div>
       <div class="fee"><span class="mute">Speedy keeps (fee)</span><b id="fee">&mdash;</b></div>
+      </div>
+      <div id="docsOnlyNote" class="hide" style="margin-top:14px;border:1px solid var(--blue);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5">
+        Adding documents to a payment that is already audited. The carrier cost, the fee and the commission stay exactly as they are.
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="recCard">
       <div class="eyebrow"><span style="color:var(--green)">◆</span> <span id="recTitle">Carrier receipt</span> <span class="pill a">required for audit</span></div>
       <div class="drop" id="drop" onclick="document.getElementById('file').click()">
         <div class="ic" id="dropic">⇪</div>
@@ -168,9 +173,12 @@
       </div>
     </div>
 
-    <div class="btns">
+    <div class="btns" id="auditBtns">
       <button class="save" onclick="submit(false)">Save &amp; finish later</button>
       <button class="submit" id="submitBtn" onclick="submit(true)" disabled>Submit to audit</button>
+    </div>
+    <div class="btns hide" id="docsOnlyBtns">
+      <button class="submit" id="docsOnlyBtn" onclick="submitDocsOnly()" disabled>Upload documents</button>
     </div>
     <div id="msg"></div>
   </div>
@@ -192,6 +200,9 @@ const CTX = {
   payment_id: qp.get('payment_id') || '',
   policy_num: qp.get('policy') || '',
   purpose: '',   // filled from the payment row by carrier_list, never from the URL
+  /* docs=1 — the audit is already closed and the agent is only adding paperwork
+     they forgot. Append-only: no carrier cost, no fee, no submit-to-audit. */
+  docs_only: qp.get('docs') === '1',
 };
 
 /* The REQUIRED slot is hardcoded "Carrier receipt", so on a zero-payment endorsement
@@ -267,6 +278,8 @@ function fillCtx(){
   recalcFee();
   loadCarriers();   // both sign-in paths land here, and TOKEN is set by now
   onDtypePick();
+  applyDocsOnly();  // hides the money half when the audit is already closed
+  updateSubmit();
 }
 
 $('#camt').addEventListener('input', recalcFee);
@@ -630,6 +643,70 @@ $('#docfile').addEventListener('change', async e => {
   e.target.value = '';
   await acceptDocFiles(files);
 });
+/* ---------- Documents-only mode ----------
+   An agent submits to audit, then realises a document is missing. Before this the
+   audit was closed and the "Add proof of payment" button was gone, so there was no
+   route back. This is that route: append documents, touch nothing else. */
+function applyDocsOnly(){
+  if(!CTX.docs_only) return;
+  ['carrierWrap','recCard','auditBtns'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.classList.add('hide');
+  });
+  ['docsOnlyBtns','docsOnlyNote'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.classList.remove('hide');
+  });
+  const t = document.getElementById('cmeth');
+  if(t) t.textContent = 'already audited';
+}
+
+async function submitDocsOnly(){
+  const msg = $('#msg'); msg.className=''; msg.textContent = 'Uploading\u2026';
+  const btn = $('#docsOnlyBtn'); if(btn) btn.disabled = true;
+
+  let ok = 0;
+  const failed = [];
+  const postDoc = async d => {
+    const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
+        policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, policy_num:CTX.policy_num||null,
+        payment_id:CTX.payment_id||null, doc_type:d.doc_type, doc_label:d.doc_label || null,
+        receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
+    let j=null; try{ j = await r.json(); }catch(e){}
+    return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };
+  };
+
+  for(let i=0;i<DOCS.length;i++){
+    const d = DOCS[i];
+    if(d.uploaded){ ok++; continue; }
+    msg.textContent = 'Uploading document ' + (i+1) + ' of ' + DOCS.length + '\u2026';
+    let res = null;
+    try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; }
+    /* Same retry shape as the audit path: a multi-photo upload is several requests
+       and the Google token is only good for an hour. */
+    if(!res.ok && res.status === 401){
+      const nt = await reauth();
+      if(nt){ TOKEN = nt; try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; } }
+    } else if(!res.ok){
+      try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; }
+    }
+    if(res.ok){ d.uploaded = true; ok++; }
+    else failed.push(d.name + ' (' + (res.error || (res.status === 413 ? 'file too large' : 'upload failed')) + ')');
+  }
+  renderDocs();
+
+  if(ok && !failed.length){
+    msg.className='ok';
+    msg.textContent = ok + ' document' + (ok>1?'s':'') + ' added and filed to HawkSoft. The audit and commission are unchanged.';
+  } else if(ok){
+    msg.className='warn';
+    msg.textContent = ok + ' added \u00b7 ' + failed.length + ' failed: ' + failed.join(', ') + ' \u2014 still listed, press Upload documents to retry.';
+  } else {
+    msg.className='err';
+    msg.textContent = 'Nothing uploaded: ' + failed.join(', ');
+  }
+  if(btn) btn.disabled = !DOCS.some(d => !d.uploaded);
+}
+
 function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
     '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
@@ -639,6 +716,10 @@ function renderDocs(){
     + (d.note ? '<span style="color:var(--mute);font-size:11px">' + d.note + '</span>' : '')
     + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
   ).join('');
+  /* In documents-only mode the ONLY gate is "is there a document", so the button
+     state has to follow this list. Harmless on the normal path — updateSubmit
+     re-reads the same inputs it always did. */
+  updateSubmit();
 }
 
 $('#file').addEventListener('change', async e => {
@@ -660,6 +741,13 @@ function updateSubmit(){
      zero payment has no card, so "Paid with" accepts the not-applicable option there.
      A gate that refuses a legitimate case does not stop the agent - it makes them lie
      to it in the smallest increment that passes. That is where 0.01 came from. */
+  /* Documents-only: the audit is closed, so none of the money gates apply.
+     The only requirement is that there is actually something to upload. */
+  if(CTX.docs_only){
+    const b = $('#docsOnlyBtn');
+    if(b) b.disabled = !DOCS.length;
+    return;
+  }
   const amt = carrierAmt(), ack = zeroAcked();
   const amtOk  = (amt != null) && (amt > 0 || (amt === 0 && ack));
   const cardOk = amt === 0 && ack ? true : !!$('#card').value;
@@ -774,7 +862,7 @@ async function submit(complete){
   const payload = {
     action: 'save_carrier_leg',
     client_no: Number(CTX.client_no)||null,
-    policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, payment_id: CTX.payment_id||null,
+    policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, policy_num: CTX.policy_num||null, payment_id: CTX.payment_id||null,
     carrier: effCarrier(),
     carrier_amount: carrierAmt(),
     carrier_zero_ack: (carrierAmt() === 0 && zeroAcked()) || null,
@@ -827,7 +915,7 @@ async function submit(complete){
   const postDoc = async d => {
     const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
       body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
-        policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, payment_id:CTX.payment_id||null,
+        policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, policy_num:CTX.policy_num||null, payment_id:CTX.payment_id||null,
         doc_type:d.doc_type, doc_label:d.doc_label || null, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
     return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };

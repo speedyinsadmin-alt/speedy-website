@@ -1092,40 +1092,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
-// ============================================================
-// QUOTE FORM → TAWK.TO LIVE CHAT WIRING
-// NOTE: Replace with TurboRater embed when ready
-// ============================================================
-function submitQuoteToChat(e) {
-  e.preventDefault();
-
-  var firstName = document.getElementById('quoteFirstName').value.trim();
-  var lastName  = document.getElementById('quoteLastName').value.trim();
-  var phone     = document.getElementById('quotePhone').value.trim();
-  var zip       = document.getElementById('quoteZip').value.trim();
-  var type      = document.getElementById('quoteType').value;
-
-  if(!firstName || !phone || !zip || type === 'Select insurance type') {
-    alert('Please fill in your name, phone number, ZIP code, and insurance type.');
-    return;
-  }
-
-  var fullName = firstName + (lastName ? ' ' + lastName : '');
-
-  // Build SMS message with quote info
-  var smsBody = 'Hi Speedy Insurance! I would like a quote.'
-    + ' Name: ' + fullName
-    + ' | Phone: ' + phone
-    + ' | ZIP: ' + zip
-    + ' | Insurance: ' + type;
-
-  // Open SMS app pre-filled to Moreno Valley main number
-  var smsNumber = '9514720927';
-  var smsLink = 'sms:' + smsNumber + '?body=' + encodeURIComponent(smsBody);
-
-  window.location.href = smsLink;
-}
-
 // ARTICLE DATA
 const ARTICLES = [
   {
@@ -1165,11 +1131,11 @@ const ARTICLES = [
 
       <div style="background:#FEF2F2;border-left:4px solid var(--red);padding:20px 24px;border-radius:8px;margin:28px 0">
         <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Speedy Tip</p>
-        <p style="margin:0;color:var(--gray-700)">Speedy Insurance files your SR-22 the same day — often within hours. Walk into any of our 4 Inland Empire locations and our bilingual agents will handle everything for you.</p>
+        <p style="margin:0;color:var(--gray-700)">Speedy Insurance files your SR-22 the same day — often within hours. Walk into any of our 5 Inland Empire locations and our bilingual agents will handle everything for you.</p>
       </div>
 
       <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">Do You Need a Car to Get an SR-22?</h3>
-      <p>No. If you do not own a vehicle but still need to drive occasionally (a borrowed car, a rental, etc.), you can get a <strong>non-owner SR-22 policy</strong>. This is typically much cheaper than a standard policy and still satisfies the DMV requirement. Speedy offers non-owner SR-22 coverage at all four branches.</p>
+      <p>No. If you do not own a vehicle but still need to drive occasionally (a borrowed car, a rental, etc.), you can get a <strong>non-owner SR-22 policy</strong>. This is typically much cheaper than a standard policy and still satisfies the DMV requirement. Speedy offers non-owner SR-22 coverage at all five branches.</p>
     `
   },
   {
@@ -1271,7 +1237,7 @@ const ARTICLES = [
     date: 'April 2025',
     body: `
       <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:0 0 12px">The DMV Wait Is Optional</h3>
-      <p>If you have ever spent two hours waiting at a California DMV office just to renew your registration stickers, you already know the frustration. The good news: you do not have to do that. Speedy Insurance handles DMV services at all four Inland Empire branches — no appointment, no long lines, no wasted afternoon.</p>
+      <p>If you have ever spent two hours waiting at a California DMV office just to renew your registration stickers, you already know the frustration. The good news: you do not have to do that. Speedy Insurance handles DMV services at all five Inland Empire branches — no appointment, no long lines, no wasted afternoon.</p>
 
       <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">DMV Services Available at Speedy</h3>
       <ul style="margin:12px 0 12px 20px;line-height:2.2">
@@ -1296,7 +1262,7 @@ const ARTICLES = [
       <p>For title transfers and other services, requirements vary — call your nearest Speedy branch before coming in and we'll tell you exactly what to bring.</p>
 
       <div style="background:#FEF2F2;border-left:4px solid var(--red);padding:20px 24px;border-radius:8px;margin:28px 0">
-        <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Same-Day Service at All 4 Locations</p>
+        <p style="font-weight:700;color:var(--navy);margin-bottom:6px">Same-Day Service at All 5 Locations</p>
         <p style="margin:0;color:var(--gray-700)">Walk in to any Speedy Insurance branch in Moreno Valley, Riverside (Van Buren or Magnolia), or Lake Elsinore. No appointment necessary. Most DMV transactions are completed in under 15 minutes.</p>
       </div>
 
@@ -1338,7 +1304,7 @@ const ARTICLES = [
       </div>
 
       <h3 style="font-size:20px;font-weight:700;color:var(--navy);margin:28px 0 12px">How to Get Started</h3>
-      <p>Getting a non-owner SR-22 at Speedy is straightforward. Walk into any of our four locations with your driver's license and the details of your SR-22 requirement (the offense date and case number if you have it). Our agents handle the filing electronically — the DMV is typically notified within 24 hours, and your license reinstatement process can begin immediately.</p>
+      <p>Getting a non-owner SR-22 at Speedy is straightforward. Walk into any of our five locations with your driver's license and the details of your SR-22 requirement (the offense date and case number if you have it). Our agents handle the filing electronically — the DMV is typically notified within 24 hours, and your license reinstatement process can begin immediately.</p>
     `
   }
 ];

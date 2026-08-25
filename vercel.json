@@ -8,5 +8,12 @@
       "path": "/api/rc-subscribe?action=renew&cron=1",
       "schedule": "0 8 * * *"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/qr",
+      "destination": "/quote.html?src=qr",
+      "permanent": false
+    }
   ]
 }

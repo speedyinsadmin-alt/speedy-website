@@ -168,6 +168,17 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
 
 <script>
 (function(){
+  /* QR landing. The code encodes speedyins.com/qr, which 307s here carrying
+     ?src=qr. Land on the quote form, but leave the address bar on the site so
+     a refresh goes to the homepage instead of stranding people on a bare form. */
+  var src = new URLSearchParams(location.search).get('src') || '';
+  if (src.indexOf('qr') === 0) {
+    var alt = document.querySelector('a.lang-btn[href="quote.html"]');
+    if (alt) alt.href = 'quote.html?src=' + encodeURIComponent(src);
+    history.replaceState(null, '', '/es.html');
+  }
+})();
+(function(){
   var frame = document.getElementById('raterFrame');
   var load  = document.getElementById('raterLoading');
   var fail  = document.getElementById('raterFallback');

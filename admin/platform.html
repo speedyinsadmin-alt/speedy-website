@@ -95,7 +95,7 @@
   <div id="app">
     <header>
       <div class="dot"></div>
-      <h1>Platform Console <small id="ver">v5.9</small></h1>
+      <h1>Platform Console <small id="ver">v6.0</small></h1>
       <div class="who" id="who"></div>
     </header>
     <nav>
@@ -776,7 +776,7 @@ function renderAgentView(r){
     g.fees += (x.fee||0);
     if(x.commission!=null) g.earned += x.commission;
     else if(x.fee!=null) g.pending += x.fee*x.pct/100;
-    const d = String(x.ts||'').slice(0,10);
+    const d = PT_DAY(x.ts);
     if(d){ if(!g.first || d<g.first) g.first=d; if(!g.last || d>g.last) g.last=d; }
   }
   const list = Object.values(byAgent).sort((a,b)=> b.earned - a.earned || b.fees - a.fees);
@@ -833,7 +833,7 @@ function renderAgentView(r){
         const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(String(x.audit_status||'open').replace(/_/g,' '))+'</span>';
         const docs = atts.filter(a => (a.payment_id===x.id) || (a.client_no===x.client_no));
         const docCell = docsCell(docs, !x.pre_audit && x.audit_status !== 'complete', x.id, (x.client_name||('#'+x.client_no))+' \u00b7 '+money(x.amount));
-        h += '<tr><td class="muted" style="font-size:12px">'+esc(String(x.ts||'').slice(0,10))+'</td>'
+        h += '<tr><td class="muted" style="font-size:12px">'+esc(PT_DAY(x.ts))+'</td>'
           + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span>'
             + (x.charged_by_other ? '<div class="muted" style="font-size:10.5px">charged by ' + esc(String(x.charged_by||'').split(' ')[0]) + '</div>' : '')
             + '</td>'
@@ -899,16 +899,42 @@ async function renderAudit(el){
     return '<span class="pill a">needs audit</span>';
   };
 
+  /* ------------------------------------------------------------------
+     PACIFIC TIME, ALWAYS. The agency is in Los Angeles; this console ran
+     on UTC. toISOString() is UTC, so from 5pm PT onward "today" had
+     already rolled over to tomorrow and the Audit tab showed 0 rows for
+     the last two hours of the business day and all evening.
+
+     America/Los_Angeles is named explicitly rather than using the
+     browser's local zone, so the numbers are identical whoever opens it
+     and from wherever. en-CA formats as YYYY-MM-DD, so every existing
+     string comparison keeps working unchanged. Intl handles DST.
+
+     Declared ABOVE inPeriod, its first reader (see: the v2.7 dead zone).
+     ------------------------------------------------------------------ */
+  const PT_TZ = 'America/Los_Angeles';
+  const _PT_D = new Intl.DateTimeFormat('en-CA', { timeZone: PT_TZ, year:'numeric', month:'2-digit', day:'2-digit' });
+  const _PT_T = new Intl.DateTimeFormat('en-CA', { timeZone: PT_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+  // YYYY-MM-DD in Pacific for any timestamp. Returns '' on junk rather than throwing.
+  const PT_DAY = ts => { if(!ts) return ''; const dt = new Date(ts); return isNaN(dt) ? '' : _PT_D.format(dt); };
+  // 'YYYY-MM-DD HH:MM' in Pacific, for display.
+  const PT_STAMP = ts => { if(!ts) return ''; const dt = new Date(ts); return isNaN(dt) ? '' : _PT_T.format(dt).replace(',', ''); };
+  const PT_TODAY = () => _PT_D.format(new Date());
+  /* Day arithmetic on the DATE ONLY. Subtracting 86400000ms lands on the
+     wrong day across a DST boundary; stepping a UTC calendar date cannot. */
+  const PT_DAY_MINUS = (iso, n) => { const [Y,M,D] = String(iso).split('-').map(Number);
+    const t = new Date(Date.UTC(Y, M-1, D)); t.setUTCDate(t.getUTCDate() - n); return t.toISOString().slice(0,10); };
+
   // Date filter — "Total fees" with no period read like a business number when it was
   // really "everything ever recorded". Totals below are always for the selected period.
   const inPeriod = ts => {
     if(AUDIT_PERIOD === 'all') return true;
-    const d = String(ts||'').slice(0,10);
+    const d = PT_DAY(ts);
     if(!d) return false;
-    const today = new Date(); const iso = x => x.toISOString().slice(0,10);
-    if(AUDIT_PERIOD === 'today')     return d === iso(today);
-    if(AUDIT_PERIOD === 'yesterday'){ const y = new Date(today); y.setDate(y.getDate()-1); return d === iso(y); }
-    if(AUDIT_PERIOD === 'month')     return d.slice(0,7) === iso(today).slice(0,7);
+    const today = PT_TODAY();
+    if(AUDIT_PERIOD === 'today')     return d === today;
+    if(AUDIT_PERIOD === 'yesterday') return d === PT_DAY_MINUS(today, 1);
+    if(AUDIT_PERIOD === 'month')     return d.slice(0,7) === today.slice(0,7);
     if(AUDIT_PERIOD === 'custom')    return (!AUDIT_FROM || d >= AUDIT_FROM) && (!AUDIT_TO || d <= AUDIT_TO);
     return true;
   };
@@ -960,7 +986,7 @@ async function renderAudit(el){
     const canComplete = !row.pre_audit && row.audit_status !== 'complete';
     const completeBtn = canComplete ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">+ proof</span>' : '';
     h += '<tr>'
-      + '<td class="muted" style="font-size:12px">'+esc(String(row.ts||'').replace('T',' ').slice(0,16))+'</td>'
+      + '<td class="muted" style="font-size:12px">'+esc(PT_STAMP(row.ts))+'</td>'
       + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span></td>'
       + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
       + '<td class="amount">'+money(row.amount)+balanceCell(row)+'</td>'
@@ -1421,7 +1447,7 @@ async function renderHealth(el) {
         + sevPill(i.sev) + '</div></div>';
       h += '<table style="margin-top:9px"><tr><th>When</th><th>Client</th><th>Detail</th><th></th></tr>';
       for (const row of i.rows) {
-        h += '<tr><td>' + esc(String(row.ts || '').slice(0, 10)) + '</td>'
+        h += '<tr><td>' + esc(PT_DAY(row.ts)) + '</td>'
           + '<td><span class="raw-t" onclick="openClient(' + (row.client_no || 0) + ')">#' + esc(row.client_no || '—') + '</span></td>'
           + '<td>' + (row.filename ? esc(row.filename) : money(row.amount) + ' · ' + esc(row.kind || ''))
           + (row.audit_status ? ' · ' + esc(row.audit_status) : '') + '</td>'

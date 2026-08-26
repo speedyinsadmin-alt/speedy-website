@@ -992,7 +992,14 @@ export default async function handler(req, res) {
                        policyCarrier: policyCarrier || null, policyProgram: policyProgram || null },
             }),
           });
-          auditSaved = pr.status === 200 || pr.status === 204;
+          /* THE recurring bug, again. This used to assign a BOOLEAN, but the linking
+             step below needs `auditSaved.id` — and `true.id` is undefined, so every
+             card/terminal receipt PATCHed onto a safety-net row was stored with
+             payment_id NULL and vanished from the Audit tab's per-payment doc list.
+             67% of client receipts since Aug 17. We already HOLD the id we are
+             patching (safetyLedgerId) — no need to ask PostgREST for it back, which
+             `Prefer: return=minimal` would refuse to give anyway. */
+          auditSaved = (pr.status === 200 || pr.status === 204) ? { id: safetyLedgerId } : false;
         } catch { auditSaved = false; }
       } else {
         auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
@@ -1382,7 +1389,14 @@ export default async function handler(req, res) {
                        policyCarrier: policyCarrier || null, policyProgram: policyProgram || null },
             }),
           });
-          auditSaved = pr.status === 200 || pr.status === 204;
+          /* THE recurring bug, again. This used to assign a BOOLEAN, but the linking
+             step below needs `auditSaved.id` — and `true.id` is undefined, so every
+             card/terminal receipt PATCHed onto a safety-net row was stored with
+             payment_id NULL and vanished from the Audit tab's per-payment doc list.
+             67% of client receipts since Aug 17. We already HOLD the id we are
+             patching (safetyLedgerId) — no need to ask PostgREST for it back, which
+             `Prefer: return=minimal` would refuse to give anyway. */
+          auditSaved = (pr.status === 200 || pr.status === 204) ? { id: safetyLedgerId } : false;
         } catch { auditSaved = false; }
       } else {
         auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, commissionTo: (req.body||{}).commissionTo, producerCode: (req.body||{}).producerCode, totalOwed: (req.body||{}).totalOwed, balanceOf: (req.body||{}).balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });

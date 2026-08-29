@@ -262,6 +262,25 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, suggested, program, purpose, onThisClient: mine, carriers: ranked });
   }
 
+  /* ---------- Blob reachability probe (admin only) ----------
+     Every one of the 212 attachment rows has blob_url NULL, including the 46
+     carrier receipts written since blobPut was wired in - so either
+     BLOB_READ_WRITE_TOKEN is absent or the PUT is failing, and the two need
+     different fixes (create a Blob store vs. correct the call). blobPut swallows
+     the distinction into a return value nobody stores. This asks it directly with
+     one byte and reports what came back. Reads nothing, writes no row. */
+  if (action === 'blob_probe') {
+    if (!isAdmin(email)) return res.status(403).json({ ok: false, error: 'admin only' });
+    const has = !!process.env.BLOB_READ_WRITE_TOKEN;
+    const r = await blobPut(`probe/blob_probe_${Date.now()}.txt`, Buffer.from('x'), 'text/plain');
+    return res.status(200).json({
+      ok: r.status === 'ok', token_present: has, result: r,
+      meaning: r.status === 'ok' ? 'Blob works. Uploads can move off Postgres.'
+             : r.status === 'no_token' ? 'No BLOB_READ_WRITE_TOKEN on this deployment - create a Blob store in Vercel and connect it to speedy-website.'
+             : 'Token exists but the PUT failed - see result.status and result.err.',
+    });
+  }
+
   if (action === 'add_document') {
     // Lightweight: just store a supporting document (no ledger/carrier logic)
     const { client_no, policy_id, policy_guid, doc_type, doc_label, receipt_b64, receipt_name, receipt_mime } = body;

@@ -539,15 +539,28 @@ if (view === 'portal_share_due') {
          is the first moment the fee — and so the commission — is a real number. */
       const r = await sbGet(s, `bridge_ledger?commission_to=eq.${encodeURIComponent(me)}`
         + `&audit_status=eq.complete&share_locked_at=is.null&is_test=is.false`
-        + `&select=id,ts,client_id,amount,agent,fee_amount&order=ts.desc&limit=10`);
+        + `&select=id,ts,client_id,amount,agent,fee_amount,audit_completed_by&order=ts.desc&limit=10`);
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
+      /* Two ways somebody can have worked on a payment they do not earn: they RAN
+         the charge, or they FINISHED the audit. Only the first was ever considered,
+         so an agent who did the finishing was invisible to the share flow. Prefer
+         the auditor when both exist - completing the audit is the harder half and
+         is the step being opened up to helpers. */
+      const helperOf = x => {
+        const auditor = agentEmailOf(x.audit_completed_by);
+        if (auditor && auditor !== me) return { email: auditor, why: 'finished the audit' };
+        const charger = agentEmailOf(x.agent);
+        if (charger && charger !== me) return { email: charger, why: 'ran this charge' };
+        return null;
+      };
       const due = (r.rows || [])
-        .filter(x => agentEmailOf(x.agent) && agentEmailOf(x.agent) !== me && x.fee_amount != null)
-        .map(x => ({ id: x.id, ts: x.ts, client_no: x.client_id, amount: Number(x.amount),
+        .map(x => ({ x, h: helperOf(x) }))
+        .filter(({ x, h }) => h && x.fee_amount != null)
+        .map(({ x, h }) => ({ id: x.id, ts: x.ts, client_no: x.client_id, amount: Number(x.amount),
           fee: Number(x.fee_amount), commission: +(Number(x.fee_amount) * pct / 100).toFixed(2),
-          helper_email: agentEmailOf(x.agent),
-          helper_name: AGENT_NAME[agentEmailOf(x.agent)] || agentEmailOf(x.agent) }));
+          helper_email: h.email, helper_why: h.why,
+          helper_name: AGENT_NAME[h.email] || h.email }));
       return res.status(200).json({ ok: true, rate: pct, due });
     }
 
@@ -558,7 +571,7 @@ if (view === 'portal_share_due') {
       // in.(), so each value must be double-quoted or the filter matches nothing.
       const since = new Date(Date.now() - 30 * 86400000).toISOString();
       const ev = await sbGet(s, `events?ts=gte.${since}`
-        + `&kind=in.("commission.reassigned","commission.shared","audit.repaired","client.corrected","client.correction_rejected")`
+        + `&kind=in.("commission.reassigned","commission.shared","audit.repaired","client.corrected","client.correction_rejected","audit.completed_by_other")`
         + `&select=id,ts,actor,kind,client_no,payload&order=ts.desc&limit=100`);
 
       const seenRow = await sbGet(s, `agent_prefs?agent_email=eq.${encodeURIComponent(me)}&select=news_seen_at`);
@@ -580,6 +593,13 @@ if (view === 'portal_share_due') {
               title: nameOf(actor) + ' moved a payment off your list',
               detail: '$' + Number(p.amount || 0).toFixed(2) + ' now belongs to ' + nameOf(p.to) });
           }
+        } else if (e.kind === 'audit.completed_by_other' && p.owner === me && actor !== me) {
+          items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
+            title: nameOf(actor) + ' finished an audit for you',
+            detail: '$' + Number(p.amount || 0).toFixed(2)
+              + (p.carrier ? ' — ' + p.carrier : '')
+              + (p.carrier_amount != null ? ', carrier cost $' + Number(p.carrier_amount).toFixed(2) : ''),
+            action: 'Check it — your commission is worked out from that cost' });
         } else if (e.kind === 'commission.shared' && p.helper === me) {
           items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
             title: nameOf(p.owner) + ' shared commission with you',

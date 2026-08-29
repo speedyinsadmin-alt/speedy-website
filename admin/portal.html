@@ -1036,7 +1036,7 @@ function showNextShare(){
   if(!SHARE_CUR){ document.getElementById('shareSheet').classList.add('hide'); document.body.style.overflow=''; loadHome(); return; }
   const c = SHARE_CUR;
   document.getElementById('shareWho').innerHTML =
-    esc(c.helper_name) + ' ran this charge for you · $' + c.amount.toFixed(2)
+    esc(c.helper_name) + ' ' + esc(c.helper_why || 'ran this charge') + ' for you · $' + c.amount.toFixed(2)
     + ' · #' + c.client_no;
   const opt = (pct,label) => '<div onclick="setShare(' + pct + ')" style="flex:1;background:'
     + (pct===0 ? 'var(--field)' : 'rgba(47,191,113,.15)') + ';border:1px solid '

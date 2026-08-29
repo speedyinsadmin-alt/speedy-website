@@ -483,6 +483,13 @@ export default async function handler(req, res) {
           service_cost: svcCost,
           fee_amount: feeAmt,
           service_path: body.service_path || body.svc || null,
+          /* Who actually finished it. The column has existed since the ledger was
+             built and NOTHING wrote it: 73 audits complete, 1 row populated. It
+             matters now because completing an audit sets the carrier cost, the fee
+             is amount minus that cost, and the commission is a percentage of the
+             fee - so whoever completes an audit decides what the OWNER earns.
+             Written only on completion; a save-and-finish-later is not finishing. */
+          ...(complete ? { audit_completed_by: email } : {}),
         }),
       });
     }
@@ -496,6 +503,30 @@ export default async function handler(req, res) {
         payload: { carrier, carrier_amount, carrier_card, status, hawksoft_filed: hsFiled, attachment_id: attachment && attachment.id },
       }]),
     });
+
+    /* Somebody finished an audit that pays somebody else. The owner has to hear it:
+       the carrier cost just set here is what their commission is calculated from,
+       and without this the payment simply vanishes off their to-do list with no
+       explanation. Own work makes no noise. */
+    if (complete && payment_id) {
+      try {
+        const o = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(payment_id)}`
+          + `&select=commission_to,amount,agent,fee_amount`);
+        const row = (o.rows || [])[0];
+        const owner = row && (row.commission_to || null);
+        if (owner && String(owner).toLowerCase() !== String(email).toLowerCase()) {
+          await fetch(`${s.base}/rest/v1/events`, {
+            method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify([{
+              actor: email, kind: 'audit.completed_by_other', client_no,
+              policy_id: policy_id || null, source: 'carrier_capture',
+              payload: { owner, payment_id, amount: row.amount,
+                         carrier: carrier || null, carrier_amount: carrier_amount != null ? Number(carrier_amount) : null },
+            }]),
+          });
+        }
+      } catch { /* never fail an audit over a notification */ }
+    }
 
     /* Separate row, not a field on the audit event: the acknowledgement is a statement
        the agent made, and it needs to be findable on its own. */

@@ -16,7 +16,7 @@ const PRODUCER_MAP = {
   JLR: 'jorge@speedyins.com',     CMA: 'chris@speedyins.com',   YYH: 'yolanda@speedyins.com',
   FSS: 'fernando@speedyins.com',  EHA: 'esmeralda@speedyins.com',
 };
-const STAFF_EMAILS = Object.values(PRODUCER_MAP).concat(['irene@speedyins.com', 'melisa@speedyins.com', 'tony@speedyins.com', 'lana@speedyins.com']);
+const STAFF_EMAILS = Object.values(PRODUCER_MAP).concat(['irene@speedyins.com', 'tony@speedyins.com', 'lana@speedyins.com']);
 function normaliseAgentEmail(v) {
   const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i);
   return m ? m[0].toLowerCase() : null;
@@ -231,7 +231,6 @@ const STAFF = {
   'alejandra@speedyins.com': ['Alejandra Salas', 'Riverside Magnolia'],
   'esmeralda@speedyins.com': ['Esmeralda Ayala Hernandez', 'Riverside Magnolia'],
   'irene@speedyins.com':     ['Irene Ayala Hernandez', 'Riverside Magnolia'],
-  'melisa@speedyins.com':    ['Melisa Hernandez', 'Moreno Valley'],
   'tony@speedyins.com':      ['Tony Dabouqi', 'All branches'],
   'lana@speedyins.com':      ['Lana D.', 'All branches'],
 };
@@ -1639,11 +1638,15 @@ export default async function handler(req, res) {
       const name = String(b.fileName || 'upload').replace(/\.[^.]+$/, '').slice(0, 100) || 'upload';
       const desc = String(b.desc || 'Uploaded via Speedy admin drop zone').slice(0, 200);
       const b64 = s => Buffer.from(s, 'utf8').toString('base64');
+      /* RefId is caller-supplied so a test can send two files under ONE id and see
+         whether HawkSoft groups them onto a single log row. Defaults to a fresh id,
+         which is the previous behaviour exactly. */
+      const refId = String(b.refId || '').trim() || crypto.randomUUID();
       const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
-          RefId: crypto.randomUUID(),
+          RefId: refId,
           TS: new Date().toISOString(),
           Desc: b64(desc),
           LogNote: b64(`File "${name}.${ext}" uploaded via Speedy admin drop zone. ${desc}`),
@@ -1653,7 +1656,67 @@ export default async function handler(req, res) {
         },
         body: gz,
       });
-      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, result: r.body });
+      return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, refId, result: r.body });
+    }
+
+    /* ---------- RefId grouping probe (test lab, ZZTEST only) ----------
+       QUESTION: the attachment endpoint always creates a NEW log row to hang its file
+       on, which is why one payment scatters into three rows in the CMS timeline. If two
+       attachment calls sharing ONE RefId land on ONE log row, we can file the Clover
+       receipt and the carrier receipt together and the agent links once instead of
+       three times. Undocumented either way - RefId is described only as "Unique Id".
+
+       Sends four files: a PAIR sharing one RefId, and a CONTROL pair with separate
+       RefIds. The control is what makes the result readable - it proves two rows is
+       the baseline, so if the pair also gives two rows that is a real answer and not
+       a broken test. Hard-locked to the ZZTEST client. */
+    if (action === 'refid_group_probe') {
+      const clientId = TEST_CLIENT_ID;
+      const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+      const { gzipSync } = await import('node:zlib');
+      const b64 = s => Buffer.from(s, 'utf8').toString('base64');
+      const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+      const makePdf = async (title) => {
+        const doc = await PDFDocument.create();
+        const page = doc.addPage([400, 200]);
+        const font = await doc.embedFont(StandardFonts.HelveticaBold);
+        page.drawText(title, { x: 24, y: 150, size: 16, font, color: rgb(0, 0, 0) });
+        page.drawText('RefId grouping probe - safe to delete', { x: 24, y: 120, size: 9, font });
+        page.drawText(stamp + ' UTC', { x: 24, y: 100, size: 9, font });
+        return Buffer.from(await doc.save());
+      };
+
+      const put = async (label, refId) => {
+        const buf = await makePdf(label);
+        const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            RefId: refId, TS: new Date().toISOString(),
+            Desc: b64(label), LogNote: b64(`PROBE ${label} - refId ${refId}`),
+            FileName: b64(label.replace(/[^A-Za-z0-9]+/g, '_')), FileExt: 'pdf',
+            Channel: '31',
+          },
+          body: gzipSync(buf),
+        });
+        return { label, refId, httpStatus: r.status, body: r.body };
+      };
+
+      const shared = crypto.randomUUID();
+      const out = [];
+      out.push(await put('PAIR A1 shared refid', shared));
+      out.push(await put('PAIR A2 shared refid', shared));
+      out.push(await put('CTRL B1 own refid', crypto.randomUUID()));
+      out.push(await put('CTRL B2 own refid', crypto.randomUUID()));
+
+      return res.status(200).json({
+        ok: out.every(x => x.httpStatus === 200 || x.httpStatus === 202),
+        clientId, sharedRefId: shared, results: out,
+        readMe: 'Open ZZTEST in CMS. CTRL B1 and B2 must be two separate log rows - that is the baseline. '
+              + 'If PAIR A1 and A2 are ONE row with two attachments, grouping by RefId works. '
+              + 'If they are two rows, or A2 was rejected, it does not.',
+      });
     }
 
     if (action === 'clover_recent_payments') {

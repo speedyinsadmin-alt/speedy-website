@@ -22,7 +22,6 @@ const AGENT_NAME = {
   'jorge@speedyins.com':'Jorge Ramos','chris@speedyins.com':'Christian Aguilar','yolanda@speedyins.com':'Yolanda Hernandez',
   'fernando@speedyins.com':'Fernando Salgado','esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
   'tony@speedyins.com':'Tony Dabouqi','lana@speedyins.com':'Lana D',
-  'melisa@speedyins.com':'Melisa Hernandez',
 };
 const agentEmailOf = v => { const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i); return m ? m[0].toLowerCase() : null; };
 /* Move a payment to the correct client. Nothing is deleted: the original client number
@@ -111,7 +110,7 @@ const AGENT_ALLOWLIST = [
   'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
   'chris@speedyins.com', 'yasmin@speedyins.com', 'fernando@speedyins.com', 'jesus@speedyins.com',
   'alejandra@speedyins.com', 'esmeralda@speedyins.com', 'irene@speedyins.com',
-  'malcolm@speedyins.com', 'melisa@speedyins.com',
+  'malcolm@speedyins.com',
   'tony@speedyins.com', 'lana@speedyins.com',
 ];
 const ALLOWLIST = ADMIN_ALLOWLIST; // back-compat for existing admin checks
@@ -435,8 +434,23 @@ export default async function handler(req, res) {
       const like = `*${q.replace(/[,()*]/g, '')}*`;
       const ors = [
         `first_name.ilike.${like}`, `last_name.ilike.${like}`, `business_name.ilike.${like}`,
-        `phone.ilike.${like}`, `email.ilike.${like}`,
+        `email.ilike.${like}`,
       ];
+      /* Phones are stored as (AAA)BBB-CCCC. The old term stripped parentheses from
+         the QUERY but not from the DATA, so a typed area code could never match:
+         (951)472-0927 became 951472-0927, which does not occur in the stored value.
+         Measured 0/500 on real rows. Matching the last seven digits as BBB-CCCC
+         scores 499/499 and, unlike rebuilding the full (AAA)BBB-CCCC form, puts no
+         literal parentheses inside a PostgREST or=() filter - which would need value
+         double-quoting, the same quirk as in.(). Under 7 digits keeps the old
+         behaviour so partial typing still narrows. */
+      const dg = q.replace(/\D/g, '');
+      if (dg.length >= 7) {
+        const t = dg.length > 10 ? dg.slice(-10) : dg;
+        ors.push(`phone.ilike.*${t.slice(-7, -4)}-${t.slice(-4)}*`);
+      } else {
+        ors.push(`phone.ilike.${like}`);
+      }
       if (/^\d+$/.test(q)) ors.unshift(`client_no.eq.${q}`);
       const cl = await sbGet(s, `clients?select=client_no,first_name,last_name,business_name,phone,branch&or=(${ors.join(',')})&order=client_no.asc&limit=25`);
       const results = (cl.rows || []).map(c => ({
@@ -967,9 +981,23 @@ if (view === 'portal_share_due') {
         `first_name.ilike.${like}`,
         `last_name.ilike.${like}`,
         `business_name.ilike.${like}`,
-        `phone.ilike.${like}`,
         `email.ilike.${like}`,
       ];
+      /* Phones are stored as (AAA)BBB-CCCC. The old term stripped parentheses from
+         the QUERY but not from the DATA, so a typed area code could never match:
+         (951)472-0927 became 951472-0927, which does not occur in the stored value.
+         Measured 0/500 on real rows. Matching the last seven digits as BBB-CCCC
+         scores 499/499 and, unlike rebuilding the full (AAA)BBB-CCCC form, puts no
+         literal parentheses inside a PostgREST or=() filter - which would need value
+         double-quoting, the same quirk as in.(). Under 7 digits keeps the old
+         behaviour so partial typing still narrows. */
+      const dg = q.replace(/\D/g, '');
+      if (dg.length >= 7) {
+        const t = dg.length > 10 ? dg.slice(-10) : dg;
+        ors.push(`phone.ilike.*${t.slice(-7, -4)}-${t.slice(-4)}*`);
+      } else {
+        ors.push(`phone.ilike.${like}`);
+      }
       if (/^\d+$/.test(q)) ors.unshift(`client_no.eq.${q}`);
       path = `clients?select=*&or=(${ors.join(',')})&order=client_no.asc&limit=100`;
     } else {

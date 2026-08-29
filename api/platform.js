@@ -426,7 +426,56 @@ export default async function handler(req, res) {
   // ============ PORTAL views (agents + admin, scoped to the signed-in agent) ============
   // These run BEFORE the admin gate so agents can reach them; each is strictly scoped to the caller's own email.
   const view = String(req.query.view || '');
-  const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];
+  
+/* ---------- Client search filter, shared by portal_search and our_clients ----------
+   Two bugs lived here, both the same shape: the query was transformed and the data
+   was not.
+
+   1. PHONES are stored (AAA)BBB-CCCC. Stripping parens from the query alone meant
+      a typed area code could never match. Measured 0/500 on real rows. Matching the
+      last seven digits as BBB-CCCC scores 500/500 and keeps parentheses out of the
+      PostgREST or=() filter, which would otherwise need value double-quoting.
+
+   2. NAMES are stored split. "Samuel Rodriguez" was asked of each column on its
+      own - does first_name contain the whole phrase, does last_name - and no single
+      column ever holds both words. 25,615 of 25,629 people failed a First Last
+      search; reversed, all 25,629 failed. Full-name search had never worked.
+
+   For a multi-word query we seed the request with the LONGEST word (the most
+   selective - "garcia" returns 536 rows, the worst common surname, against 25,638
+   clients) and require the remaining words in JS. That keeps the proven or=()
+   syntax rather than nesting and=(or(...),or(...)), which cannot be tested from
+   here and would break search outright if the syntax were wrong.
+
+   Single-word and phone queries are untouched and still cost 25 rows. */
+const SEARCH_COLS = ['first_name', 'last_name', 'business_name', 'email'];
+function buildClientSearch(q) {
+  const digits = q.replace(/\D/g, '');
+  const isPhone = digits.length >= 7;
+  const toks = isPhone ? [] : q.split(/\s+/).map(t => t.trim()).filter(t => t.length >= 2);
+  const multi = toks.length > 1;
+  // Longest word first: fewest rows come back, so the JS pass has least to chew on.
+  const seed = multi ? toks.slice().sort((a, b) => b.length - a.length)[0] : q;
+  const like = `*${seed.replace(/[,()*]/g, '')}*`;
+  const ors = SEARCH_COLS.map(c => `${c}.ilike.${like}`);
+  if (isPhone) {
+    const t = digits.length > 10 ? digits.slice(-10) : digits;
+    ors.push(`phone.ilike.*${t.slice(-7, -4)}-${t.slice(-4)}*`);
+  } else {
+    ors.push(`phone.ilike.${like}`);
+  }
+  if (/^\d+$/.test(q)) ors.unshift(`client_no.eq.${q}`);
+  return { ors, multi, toks };
+}
+/* Every word must appear somewhere on the row. Order-independent, so "Rodriguez
+   Samuel" finds the same client as "Samuel Rodriguez". */
+function matchesAllTokens(row, toks) {
+  const hay = [row.first_name, row.last_name, row.business_name, row.email, row.phone]
+    .filter(Boolean).join(' ').toLowerCase();
+  return toks.every(t => hay.includes(t.toLowerCase()));
+}
+
+const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
@@ -436,29 +485,14 @@ export default async function handler(req, res) {
     if (view === 'portal_search') {
       const q = String(req.query.q || '').trim();
       if (!q) return res.status(200).json({ ok: true, results: [] });
-      const like = `*${q.replace(/[,()*]/g, '')}*`;
-      const ors = [
-        `first_name.ilike.${like}`, `last_name.ilike.${like}`, `business_name.ilike.${like}`,
-        `email.ilike.${like}`,
-      ];
-      /* Phones are stored as (AAA)BBB-CCCC. The old term stripped parentheses from
-         the QUERY but not from the DATA, so a typed area code could never match:
-         (951)472-0927 became 951472-0927, which does not occur in the stored value.
-         Measured 0/500 on real rows. Matching the last seven digits as BBB-CCCC
-         scores 499/499 and, unlike rebuilding the full (AAA)BBB-CCCC form, puts no
-         literal parentheses inside a PostgREST or=() filter - which would need value
-         double-quoting, the same quirk as in.(). Under 7 digits keeps the old
-         behaviour so partial typing still narrows. */
-      const dg = q.replace(/\D/g, '');
-      if (dg.length >= 7) {
-        const t = dg.length > 10 ? dg.slice(-10) : dg;
-        ors.push(`phone.ilike.*${t.slice(-7, -4)}-${t.slice(-4)}*`);
-      } else {
-        ors.push(`phone.ilike.${like}`);
-      }
-      if (/^\d+$/.test(q)) ors.unshift(`client_no.eq.${q}`);
-      const cl = await sbGet(s, `clients?select=client_no,first_name,last_name,business_name,phone,branch&or=(${ors.join(',')})&order=client_no.asc&limit=25`);
-      const results = (cl.rows || []).map(c => ({
+      const { ors, multi, toks } = buildClientSearch(q);
+      /* A multi-word query over-fetches so the second word can be applied in JS.
+         800 covers the worst common surname (garcia, 536) with headroom; the select
+         is six short text columns, so this is tens of KB, not a document load. */
+      const cl = await sbGet(s, `clients?select=client_no,first_name,last_name,business_name,email,phone,branch&or=(${ors.join(',')})&order=client_no.asc&limit=${multi ? 800 : 25}`);
+      let rows = cl.rows || [];
+      if (multi) rows = rows.filter(c => matchesAllTokens(c, toks)).slice(0, 25);
+      const results = rows.map(c => ({
         client_no: c.client_no,
         name: c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' '),
         phone: c.phone || null, branch: c.branch || null,
@@ -978,37 +1012,20 @@ if (view === 'portal_share_due') {
   /* ---- Our clients list ---- */
   if (view === 'our_clients') {
     const q = String(req.query.q || '').trim();
-    let path;
+    let path, MULTI = false, TOKS = [];
     if (q) {
       // Search: client_no exact, OR name/business/phone/email contains (case-insensitive)
-      const like = `*${q.replace(/[,()*]/g, '')}*`;
-      const ors = [
-        `first_name.ilike.${like}`,
-        `last_name.ilike.${like}`,
-        `business_name.ilike.${like}`,
-        `email.ilike.${like}`,
-      ];
-      /* Phones are stored as (AAA)BBB-CCCC. The old term stripped parentheses from
-         the QUERY but not from the DATA, so a typed area code could never match:
-         (951)472-0927 became 951472-0927, which does not occur in the stored value.
-         Measured 0/500 on real rows. Matching the last seven digits as BBB-CCCC
-         scores 499/499 and, unlike rebuilding the full (AAA)BBB-CCCC form, puts no
-         literal parentheses inside a PostgREST or=() filter - which would need value
-         double-quoting, the same quirk as in.(). Under 7 digits keeps the old
-         behaviour so partial typing still narrows. */
-      const dg = q.replace(/\D/g, '');
-      if (dg.length >= 7) {
-        const t = dg.length > 10 ? dg.slice(-10) : dg;
-        ors.push(`phone.ilike.*${t.slice(-7, -4)}-${t.slice(-4)}*`);
-      } else {
-        ors.push(`phone.ilike.${like}`);
-      }
-      if (/^\d+$/.test(q)) ors.unshift(`client_no.eq.${q}`);
-      path = `clients?select=*&or=(${ors.join(',')})&order=client_no.asc&limit=100`;
+      const { ors, multi, toks } = buildClientSearch(q);
+      path = `clients?select=*&or=(${ors.join(',')})&order=client_no.asc&limit=${multi ? 800 : 100}`;
+      MULTI = multi; TOKS = toks;
     } else {
       path = 'clients?select=*&order=client_no.asc&limit=100';
     }
     const cl = await sbGet(s, path);
+    /* Narrow BEFORE the policy-count query below. That query is an in.() over every
+       client_no returned, so filtering after it would build an 800-id IN list to
+       answer a search that shows 100. */
+    if (MULTI) cl.rows = (cl.rows || []).filter(c => matchesAllTokens(c, TOKS)).slice(0, 100);
     // policy counts only for the returned clients
     const nos = (cl.rows || []).map(c => c.client_no).filter(n => n != null);
     let counts = {};

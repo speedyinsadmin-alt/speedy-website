@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.2</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.3</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -420,7 +420,12 @@ async function loadHome(){
   const n = r.unfinished_count || 0;
   if(n){
     $('#todo').classList.remove('hide');
-    $('#todoText').textContent = '⚠ ' + n + ' payment' + (n>1?'s':'') + ' need your proof of payment';
+    const notMine = (UNFINISHED || []).filter(u => !u.mine).length;
+    /* The count includes payments this agent CHARGED but does not earn. Calling all
+       of them "your proof of payment" told Tony a payment was his when Sammy owns it. */
+    $('#todoText').textContent = '⚠ ' + n + ' payment' + (n>1?'s':'') + ' need'
+      + (n>1?'':'s') + ' proof of payment'
+      + (notMine ? ' · ' + notMine + ' for another agent' : '');
   } else {
     $('#todo').classList.add('hide');
   }
@@ -732,8 +737,11 @@ function payHistoryHtml(c){
     + (c.producer_name ? ' <span style="text-transform:none;letter-spacing:0;color:var(--mute)">· producer ' + esc(c.producer_name) + '</span>' : '')
     + '</div>';
   h += pays.map(p => {
-    const mine = (p.commission_to === EMAIL)
-      || String(p.charged_by || '').toLowerCase().includes(String(EMAIL || '').split('@')[0]);
+    /* Two different questions, and they used to be conflated into one broken test
+       against a display name. Who EARNS it decides who finishes the audit; who
+       TOOK it decides who may help with paperwork. */
+    const mine = (p.commission_to === EMAIL);
+    const iCharged = (p.charged_by_email === EMAIL);
     const dl = byPay[p.id] || [];
     const complete = p.audit_status === 'complete';
     const hasCarrier = dl.some(d => docType(d) === 'carrier_receipt');
@@ -757,7 +765,7 @@ function payHistoryHtml(c){
       + '</div>'
       + '<div class="dim" style="font-size:11px;margin-top:3px">Commission to <b style="color:var(--ink)">'
       + esc(p.commission_to_name || 'unassigned') + '</b>'
-      + ((p.commission_to === EMAIL || (p.charged_by && p.charged_by.toLowerCase().includes((EMAIL||'').split('@')[0])))
+      + ((mine || iCharged)
           ? ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();reassignPayment(\'' + p.id + '\',\'' + esc(p.commission_to||'') + '\')">change</span>'
             + ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();moveClient(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')">wrong client</span>'
           : '')
@@ -772,6 +780,17 @@ function payHistoryHtml(c){
       + (!complete && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
+          : '')
+      /* Not the owner: documents only. save_carrier_leg is guarded server-side by
+         mayTouchPayment, so offering the full audit here would let someone fill in a
+         carrier cost and then be refused after the work. The owner still confirms
+         the cost, and the line below says so - otherwise the amber badge staying put
+         afterwards reads as broken. */
+      + (!complete && !mine
+          ? '<div onclick="addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
+            + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">Add documents to help</div>'
+            + '<div class="dim" style="font-size:11px;text-align:center;margin-top:4px">'
+            + esc((p.commission_to_name || 'The owner').split(' ')[0]) + ' still confirms the carrier cost</div>'
           : '')
       /* Audited payments used to be a dead end: the button above is gated on
          !complete, so an agent who noticed a missing document after submitting had

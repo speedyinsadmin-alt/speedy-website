@@ -648,6 +648,13 @@ if (view === 'portal_share_due') {
           total_owed: r.total_owed != null ? Number(r.total_owed) : null,
           collected: collectedFor(r, pay.rows || []),
           charged_by: AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent) || null,
+          /* The EMAIL as well as the display name. The card decided ownership by
+             testing whether the display name contained the signed-in email's local
+             part - "tony dabouqi".includes("info") is false, so info@ got no button
+             on a payment it had just taken. lfigueroa@ / "Laura Figueroa" fails the
+             same way. The other fifteen agents passed by coincidence. Compare
+             identifiers, never rendered text. */
+          charged_by_email: agentEmailOf(r.agent) || null,
           commission_to: r.commission_to || agentEmailOf(r.agent) || null,
           commission_to_name: AGENT_NAME[r.commission_to || agentEmailOf(r.agent)] || null,
           carrier_name: r.carrier_name, service_cost: r.service_cost, fee_amount: r.fee_amount,

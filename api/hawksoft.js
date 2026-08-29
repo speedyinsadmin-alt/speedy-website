@@ -16,7 +16,7 @@ const PRODUCER_MAP = {
   JLR: 'jorge@speedyins.com',     CMA: 'chris@speedyins.com',   YYH: 'yolanda@speedyins.com',
   FSS: 'fernando@speedyins.com',  EHA: 'esmeralda@speedyins.com',
 };
-const STAFF_EMAILS = Object.values(PRODUCER_MAP).concat(['irene@speedyins.com', 'tony@speedyins.com', 'lana@speedyins.com']);
+const STAFF_EMAILS = Object.values(PRODUCER_MAP).concat(['irene@speedyins.com', 'melisa@speedyins.com', 'tony@speedyins.com', 'lana@speedyins.com']);
 function normaliseAgentEmail(v) {
   const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i);
   return m ? m[0].toLowerCase() : null;
@@ -231,6 +231,7 @@ const STAFF = {
   'alejandra@speedyins.com': ['Alejandra Salas', 'Riverside Magnolia'],
   'esmeralda@speedyins.com': ['Esmeralda Ayala Hernandez', 'Riverside Magnolia'],
   'irene@speedyins.com':     ['Irene Ayala Hernandez', 'Riverside Magnolia'],
+  'melisa@speedyins.com':    ['Melisa Hernandez', 'Moreno Valley'],
   'tony@speedyins.com':      ['Tony Dabouqi', 'All branches'],
   'lana@speedyins.com':      ['Lana D.', 'All branches'],
 };

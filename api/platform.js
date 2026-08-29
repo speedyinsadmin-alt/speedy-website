@@ -22,6 +22,7 @@ const AGENT_NAME = {
   'jorge@speedyins.com':'Jorge Ramos','chris@speedyins.com':'Christian Aguilar','yolanda@speedyins.com':'Yolanda Hernandez',
   'fernando@speedyins.com':'Fernando Salgado','esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
   'tony@speedyins.com':'Tony Dabouqi','lana@speedyins.com':'Lana D',
+  'melisa@speedyins.com':'Melisa Hernandez',
 };
 const agentEmailOf = v => { const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i); return m ? m[0].toLowerCase() : null; };
 /* Move a payment to the correct client. Nothing is deleted: the original client number
@@ -110,7 +111,7 @@ const AGENT_ALLOWLIST = [
   'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
   'chris@speedyins.com', 'yasmin@speedyins.com', 'fernando@speedyins.com', 'jesus@speedyins.com',
   'alejandra@speedyins.com', 'esmeralda@speedyins.com', 'irene@speedyins.com',
-  'malcolm@speedyins.com',
+  'malcolm@speedyins.com', 'melisa@speedyins.com',
   'tony@speedyins.com', 'lana@speedyins.com',
 ];
 const ALLOWLIST = ADMIN_ALLOWLIST; // back-compat for existing admin checks

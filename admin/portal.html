@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.0</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.1</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -253,6 +253,8 @@
             <div id="chgPolPrevVal" style="font-size:12.5px;margin-top:3px"></div>
           </div>
         </div>
+
+        <div id="chgRefresh" onclick="chgRefresh()" style="border:1.5px solid var(--line);border-radius:9px;text-align:center;cursor:pointer;color:var(--mute);padding:9px;font-size:12.5px;margin-top:8px">&#8635; New tab in HawkSoft? Refresh</div>
 
         <div style="margin-top:12px">
           <label for="chgComm">Commission to</label>
@@ -728,7 +730,9 @@ async function renderPanel(){
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">'
     + '<div onclick="toggleFull('+ACTIVE_TAB+')" style="background:var(--field);border:1px solid var(--line);border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:600;color:var(--blue-l);cursor:pointer">'+(full?'Hide details ▴':'See full details ▾')+'</div>'
     + '<div onclick="openCharge('+ACTIVE_TAB+')" style="background:var(--red);color:#fff;border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:700;cursor:pointer">Charge this client</div>'
-    + '</div>';
+    + '</div>'
+    + '<div id="cardRefresh" onclick="refreshHawkSoft(\'cardRefresh\','+ACTIVE_TAB+',\'card\')" '
+    + 'style="' + RF_BASE + ';padding:10px;font-size:13px;margin-top:8px">' + label('card') + '</div>';
   h += '</div>';
   el.innerHTML = h;
 }
@@ -1300,6 +1304,115 @@ function closeCharge(){
 }
 
 // --- form ---
+/* Pulled out of renderChargeForm so the refresh control can repaint ONLY the
+   dropdown. Re-running the whole form would rebuild the method chips and re-run
+   fillCommission - on a money page nothing the agent already chose may move.
+   keepValue re-selects a policy if it still exists after the rebuild. */
+function renderPolicyPicker(keepValue){
+  if(!CHG) return 0;
+  const cached = CLIENT_CACHE[CHG.clientNo];
+  const tabNo = p => {
+    const i = p.carrier_extras && p.carrier_extras.policyIndex;
+    return (i === 0 || i > 0) ? 'Tab ' + (Number(i) + 1) + ' · ' : '';
+  };
+  const byTab = (a, b) => Number((a.carrier_extras||{}).policyIndex ?? 999)
+                        - Number((b.carrier_extras||{}).policyIndex ?? 999);
+  const all  = ((cached && cached.policies) || []).filter(p => p.policy_number);
+  const ins  = all.filter(p => p.record_type !== 'dmv_service').sort(byTab);
+  const dmvs = all.filter(p => p.record_type === 'dmv_service').sort(byTab);
+  const pols = ins.concat(dmvs);
+  const opt  = p => '<option value="' + esc(p.policy_number) + '">' + tabNo(p) + esc(p.policy_number)
+      + ' — ' + esc(p.carrier || (p.record_type === 'dmv_service' ? 'DMV service' : ''))
+      + (isExpired(p) ? ' (expired)' : '') + '</option>';
+  const sel = chgEl('chgPolSel'), w = chgEl('chgPolWrap');
+  if(pols.length){
+    sel.innerHTML =
+        (ins.length  ? '<optgroup label="Insurance policies">' + ins.map(opt).join('')  + '</optgroup>' : '')
+      + (dmvs.length ? '<optgroup label="DMV services">'      + dmvs.map(opt).join('') + '</optgroup>' : '')
+      + '<option value="">No policy — file at client level</option>';
+    /* A selection the agent already made outranks the launch URL. If the policy is
+       gone we do NOT silently fall through to another one - the dropdown resets to
+       its first entry and the preview line below it changes, which is visible. */
+    const kept = keepValue && [].slice.call(sel.options).some(o => o.value === keepValue);
+    if(kept){
+      sel.value = keepValue;
+    } else if(HL.armed && HL.policy && String(CHG.clientNo) === String(HL.client)){
+      const want = HL.policy.trim().toUpperCase();
+      const hit = pols.find(p => String(p.policy_number).trim().toUpperCase() === want);
+      if(hit) sel.value = hit.policy_number;
+    }
+    w.classList.remove('hide');
+  } else {
+    sel.innerHTML = '<option value="">No policy — file at client level</option>';
+    w.classList.add('hide');
+  }
+  updatePolicyPreview();
+  return pols.length;
+}
+
+/* ---------- Refresh from HawkSoft ----------
+   Portal search and the policy picker read OUR Supabase tables, filled by the cron
+   at 09:00 UTC (2am Pacific). HawkSoft has no webhooks. So a policy tab created in
+   CMS ten minutes ago is invisible here until a sync runs - Sammy hit this trying
+   to charge a DMV record he had just created.
+
+   portal_refresh_clients ALREADY syncs policies as well as clients (runDeltaSync ->
+   upsertHsClient returns both counts). It was simply unreachable: it only rendered
+   inside the "No clients found" state, and Sammy's search worked fine. This is
+   placement, not plumbing - no new endpoint, no schema change.
+
+   mode 'card' repaints the whole client panel, which is safe because nothing is
+   typed there. mode 'picker' repaints only the dropdown. */
+const RF_BASE = 'border:1.5px solid var(--line);border-radius:9px;text-align:center;cursor:pointer;color:var(--mute)';
+const RF_OK   = 'border:1.5px solid rgba(47,191,113,.45);background:rgba(47,191,113,.12);border-radius:9px;text-align:center;color:var(--green)';
+const RF_WARN = 'border:1.5px solid rgba(245,166,35,.4);background:rgba(245,166,35,.12);border-radius:9px;text-align:center;color:var(--amber)';
+
+async function refreshHawkSoft(btnId, clientNo, mode){
+  const pad = mode === 'card' ? 'padding:10px;font-size:13px;margin-top:8px'
+                              : 'padding:9px;font-size:12.5px;margin-top:8px';
+  /* renderPanel() rebuilds #clientPanel, so the node we started on is gone by the
+     time we report. Always re-query by id rather than holding a reference. */
+  const at = () => document.getElementById(btnId);
+  const paint = (html, style) => { const b = at(); if(b){ b.innerHTML = html; b.setAttribute('style', style + ';' + pad); } };
+  const rest = () => { const b = at(); if(b){ b.dataset.busy = ''; b.innerHTML = label(mode); b.setAttribute('style', RF_BASE + ';' + pad); } };
+
+  const b0 = at();
+  if(!b0 || b0.dataset.busy) return;      // no stacked syncs from a double tap
+  b0.dataset.busy = '1';
+  paint('Checking HawkSoft\u2026', RF_BASE);
+
+  const numbers = n => new Set((((CLIENT_CACHE[n]||{}).policies)||[]).map(p => String(p.policy_number||'')));
+  const before = numbers(clientNo);
+  const keep = (mode === 'picker' && chgEl('chgPolSel')) ? chgEl('chgPolSel').value : null;
+
+  const r = await api('portal_refresh_clients');
+  if(!r || !r.ok){
+    paint('Couldn\u2019t reach HawkSoft. Try again in a moment.', RF_WARN);
+    setTimeout(rest, 6000);
+    return;
+  }
+  /* Re-read the client even when r.skipped is true. The 60s cooldown is shared by
+     all thirteen agents and lives in the database, so this agent can be blocked by
+     someone else's run - but that run is global and may already have pulled the tab
+     he is looking for. Telling him about a lock he did not hit would be noise. */
+  const c = await api('portal_client&no=' + encodeURIComponent(clientNo));
+  if(c && c.ok) CLIENT_CACHE[clientNo] = c;
+
+  const gained = [].concat.apply([], [[...numbers(clientNo)].filter(x => !before.has(x))]).length;
+  if(mode === 'card') renderPanel(); else renderPolicyPicker(keep);
+
+  if(gained > 0){
+    paint('\u2713 ' + gained + ' new polic' + (gained > 1 ? 'ies' : 'y') + ' added \u2014 check the list', RF_OK);
+  } else {
+    paint('Nothing new. Make sure the tab is saved in HawkSoft.', RF_BASE);
+  }
+  setTimeout(rest, 6000);
+}
+function label(mode){
+  return mode === 'card' ? '\u21bb Refresh from HawkSoft' : '\u21bb New tab in HawkSoft? Refresh';
+}
+function chgRefresh(){ if(CHG && CHG.clientNo) refreshHawkSoft('chgRefresh', CHG.clientNo, 'picker'); }
+
 function renderChargeForm(){
   const c = CHG.confirmed;
 
@@ -1338,36 +1451,7 @@ function renderChargeForm(){
   // charge_lookup does not return a policy number (charge.html gets it from HawkLink),
   // so the portal offers the real list instead of guessing.
   const cached = CLIENT_CACHE[CHG.clientNo];
-  const tabNo = p => {
-    const i = p.carrier_extras && p.carrier_extras.policyIndex;
-    return (i === 0 || i > 0) ? 'Tab ' + (Number(i) + 1) + ' · ' : '';
-  };
-  const byTab = (a, b) => Number((a.carrier_extras||{}).policyIndex ?? 999)
-                        - Number((b.carrier_extras||{}).policyIndex ?? 999);
-  const all  = ((cached && cached.policies) || []).filter(p => p.policy_number);
-  const ins  = all.filter(p => p.record_type !== 'dmv_service').sort(byTab);
-  const dmvs = all.filter(p => p.record_type === 'dmv_service').sort(byTab);
-  const pols = ins.concat(dmvs);
-  const opt  = p => '<option value="' + esc(p.policy_number) + '">' + tabNo(p) + esc(p.policy_number)
-      + ' — ' + esc(p.carrier || (p.record_type === 'dmv_service' ? 'DMV service' : ''))
-      + (isExpired(p) ? ' (expired)' : '') + '</option>';
-  const w = chgEl('chgPolWrap');
-  if(pols.length){
-    chgEl('chgPolSel').innerHTML =
-        (ins.length  ? '<optgroup label="Insurance policies">' + ins.map(opt).join('')  + '</optgroup>' : '')
-      + (dmvs.length ? '<optgroup label="DMV services">'      + dmvs.map(opt).join('') + '</optgroup>' : '')
-      + '<option value="">No policy — file at client level</option>';
-    if(HL.armed && HL.policy && String(CHG.clientNo) === String(HL.client)){
-      const want = HL.policy.trim().toUpperCase();
-      const hit = pols.find(p => String(p.policy_number).trim().toUpperCase() === want);
-      if(hit) chgEl('chgPolSel').value = hit.policy_number;
-    }
-    w.classList.remove('hide');
-  } else {
-    chgEl('chgPolSel').innerHTML = '<option value="">No policy — file at client level</option>';
-    w.classList.add('hide');
-  }
-  updatePolicyPreview();
+  renderPolicyPicker(null);
 
   applyMethodUI();
 }

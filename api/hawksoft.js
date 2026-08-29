@@ -306,7 +306,22 @@ async function ledger(event) {
 
 /* Store a generated receipt PDF in OUR attachments vault so it's visible in the Audit tab.
    Fail-soft: never blocks a charge. kind = 'client_receipt' (the branded PDF the client gets). */
-async function storeReceiptVault({ clientId, pdfBuf, filename, amount, txnId, who, policyGuid }) {
+const VAULT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/* policyGuid arrived as a parameter here from the first day and was never written to
+   the row: 49 of 49 client_receipt rows since the Aug 24 resolver fix carried no
+   policy, while carrier_receipt rows written by carrier.js carried one 38 times out
+   of 46. The resolver was never the problem - this function simply dropped what it
+   was handed. Same for the HawkSoft outcome: fileReceiptPdf posts to HawkSoft BEFORE
+   calling this, so it already knows whether the file landed, but filed_hawksoft read
+   false on every row and our own Audit tab under-reported what HawkSoft actually
+   holds. And the RefId is worth keeping now that the sandbox probe proved HawkSoft
+   enforces it as a unique key - it is what makes a retry safe instead of duplicating.
+
+   payment_id is deliberately NOT set here. linkReceiptToPayment owns that column,
+   from the Aug 25 fix, and it runs after the audit row is finalised. Two writers on
+   one column is how values drift. */
+async function storeReceiptVault({ clientId, pdfBuf, filename, amount, txnId, who, policyGuid,
+                                   filedHawksoft, hawksoftRefId }) {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
     || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -322,6 +337,9 @@ async function storeReceiptVault({ clientId, pdfBuf, filename, amount, txnId, wh
       file_b64: b64, sha256: sha, mime: 'application/pdf', bytes: pdfBuf.length,
       amount: (typeof amount === 'number') ? amount : null,
       uploaded_by: who ? String(who).slice(0, 120) : 'charge_page',
+      policy_id: VAULT_UUID_RE.test(String(policyGuid || '').trim()) ? String(policyGuid).trim() : null,
+      filed_hawksoft: filedHawksoft === true,
+      hawksoft_refid: hawksoftRefId || null,
     };
     const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/attachments`, {
       method: 'POST',
@@ -529,11 +547,13 @@ async function fileReceiptPdf(o) {
   const { gzipSync } = await import('node:zlib');
   const b64h = str => Buffer.from(str, 'utf8').toString('base64');
   const fname = `${o.filePrefix}_${o.now.toISOString().slice(0, 10)}_${String(o.total.toFixed(2)).replace('.', '-')}usd`;
+  /* Held rather than generated inline, so the vault row can record it. */
+  const refId = crypto.randomUUID();
   const r2 = await o.hs(`/vendor/agency/${AGENCY_ID}/client/${o.clientId}/attachment?version=4.0`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/octet-stream',
-      RefId: crypto.randomUUID(), TS: o.now.toISOString(),
+      RefId: refId, TS: o.now.toISOString(),
       Desc: b64h(String(o.desc).slice(0, 41)),
       LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. ${o.logNoteTail || ''}`.trim()),
       FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
@@ -543,8 +563,9 @@ async function fileReceiptPdf(o) {
   });
   const attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
   const vault = await storeReceiptVault({ clientId: o.clientId, pdfBuf: o.pdfBuf, filename: fname,
-    amount: o.total, txnId: o.txnId || null, who: o.who, policyGuid: o.policyGuid });
-  return { fname, attachment, vault };
+    amount: o.total, txnId: o.txnId || null, who: o.who, policyGuid: o.policyGuid,
+    filedHawksoft: attachment.ok, hawksoftRefId: refId });
+  return { fname, attachment, vault, refId };
 }
 
 export default async function handler(req, res) {
@@ -1498,11 +1519,12 @@ export default async function handler(req, res) {
       const { gzipSync } = await import('node:zlib');
       const b64h = s => Buffer.from(s, 'utf8').toString('base64');
       const fname = `Clover_Receipt_TEST_${now.toISOString().slice(0, 10)}_${String(total.toFixed(2)).replace('.', '-')}usd`;
+      const testRefId = crypto.randomUUID();
       const r2 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
-          RefId: crypto.randomUUID(), TS: now.toISOString(),
+          RefId: testRefId, TS: now.toISOString(),
           Desc: b64h(`Clover receipt $${total.toFixed(2)} (TEST)`.slice(0, 41)),
           LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge (TEST). Charged by ${who}.`),
           FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
@@ -1511,7 +1533,8 @@ export default async function handler(req, res) {
       });
       out.attachment = { ok: r2.status === 200 || r2.status === 202, status: r2.status, ...(r2.status >= 400 ? { error: r2.body } : {}) };
       // Also store the receipt PDF in OUR vault so it shows in the Audit tab
-      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId: (typeof txnId!=='undefined'?txnId:(typeof ref!=='undefined'?ref:null)), who, policyGuid });
+      out.vault = await storeReceiptVault({ clientId, pdfBuf, filename: fname, amount: total, txnId: (typeof txnId!=='undefined'?txnId:(typeof ref!=='undefined'?ref:null)), who, policyGuid,
+        filedHawksoft: out.attachment.ok, hawksoftRefId: testRefId });
 
       // 3) Summary log note
       const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {

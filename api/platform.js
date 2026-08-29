@@ -15,6 +15,9 @@ const PRODUCER_MAP = {
   AES: 'alejandra@speedyins.com', YVA: 'yasmin@speedyins.com',  LIF: 'lfigueroa@speedyins.com',
   JLR: 'jorge@speedyins.com',     CMA: 'chris@speedyins.com',   YYH: 'yolanda@speedyins.com',
   FSS: 'fernando@speedyins.com',  EHA: 'esmeralda@speedyins.com',
+  MSH: 'melisa@speedyins.com',   MCR: 'malcolm@speedyins.com',
+  IAH: 'irene@speedyins.com',    LND: 'lana@speedyins.com',
+  GGR: 'gabriela@speedyins.com',
 };
 const AGENT_NAME = {
   'sammy@speedyins.com':'Sammy Rodriguez','jesus@speedyins.com':'Jesus Velarde','info@speedyins.com':'Tony Dabouqi',
@@ -22,7 +25,8 @@ const AGENT_NAME = {
   'jorge@speedyins.com':'Jorge Ramos','chris@speedyins.com':'Christian Aguilar','yolanda@speedyins.com':'Yolanda Hernandez',
   'fernando@speedyins.com':'Fernando Salgado','esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
   'tony@speedyins.com':'Tony Dabouqi','lana@speedyins.com':'Lana D',
-  'melisa@speedyins.com':'Melisa Hernandez',
+  'melisa@speedyins.com':'Melisa Hernandez','malcolm@speedyins.com':'Malcolm Reese',
+  'gabriela@speedyins.com':'Gabriela Rosales',
 };
 const agentEmailOf = v => { const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i); return m ? m[0].toLowerCase() : null; };
 /* Move a payment to the correct client. Nothing is deleted: the original client number

@@ -15,6 +15,9 @@ const PRODUCER_MAP = {
   AES: 'alejandra@speedyins.com', YVA: 'yasmin@speedyins.com',  LIF: 'lfigueroa@speedyins.com',
   JLR: 'jorge@speedyins.com',     CMA: 'chris@speedyins.com',   YYH: 'yolanda@speedyins.com',
   FSS: 'fernando@speedyins.com',  EHA: 'esmeralda@speedyins.com',
+  MSH: 'melisa@speedyins.com',   MCR: 'malcolm@speedyins.com',
+  IAH: 'irene@speedyins.com',    LND: 'lana@speedyins.com',
+  GGR: 'gabriela@speedyins.com',
 };
 const STAFF_EMAILS = Object.values(PRODUCER_MAP).concat(['irene@speedyins.com', 'melisa@speedyins.com', 'tony@speedyins.com', 'lana@speedyins.com']);
 function normaliseAgentEmail(v) {

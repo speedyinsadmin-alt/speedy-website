@@ -73,14 +73,40 @@ function isAdmin(email) { return ADMIN_ALLOWLIST.includes(String(email || '').to
 
 /* An agent may only file proof against a payment they took. Admin may file against any.
    Without this, opening the allowlist would let any agent edit anyone's payment. */
+/* ---------- Who may set the carrier cost on a payment ----------
+   Opened to helpers, approved by Tony, Aug 29. Any allowlisted agent can now
+   finish an OPEN audit for anybody. Completing one sets the carrier cost, the fee
+   is amount minus that cost and the commission is a percentage of the fee - so
+   this is a real change in who can affect another agent's money. It is defensible
+   only because of what shipped alongside it: audit_completed_by records who did
+   it, the owner is notified with the carrier cost that was set, and the share
+   prompt now credits whoever finished rather than only whoever charged.
+
+   Commission itself never moves. Completing an audit does not touch commission_to.
+
+   ONE THING STAYS SHUT. Once an audit is COMPLETE the numbers are settled and only
+   the owner or an admin may rewrite them. A helper finishing open work is the
+   point; a helper silently changing a fee somebody has already been paid on is
+   not, and nothing on screen would show it happened.
+
+   This also fixes the mirror of a bug found in the UI today: the old check read
+   `agent` (who CHARGED) rather than commission_to (who EARNS), so an owner whose
+   payment was taken by someone else was refused on their own audit. Measured: 1 of
+   31 open audits. */
 async function mayTouchPayment(s, email, paymentId) {
   if (isAdmin(email)) return true;
   if (!paymentId) return true; // no ledger row to guard (document-only upload)
   try {
-    const r = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=agent`);
+    const r = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`
+      + `&select=agent,commission_to,audit_status`);
     const row = (r.rows || [])[0];
     if (!row) return true;
-    return String(row.agent || '').toLowerCase().includes(String(email).toLowerCase());
+    const me = String(email || '').toLowerCase();
+    const owner = String(row.commission_to || '').toLowerCase();
+    const charger = String(row.agent || '').toLowerCase();
+    const isOwner = owner ? owner === me : charger.includes(me);
+    if (row.audit_status === 'complete') return isOwner;   // settled: owner or admin only
+    return true;                                           // open: anyone may help finish
   } catch { return false; }
 }
 
@@ -556,7 +582,7 @@ export default async function handler(req, res) {
     }
 
     if (!(await mayTouchPayment(s, email, payment_id))) {
-      return res.status(403).json({ ok: false, error: 'This payment was taken by another agent — they need to add its proof.' });
+      return res.status(403).json({ ok: false, error: 'This audit is already complete. Only the agent who earns it can change the carrier cost.' });
     }
 
     // Audit-complete requires the carrier receipt

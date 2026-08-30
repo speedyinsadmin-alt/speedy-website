@@ -786,6 +786,30 @@ if (view === 'portal_share_due') {
         ok: true, email: me, role: who.role,
         commission: { rate: pct, earned_month: +earned.toFixed(2), pending_month: +pending.toFixed(2) },
         unfinished_count: unfinished.length, unfinished,
+        /* Open audits belonging to OTHER agents that this one could help finish.
+           Built from `all`, which is already in memory - no extra query. Deliberately
+           carries NO money: no fee, no service_cost, no commission. Everyone sees
+           everything except commission, and a helper has no business knowing what
+           somebody else earns on a payment they are only adding paperwork to.
+           Capped at 20 so a backlog stays a list rather than a wall. */
+        help_open: (all.rows || [])
+          .filter(r => {
+            if (String(r.ts || '').slice(0, 10) < AUDIT_CUTOFF) return false;
+            if (r.audit_status === 'complete') return false;
+            if (NON_PAYMENT.includes(r.audit_status)) return false;
+            if (r.correction_status === 'pending') return false;
+            if (r.balance_of) return false;
+            if (/declin|fail|void|refund/i.test(String(r.kind || ''))) return false;
+            const owner = r.commission_to || agentEmailOf(r.agent);
+            if (!owner || owner === me) return false;            // theirs, not help
+            return agentEmailOf(r.agent) !== me;                 // already in their own list
+          })
+          .slice(0, 20)
+          .map(r => ({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount),
+            purpose: r.purpose, audit_status: r.audit_status || 'client_paid',
+            owner_email: r.commission_to || agentEmailOf(r.agent),
+            owner_name: AGENT_NAME[r.commission_to || agentEmailOf(r.agent)]
+              || (r.commission_to || agentEmailOf(r.agent) || '').split('@')[0] })),
         recent: mine.slice(0, 10).map(r => ({ ts: r.ts, client_no: r.client_id, amount: Number(r.amount), purpose: r.purpose, audit_status: r.audit_status || 'client_paid' })),
       });
     }

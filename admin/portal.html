@@ -116,6 +116,11 @@
       <span id="newsCount" style="background:var(--red);color:#fff;font-size:10.5px;font-weight:800;border-radius:99px;padding:1px 7px">0</span>
     </div>
 
+    <div id="helpBox" class="hide" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openHelp()">
+      <div style="font-size:13px;font-weight:700;color:var(--blue-l)" id="helpText">Payments needing proof</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:1px">Other agents' — you can add documents to help &rarr;</div>
+    </div>
+
     <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openTodo()">
       <div style="font-size:13px;font-weight:700;color:var(--amber)" id="todoText">⚠ You have payments needing proof</div>
       <div style="font-size:11px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
@@ -150,7 +155,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.5</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.6</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -185,6 +190,22 @@
 </div>
 
 <!-- ===== STAGE 4: UNFINISHED AUDITS ===== -->
+<div id="helpSheet" class="hide">
+  <div style="max-width:560px;margin:0 auto">
+    <div class="card" style="border-color:var(--blue)">
+      <div class="row" style="align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:16px;font-weight:800">Help another agent</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">Add documents to a payment they earn</div>
+        </div>
+        <div onclick="closeHelp()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
+      </div>
+      <div id="helpBody"></div>
+      <button class="btn btn-ghost" onclick="closeHelp()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="todoSheet" class="hide">
   <div style="max-width:560px;margin:0 auto">
     <div class="card" style="border-color:rgba(245,166,35,.5)">
@@ -415,6 +436,13 @@ async function loadHome(){
   $('#earned').textContent = money(r.commission.earned_month);
   $('#pending').textContent = money(r.commission.pending_month);
   UNFINISHED = r.unfinished || [];
+  HELP_OPEN = r.help_open || [];
+  const hb = document.getElementById('helpBox');
+  if(HELP_OPEN.length){
+    document.getElementById('helpText').textContent =
+      HELP_OPEN.length + ' payment' + (HELP_OPEN.length>1?'s':'') + ' need proof of payment';
+    hb.classList.remove('hide');
+  } else hb.classList.add('hide');
   restoreEarningsPref();
   loadNews();
   const n = r.unfinished_count || 0;
@@ -436,6 +464,7 @@ async function loadHome(){
    no second copy of the carrier form, and the token is handed over so the agent
    never has to sign in again. */
 let UNFINISHED = [];
+let HELP_OPEN = [];   // other agents' open audits this agent could help with
 function openTodo(){
   if(!UNFINISHED.length){ return; }
   const sheet = document.getElementById('todoSheet');
@@ -477,6 +506,37 @@ function openTodo(){
   sheet.classList.remove('hide');
   document.body.style.overflow = 'hidden';
 }
+/* Documents only. save_carrier_leg is guarded server-side by mayTouchPayment, so
+   offering the full audit here would let an agent set a carrier cost and then be
+   refused after doing the work. No amounts beyond the charge itself: the server
+   sends no fee and no commission for somebody else's payment. */
+function openHelp(){
+  if(!HELP_OPEN.length) return;
+  const money2 = a => '$' + Number(a || 0).toFixed(2);
+  const when = ts => String(ts || '').slice(0, 10);
+  document.getElementById('helpBody').innerHTML =
+    '<div class="dim" style="font-size:12px;margin-bottom:10px">These belong to other agents. '
+    + 'You can add documents; they still confirm the carrier cost and they keep the commission.</div>'
+    + HELP_OPEN.map(u =>
+        '<div class="todoitem" onclick="helpWith(\'' + u.id + '\',' + (u.client_no||0) + ',' + Number(u.amount||0) + ')">'
+        + '<div style="display:flex;justify-content:space-between;gap:10px">'
+        + '<span style="font-size:13.5px;font-weight:600">#' + u.client_no + '</span>'
+        + '<span style="font-size:13.5px;font-weight:700">' + money2(u.amount) + '</span></div>'
+        + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
+        + esc(u.purpose || 'Payment') + ' \u00b7 ' + when(u.ts)
+        + ' \u00b7 ' + esc(u.owner_name || 'another agent') + ' earns it</div></div>').join('');
+  document.getElementById('helpSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+}
+function closeHelp(){
+  document.getElementById('helpSheet').classList.add('hide');
+  document.body.style.overflow = '';
+}
+function helpWith(paymentId, clientNo, amount){
+  closeHelp();
+  addDocsFor(paymentId, clientNo, amount);
+}
+
 function closeTodo(){
   document.getElementById('todoSheet').classList.add('hide');
   document.body.style.overflow = '';

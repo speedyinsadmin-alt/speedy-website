@@ -732,7 +732,16 @@ if (view === 'portal_share_due') {
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 
       const NON_PAYMENT = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
-      let earned = 0, pending = 0, unfinished = [];
+      /* The lines BEHIND the two numbers. portal_home already walks every
+         qualifying row to produce `earned` and `pending`; it just never returned
+         what it walked, so an agent saw a total with nothing to check it against.
+         No new query - these are filled inside the existing loop. */
+      let earned = 0, pending = 0, unfinished = [], earned_lines = [];
+      /* Work this agent did on somebody else's payment. Two ways: they RAN the
+         charge, or they FINISHED the audit. Usually it pays them nothing - the
+         owner earns it unless they chose to share - and that is exactly why it
+         should be visible. Effort with no trace looks like effort nobody noticed. */
+      let helped_lines = [];
       for (const r of mine) {
         const dateStr = String(r.ts || '').slice(0, 10);
         if (dateStr < AUDIT_CUTOFF) continue; // pre-audit: no commission expected
@@ -760,6 +769,45 @@ if (view === 'portal_share_due') {
             earned  += full * ratio * share;
             pending += full * (1 - ratio) * share;
           }
+          if (isOwner && r.ts >= monthStart) {
+            const share = Number(r.helper_share_pct || 0);
+            earned_lines.push({
+              id: r.id, ts: r.ts, client_no: r.client_id,
+              amount: Number(r.amount),
+              carrier: r.carrier_name || null,
+              carrier_cost: r.service_cost != null ? Number(r.service_cost) : null,
+              fee: fee,
+              commission: +(full * ratio * (1 - share / 100)).toFixed(2),
+              collected_ratio: ratio,
+              shared_pct: share || 0,
+              /* Who did the work, when it was not the owner. Reads the column that
+                 only started being written today. */
+              finished_by: agentEmailOf(r.audit_completed_by) && agentEmailOf(r.audit_completed_by) !== me
+                ? (AGENT_NAME[agentEmailOf(r.audit_completed_by)] || agentEmailOf(r.audit_completed_by)) : null,
+              charged_by: agentEmailOf(r.agent) !== me
+                ? (AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent)) : null,
+            });
+          }
+          if (!isOwner && r.ts >= monthStart) {
+            const iCharged = agentEmailOf(r.agent) === me;
+            const iFinished = agentEmailOf(r.audit_completed_by) === me;
+            if (iCharged || iFinished) {
+              const share = Number(r.helper_share_pct || 0);
+              const ownerEmail = r.commission_to || agentEmailOf(r.agent);
+              helped_lines.push({
+                id: r.id, ts: r.ts, client_no: r.client_id,
+                amount: Number(r.amount),
+                carrier: r.carrier_name || null,
+                what: iFinished ? (iCharged ? 'charged it and finished the audit' : 'finished the audit')
+                                : 'ran the charge',
+                owner_name: AGENT_NAME[ownerEmail] || (ownerEmail || '').split('@')[0],
+                /* Only a share they were actually given. No fee, no commission -
+                   somebody else's money stays somebody else's. */
+                your_share: (r.helper_email === me && share)
+                  ? +(full * ratio * (share / 100)).toFixed(2) : 0,
+              });
+            }
+          }
         } else if (r.kind !== 'charge_captured' || r.audit_status) {
           // needs proof of payment / audit
           const feeGuess = fee != null ? fee * pct / 100 : null;
@@ -786,6 +834,8 @@ if (view === 'portal_share_due') {
         ok: true, email: me, role: who.role,
         commission: { rate: pct, earned_month: +earned.toFixed(2), pending_month: +pending.toFixed(2) },
         unfinished_count: unfinished.length, unfinished,
+        earned_lines: earned_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60),
+        helped_lines: helped_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 40),
         /* Open audits belonging to OTHER agents that this one could help finish.
            Built from `all`, which is already in memory - no extra query. Deliberately
            carries NO money: no fee, no service_cost, no commission. Everyone sees

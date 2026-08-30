@@ -43,7 +43,7 @@
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
-  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
   .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
   .todoitem:hover{border-color:var(--amber)}
@@ -131,8 +131,8 @@
       <span onclick="toggleEarnings()" id="eyeBtn" style="cursor:pointer;color:var(--mute);font-size:11.5px">Hide my earnings</span>
     </div>
     <div id="earnWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      <div style="background:linear-gradient(135deg,rgba(47,191,113,.15),rgba(77,124,254,.08));border:1px solid rgba(47,191,113,.3);border-radius:12px;padding:13px">
-        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Earned this month</div>
+      <div onclick="openEarnings()" style="background:linear-gradient(135deg,rgba(47,191,113,.15),rgba(77,124,254,.08));border:1px solid rgba(47,191,113,.3);border-radius:12px;padding:13px;cursor:pointer">
+        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Earned this month &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--green)" id="earned">$0.00</div>
       </div>
       <div style="background:var(--field);border:1px solid var(--line);border-radius:12px;padding:13px">
@@ -155,7 +155,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.8</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.9</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -190,6 +190,22 @@
 </div>
 
 <!-- ===== STAGE 4: UNFINISHED AUDITS ===== -->
+<div id="earnSheet" class="hide">
+  <div style="max-width:560px;margin:0 auto">
+    <div class="card" style="border-color:var(--green)">
+      <div class="row" style="align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:16px;font-weight:800">Where this came from</div>
+          <div class="muted" style="font-size:12px;margin-top:2px" id="earnSub">&mdash;</div>
+        </div>
+        <div onclick="closeEarnings()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
+      </div>
+      <div id="earnBody"></div>
+      <button class="btn btn-ghost" onclick="closeEarnings()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="helpSheet" class="hide">
   <div style="max-width:560px;margin:0 auto">
     <div class="card" style="border-color:var(--blue)">
@@ -438,6 +454,8 @@ async function loadHome(){
   $('#pending').textContent = money(r.commission.pending_month);
   UNFINISHED = r.unfinished || [];
   HELP_OPEN = r.help_open || [];
+  EARN_LINES = r.earned_lines || [];
+  HELPED_LINES = r.helped_lines || [];
   const hb = document.getElementById('helpBox');
   if(HELP_OPEN.length){
     document.getElementById('helpText').textContent =
@@ -466,6 +484,7 @@ async function loadHome(){
    never has to sign in again. */
 let UNFINISHED = [];
 let HELP_OPEN = [];   // other agents' open audits this agent could help with
+let EARN_LINES = [], HELPED_LINES = [];
 function openTodo(){
   if(!UNFINISHED.length){ return; }
   const sheet = document.getElementById('todoSheet');
@@ -511,6 +530,68 @@ function openTodo(){
    offering the full audit here would let an agent set a carrier cost and then be
    refused after doing the work. No amounts beyond the charge itself: the server
    sends no fee and no commission for somebody else's payment. */
+/* The lines behind "earned this month", plus the work done on other people's
+   payments. A total with nothing behind it is something an agent can only accept
+   or dispute; this is what makes it checkable. */
+function openEarnings(){
+  const m = a => '$' + Number(a || 0).toFixed(2);
+  const d = ts => String(ts || '').slice(0, 10);
+  let h = '';
+
+  if(!EARN_LINES.length) h += '<div class="dim" style="font-size:12.5px">Nothing earned yet this month.</div>';
+  else h += EARN_LINES.map(x =>
+      '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px">'
+      + '<div style="display:flex;justify-content:space-between;gap:10px">'
+      + '<span style="font-size:13px;font-weight:600">#' + x.client_no + '</span>'
+      + '<span style="font-size:13.5px;font-weight:800;color:var(--green)">' + m(x.commission) + '</span></div>'
+      + '<div class="dim" style="font-size:11.5px;margin-top:3px">'
+      + 'charged ' + m(x.amount)
+      + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '')
+      + (x.carrier_cost != null ? ' \u00b7 carrier ' + m(x.carrier_cost) : '')
+      + (x.fee != null ? ' \u00b7 Speedy kept ' + m(x.fee) : '')
+      + '</div>'
+      + ((x.charged_by || x.finished_by || x.shared_pct || x.collected_ratio < 1)
+          ? '<div class="dim" style="font-size:11px;margin-top:3px;color:var(--mute)">'
+            + [x.charged_by ? esc(x.charged_by) + ' ran the charge' : '',
+               x.finished_by ? esc(x.finished_by) + ' finished the audit' : '',
+               x.shared_pct ? 'you shared ' + x.shared_pct + '%' : '',
+               x.collected_ratio < 1 ? Math.round(x.collected_ratio * 100) + '% collected so far' : ''
+              ].filter(Boolean).join(' \u00b7 ')
+            + '</div>' : '')
+      + '<div class="dim" style="font-size:10.5px;margin-top:2px">' + d(x.ts) + '</div>'
+      + '</div>').join('');
+
+  if(HELPED_LINES.length){
+    h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px">'
+      + 'You helped on ' + HELPED_LINES.length + '</div>'
+      + '<div class="dim" style="font-size:11.5px;margin-bottom:8px">Someone else earns these. '
+      + 'Shown because you did the work.</div>'
+      + HELPED_LINES.map(x =>
+        '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px">'
+        + '<div style="display:flex;justify-content:space-between;gap:10px">'
+        + '<span style="font-size:13px;font-weight:600">#' + x.client_no + '</span>'
+        + '<span style="font-size:12.5px;' + (x.your_share ? 'font-weight:800;color:var(--green)' : 'color:var(--dim)') + '">'
+        + (x.your_share ? m(x.your_share) : '\u2014') + '</span></div>'
+        + '<div class="dim" style="font-size:11.5px;margin-top:3px">'
+        + esc(x.what) + ' \u00b7 ' + m(x.amount)
+        + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '') + '</div>'
+        + '<div class="dim" style="font-size:11px;margin-top:2px">'
+        + esc(x.owner_name) + ' earns it \u00b7 ' + d(x.ts) + '</div>'
+        + '</div>').join('');
+  }
+
+  document.getElementById('earnBody').innerHTML = h;
+  document.getElementById('earnSub').textContent =
+    EARN_LINES.length + ' payment' + (EARN_LINES.length === 1 ? '' : 's')
+    + (HELPED_LINES.length ? ' \u00b7 ' + HELPED_LINES.length + ' you helped on' : '');
+  document.getElementById('earnSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+}
+function closeEarnings(){
+  document.getElementById('earnSheet').classList.add('hide');
+  document.body.style.overflow = '';
+}
+
 function openHelp(){
   if(!HELP_OPEN.length) return;
   const money2 = a => '$' + Number(a || 0).toFixed(2);

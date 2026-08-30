@@ -43,7 +43,7 @@
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
-  #chargeSheet,#todoSheet,#newsSheet,#shareSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
   .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
   .todoitem:hover{border-color:var(--amber)}
@@ -118,7 +118,7 @@
 
     <div id="helpBox" class="hide" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openHelp()">
       <div style="font-size:13px;font-weight:700;color:var(--blue-l)" id="helpText">Payments needing proof</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:1px">Other agents' — you can add documents to help &rarr;</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:1px">Other agents' — you can finish these for them &rarr;</div>
     </div>
 
     <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openTodo()">
@@ -155,7 +155,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.6</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.7</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -196,7 +196,7 @@
       <div class="row" style="align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:16px;font-weight:800">Help another agent</div>
-          <div class="muted" style="font-size:12px;margin-top:2px">Add documents to a payment they earn</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">Finish an audit on a payment they earn</div>
         </div>
         <div onclick="closeHelp()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
       </div>
@@ -516,7 +516,7 @@ function openHelp(){
   const when = ts => String(ts || '').slice(0, 10);
   document.getElementById('helpBody').innerHTML =
     '<div class="dim" style="font-size:12px;margin-bottom:10px">These belong to other agents. '
-    + 'You can add documents; they still confirm the carrier cost and they keep the commission.</div>'
+    + 'You can finish the audit for them \u2014 carrier cost and documents. They keep the commission.</div>'
     + HELP_OPEN.map(u =>
         '<div class="todoitem" onclick="helpWith(\'' + u.id + '\',' + (u.client_no||0) + ',' + Number(u.amount||0) + ')">'
         + '<div style="display:flex;justify-content:space-between;gap:10px">'
@@ -532,9 +532,13 @@ function closeHelp(){
   document.getElementById('helpSheet').classList.add('hide');
   document.body.style.overflow = '';
 }
+/* Full audit, not documents-only. These are OPEN audits and save_carrier_leg was
+   opened to helpers, so the carrier cost can actually be set. addDocsFor was wired
+   here before that approval and sent the agent to the already-audited screen, which
+   told them the payment was complete when it is exactly the opposite. */
 function helpWith(paymentId, clientNo, amount){
   closeHelp();
-  addDocsFor(paymentId, clientNo, amount);
+  finishAuditFor(paymentId, clientNo, amount);
 }
 
 function closeTodo(){

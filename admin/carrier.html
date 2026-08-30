@@ -113,7 +113,7 @@
       <div class="fee"><span class="mute">Speedy keeps (fee)</span><b id="fee">&mdash;</b></div>
       </div>
       <div id="docsOnlyNote" class="hide" style="margin-top:14px;border:1px solid var(--blue);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5">
-        Adding documents to a payment that is already audited. The carrier cost, the fee and the commission stay exactly as they are.
+        <span id="docsOnlyWhy">Adding documents to a payment that is already audited. The carrier cost, the fee and the commission stay exactly as they are.</span>
       </div>
     </div>
 
@@ -203,6 +203,9 @@ const CTX = {
   /* docs=1 — the audit is already closed and the agent is only adding paperwork
      they forgot. Append-only: no carrier cost, no fee, no submit-to-audit. */
   docs_only: qp.get('docs') === '1',
+  /* Launched from a policy row rather than a payment: there is no charge to attach
+     to, and the server must not invent one. */
+  no_payment: qp.get('nopay') === '1',
 };
 
 /* The REQUIRED slot is hardcoded "Carrier receipt", so on a zero-payment endorsement
@@ -656,7 +659,14 @@ function applyDocsOnly(){
     const el = document.getElementById(id); if(el) el.classList.remove('hide');
   });
   const t = document.getElementById('cmeth');
-  if(t) t.textContent = 'already audited';
+  if(t) t.textContent = CTX.no_payment ? 'no payment' : 'already audited';
+  /* Two different arrivals share this screen. Say which one it is, or an agent
+     filing an ID card wonders which payment they just touched. */
+  if(CTX.no_payment){
+    const w = document.getElementById('docsOnlyWhy');
+    if(w) w.textContent = 'Filing documents against this policy. No payment is involved, '
+      + 'and nothing about any charge, fee or commission changes.';
+  }
 }
 
 async function submitDocsOnly(){
@@ -669,7 +679,8 @@ async function submitDocsOnly(){
     const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
       body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
         policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, policy_num:CTX.policy_num||null,
-        payment_id:CTX.payment_id||null, doc_type:d.doc_type, doc_label:d.doc_label || null,
+        payment_id:CTX.payment_id||null, no_payment:CTX.no_payment === true,
+        doc_type:d.doc_type, doc_label:d.doc_label || null,
         receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
     return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };

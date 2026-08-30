@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.3</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.4</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -1227,7 +1227,30 @@ function policyDetailHtml(p){
         + [a.vin?'VIN '+a.vin:'', a.use?'Use: '+a.use:'', (a.personalInfo&&a.personalInfo.annualMiles)?a.personalInfo.annualMiles+' mi/yr':''].filter(Boolean).join(' · ')
         + '</div></div>';
     } }
+  /* Upload straight onto this policy. Reuses carrier.html's documents-only mode -
+     multi-file, drag-and-drop, per-file type, client-side downscaling, all already
+     built and proven - rather than a second uploader in the portal. nopay=1 tells
+     the server there is no charge behind this, so it must not attach the client's
+     one open payment. */
+  h += '<div onclick="event.stopPropagation();openPolicyDocs(\'' + esc(p.policy_number || '') + '\',\'' + esc(p.hs_policy_guid || '') + '\')" '
+    + 'style="border:1px solid var(--line);border-radius:9px;padding:9px;text-align:center;'
+    + 'font-size:12px;font-weight:600;color:var(--blue-l);cursor:pointer;margin-top:10px">'
+    + '\uff0b Add documents to this policy</div>';
   return h + '</div>';
+}
+
+/* ID card, dec page, signed application - anything that belongs to the policy
+   rather than to a payment. */
+function openPolicyDocs(policyNum, policyGuid){
+  if(!ACTIVE_TAB) return;
+  stashHandoff();
+  const tab = OPEN_TABS.find(t => t.client_no === ACTIVE_TAB);
+  const q = new URLSearchParams({
+    client: ACTIVE_TAB || '', name: (tab && tab.name) || '',
+    policy: policyNum || '', policy_guid: policyGuid || '',
+    docs: '1', nopay: '1',
+  });
+  location.href = '/admin/carrier.html?' + q.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
 
 /* ===================== STAGE 3 — CHARGE INSIDE THE PORTAL =====================

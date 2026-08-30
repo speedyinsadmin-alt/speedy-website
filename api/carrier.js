@@ -437,7 +437,14 @@ export default async function handler(req, res) {
        the page counts to 41 so the slice below should never actually bite. */
     const label = String(doc_label || '').trim();
     let payment_id = body.payment_id;
-    if (!payment_id && client_no) {
+    /* A document attached to a POLICY has no payment behind it - an ID card or a
+       dec page is not proof of anything financial. The lookup below exists for the
+       audit flow, where a document arriving without a payment_id almost certainly
+       belongs to the one open payment. Applied here it would staple an ID card to
+       an unrelated charge, where it would then show under that payment's chips and
+       read as its proof. The caller says which case it is; we do not guess. */
+    if (body.no_payment === true) payment_id = null;
+    else if (!payment_id && client_no) {
       const open = await sbGet(s, `bridge_ledger?client_id=eq.${client_no}`
         + `&audit_status=in.(client_paid,carrier_pending)&is_test=is.false`
         + `&select=id&order=ts.desc&limit=2`);

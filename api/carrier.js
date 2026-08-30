@@ -149,17 +149,67 @@ async function resolvePolicyGuid(s, { policy_guid, client_no, payment_id, policy
   } catch { return { guid: null, via: 'error' }; }
 }
 
-async function blobPut(path, buf, contentType) {
-  const tok = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!tok) return { url: null, status: 'no_token' };
-  const r = await fetch(`https://blob.vercel-storage.com/${path}`, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${tok}`, 'x-api-version': '7', 'content-type': contentType || 'application/octet-stream', 'x-add-random-suffix': '1' },
-    body: buf,
-  });
-  if (r.status !== 200) { const errtxt = await r.text().catch(()=> ''); return { url: null, status: 'http_' + r.status, err: errtxt.slice(0,120) }; }
-  const j = await r.json().catch(() => null);
-  return { url: j && j.url ? j.url : null, status: 'ok' };
+/* ---------- Document bytes live in Supabase Storage, not in Postgres ----------
+   SECURITY. The bucket `client-documents` is PRIVATE (public=false), so no
+   anonymous URL can ever read it. These are driver licenses, dec pages, ID cards
+   and signed applications - DOB, license numbers, VINs. Reads go through
+   portal_doc, which already sits behind Google SSO plus the agent allowlist, and
+   that stays the ONLY door: we never mint a signed URL and never hand the browser
+   a path, because a signed URL works for anyone holding it until it expires.
+
+   WHY NOT VERCEL BLOB. Supabase Pro already includes 100 GB of file storage we do
+   not use, the service-role key is already in the environment (no new credential,
+   no waiting on an env var to reach a deployment), and public Vercel blob URLs are
+   "unique and hard to guess", which is obscurity rather than access control.
+
+   PERFORMANCE. Postgres stops carrying file bytes. `blob_url` holds an object PATH
+   here, never a public URL. Thumbnails stay inline in `thumb_b64` on purpose - they
+   are tiny and the client card renders many at once, so fetching each from storage
+   would turn one list render into N round trips. */
+const DOC_BUCKET = 'client-documents';
+
+function docStorage() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+  if (!url || !key) return null;
+  return { base: url.replace(/\/$/, ''), key };
+}
+
+/* Returns the stored PATH, never a URL. Fail-soft by construction: on any failure
+   the caller keeps the inline copy, so a document can never be lost by trying. */
+async function storagePut(objectPath, buf, contentType) {
+  const st = docStorage();
+  if (!st) return { path: null, status: 'no_supabase_env' };
+  if (!buf || !buf.length) return { path: null, status: 'empty' };
+  if (buf.length > 5 * 1024 * 1024) return { path: null, status: 'too_large' };
+  try {
+    const r = await fetch(`${st.base}/storage/v1/object/${DOC_BUCKET}/${objectPath}`, {
+      method: 'POST',
+      headers: {
+        apikey: st.key, Authorization: `Bearer ${st.key}`,
+        'Content-Type': contentType || 'application/octet-stream',
+        'cache-control': 'max-age=31536000', 'x-upsert': 'false',
+      },
+      body: buf,
+    });
+    if (r.status !== 200) {
+      const t = await r.text().catch(() => '');
+      return { path: null, status: 'http_' + r.status, err: t.slice(0, 160) };
+    }
+    return { path: objectPath, status: 'ok' };
+  } catch (e) { return { path: null, status: 'error', err: String(e).slice(0, 160) }; }
+}
+
+/* One object name per upload. crypto.randomUUID keeps it unguessable and makes a
+   collision impossible; the client folder makes the store readable by a human
+   during an incident. The extension is whitelisted, never taken from user input
+   verbatim, so nothing can be written outside the bucket. */
+function docObjectPath(clientNo, filename, mime) {
+  const ext = String(filename || '').split('.').pop().toLowerCase();
+  const safe = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'eml'].includes(ext)
+    ? ext : (String(mime || '').includes('pdf') ? 'pdf' : 'bin');
+  const cn = String(parseInt(clientNo, 10) || 0);
+  return `${cn}/${crypto.randomUUID()}.${safe}`;
 }
 
 async function sha256hex(buf) {
@@ -262,22 +312,20 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, suggested, program, purpose, onThisClient: mine, carriers: ranked });
   }
 
-  /* ---------- Blob reachability probe (admin only) ----------
-     Every one of the 212 attachment rows has blob_url NULL, including the 46
-     carrier receipts written since blobPut was wired in - so either
-     BLOB_READ_WRITE_TOKEN is absent or the PUT is failing, and the two need
-     different fixes (create a Blob store vs. correct the call). blobPut swallows
-     the distinction into a return value nobody stores. This asks it directly with
-     one byte and reports what came back. Reads nothing, writes no row. */
+  /* ---------- Storage reachability probe (admin only) ----------
+     Writes one tiny object into the private client-documents bucket and reports
+     what came back. Reads no client data and writes no attachment row. Kept
+     because the failure modes are silent otherwise: storagePut returns a status
+     that only the caller sees, so without this a broken write looks identical to
+     a working one from the outside. */
   if (action === 'blob_probe') {
     if (!isAdmin(email)) return res.status(403).json({ ok: false, error: 'admin only' });
-    const has = !!process.env.BLOB_READ_WRITE_TOKEN;
-    const r = await blobPut(`probe/blob_probe_${Date.now()}.txt`, Buffer.from('x'), 'text/plain');
+    const r = await storagePut(`0/probe_${crypto.randomUUID()}.pdf`, Buffer.from('%PDF-1.4 probe'), 'application/pdf');
     return res.status(200).json({
-      ok: r.status === 'ok', token_present: has, result: r,
-      meaning: r.status === 'ok' ? 'Blob works. Uploads can move off Postgres.'
-             : r.status === 'no_token' ? 'No BLOB_READ_WRITE_TOKEN on this deployment - create a Blob store in Vercel and connect it to speedy-website.'
-             : 'Token exists but the PUT failed - see result.status and result.err.',
+      ok: r.status === 'ok', bucket: DOC_BUCKET, result: r,
+      meaning: r.status === 'ok' ? 'Private bucket is writable. Uploads are off Postgres.'
+             : r.status === 'no_supabase_env' ? 'SUPABASE_URL / service key missing on this deployment.'
+             : 'Write refused - see result.status and result.err.',
     });
   }
 
@@ -319,6 +367,11 @@ export default async function handler(req, res) {
     const looksUuid = /^[0-9a-f-]{30,}\.[a-z]+$/i.test(receipt_name || '');
     const niceName = (receipt_name && !looksUuid) ? receipt_name : `${dtype}_${client_no}_${today}.${ext}`;
 
+    /* This path stored bytes ONLY in Postgres - the storage helper was never
+       called here at all, only from save_carrier_leg. Both now write to the same
+       private bucket. */
+    const putDoc = await storagePut(docObjectPath(client_no, niceName, receipt_mime), buf, receipt_mime || 'application/pdf');
+
     const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
       method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
       body: JSON.stringify([{
@@ -326,6 +379,10 @@ export default async function handler(req, res) {
         policy_id: pol.guid || (UUID_RE.test(String(policy_id || '')) ? policy_id : null),
         payment_id: payment_id || null,
         kind: dtype, doc_type: dtype, doc_label: label || null, filename: niceName,
+        blob_url: putDoc.path,
+        /* DUAL WRITE, deliberately. The inline copy stays until documents have been
+           read from storage for a month. Dropping it now would mean trusting a path
+           that has never served a single file. */
         file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
         sha256: hash, mime: receipt_mime, bytes: buf.length,
         uploaded_by: email,
@@ -419,8 +476,8 @@ export default async function handler(req, res) {
       const hash = await sha256hex(buf);
       const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
       const path = `carrier-receipts/${client_no}/${Date.now()}_${(carrier || 'carrier').replace(/[^a-z0-9]/gi, '').slice(0, 20)}.${ext}`;
-      const blobRes = await blobPut(path, buf, receipt_mime || 'application/octet-stream');
-      blobUrl = blobRes.url; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
+      const blobRes = await storagePut(docObjectPath(client_no, receipt_name, receipt_mime), buf, receipt_mime || 'application/octet-stream');
+      blobUrl = blobRes.path; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
 
       // Store attachment row in our vault — file bytes stored INLINE in Supabase (guaranteed, no Blob dependency)
       const dtype = (body.doc_type || 'carrier_receipt');

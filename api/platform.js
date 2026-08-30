@@ -211,6 +211,22 @@ function sb() {
   if (!url || !key) return null;
   return { base: url.replace(/\/$/, ''), hdrs: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } };
 }
+/* Fetch one object out of the PRIVATE document bucket, server-side only. Returns
+   base64 or null; never throws, so a storage problem degrades to the inline copy
+   rather than an error in front of an agent. */
+async function storageGet(objectPath) {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
+  if (!url || !key || !objectPath) return null;
+  try {
+    const r = await fetch(`${url.replace(/\/$/, '')}/storage/v1/object/client-documents/${objectPath}`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    if (r.status !== 200) return null;
+    const ab = await r.arrayBuffer();
+    return Buffer.from(ab).toString('base64');
+  } catch { return null; }
+}
+
 async function sbGet(s, path) {
   const r = await fetch(`${s.base}/rest/v1/${path}`, { headers: s.hdrs });
   return { ok: r.ok, rows: await r.json().catch(() => []) , headers: r.headers };
@@ -637,13 +653,29 @@ if (view === 'portal_share_due') {
     }
 
     if (view === 'portal_doc') {
-      // One document's bytes, on demand.
+      /* One document's bytes, on demand.
+         SECURITY: `blob_url` holds a PATH inside the PRIVATE client-documents
+         bucket, not a public URL, and it is never sent to the browser. This
+         function is the only door, and it already sits behind Google SSO plus the
+         agent allowlist. Signed URLs were deliberately not used: once minted they
+         work for anyone holding them until they expire, which is a weaker gate
+         than the one we already have. */
       const id = String(req.query.id || '');
       if (!id) return res.status(400).json({ ok: false, error: 'id required' });
       const r = await sbGet(s, `attachments?id=eq.${encodeURIComponent(id)}&select=filename,mime,file_b64,blob_url`);
       const row = (r.rows || [])[0];
       if (!row) return res.status(404).json({ ok: false, error: 'not found' });
-      return res.status(200).json({ ok: true, ...row });
+
+      /* Storage first, Postgres second. During the dual-write period both exist;
+         reading storage is what proves the path works before the inline copy is
+         dropped. A storage miss falls back silently - the agent still gets the file. */
+      let file_b64 = row.file_b64 || null, served = row.file_b64 ? 'inline' : 'none';
+      if (row.blob_url) {
+        const got = await storageGet(row.blob_url);
+        if (got) { file_b64 = got; served = 'storage'; }
+      }
+      if (!file_b64) return res.status(404).json({ ok: false, error: 'no bytes stored' });
+      return res.status(200).json({ ok: true, filename: row.filename, mime: row.mime, file_b64, served });
     }
 
     if (view === 'portal_client') {
@@ -1215,13 +1247,23 @@ if (view === 'portal_share_due') {
     return res.status(200).json({ ok: true, thumbs: (r.rows || []).filter(x => x.thumb_b64) });
   }
 
+  /* The Console's document viewer. Same rule as portal_doc: the storage PATH is
+     private and never leaves the server, so this returns bytes only. It used to
+     hand back blob_url, which was harmless while that column was NULL on every row
+     and becomes a leak the moment storage is live. */
   if (view === 'attachment_get') {
     const id = String(req.query.id || '');
     if (!id) return res.status(400).json({ ok: false, error: 'id required' });
     const r = await sbGet(s, `attachments?id=eq.${id}&select=filename,mime,file_b64,blob_url`);
     const a = (r.rows || [])[0];
     if (!a) return res.status(404).json({ ok: false, error: 'not found' });
-    return res.status(200).json({ ok: true, filename: a.filename, mime: a.mime, file_b64: a.file_b64, blob_url: a.blob_url });
+    let file_b64 = a.file_b64 || null, served = a.file_b64 ? 'inline' : 'none';
+    if (a.blob_url) {
+      const got = await storageGet(a.blob_url);
+      if (got) { file_b64 = got; served = 'storage'; }
+    }
+    if (!file_b64) return res.status(404).json({ ok: false, error: 'no bytes stored' });
+    return res.status(200).json({ ok: true, filename: a.filename, mime: a.mime, file_b64, served });
   }
 
   if (view === 'pending_corrections') {

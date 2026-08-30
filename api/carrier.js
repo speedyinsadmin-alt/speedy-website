@@ -329,6 +329,57 @@ export default async function handler(req, res) {
     });
   }
 
+  /* ---------- One-time migration of the inline documents (admin only) ----------
+     212 files predate the bucket and live as base64 in Postgres. This copies them
+     across in batches and records the object path; the inline copy is NOT touched,
+     so this is additive and can be re-run safely. Rows that already have a path are
+     skipped, so a partial run simply resumes.
+
+     Batched because a serverless function has a time limit and 28 MB in one request
+     would not finish. Each row is verified by reading it back out of the bucket and
+     comparing the byte length before the path is recorded - a path written for an
+     object that is not really there would be worse than no path at all. */
+  if (action === 'doc_migrate') {
+    if (!isAdmin(email)) return res.status(403).json({ ok: false, error: 'admin only' });
+    const limit = Math.min(parseInt(body.limit, 10) || 25, 50);
+    const st = docStorage();
+    if (!st) return res.status(500).json({ ok: false, error: 'no supabase env' });
+
+    const todo = await sbGet(s, `attachments?blob_url=is.null&file_b64=not.is.null`
+      + `&select=id,client_no,filename,mime,bytes,file_b64&order=created_at.asc&limit=${limit}`);
+    const rows = todo.rows || [];
+    const out = { moved: 0, verified: 0, skipped: 0, failed: [], remaining: null };
+
+    for (const a of rows) {
+      try {
+        const buf = b64ToBuf(a.file_b64);
+        if (!buf || !buf.length) { out.skipped++; continue; }
+        const path = docObjectPath(a.client_no, a.filename, a.mime);
+        const put = await storagePut(path, buf, a.mime || 'application/pdf');
+        if (put.status !== 'ok') { out.failed.push({ id: a.id, why: put.status, err: put.err || null }); continue; }
+
+        // read it back before trusting it
+        const check = await fetch(`${st.base}/storage/v1/object/${DOC_BUCKET}/${path}`,
+          { headers: { apikey: st.key, Authorization: `Bearer ${st.key}` } });
+        const ok = check.status === 200
+          && Buffer.from(await check.arrayBuffer()).length === buf.length;
+        if (!ok) { out.failed.push({ id: a.id, why: 'verify_failed' }); continue; }
+        out.verified++;
+
+        await fetch(`${s.base}/rest/v1/attachments?id=eq.${a.id}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ blob_url: path }),
+        });
+        out.moved++;
+      } catch (e) { out.failed.push({ id: a.id, why: String(e).slice(0, 120) }); }
+    }
+
+    const left = await sbGet(s, `attachments?blob_url=is.null&file_b64=not.is.null&select=id`);
+    out.remaining = (left.rows || []).length;
+    return res.status(200).json({ ok: true, ...out,
+      note: out.remaining ? 'Run again to continue.' : 'All inline documents are now in the bucket. Inline copies kept.' });
+  }
+
   if (action === 'add_document') {
     // Lightweight: just store a supporting document (no ledger/carrier logic)
     const { client_no, policy_id, policy_guid, doc_type, doc_label, receipt_b64, receipt_name, receipt_mime } = body;

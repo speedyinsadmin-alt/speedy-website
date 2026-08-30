@@ -150,7 +150,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.4</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.5</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -1232,15 +1232,29 @@ function policyDetailHtml(p){
      built and proven - rather than a second uploader in the portal. nopay=1 tells
      the server there is no charge behind this, so it must not attach the client's
      one open payment. */
-  h += '<div onclick="event.stopPropagation();openPolicyDocs(\'' + esc(p.policy_number || '') + '\',\'' + esc(p.hs_policy_guid || '') + '\')" '
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'
+    + '<div onclick="event.stopPropagation();openPolicyDocs(\'' + esc(p.policy_number || '') + '\',\'' + esc(p.hs_policy_guid || '') + '\')" '
     + 'style="border:1px solid var(--line);border-radius:9px;padding:9px;text-align:center;'
-    + 'font-size:12px;font-weight:600;color:var(--blue-l);cursor:pointer;margin-top:10px">'
-    + '\uff0b Add documents to this policy</div>';
+    + 'font-size:12px;font-weight:600;color:var(--blue-l);cursor:pointer">'
+    + '\uff0b Documents</div>'
+    /* Charging THIS policy, not "the client". The picker still shows every policy
+       and the agent can change it - the preselect is a starting point, not a lock,
+       because the receipt prints whatever is chosen and HawkSoft has no way to
+       correct one after it is sent. */
+    + '<div onclick="event.stopPropagation();chargeThisPolicy(\'' + esc(p.policy_number || '') + '\')" '
+    + 'style="background:var(--red);color:#fff;border-radius:9px;padding:9px;text-align:center;'
+    + 'font-size:12px;font-weight:700;cursor:pointer">Charge this policy</div>'
+    + '</div>';
   return h + '</div>';
 }
 
 /* ID card, dec page, signed application - anything that belongs to the policy
    rather than to a payment. */
+function chargeThisPolicy(policyNum){
+  if(!ACTIVE_TAB) return;
+  openCharge(ACTIVE_TAB, policyNum || null);
+}
+
 function openPolicyDocs(policyNum, policyGuid){
   if(!ACTIVE_TAB) return;
   stashHandoff();
@@ -1260,6 +1274,7 @@ function openPolicyDocs(policyNum, policyGuid){
 const PURPOSES = ['Down payment','Renewal','Endorsement','Cancellation','DMV','Other'];
 const METHODS  = [['card','Card'],['cash','Cash'],['link','Pay link'],['zelle','Zelle'],['other','Other']];
 let CHG = null;            // { clientNo, confirmed } — one charge at a time
+let CHG_PRESELECT = null;  // policy to open the picker on, for one charge only
 let CHG_PURPOSE = 'Down payment';
 let CHG_METHOD = 'card';
 let cloverSDK = null, cloverMounted = false;
@@ -1323,7 +1338,9 @@ async function hsPost(body){
 function reauth(){ if(window.google) google.accounts.id.prompt(); }
 
 // --- open / close ---
-async function openCharge(no){
+/* preselectPolicy: launched from a specific policy row, so the picker should open
+   on that policy rather than the first in the list. The agent chose it already. */
+async function openCharge(no, preselectPolicy){
   if(!no){ alert('Open a client first — search above, then charge from their card.'); return; }
   CHG = { clientNo: no, confirmed: null };
   CHG_PURPOSE = 'Down payment'; CHG_METHOD = 'card';
@@ -1353,6 +1370,7 @@ async function openCharge(no){
   chgEl('chgLoading').classList.add('hide');
   chgEl('chgBody').classList.remove('hide');
   await loadStaff();
+  CHG_PRESELECT = preselectPolicy || null;
   renderChargeForm();
   fillCommission(CLIENT_CACHE[no]);
   renderOpenBalance(CLIENT_CACHE[no]);
@@ -1517,7 +1535,10 @@ function renderChargeForm(){
   // charge_lookup does not return a policy number (charge.html gets it from HawkLink),
   // so the portal offers the real list instead of guessing.
   const cached = CLIENT_CACHE[CHG.clientNo];
-  renderPolicyPicker(null);
+  /* Cleared immediately: it applies to THIS opening only. Left set, the next
+     charge on the same client would silently preselect a policy nobody chose. */
+  renderPolicyPicker(CHG_PRESELECT);
+  CHG_PRESELECT = null;
 
   applyMethodUI();
 }

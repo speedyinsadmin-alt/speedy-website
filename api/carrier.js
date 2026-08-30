@@ -177,7 +177,7 @@ function docStorage() {
 
 /* Returns the stored PATH, never a URL. Fail-soft by construction: on any failure
    the caller keeps the inline copy, so a document can never be lost by trying. */
-async function storagePut(objectPath, buf, contentType) {
+async function storagePut(objectPath, buf, contentType, upsert) {
   const st = docStorage();
   if (!st) return { path: null, status: 'no_supabase_env' };
   if (!buf || !buf.length) return { path: null, status: 'empty' };
@@ -188,7 +188,7 @@ async function storagePut(objectPath, buf, contentType) {
       headers: {
         apikey: st.key, Authorization: `Bearer ${st.key}`,
         'Content-Type': contentType || 'application/octet-stream',
-        'cache-control': 'max-age=31536000', 'x-upsert': 'false',
+        'cache-control': 'max-age=31536000', 'x-upsert': upsert ? 'true' : 'false',
       },
       body: buf,
     });
@@ -204,6 +204,16 @@ async function storagePut(objectPath, buf, contentType) {
    collision impossible; the client folder makes the store readable by a human
    during an incident. The extension is whitelisted, never taken from user input
    verbatim, so nothing can be written outside the bucket. */
+/* Same shape as docObjectPath but keyed on the attachment id, so re-running the
+   migration overwrites rather than duplicates. */
+function migrateObjectPath(attId, clientNo, filename, mime) {
+  const ext = String(filename || '').split('.').pop().toLowerCase();
+  const safe = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'eml'].includes(ext)
+    ? ext : (String(mime || '').includes('pdf') ? 'pdf' : 'bin');
+  const cn = String(parseInt(clientNo, 10) || 0);
+  return `${cn}/${String(attId).replace(/[^0-9a-f-]/gi, '')}.${safe}`;
+}
+
 function docObjectPath(clientNo, filename, mime) {
   const ext = String(filename || '').split('.').pop().toLowerCase();
   const safe = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'eml'].includes(ext)
@@ -341,7 +351,10 @@ export default async function handler(req, res) {
      object that is not really there would be worse than no path at all. */
   if (action === 'doc_migrate') {
     if (!isAdmin(email)) return res.status(403).json({ ok: false, error: 'admin only' });
-    const limit = Math.min(parseInt(body.limit, 10) || 25, 50);
+    /* Small batches. Each row is an upload AND a read-back, files run to 3 MB, and
+       a serverless function has a time limit - at 25 it died mid-batch, leaving the
+       objects written and the rows unrecorded. */
+    const limit = Math.min(parseInt(body.limit, 10) || 8, 15);
     const st = docStorage();
     if (!st) return res.status(500).json({ ok: false, error: 'no supabase env' });
 
@@ -354,8 +367,14 @@ export default async function handler(req, res) {
       try {
         const buf = b64ToBuf(a.file_b64);
         if (!buf || !buf.length) { out.skipped++; continue; }
-        const path = docObjectPath(a.client_no, a.filename, a.mime);
-        const put = await storagePut(path, buf, a.mime || 'application/pdf');
+        /* DETERMINISTIC path, keyed on the attachment id, and upsert. The live
+           upload path uses a random uuid because each upload is genuinely new; a
+           migration retry is the SAME file and must land on the SAME object.
+           Random names made every retry orphan its predecessor - 118 of them. The
+           id is itself a uuid, so this is no more guessable, and the bucket is
+           private either way. */
+        const path = migrateObjectPath(a.id, a.client_no, a.filename, a.mime);
+        const put = await storagePut(path, buf, a.mime || 'application/pdf', true);
         if (put.status !== 'ok') { out.failed.push({ id: a.id, why: put.status, err: put.err || null }); continue; }
 
         // read it back before trusting it
@@ -378,6 +397,33 @@ export default async function handler(req, res) {
     out.remaining = (left.rows || []).length;
     return res.status(200).json({ ok: true, ...out,
       note: out.remaining ? 'Run again to continue.' : 'All inline documents are now in the bucket. Inline copies kept.' });
+  }
+
+  /* Delete objects in the bucket that no attachment row points at. Created by the
+     first migration attempt, which used random names and timed out mid-batch, so
+     the same row uploaded a fresh object on every retry. Only ever removes objects
+     NOT referenced by any row, and never touches file_b64, so no document can be
+     lost by running it. */
+  if (action === 'doc_orphans') {
+    if (!isAdmin(email)) return res.status(403).json({ ok: false, error: 'admin only' });
+    const st = docStorage();
+    if (!st) return res.status(500).json({ ok: false, error: 'no supabase env' });
+    const dry = body.delete !== true;
+
+    const listed = await fetch(`${s.base}/rest/v1/rpc/list_orphan_document_objects`, {
+      method: 'POST', headers: { ...s.hdrs }, body: JSON.stringify({}),
+    });
+    const names = await listed.json().catch(() => []);
+    const paths = Array.isArray(names) ? names.map(x => x.name || x).filter(Boolean) : [];
+    if (dry) return res.status(200).json({ ok: true, dry_run: true, orphans: paths.length, sample: paths.slice(0, 5) });
+
+    let deleted = 0, failed = 0;
+    for (const p of paths.slice(0, 200)) {
+      const d = await fetch(`${st.base}/storage/v1/object/${DOC_BUCKET}/${p}`,
+        { method: 'DELETE', headers: { apikey: st.key, Authorization: `Bearer ${st.key}` } });
+      if (d.status === 200) deleted++; else failed++;
+    }
+    return res.status(200).json({ ok: true, deleted, failed, remaining_after: paths.length - deleted });
   }
 
   if (action === 'add_document') {

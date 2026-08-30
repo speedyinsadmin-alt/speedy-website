@@ -155,7 +155,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.7</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.8</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -421,6 +421,7 @@ function applyOffice(office){
   loadHome();
   initSearch();
   startUpdateWatch();
+  startNewsWatch();
   /* A launched client opens through here so BOTH paths -- picker and auto-lock --
      open it after an office is settled, through ONE function. */
   if(HL.armed && HL.client && !HL.opened){
@@ -1448,7 +1449,7 @@ function closeCharge(){
   chgEl('chgAmt').value = ''; chgEl('chgNote').value = '';
   chgEl('chgOther').value = ''; chgEl('chgAltRef').value = ''; chgEl('chgTotal').value = ''; chgEl('chgBal').classList.add('hide');
   chgEl('chgGo').disabled = false;
-  loadHome();
+  loadHome();   // loadHome calls loadNews, so the bell catches up here too
 }
 
 // --- form ---
@@ -1862,6 +1863,29 @@ async function checkUpdate(){
   if(chargeSheetOpen()) return;      // never interrupt a charge
   showUpdate();
 }
+/* ---------- Notification polling ----------
+   loadNews() only ever ran inside loadHome(), which fires on sign-in and after the
+   agent does something themselves. So an agent sitting on the portal while someone
+   finished their audit was never told: the events were written, the unread count was
+   right, and the bell simply never repainted. A notification that arrives only when
+   you happen to reload is not a notification.
+
+   Same shape as startUpdateWatch above - interval plus window focus - because that
+   pattern is already proven here. Three minutes rather than fifteen: this one is
+   about money moving on someone else's action, and focus covers the common case of
+   an agent coming back to the tab. One small query per tick; portal_news reads
+   events already written and stores nothing except a per-agent last-seen marker.
+
+   Never polls while a charge sheet is open. Repainting the bell mid-charge is the
+   same class of interruption the update banner is already careful to avoid. */
+let newsTimer = null;
+function startNewsWatch(){
+  if(newsTimer) return;
+  const tick = () => { if(!OFFICE) return; if(chargeSheetOpen()) return; loadNews(); };
+  newsTimer = setInterval(tick, 3 * 60 * 1000);
+  window.addEventListener('focus', tick);
+}
+
 function startUpdateWatch(){
   if(updTimer) return;
   checkUpdate();

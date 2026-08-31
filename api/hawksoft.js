@@ -1746,6 +1746,57 @@ export default async function handler(req, res) {
       });
     }
 
+    /* ---------- Why do our receipts show Tendered 0.00? (test lab, ZZTEST only) ----------
+       End-of-period report for 08/28: Invoiced 3,749.99, Tendered 2,548.43, Credit
+       Used 400.43. The 801.13 gap is EXACTLY our three receipts that day (ZZTEST
+       80.00, Gino 401.13, Rudy 320.00). Every receipt with a Pay Time and a Tendered
+       amount was keyed by hand in CMS; every one of ours has neither. Agents then see
+       an unpaid-looking receipt and key a real payment on top - which is the duplicate
+       Saif spotted. Real Clover money is sitting in trust accounting as uncollected.
+
+       Not the missing-invoice case: ZZTEST and Rudy both applied to real invoices
+       (INV00026667, INV00026678) and still showed zero.
+
+       The v3/v4 spec lists Receipt fields as Channel, Invoices, LogNote, OfficeId,
+       PayMethod, PolicyId, RefId, TS, Task. `total` appears ONLY in the example and
+       is NOT in the field table, so it may be ignored entirely. PayMethod is
+       documented as optional, defaulting to 'Other'.
+
+       Four receipts, four shapes, distinct amounts so they are identifiable in the
+       accounting search. ZZTEST only. */
+    if (action === 'receipt_tender_probe') {
+      const clientId = TEST_CLIENT_ID;
+      const now = new Date();
+      const base = (amt, note) => ({
+        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21,
+        logNote: `TENDER PROBE ${note} — $${amt.toFixed(2)}. Safe to reverse.`,
+      });
+      const variants = [
+        { amt: 1.11, note: 'A total+payMethod Cash (what we send today)',
+          body: r => ({ ...r, payMethod: 'Cash', total: 1.11 }) },
+        { amt: 1.22, note: 'B total only, no payMethod (defaults to Other)',
+          body: r => ({ ...r, total: 1.22 }) },
+        { amt: 1.33, note: 'C payMethod Cash, NO total',
+          body: r => ({ ...r, payMethod: 'Cash' }) },
+        { amt: 1.44, note: 'D total + payMethod CreditCard (the card path)',
+          body: r => ({ ...r, payMethod: 'CreditCard', total: 1.44 }) },
+      ];
+      const out = [];
+      for (const v of variants) {
+        const r = v.body(base(v.amt, v.note));
+        const res1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+          method: 'POST', body: JSON.stringify([r]) });
+        out.push({ amount: v.amt, shape: v.note, httpStatus: res1.status,
+                   /* The per-item code, which the charge paths currently discard. */
+                   itemResult: Array.isArray(res1.body) ? res1.body[0] : res1.body });
+      }
+      return res.status(200).json({ ok: true, clientId, results: out,
+        readMe: 'Open Accounting search in CMS for client 26081 today. Look at the Tendered column '
+              + 'for 1.11 / 1.22 / 1.33 / 1.44. Whichever shows the money in Tendered is the shape '
+              + 'we should be sending. If none do, the API cannot record tender and this is a '
+              + 'HawkSoft conversation, not a code fix.' });
+    }
+
     if (action === 'clover_recent_payments') {
       const MID = process.env.CLOVER_MERCHANT_ID;
       const CTOK = process.env.CLOVER_API_TOKEN;

@@ -231,8 +231,13 @@ async function syncRoster(s) {
   if (!r) return false;
   AGENT_NAME   = { ...AGENT_NAME,   ...r.names };
   PRODUCER_MAP = { ...PRODUCER_MAP, ...r.producers };
-  if (r.allow.length)  AGENT_ALLOWLIST = r.allow;
-  if (r.admins.length) ADMIN_ALLOWLIST = r.admins;
+  if (r.allow.length)  AGENT_ALLOWLIST = [...new Set([...r.allow, ...ADMIN_ALLOWLIST])];
+  /* ADMINS ARE ADDITIVE, NEVER REPLACED. Replacing them meant a bad roster read - a
+     missing GRANT, a schema-cache miss, a typo in one row - could lock the owner out
+     of the Console, which is exactly what happened minutes after this shipped. The
+     code list is the floor: the table can GRANT console access, never revoke the
+     built-in admin. Removing an admin is a deliberate code change, as it should be. */
+  ADMIN_ALLOWLIST = [...new Set([...ADMIN_ALLOWLIST, ...r.admins])];
   return true;
 }
 
@@ -541,8 +546,12 @@ async function loadRoster(s) {
   if (ROSTER && Date.now() - ROSTER_AT < 60000) return ROSTER;
   try {
     const r = await sbGet(s, 'agents?select=email,full_name,branch,producer_code,active,is_admin&limit=200');
-    const rows = r.rows || [];
-    if (!rows.length) return null;                 // empty table is a fault, not an answer
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+    if (!rows.length) {
+      console.error('loadRoster: no agent rows returned, using code roster.',
+        JSON.stringify(r.rows).slice(0, 300));
+      return null;                                 // empty table is a fault, not an answer
+    }
     const allow = [], names = {}, producers = {}, staff = {}, admins = [];
     for (const a of rows) {
       const e = String(a.email || '').toLowerCase();
@@ -556,7 +565,12 @@ async function loadRoster(s) {
     ROSTER = { allow, names, producers, staff, admins };
     ROSTER_AT = Date.now();
     return ROSTER;
-  } catch { return null; }                          // fall back to the arrays below
+  } catch (e) {
+    /* Silent fallback hid the cause for twenty minutes. Log it; the fallback still
+       keeps everyone working. */
+    console.error('loadRoster failed, using code roster:', String(e).slice(0, 200));
+    return null;
+  }
 }
 
 const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];

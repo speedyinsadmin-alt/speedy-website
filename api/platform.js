@@ -6,11 +6,11 @@ import { randomUUID } from 'node:crypto';
 // POST = sync_zztest only: HawkSoft client 26081 -> our clients/policies + events. No other writes.
 
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const ADMIN_ALLOWLIST = ['info@speedyins.com'];
+let ADMIN_ALLOWLIST = ['info@speedyins.com'];
 /* Producer code -> agent. Sourced from OUR clients table, so this keeps working
    after HawkSoft is retired. The producer is a record of who wrote the client and is
    NEVER rewritten by us — commission_to is a separate field we own. */
-const PRODUCER_MAP = {
+let PRODUCER_MAP = {
   SSM: 'sammy@speedyins.com',     JEV: 'jesus@speedyins.com',   THD: 'info@speedyins.com',
   AES: 'alejandra@speedyins.com', YVA: 'yasmin@speedyins.com',  LIF: 'lfigueroa@speedyins.com',
   JLR: 'jorge@speedyins.com',     CMA: 'chris@speedyins.com',   YYH: 'yolanda@speedyins.com',
@@ -19,7 +19,7 @@ const PRODUCER_MAP = {
   IAH: 'irene@speedyins.com',    LND: 'lana@speedyins.com',
   GGR: 'gabriela@speedyins.com', DHT: 'daisy@speedyins.com',
 };
-const AGENT_NAME = {
+let AGENT_NAME = {
   'sammy@speedyins.com':'Sammy Rodriguez','jesus@speedyins.com':'Jesus Velarde','info@speedyins.com':'Tony Dabouqi',
   'alejandra@speedyins.com':'Alejandra Salas','yasmin@speedyins.com':'Yasmin Alfaro','lfigueroa@speedyins.com':'Laura Figueroa',
   'jorge@speedyins.com':'Jorge Ramos','chris@speedyins.com':'Christian Aguilar','yolanda@speedyins.com':'Yolanda Hernandez',
@@ -112,7 +112,7 @@ function collectedRatio(row, allRows) {
 
 const owns = (row, email) => (row.commission_to || agentEmailOf(row.agent)) === email;
 // Agents can sign into the PORTAL and see ONLY their own data (never admin views, never other agents).
-const AGENT_ALLOWLIST = [
+let AGENT_ALLOWLIST = [
   'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
   'chris@speedyins.com', 'yasmin@speedyins.com', 'fernando@speedyins.com', 'jesus@speedyins.com',
   'alejandra@speedyins.com', 'esmeralda@speedyins.com', 'irene@speedyins.com',
@@ -191,19 +191,49 @@ async function googleClaims(idToken) {
   } catch { return null; }
 }
 
+/* The Console gate. Same merge, so deactivating an admin in the table takes effect
+   here too rather than only on the portal. */
 async function verifyGoogle(idToken) {
+  await syncRoster(sb());
   const c = await googleClaims(idToken);
   if (!c) return null;
   return ADMIN_ALLOWLIST.includes(c.email) ? c.email : null;
 }
 
 // Verify for portal access: returns { email, role } where role is 'admin' or 'agent'.
+/* Database first, arrays second. The fallback is deliberate: if Supabase is slow or
+   down, agents keep working on yesterday's roster rather than being locked out of a
+   money page. It fails CLOSED for anyone in neither source. */
 async function verifyPortal(idToken) {
   const c = await googleClaims(idToken);
   if (!c) return null;
+  await syncRoster(sb());
   if (ADMIN_ALLOWLIST.includes(c.email)) return { email: c.email, role: 'admin' };
   if (AGENT_ALLOWLIST.includes(c.email)) return { email: c.email, role: 'agent' };
   return null;
+}
+/* Display lookups take the union: a name that exists in either source should
+   render. Losing a name is cosmetic; losing it silently is how "charged by
+   sammy@speedyins.com" ends up on a receipt. */
+/* Merge the database roster into the module maps once per request. Seventeen places
+   read AGENT_NAME and PRODUCER_MAP; rewriting each into an async lookup would be a
+   large change to working code for no gain. Merging at one point means every reader
+   picks up the table automatically.
+
+   MERGE, never replace: a name present in code but missing from the table still
+   renders. Losing a name is how "charged by sammy@speedyins.com" ends up on a
+   receipt instead of a person.
+
+   The allowlists ARE replaced when the table has rows, because that is the whole
+   point - deactivating someone must actually remove their access. */
+async function syncRoster(s) {
+  const r = await loadRoster(s);
+  if (!r) return false;
+  AGENT_NAME   = { ...AGENT_NAME,   ...r.names };
+  PRODUCER_MAP = { ...PRODUCER_MAP, ...r.producers };
+  if (r.allow.length)  AGENT_ALLOWLIST = r.allow;
+  if (r.admins.length) ADMIN_ALLOWLIST = r.admins;
+  return true;
 }
 
 function sb() {
@@ -490,6 +520,43 @@ function matchesAllTokens(row, toks) {
   const hay = [row.first_name, row.last_name, row.business_name, row.email, row.phone]
     .filter(Boolean).join(' ').toLowerCase();
   return toks.every(t => hay.includes(t.toLowerCase()));
+}
+
+/* ---------- The roster, from the database ----------
+   This list lived in source across six files and drifted. Adding one agent was seven
+   edits and a deploy, which is how melisa@ got silently reverted twice on Aug 29.
+   It now comes from public.agents; the arrays below stay as a FALLBACK so a database
+   problem can never lock every agent out of a money page.
+
+   Cached for 60s in module scope. Serverless instances are short-lived, so this is
+   a handful of queries a minute across the fleet, and a new agent is usable within a
+   minute of the row being written rather than after a deploy.
+
+   `active` gates SIGN-IN only. Names and producer codes deliberately include
+   inactive people: a departed agent's name must still render on the payments they
+   wrote, and their producer code is historical. Gabriela is the live example -
+   producer code GGR, no portal access. */
+let ROSTER = null, ROSTER_AT = 0;
+async function loadRoster(s) {
+  if (ROSTER && Date.now() - ROSTER_AT < 60000) return ROSTER;
+  try {
+    const r = await sbGet(s, 'agents?select=email,full_name,branch,producer_code,active,is_admin&limit=200');
+    const rows = r.rows || [];
+    if (!rows.length) return null;                 // empty table is a fault, not an answer
+    const allow = [], names = {}, producers = {}, staff = {}, admins = [];
+    for (const a of rows) {
+      const e = String(a.email || '').toLowerCase();
+      if (!e) continue;
+      if (a.active) allow.push(e);
+      if (a.is_admin) admins.push(e);
+      if (a.full_name) names[e] = a.full_name;     // inactive included, on purpose
+      if (a.producer_code) producers[String(a.producer_code).toUpperCase()] = e;
+      if (a.full_name && a.branch) staff[e] = [a.full_name, a.branch];
+    }
+    ROSTER = { allow, names, producers, staff, admins };
+    ROSTER_AT = Date.now();
+    return ROSTER;
+  } catch { return null; }                          // fall back to the arrays below
 }
 
 const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];

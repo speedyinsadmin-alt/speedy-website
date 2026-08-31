@@ -17,7 +17,7 @@ const PRODUCER_MAP = {
   FSS: 'fernando@speedyins.com',  EHA: 'esmeralda@speedyins.com',
   MSH: 'melisa@speedyins.com',   MCR: 'malcolm@speedyins.com',
   IAH: 'irene@speedyins.com',    LND: 'lana@speedyins.com',
-  GGR: 'gabriela@speedyins.com',
+  GGR: 'gabriela@speedyins.com', DHT: 'daisy@speedyins.com',
 };
 const AGENT_NAME = {
   'sammy@speedyins.com':'Sammy Rodriguez','jesus@speedyins.com':'Jesus Velarde','info@speedyins.com':'Tony Dabouqi',
@@ -26,6 +26,7 @@ const AGENT_NAME = {
   'fernando@speedyins.com':'Fernando Salgado','esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
   'tony@speedyins.com':'Tony Dabouqi','lana@speedyins.com':'Lana D',
   'melisa@speedyins.com':'Melisa Hernandez','malcolm@speedyins.com':'Malcolm Reese',
+  'daisy@speedyins.com':'Daisy Hurtado',
   'gabriela@speedyins.com':'Gabriela Rosales',
 };
 const agentEmailOf = v => { const m = String(v || '').match(/[A-Za-z0-9._%+-]+@speedyins\.com/i); return m ? m[0].toLowerCase() : null; };
@@ -115,7 +116,7 @@ const AGENT_ALLOWLIST = [
   'sammy@speedyins.com', 'yolanda@speedyins.com', 'jorge@speedyins.com', 'lfigueroa@speedyins.com',
   'chris@speedyins.com', 'yasmin@speedyins.com', 'fernando@speedyins.com', 'jesus@speedyins.com',
   'alejandra@speedyins.com', 'esmeralda@speedyins.com', 'irene@speedyins.com',
-  'malcolm@speedyins.com', 'melisa@speedyins.com',
+  'malcolm@speedyins.com', 'melisa@speedyins.com', 'daisy@speedyins.com',
   'tony@speedyins.com', 'lana@speedyins.com',
 ];
 const ALLOWLIST = ADMIN_ALLOWLIST; // back-compat for existing admin checks

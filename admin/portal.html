@@ -17,7 +17,26 @@
     --navy:#0b1029; --card:#0e1533; --ink:#e8ecff; --mute:#8f9ac4; --dim:#5c6690;
     --line:rgba(255,255,255,.10); --blue:#4d7cfe; --blue-l:#7fa8ff; --green:#2fbf71;
     --amber:#f5a623; --red:#e03131; --field:#161f45;
+    /* --amber is used BOTH as a button background with dark text and as warning
+       text. Darkening it for readability on white would make those buttons
+       dark-on-dark, so text gets its own token. Identical here, so dark is
+       unchanged. --hair and --scrim replace white-alpha values that vanish on a
+       light page. */
+    --amber-ink:#f5a623; --hair:rgba(255,255,255,.06); --scrim:rgba(6,9,24,.9);
+    --shadow:none;
   }
+  /* Light. Every value is a deliberate substitution, not a lightening: #7fa8ff,
+     #2fbf71 and #f5a623 all fail as text on white. */
+  [data-theme="light"]{
+    --navy:#f4f6fb; --card:#ffffff; --ink:#101632; --mute:#5c6690; --dim:#8790ab;
+    --line:rgba(16,22,50,.12); --blue:#2f5fe0; --blue-l:#2f5fe0; --green:#16874a;
+    --amber:#f5a623; --amber-ink:#a35c00; --red:#d32f2f; --field:#eef1f8;
+    --hair:rgba(16,22,50,.08); --scrim:rgba(16,22,50,.45);
+    --shadow:0 1px 2px rgba(16,22,50,.06);
+  }
+  [data-theme="light"] .card{box-shadow:var(--shadow)}
+  [data-theme="light"] input,[data-theme="light"] select,[data-theme="light"] textarea{
+    background:var(--card);color:var(--ink)}
   *{box-sizing:border-box}
   body{margin:0;background:var(--navy);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
   .wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px}
@@ -43,20 +62,20 @@
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
-  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet{position:fixed;inset:0;background:rgba(6,9,24,.9);overflow-y:auto;z-index:50;padding:16px}
+  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet{position:fixed;inset:0;background:var(--scrim);overflow-y:auto;z-index:50;padding:16px}
   .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
-  .todoitem:hover{border-color:var(--amber)}
+  .todoitem:hover{border-color:var(--amber-ink)}
   .res{border-radius:12px;padding:16px;margin-top:12px}
   .res.good{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.45)}
   .res.bad{background:rgba(224,49,49,.12);border:1px solid rgba(224,49,49,.45)}
-  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid var(--hair)}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div id="authWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:11px 13px;font-size:12.5px;margin-bottom:12px;color:var(--amber)">
+  <div id="authWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:11px 13px;font-size:12.5px;margin-bottom:12px;color:var(--amber-ink)">
     Your sign-in expired. <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="reauth()">Sign in again</span> &mdash; nothing you typed is lost.
   </div>
 
@@ -105,7 +124,7 @@
         </div>
         <div style="text-align:right">
           <div style="background:var(--field);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600" id="officeLabel">—</div>
-          <div class="dim" style="font-size:10px;margin-top:3px">sign out to change office · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span></div>
+          <div class="dim" style="font-size:10px;margin-top:3px">sign out to change office · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span> · <span id="themeBtn" onclick="toggleTheme()" style="color:var(--blue-l);cursor:pointer" title="Switch light / dark">&#9789; Light</span></div>
         </div>
       </div>
     </div>
@@ -122,7 +141,7 @@
     </div>
 
     <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openTodo()">
-      <div style="font-size:13px;font-weight:700;color:var(--amber)" id="todoText">⚠ You have payments needing proof</div>
+      <div style="font-size:13px;font-weight:700;color:var(--amber-ink)" id="todoText">⚠ You have payments needing proof</div>
       <div style="font-size:11px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
     </div>
 
@@ -137,7 +156,7 @@
       </div>
       <div style="background:var(--field);border:1px solid var(--line);border-radius:12px;padding:13px">
         <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Pending</div>
-        <div style="font-size:22px;font-weight:800;color:var(--amber)" id="pending">$0.00</div>
+        <div style="font-size:22px;font-weight:800;color:var(--amber-ink)" id="pending">$0.00</div>
       </div>
     </div>
 
@@ -155,7 +174,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v3.9</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v4.0</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -251,7 +270,7 @@
         <div onclick="closeCharge()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px" title="Close">&#10005;</div>
       </div>
 
-      <div id="chgAuthWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:10px;color:var(--amber)">
+      <div id="chgAuthWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:10px;color:var(--amber-ink)">
         Your sign-in expired. <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="reauth()">Sign in again</span> &mdash; nothing you typed is lost.
       </div>
 
@@ -275,7 +294,7 @@
         <div style="margin-top:12px">
           <label for="chgTotal">Total owed &mdash; leave blank if paying in full</label>
           <input id="chgTotal" inputmode="decimal" placeholder="Same as amount" autocomplete="off" oninput="showBalance()">
-          <div id="chgBal" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px;font-size:12.5px;color:var(--amber)"></div>
+          <div id="chgBal" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px;font-size:12.5px;color:var(--amber-ink)"></div>
         </div>
 
         <label for="chgNote" style="margin-top:12px">Note &mdash; optional</label>
@@ -284,7 +303,7 @@
         <div id="chgPolWrap" class="hide" style="margin-top:12px">
           <label for="chgPolSel">Apply to policy &mdash; files the receipt under that policy tab</label>
           <select id="chgPolSel" onchange="updatePolicyPreview()"></select>
-          <div id="chgPolOdd" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:9px;padding:9px 10px;margin-top:7px;font-size:12px;color:var(--amber)"></div>
+          <div id="chgPolOdd" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:9px;padding:9px 10px;margin-top:7px;font-size:12px;color:var(--amber-ink)"></div>
           <div id="chgPolPrev" class="hide" style="background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-top:7px">
             <div class="dim" style="font-size:11px">Receipt will show</div>
             <div id="chgPolPrevVal" style="font-size:12.5px;margin-top:3px"></div>
@@ -297,7 +316,7 @@
           <label for="chgComm">Commission to</label>
           <select id="chgComm" onchange="onCommChange()"></select>
           <div id="chgProdNote" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px">
-            <div style="font-size:11.5px;color:var(--amber)" id="chgProdText"></div>
+            <div style="font-size:11.5px;color:var(--amber-ink)" id="chgProdText"></div>
             <div class="dim" style="font-size:11px;margin-top:2px">Is this your job, or are you charging for someone?</div>
             <div style="display:flex;gap:6px;margin-top:8px">
               <button type="button" class="btn btn-ghost" style="margin:0;padding:7px" onclick="giveToProducer()" id="chgGiveBtn"></button>
@@ -334,6 +353,28 @@
   </div>
 </div>
 
+<script>
+/* Theme, applied before anything renders so the page never flashes dark then light.
+   Stored per DEVICE, not per agent: branch machines are shared, and a preference
+   about a screen belongs to that screen. agent_prefs would follow an agent between
+   branches, which is the opposite of what is wanted. */
+(function(){
+  try{ if(localStorage.getItem('speedy_theme') === 'light')
+    document.documentElement.setAttribute('data-theme','light'); }catch(e){}
+})();
+function applyThemeLabel(){
+  var light = document.documentElement.getAttribute('data-theme') === 'light';
+  var b = document.getElementById('themeBtn');
+  if(b) b.innerHTML = light ? '\u2600 Dark' : '\u263D Light';
+}
+function toggleTheme(){
+  var light = document.documentElement.getAttribute('data-theme') === 'light';
+  if(light) document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme','light');
+  try{ localStorage.setItem('speedy_theme', light ? 'dark' : 'light'); }catch(e){}
+  applyThemeLabel();
+}
+</script>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 const OFFICES = ['Moreno Valley','Riverside Van Buren','Riverside Magnolia','Lake Elsinore','Colton'];
@@ -438,6 +479,7 @@ function applyOffice(office){
   initSearch();
   startUpdateWatch();
   startNewsWatch();
+  applyThemeLabel();
   /* A launched client opens through here so BOTH paths -- picker and auto-lock --
      open it after an office is settled, through ONE function. */
   if(HL.armed && HL.client && !HL.opened){
@@ -509,7 +551,7 @@ function openTodo(){
           + '<span style="font-size:13.5px;font-weight:700">' + money2(u.amount) + '</span></div>'
           + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
           + esc(u.purpose || 'Payment') + ' · ' + when(u.ts) + ' · #' + u.client_no
-          + (started ? ' · <span style="color:var(--amber)">started, not finished</span>' : '')
+          + (started ? ' · <span style="color:var(--amber-ink)">started, not finished</span>' : '')
           + '</div></div>'
           + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)">'
           + '<span class="dim" style="font-size:11px">'
@@ -687,7 +729,7 @@ async function runSearch(q){
 function renderSearchResults(results){
   const box = document.getElementById('searchResults');
   box.innerHTML = '<div style="background:var(--navy);border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:8px">'
-    + results.map(c => '<div onclick="openClient('+c.client_no+',\''+esc(c.name).replace(/\x27/g,"")+'\')" style="padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)">'
+    + results.map(c => '<div onclick="openClient('+c.client_no+',\''+esc(c.name).replace(/\x27/g,"")+'\')" style="padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--hair)">'
         + '<b>'+esc(c.name)+'</b> <span class="dim" style="font-size:11px">· #'+c.client_no+(c.branch?' · '+esc(c.branch):'')+'</span></div>').join('')
     + '</div>';
 }
@@ -712,7 +754,7 @@ async function refreshClients(q){
   if(box) box.innerHTML = '<div class="dim" style="font-size:12.5px">Refreshing from HawkSoft… this can take a few seconds.</div>';
   const r = await api('portal_refresh_clients');
   if(!r || !r.ok){
-    if(box) box.innerHTML = '<div style="font-size:12.5px;color:var(--amber)">Could not reach HawkSoft just now. Try again in a moment.</div>';
+    if(box) box.innerHTML = '<div style="font-size:12.5px;color:var(--amber-ink)">Could not reach HawkSoft just now. Try again in a moment.</div>';
     return;
   }
   // re-run the search either way — a sync skipped by cooldown may still have new rows
@@ -823,7 +865,7 @@ async function renderPanel(){
       + (expired ? ' · expired '+String(p.expiration_date).slice(0,10) : '')+'</div></div>'
       + '<div style="text-align:right;white-space:nowrap;padding-left:8px">'
       + (prem?'<div style="font-size:14px;font-weight:800;color:var(--blue-l)">'+premLabel+'</div>':'')
-      + (!expired && p.status ? '<span style="font-size:10px;color:var(--amber)">'+esc(p.status)+'</span>' : '')
+      + (!expired && p.status ? '<span style="font-size:10px;color:var(--amber-ink)">'+esc(p.status)+'</span>' : '')
       + ' <span style="color:'+(open?'var(--blue-l)':'var(--dim)')+';font-size:12px">'+(open?'&#9662;':'&#9656;')+'</span>'
       + '</div></div>'
       + (open ? policyDetailHtml(p) : '')
@@ -895,11 +937,11 @@ function payHistoryHtml(c){
       + '<div class="row" style="align-items:flex-start">'
       + '<div><b style="font-size:14px">$' + Number(p.amount||0).toFixed(2) + '</b>'
       + ((p.total_owed && p.total_owed > (p.collected || p.amount))
-          ? '<span style="color:var(--amber);font-size:11.5px"> · $'
+          ? '<span style="color:var(--amber-ink);font-size:11.5px"> · $'
             + (p.total_owed - (p.collected || p.amount)).toFixed(2) + ' still owed</span>' : '')
       + ' <span class="dim" style="font-size:11.5px">' + esc(p.purpose || '') + '</span></div>'
       + '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;'
-      + (complete ? 'background:rgba(47,191,113,.15);color:var(--green)' : 'background:rgba(245,166,35,.15);color:var(--amber)')
+      + (complete ? 'background:rgba(47,191,113,.15);color:var(--green)' : 'background:rgba(245,166,35,.15);color:var(--amber-ink)')
       + '">' + (complete ? 'audited' : 'needs proof') + '</span></div>'
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
@@ -922,7 +964,7 @@ function payHistoryHtml(c){
                 + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '')
                 + (d.uploaded_by ? ' · ' + esc(uploaderShort(d.uploaded_by)) : '') + '</span>').join('')
             + '</div>'
-          : (!complete ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber)">No documents yet</div>' : ''))
+          : (!complete ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
       + (!complete && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
@@ -1145,7 +1187,7 @@ function openNews(){
           + '>'
           + '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>'
           + '<div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(n.detail || '') + '</div>'
-          + (n.action ? '<div style="color:var(--amber);font-size:11px;margin-top:4px">' + esc(n.action) + ' →</div>' : '')
+          + (n.action ? '<div style="color:var(--amber-ink);font-size:11px;margin-top:4px">' + esc(n.action) + ' →</div>' : '')
           + '<div class="dim" style="font-size:10.5px;margin-top:3px">' + ago(n.ts)
           + (n.client_no ? ' · #' + n.client_no : '') + (isNew ? '' : ' · read') + '</div></div>';
       }).join('')
@@ -1266,7 +1308,7 @@ function renderOpenBalance(cache){
   const bals = openBalances(cache);
   CHG_BALANCE_OF = null;
   if(!bals.length){ box.classList.add('hide'); box.innerHTML = ''; return; }
-  box.innerHTML = '<div style="font-size:12.5px;font-weight:700;color:var(--amber)">This client still owes money</div>'
+  box.innerHTML = '<div style="font-size:12.5px;font-weight:700;color:var(--amber-ink)">This client still owes money</div>'
     + bals.map(b =>
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
         + '<div><b style="font-size:13px">$' + b.left.toFixed(2) + '</b>'
@@ -1333,7 +1375,7 @@ function policyDetailHtml(p){
   const fmtD = d => d ? String(d).slice(0,10) : '—';
   const tmF = termMonths(p);
   const expiredF = isExpired(p);
-  let h = '<div style="border-top:1px solid rgba(255,255,255,.08);margin-top:9px;padding-top:9px">';
+  let h = '<div style="border-top:1px solid var(--hair);margin-top:9px;padding-top:9px">';
   const rows = [
     ['Type', p.lob || ce.type || '—'],
     ['Status', expiredF ? '⚠ Expired' : (p.status || '—')],
@@ -1346,7 +1388,7 @@ function policyDetailHtml(p){
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:8px;font-size:12px">';
   for(const [k,v] of rows){
     const isExp = String(v).includes('Expired') || String(v).includes('(past)');
-    h += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:3px"><span class="dim">'+k+'</span><b'+(isExp?' style="color:#ff8787"':'')+'>'+esc(v)+'</b></div>';
+    h += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hair);padding-bottom:3px"><span class="dim">'+k+'</span><b'+(isExp?' style="color:#ff8787"':'')+'>'+esc(v)+'</b></div>';
   }
   h += '</div>';
   h += '<div class="dim" style="font-size:11px;margin-bottom:8px">💡 Exact down payment &amp; monthly amounts are set by the carrier — check the carrier portal for the live schedule.</div>';
@@ -1595,7 +1637,7 @@ function renderPolicyPicker(keepValue){
    typed there. mode 'picker' repaints only the dropdown. */
 const RF_BASE = 'border:1.5px solid var(--line);border-radius:9px;text-align:center;cursor:pointer;color:var(--mute)';
 const RF_OK   = 'border:1.5px solid rgba(47,191,113,.45);background:rgba(47,191,113,.12);border-radius:9px;text-align:center;color:var(--green)';
-const RF_WARN = 'border:1.5px solid rgba(245,166,35,.4);background:rgba(245,166,35,.12);border-radius:9px;text-align:center;color:var(--amber)';
+const RF_WARN = 'border:1.5px solid rgba(245,166,35,.4);background:rgba(245,166,35,.12);border-radius:9px;text-align:center;color:var(--amber-ink)';
 
 async function refreshHawkSoft(btnId, clientNo, mode){
   const pad = mode === 'card' ? 'padding:10px;font-size:13px;margin-top:8px'
@@ -1655,7 +1697,7 @@ function renderChargeForm(){
       + ppl.map(p => '<option value="'+esc(p.name)+'"'+(p.role==='named insured'?' selected':'')+'>'+esc(p.name)+' — '
           + (p.role==='named insured' ? '★ named insured' : p.role==='excluded' ? '⚠ EXCLUDED — do not charge' : 'active driver')
           + '</option>').join('')
-      + '</select><div id="chgNameWarn" class="hide" style="color:var(--amber);font-size:12px;margin-top:5px"></div>'
+      + '</select><div id="chgNameWarn" class="hide" style="color:var(--amber-ink);font-size:12px;margin-top:5px"></div>'
       + '<div style="height:12px"></div>';
   } else np.innerHTML = '';
 

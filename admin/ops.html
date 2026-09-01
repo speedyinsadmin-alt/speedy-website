@@ -18,7 +18,20 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--paper);color:var(--ink);
     font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 64px}
+  .wrap{max-width:1240px;margin:0 auto;padding:28px 20px 64px}
+  .shell{display:grid;grid-template-columns:196px 1fr;gap:34px;align-items:start}
+  @media(max-width:840px){.shell{grid-template-columns:1fr}nav.side{position:static!important;
+    display:flex;flex-wrap:wrap;gap:6px;border:0;padding:0}
+    nav.side .grp{display:none}nav.side a{border:1px solid var(--rule);padding:5px 9px;border-radius:4px}}
+  /* Sticky so the section list stays reachable on a long page - the thing that made
+     the original artifact usable was never having to scroll back up. */
+  nav.side{position:sticky;top:24px;font-size:12.5px}
+  nav.side .grp{color:var(--dim);font-size:10px;letter-spacing:.09em;margin:16px 0 6px}
+  nav.side .grp:first-child{margin-top:0}
+  nav.side a{display:flex;justify-content:space-between;gap:8px;padding:3px 0;color:var(--mute)}
+  nav.side a:hover{color:var(--ink);text-decoration:none}
+  nav.side a b{color:var(--dim);font-weight:400;font-size:11px}
+  nav.side a.hot b{color:var(--hot)}
   a{color:var(--link);text-decoration:none}
   a:hover{text-decoration:underline}
   .hide{display:none!important}
@@ -93,19 +106,18 @@
 
     <div class="strip" id="strip"></div>
 
-    <h2>Needs a decision</h2>
-    <div id="decisions"></div>
-
-    <h2>Open</h2>
-    <div id="items"></div>
-
-    <h2>Links</h2>
-    <div class="cols" id="links"></div>
-
-    <h2>Recurring cost</h2>
-    <table id="costs"></table>
-
-    <footer id="foot"></footer>
+    <div class="shell">
+      <nav class="side" id="side"></nav>
+      <main>
+        <section id="s-decisions"><h2>Needs a decision</h2><div id="decisions"></div></section>
+        <div id="sections"></div>
+        <section id="s-links"><h2>Every link, one place</h2><div class="cols" id="links"></div></section>
+        <section id="s-map"><h2>Platform map</h2><div id="pmap"></div></section>
+        <section id="s-bug"><h2>The recurring bug</h2><div id="recurring"></div></section>
+        <section id="s-costs"><h2>Recurring cost</h2><table id="costs"></table></section>
+        <footer id="foot"></footer>
+      </main>
+    </div>
   </div>
 
 </div>
@@ -165,7 +177,11 @@ function render(r) {
   /* Every figure here is counted live. The artifact this replaces said "46 open
      items" and was stale before anyone read it. */
   const inline = L.documents_inline, stored = L.documents_in_storage;
+  const allItems = (r.sections || []).reduce((a, s) => a.concat(s.items), []);
+  const highCount = allItems.filter(i => i.pri === 'high').length;
   const cells = [
+    { n: allItems.length, k: 'OPEN ITEMS', c: highCount ? 'hot' : '' },
+    { n: highCount, k: 'HIGH PRIORITY', c: highCount ? 'hot' : 'ok' },
     { n: L.open_audits, k: 'OPEN AUDITS', c: L.open_audits > 20 ? 'hot' : 'warn' },
     { n: L.payments_30d, k: 'PAYMENTS 30D', c: '' },
     { n: L.agents_active, k: 'ACTIVE AGENTS', c: '' },
@@ -177,18 +193,47 @@ function render(r) {
     '<div class="cell ' + c.c + '"><div class="n">' + esc(c.n) + '</div>'
     + '<div class="k">' + c.k + '</div></div>').join('');
 
+  /* Sidebar built from the same data as the body, so a section can never appear in
+     one and not the other. */
+  const nav = [
+    { grp: 'GO TO', links: [['s-links','Every link',''],['s-map','Platform map','A–E']] },
+    { grp: 'ACT ON', links: [['s-decisions','Needs a decision', (r.decisions||[]).length]] },
+  ];
+  const secLinks = (r.sections || []).map(s =>
+    ['sec-' + s.id, s.title, s.items.length]);
+  nav[1].links = nav[1].links.concat(secLinks.slice(0, 3));
+  nav.push({ grp: 'BACKLOG', links: secLinks.slice(3) });
+  nav.push({ grp: 'REFERENCE', links: [['s-bug','The recurring bug',(r.recurring||[]).length],
+    ['s-costs','Costs','$' + ((r.costs||{}).fixed_monthly || 0)]] });
+  $('#side').innerHTML = nav.map(g =>
+    '<div class="grp">' + esc(g.grp) + '</div>'
+    + g.links.map(([id,label,count]) => {
+        const hot = (r.sections||[]).some(s => 'sec-'+s.id===id && s.items.some(i=>i.pri==='high'));
+        return '<a class="' + (hot?'hot':'') + '" href="#' + id + '">' + esc(label)
+          + '<b>' + esc(count) + '</b></a>';
+      }).join('')).join('');
+
+  $('#sections').innerHTML = (r.sections || []).map(s =>
+    '<section id="sec-' + esc(s.id) + '"><h2>' + esc(s.title) + '</h2>'
+    + s.items.map(i => '<div class="item"><div class="pri ' + esc(i.pri) + '">'
+        + esc(i.pri).toUpperCase() + '</div><div>' + esc(i.text) + '</div></div>').join('')
+    + '</section>').join('');
+
+  $('#pmap').innerHTML = (r.platform_map || []).map(m =>
+    '<div class="item"><div class="pri" style="flex:0 0 108px;color:var(--link)">'
+    + esc(m.k) + '</div><div>' + esc(m.v) + '</div></div>').join('');
+
+  $('#recurring').innerHTML = (r.recurring || []).map(x =>
+    '<div class="item"><div class="pri low">·</div><div>' + esc(x) + '</div></div>').join('');
+
   $('#decisions').innerHTML = (r.decisions || []).map(d =>
     '<div class="item"><div class="who">' + esc(d.who) + '</div><div>' + esc(d.text) + '</div></div>'
   ).join('') || '<div class="note">Nothing waiting.</div>';
 
-  $('#items').innerHTML = (r.open_items || []).map(i =>
-    '<div class="item"><div class="pri ' + esc(i.pri) + '">' + esc(i.pri).toUpperCase() + '</div>'
-    + '<div>' + esc(i.text) + '</div></div>').join('');
-
   $('#links').innerHTML = (r.links || []).map(g =>
     '<div><h2 style="margin-top:0">' + esc(g.group) + '</h2>'
     + g.items.map(x => '<a class="lk" href="' + esc(x.url) + '" target="_blank" rel="noopener">'
-        + esc(x.name) + '<span>' + esc(x.url) + '</span></a>').join('')
+        + esc(x.name) + '<span>' + esc(x.note || x.url) + '</span></a>').join('')
     + '</div>').join('');
 
   const C = r.costs || { lines: [] };

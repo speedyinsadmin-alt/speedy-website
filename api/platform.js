@@ -496,51 +496,136 @@ function matchesAllTokens(row, toks) {
    Lives in code, not in the page, so it ships only to a signed-in admin. Versioned
    with everything else, so a diff shows when it drifted. NO CREDENTIALS EVER - the
    master project file contains a GitHub token and none of that belongs here. */
-const OPS_VERSIONS = {
-  portal: 'v4.1', console: 'v6.0', charge: 'v2.37',
-  master_file: '2026-09-01',
-};
-const OPS_COSTS = {
-  fixed_monthly: 190,
-  lines: [
-    { name: 'Vercel Pro', amount: 20 },
-    { name: 'Supabase Pro', amount: 25 },
-    { name: 'TurboRater for Websites', amount: 145 },
-    { name: 'Anthropic API', amount: null, note: 'usage — update monthly' },
-  ],
-};
+const OPS_VERSIONS = { portal: 'v4.1', console: 'v6.0', charge: 'v2.37',
+  carrier: 'live', master_file: '2026-09-01' };
+
+const OPS_COSTS = { fixed_monthly: 190, lines: [
+  { name: 'Vercel Pro', amount: 20 },
+  { name: 'Supabase Pro', amount: 25 },
+  { name: 'TurboRater for Websites', amount: 145, note: 'Zywave Q-182382 · auto-renews, 60-day notice, remind Apr 2027' },
+  { name: 'Anthropic API', amount: null, note: 'usage — update monthly' },
+]};
+
 const OPS_LINKS = [
   { group: 'Live pages', items: [
-    { name: 'Agent portal', url: '/admin/portal.html' },
-    { name: 'Charge page', url: '/admin/charge.html' },
-    { name: 'Platform console', url: '/admin/platform.html' },
-    { name: 'Carrier audit', url: '/admin/carrier.html' },
-    { name: 'Agent ticket form', url: '/admin/ticket.html' },
+    { name: 'Agent portal', url: '/admin/portal.html', note: 'v4.1' },
+    { name: 'Charge page', url: '/admin/charge.html', note: 'v2.37' },
+    { name: 'Platform console', url: '/admin/platform.html', note: 'v6.0 · info@ only' },
+    { name: 'Carrier audit', url: '/admin/carrier.html', note: 'docs=1 for documents only' },
+    { name: 'Agent ticket form', url: '/admin/ticket.html', note: 'public by design' },
+    { name: 'HawkSoft API dashboard', url: '/admin/hawksoft.html' },
+    { name: 'Health checks', url: '/admin/', note: 'the live monitor' },
   ]},
   { group: 'Public site', items: [
     { name: 'speedyins.com', url: 'https://www.speedyins.com' },
     { name: 'Spanish site', url: 'https://www.speedyins.com/es.html' },
-    { name: 'Quote form', url: 'https://www.speedyins.com/quote.html' },
+    { name: 'Quote form', url: 'https://www.speedyins.com/quote.html', note: 'TurboRater' },
+    { name: 'Cotizar', url: 'https://www.speedyins.com/cotizar.html' },
+    { name: 'QR redirect', url: 'https://www.speedyins.com/qr', note: '307 — must stay non-permanent' },
+    { name: 'Speedy Hub', url: 'https://speedy-hub.vercel.app', note: 'agent hub' },
   ]},
   { group: 'Infrastructure', items: [
     { name: 'Supabase', url: 'https://supabase.com/dashboard/project/huvpitgappdqgavrqbud' },
     { name: 'Vercel — speedy-website', url: 'https://vercel.com/speedyinsadmin-8075s-projects' },
-    { name: 'GitHub — speedy-website', url: 'https://github.com/speedyinsadmin-alt/speedy-website' },
+    { name: 'Vercel — speedy-dashboard', url: 'https://vercel.com/speedyinsadmin-8075s-projects', note: 'SSO-gated' },
+    { name: 'Vercel — speedy-hub', url: 'https://vercel.com/speedyinsadmin-8075s-projects' },
+  ]},
+  { group: 'Code', items: [
+    { name: 'speedy-website', url: 'https://github.com/speedyinsadmin-alt/speedy-website', note: 'site + all APIs · PUBLIC' },
+    { name: 'speedy-dashboard', url: 'https://github.com/speedyinsadmin-alt/speedy-dashboard', note: 'PUBLIC' },
+    { name: 'speedy-hub', url: 'https://github.com/speedyinsadmin-alt/speedy-hub', note: 'PUBLIC' },
+  ]},
+  { group: 'Vendors', items: [
+    { name: 'HawkSoft Partner API v4', url: 'https://partner.hawksoft.app/v4/api.html', note: 'contract 15112' },
+    { name: 'Clover', url: 'https://www.clover.com/dashboard', note: 'app pending since Jul 23' },
+    { name: 'RingCentral', url: 'https://service.ringcentral.com' },
+    { name: 'Tawk.to', url: 'https://dashboard.tawk.to' },
+    { name: 'Google Business Profile', url: 'https://business.google.com' },
   ]},
 ];
-const OPS_OPEN_ITEMS = [
-  { pri: 'high', text: 'Duplicate receipts — agents re-key what the bridge already posted. Esmeralda confirmed. Ask what she sees after a charge before building' },
-  { pri: 'high', text: 'Finish the roster table — public.agents seeded and verified, nothing reads it. Admins must be ADDITIVE' },
-  { pri: 'med',  text: 'Earnings breakdown — show charge and payment beside commission, add search' },
-  { pri: 'med',  text: 'Light mode is portal.html only — charge, carrier and console still dark' },
-  { pri: 'med',  text: 'TurboRater embed still not wired — quote form on Tawk.to' },
-  { pri: 'low',  text: 'In a month: drop file_b64 once portal_doc shows served:storage' },
-  { pri: 'low',  text: 'Reverse the ZZTEST probe receipts (1.11 / 1.22 / 1.33 / 1.44)' },
+
+/* Grouped the way the sidebar reads: act on it, or it is backlog, or it is
+   reference. Priority is about what breaks if ignored, not about effort. */
+const OPS_SECTIONS = [
+  { id: 'blocking', title: 'Blocking now', items: [
+    { pri: 'high', text: 'Duplicate receipts — agents re-key what the bridge already posted. Esmeralda confirmed. Ask what she sees after a charge before building anything' },
+    { pri: 'high', text: 'Finish the roster table — public.agents is seeded and verified, nothing reads it. Admins must be ADDITIVE or a bad read locks the owner out' },
+    { pri: 'high', text: 'Clover terminal has never run a live charge — pending app approval since Jul 23' },
+    { pri: 'high', text: 'Golden Square Insurance — 6th verified Google profile on the old Lake Elsinore address, splitting reviews. Close or merge, NEVER delete' },
+  ]},
+  { id: 'money', title: 'Money path', items: [
+    { pri: 'high', text: 'Pol 1 — prove a PORTAL-launched charge files to the correct policy tab. Partially proven, waiting on a natural real charge' },
+    { pri: 'med',  text: 'Merge Stage 1 — replace the policy string match in the charge path. Parked behind Pol 1' },
+    { pri: 'med',  text: 'Earnings breakdown — show the charge and payment beside the commission, add search' },
+    { pri: 'med',  text: 'Portal not showing open invoices — reported, not diagnosed' },
+    { pri: 'low',  text: 'Merge the redundant third HawkSoft log row — each charge posts receipt + attachment + a text-only summary' },
+    { pri: 'low',  text: 'Reverse the ZZTEST probe receipts (1.11 / 1.22 / 1.33 / 1.44, posted twice Sep 1)' },
+  ]},
+  { id: 'portal', title: 'Portal & console', items: [
+    { pri: 'med',  text: 'Light mode is portal.html only — charge, carrier and console still dark' },
+    { pri: 'med',  text: 'Call log by-agent view — rows are call LEGS, must group by rc_session_id' },
+    { pri: 'med',  text: 'Consolidate six hardcoded staff lists — the agents table exists for this' },
+    { pri: 'low',  text: 'Shared stylesheet — .hide, .btn and esc() have each been assumed to exist and were not' },
+    { pri: 'low',  text: 'In a month: drop file_b64 once portal_doc reports served:storage' },
+  ]},
+  { id: 'security', title: 'Security', items: [
+    { pri: 'high', text: 'Regenerate the Clover App Secret — exposed in chat screenshots — and update Vercel' },
+    { pri: 'med',  text: 'api/hawksoft.js gates on the @speedyins.com domain only, while the other APIs use explicit allowlists. The money API is the loosest' },
+    { pri: 'med',  text: 'Attorney review — California all-party consent for call recording and AI scoring' },
+    { pri: 'low',  text: 'Two SECURITY DEFINER functions remain callable by anon' },
+    { pri: 'low',  text: 'All three repos are PUBLIC — no secret may ever enter them' },
+  ]},
+  { id: 'vendors', title: 'Vendors', items: [
+    { pri: 'high', text: 'Clover production app — pending since Jul 23. After approval: authorize MV, then terminal test' },
+    { pri: 'med',  text: 'Per-branch Clover OAuth still needed for Van Buren, Magnolia, Lake Elsinore' },
+    { pri: 'med',  text: 'IVANS — can Speedy act as a sender, pushing data into the network? Ask Brian Marable' },
+    { pri: 'med',  text: 'IVANS carrier expansion — cross-match the 454-company matrix against our carriers' },
+    { pri: 'low',  text: 'RingCentral AI CEB proposal — evaluate separately from the renewal decision' },
+  ]},
+  { id: 'website', title: 'Website & comms', items: [
+    { pri: 'high', text: 'TurboRater embed — quote form is still temporarily wired to Tawk.to' },
+    { pri: 'med',  text: 'Tawk.to per-branch routing — 4 widgets, switchWidget(), both index.html and es.html' },
+    { pri: 'med',  text: 'SEO pass — LocalBusiness schema, sitemap.xml, robots.txt, hreflang' },
+    { pri: 'med',  text: 'GA + Search Console' },
+    { pri: 'low',  text: 'Google reviews section on the site' },
+    { pri: 'low',  text: 'Privacy / Terms / SMS opt-in language' },
+    { pri: 'low',  text: 'Sticky mobile CTA' },
+  ]},
+  { id: 'gbp', title: 'Google Business', items: [
+    { pri: 'high', text: 'Four reviewers across 2019–2025 allege paid reviews. Breaches Google policy. ESCALATED TO TONY — business decision, not a template' },
+    { pri: 'high', text: 'Golden Square — parked to Fri Sep 4. Close or merge, never delete or its reviews go too' },
+    { pri: 'med',  text: 'An older reply automation exists that is NOT on this account — find it or the two collide' },
+    { pri: 'med',  text: 'The weekly reply task still says Van Buren is 2955 — delete and recreate, a device-bound task cannot be edited' },
+    { pri: 'med',  text: 'Post cadence has never run — one post ever published, Jul 10' },
+    { pri: 'low',  text: 'GBP photos — Van Buren, Magnolia and Lake Elsinore may still need updating' },
+  ]},
 ];
+
 const OPS_DECISIONS = [
-  { who: 'Tony', text: 'Clover production app — still pending approval' },
+  { who: 'Tony', text: 'Clover production app — still pending approval since Jul 23' },
   { who: 'Tony', text: 'Attorney review — California all-party consent for call recording' },
   { who: 'Tony', text: 'Platform SaaS spinout — entity, IP ownership, insurance' },
+  { who: 'Tony', text: 'Paid-review allegations across four Google reviewers' },
+];
+
+/* Every one of these was a production incident. Kept on the page because the same
+   shape keeps recurring and recognising it early is the only defence. */
+const OPS_RECURRING = [
+  'A value transformed on one side and compared against the untransformed other — phone search, full-name search, ownership by display name',
+  'Something not carrying its identifier through — payment_id, policy GUID, commission_to, RefId, audit_completed_by',
+  'A column nobody writes, or a value handed in and dropped — storeReceiptVault got policyGuid and never wrote it',
+  'CSS classes assumed to exist because they do in a sibling file — .hide, .btn, esc()',
+  'Shared STAFF maps that drift across six files',
+  'Dates computed in UTC for an agency that runs on Pacific',
+  'Inferring the identifying attribute from the pattern being explained — the Tendered 0.00 mistake',
+];
+
+const OPS_PLATFORM_MAP = [
+  { k: 'A · Money', v: 'Clover ecommerce, cash, terminal, pay links. bridge_ledger is the record of truth' },
+  { k: 'B · Clients', v: 'HawkSoft sync into clients and policies. 2am Pacific cron plus manual refresh' },
+  { k: 'C · Documents', v: 'Private Supabase bucket client-documents. Dual-written with file_b64 for now' },
+  { k: 'D · Operations', v: 'Portal, charge sheet, carrier audit, console, notifications, commission' },
+  { k: 'E · Compliance', v: 'Audit trail in events. CCPA. Call recording pending attorney review' },
 ];
 
 const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];
@@ -1648,8 +1733,10 @@ if (view === 'portal_share_due') {
       versions: OPS_VERSIONS,
       costs: OPS_COSTS,
       links: OPS_LINKS,
-      open_items: OPS_OPEN_ITEMS,
+      sections: OPS_SECTIONS,
       decisions: OPS_DECISIONS,
+      recurring: OPS_RECURRING,
+      platform_map: OPS_PLATFORM_MAP,
     });
   }
 

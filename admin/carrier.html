@@ -127,7 +127,7 @@
     </div>
 
     <div class="card" id="recCard">
-      <div class="eyebrow"><span style="color:var(--green)">◆</span> <span id="recTitle">Carrier receipt</span> <span class="pill a">required for audit</span></div>
+      <div class="eyebrow"><span style="color:var(--green)">◆</span> <span id="recTitle">Carrier receipt</span> <span class="pill a" id="recReq">required for audit</span></div>
       <div class="drop" id="drop" onclick="document.getElementById('file').click()">
         <div class="ic" id="dropic">⇪</div>
         <div id="droptxt" style="font-size:13px;margin-top:6px">Drag the receipt here, or tap to choose</div>
@@ -839,7 +839,9 @@ function applyFeeOnly(){
   ['carrierWrap','card'].forEach(id => { const e = $('#' + id); if(e) e.style.opacity = on ? .45 : ''; });
   const z = $('#zeroAck'); if(z) z.checked = on;     // the statement is still recorded
   const rc = $('#recCard'); if(rc) rc.style.opacity = on ? .5 : '';
-  recalc();
+  const badge = $('#recReq');
+  if(badge){ badge.textContent = on ? 'not needed' : 'required for audit'; }
+  recalcFee();   // NOT recalc() - that does not exist
   updateSubmit();
 }
 $('#feeOnly').addEventListener('change', applyFeeOnly);

@@ -152,10 +152,6 @@ async function resolvePolicyGuid(s, { policy_guid, client_no, payment_id, policy
 
     /* The ledger row already holds both. Cash charges store policyGuid; card
        charges store only policyNumber. Read whichever is there. */
-    /* One instant for the ledger row and the event, so the approval time in the
-       column and the time in the audit trail can never disagree. */
-    const nowIso = new Date().toISOString();
-
     if (payment_id) {
       const r = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(payment_id)}`
         + `&select=policy_guid:extra->>policyGuid,policy_number:extra->>policyNumber`);
@@ -703,7 +699,7 @@ export default async function handler(req, res) {
              lands in - Tony's rule, Sep 1: a month, once closed, can never move.
              Written only on completion; a save-and-finish-later is not approval, so
              audit_completed_at stays null and the work is not yet earned. */
-          ...(complete ? { audit_completed_by: email, audit_completed_at: nowIso } : {}),
+          ...(complete ? { audit_completed_by: email, audit_completed_at: new Date().toISOString() } : {}),
         }),
       });
     }

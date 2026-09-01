@@ -83,6 +83,15 @@
 
       <div id="carrierWrap">
       <div class="eyebrow" style="margin-top:14px"><span style="color:var(--amber)">◆</span> Carrier payment</div>
+      <!-- Fee-only. An endorsement such as an address change has no carrier payment,
+           so there is no receipt to attach - and until now the only way past the
+           receipt gate was to upload something that was not a receipt. One control at
+           the top of the existing box; nothing else on this page moves. -->
+      <label id="feeOnlyWrap" style="display:flex;gap:9px;align-items:center;cursor:pointer;margin:12px 0 0;
+             border:1px solid var(--line);border-radius:8px;padding:9px 11px">
+        <input type="checkbox" id="feeOnly" style="margin:0;flex:none;width:auto">
+        <span style="font-size:13px">This is a fee &mdash; no carrier payment</span>
+      </label>
       <div class="row">
         <div>
           <label>Carrier paid</label>
@@ -762,7 +771,11 @@ function updateSubmit(){
   const amt = carrierAmt(), ack = zeroAcked();
   const amtOk  = (amt != null) && (amt > 0 || (amt === 0 && ack));
   const cardOk = amt === 0 && ack ? true : !!$('#card').value;
-  $('#submitBtn').disabled = !(!!effCarrier() && amtOk && cardOk && FILE_B64);
+  /* A receipt is not required when nothing was paid to a carrier. This gate is why an
+     agent uploaded a document that was not a receipt on a $102 endorsement - it was
+     the only way to make the audit close. */
+  const needReceipt = !feeOnly();
+  $('#submitBtn').disabled = !(!!effCarrier() && amtOk && cardOk && (!needReceipt || FILE_B64));
 }
 /* Shows the acknowledgement only on an exact zero, and carries the live amount so the
    agent reads the real consequence, not a generic warning. No purpose gate: zero is
@@ -809,6 +822,27 @@ function receiptDocType(){ return (carrierAmt() === 0 && zeroAcked()) ? nopayDoc
 ['carrier','camt','card'].forEach(id => $('#'+id).addEventListener('input', updateSubmit));
 $('#carrierSel').addEventListener('change', updateSubmit);
 $('#zeroAck').addEventListener('change', updateSubmit);
+
+/* Fee-only drives the SAME carrier_zero_ack the manual path already uses - a shortcut
+   to an existing, audited statement rather than a second way of saying $0. Fully
+   reversible: unticking restores the amount, the receipt requirement and the page
+   exactly as before, and nothing is written until Submit is pressed. */
+function feeOnly(){ const b = $('#feeOnly'); return !!(b && b.checked); }
+function applyFeeOnly(){
+  const on = feeOnly();
+  const amt = $('#camt');
+  if(amt){
+    if(on){ amt.value = '0'; amt.readOnly = true; }
+    else { amt.readOnly = false; }
+    amt.style.opacity = on ? .45 : '';
+  }
+  ['carrierWrap','card'].forEach(id => { const e = $('#' + id); if(e) e.style.opacity = on ? .45 : ''; });
+  const z = $('#zeroAck'); if(z) z.checked = on;     // the statement is still recorded
+  const rc = $('#recCard'); if(rc) rc.style.opacity = on ? .5 : '';
+  recalc();
+  updateSubmit();
+}
+$('#feeOnly').addEventListener('change', applyFeeOnly);
 $('#card').addEventListener('change', updateSubmit);
 
 // Plain-language errors. An agent can act on "the receipt didn't upload";
@@ -876,7 +910,7 @@ async function submit(complete){
     policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, policy_num: CTX.policy_num||null, payment_id: CTX.payment_id||null,
     carrier: effCarrier(),
     carrier_amount: carrierAmt(),
-    carrier_zero_ack: (carrierAmt() === 0 && zeroAcked()) || null,
+    carrier_zero_ack: (feeOnly() || (carrierAmt() === 0 && zeroAcked())) || null,
     doc_type: receiptDocType(),
     purpose: CTX.purpose || null,
     carrier_card: $('#card').value||null,

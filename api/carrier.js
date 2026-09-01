@@ -585,8 +585,12 @@ export default async function handler(req, res) {
       return res.status(403).json({ ok: false, error: 'This audit is already complete. Only the agent who earns it can change the carrier cost.' });
     }
 
-    // Audit-complete requires the carrier receipt
-    if (complete && !receipt_b64) {
+    /* Audit-complete requires the carrier receipt - UNLESS nothing was paid to a
+       carrier, in which case there is no receipt to require. This gate is what made an
+       agent upload a document that was not a receipt on a $102 endorsement: faking one
+       was the only way to close the audit. carrier_zero_ack is still required, so a
+       missing receipt always comes with an explicit statement that none exists. */
+    if (complete && !receipt_b64 && carrier_zero_ack !== true) {
       return res.status(400).json({ ok: false, error: 'Carrier receipt is required to submit to audit' });
     }
 

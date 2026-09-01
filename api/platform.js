@@ -492,6 +492,57 @@ function matchesAllTokens(row, toks) {
   return toks.every(t => hay.includes(t.toLowerCase()));
 }
 
+/* ---------- Ops console static content ----------
+   Lives in code, not in the page, so it ships only to a signed-in admin. Versioned
+   with everything else, so a diff shows when it drifted. NO CREDENTIALS EVER - the
+   master project file contains a GitHub token and none of that belongs here. */
+const OPS_VERSIONS = {
+  portal: 'v4.1', console: 'v6.0', charge: 'v2.37',
+  master_file: '2026-09-01',
+};
+const OPS_COSTS = {
+  fixed_monthly: 190,
+  lines: [
+    { name: 'Vercel Pro', amount: 20 },
+    { name: 'Supabase Pro', amount: 25 },
+    { name: 'TurboRater for Websites', amount: 145 },
+    { name: 'Anthropic API', amount: null, note: 'usage — update monthly' },
+  ],
+};
+const OPS_LINKS = [
+  { group: 'Live pages', items: [
+    { name: 'Agent portal', url: '/admin/portal.html' },
+    { name: 'Charge page', url: '/admin/charge.html' },
+    { name: 'Platform console', url: '/admin/platform.html' },
+    { name: 'Carrier audit', url: '/admin/carrier.html' },
+    { name: 'Agent ticket form', url: '/admin/ticket.html' },
+  ]},
+  { group: 'Public site', items: [
+    { name: 'speedyins.com', url: 'https://www.speedyins.com' },
+    { name: 'Spanish site', url: 'https://www.speedyins.com/es.html' },
+    { name: 'Quote form', url: 'https://www.speedyins.com/quote.html' },
+  ]},
+  { group: 'Infrastructure', items: [
+    { name: 'Supabase', url: 'https://supabase.com/dashboard/project/huvpitgappdqgavrqbud' },
+    { name: 'Vercel — speedy-website', url: 'https://vercel.com/speedyinsadmin-8075s-projects' },
+    { name: 'GitHub — speedy-website', url: 'https://github.com/speedyinsadmin-alt/speedy-website' },
+  ]},
+];
+const OPS_OPEN_ITEMS = [
+  { pri: 'high', text: 'Duplicate receipts — agents re-key what the bridge already posted. Esmeralda confirmed. Ask what she sees after a charge before building' },
+  { pri: 'high', text: 'Finish the roster table — public.agents seeded and verified, nothing reads it. Admins must be ADDITIVE' },
+  { pri: 'med',  text: 'Earnings breakdown — show charge and payment beside commission, add search' },
+  { pri: 'med',  text: 'Light mode is portal.html only — charge, carrier and console still dark' },
+  { pri: 'med',  text: 'TurboRater embed still not wired — quote form on Tawk.to' },
+  { pri: 'low',  text: 'In a month: drop file_b64 once portal_doc shows served:storage' },
+  { pri: 'low',  text: 'Reverse the ZZTEST probe receipts (1.11 / 1.22 / 1.33 / 1.44)' },
+];
+const OPS_DECISIONS = [
+  { who: 'Tony', text: 'Clover production app — still pending approval' },
+  { who: 'Tony', text: 'Attorney review — California all-party consent for call recording' },
+  { who: 'Tony', text: 'Platform SaaS spinout — entity, IP ownership, insurance' },
+];
+
 const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
@@ -1548,6 +1599,58 @@ if (view === 'portal_share_due') {
     const worst = issues.some(i => i.sev === 'high') ? 'attention' : issues.length ? 'minor' : 'clean';
     return res.status(200).json({ ok: true, status: worst, checked: rows.length,
       documents: docs.length, checked_at: new Date().toISOString(), issues });
+  }
+
+  /* ---------- Ops console summary ----------
+     Sits behind the SAME verifyGoogle gate as every other admin view above; that
+     gate is deliberately not touched. Everything the ops page shows comes from here
+     rather than being baked into the HTML, because static files under /admin/ are
+     fetchable by anyone with the URL - an unauthenticated fetch of ops.html must
+     return a page that says nothing.
+
+     COUNTS AND STATUS ONLY. No client names, no amounts, no policy numbers, and
+     never a credential. Links point at dashboards; keys stay in Vercel env. */
+  if (view === 'ops_summary') {
+    const s = sb();
+    const num = r => Number((r.rows && r.rows[0] && r.rows[0].n) || 0);
+    const cnt = async (path) => {
+      try {
+        const r = await sbGet(s, path + '&select=count');
+        return Number((r.rows && r.rows[0] && r.rows[0].count) || 0);
+      } catch { return null; }
+    };
+    const cutoff = '2026-07-29';
+    const [openAudits, docsTotal, docsInStorage, docsInline, agentsActive, ledger30] = await Promise.all([
+      cnt(`bridge_ledger?audit_status=neq.complete&is_test=is.false&ts=gte.${cutoff}`),
+      cnt('attachments?id=not.is.null'),
+      cnt('attachments?blob_url=not.is.null'),
+      cnt('attachments?file_b64=not.is.null'),
+      cnt('agents?active=is.true'),
+      cnt(`bridge_ledger?is_test=is.false&ts=gte.${new Date(Date.now() - 30 * 864e5).toISOString()}`),
+    ]);
+    let lastSync = null;
+    try {
+      const r = await sbGet(s, 'events?kind=eq.sync.delta&select=ts&order=ts.desc&limit=1');
+      lastSync = (r.rows && r.rows[0] && r.rows[0].ts) || null;
+    } catch {}
+    return res.status(200).json({
+      ok: true,
+      generated: new Date().toISOString(),
+      live: {
+        open_audits: openAudits,
+        documents: docsTotal,
+        documents_in_storage: docsInStorage,
+        documents_inline: docsInline,
+        agents_active: agentsActive,
+        payments_30d: ledger30,
+        last_client_sync: lastSync,
+      },
+      versions: OPS_VERSIONS,
+      costs: OPS_COSTS,
+      links: OPS_LINKS,
+      open_items: OPS_OPEN_ITEMS,
+      decisions: OPS_DECISIONS,
+    });
   }
 
   if (view === 'system_health') {

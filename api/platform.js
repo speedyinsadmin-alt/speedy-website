@@ -737,7 +737,58 @@ if (view === 'portal_share_due') {
       const mine = (all.rows || []).filter(r => owns(r, me) || String(r.agent || '').toLowerCase().includes(me));
       // month boundary (America/Los_Angeles approx via UTC month is fine for display)
       const now = new Date();
-      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+      /* PACIFIC month boundary, not UTC. Computed in UTC this flipped to the next
+         month at 5pm Pacific on the last day, so every agent's earnings read $0.00
+         for a full 24 hours every month while they were still working. Sammy hit it
+         with 50 completed August payments and $9,496.23 of fees behind the boundary.
+         Same class as the Console v6.0 date bug: en-CA gives YYYY-MM-DD, and the
+         offset is derived rather than hardcoded so DST needs no maintenance. */
+      const pacificParts = d => {
+        const s = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles',
+          year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+        const [y, m, dd] = s.split('-').map(Number);
+        return { y, m, d: dd };
+      };
+      /* Midnight Pacific on a given y-m-d, as a UTC instant. The offset is MEASURED
+         for that date, not guessed: midday UTC is the same calendar day worldwide, so
+         formatting it in Pacific and subtracting gives 7 for PDT and 8 for PST.
+         An earlier version compared only the DATE after a PST guess, which passed for
+         PDT dates too - 08:00 UTC is 1am PDT, still the right day, wrong hour. */
+      const pacificOffset = (y, m, dd) => {
+        const probe = new Date(Date.UTC(y, m - 1, dd, 12, 0, 0));
+        const hh = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
+          hour: '2-digit', hour12: false }).format(probe));
+        return 12 - hh;
+      };
+      const pacificMidnightUTC = (y, m, dd) =>
+        new Date(Date.UTC(y, m - 1, dd, pacificOffset(y, m, dd), 0, 0)).toISOString();
+      /* period=this|last|YYYY-MM-DD:YYYY-MM-DD. Defaults to the current Pacific
+         month, so nothing changes for an agent who never touches the picker. */
+      const periodBounds = (raw) => {
+        const t = pacificParts(now);
+        const q = String(raw || 'this');
+        const range = q.match(/^(\d{4})-(\d{2})-(\d{2}):(\d{4})-(\d{2})-(\d{2})$/);
+        if (range) {
+          const [, y1, m1, d1, y2, m2, d2] = range.map(Number);
+          const endNext = new Date(Date.UTC(y2, m2 - 1, d2 + 1));
+          return { from: pacificMidnightUTC(y1, m1, d1),
+                   to: pacificMidnightUTC(endNext.getUTCFullYear(), endNext.getUTCMonth() + 1, endNext.getUTCDate()),
+                   label: `${y1}-${String(m1).padStart(2,'0')}-${String(d1).padStart(2,'0')} to ${y2}-${String(m2).padStart(2,'0')}-${String(d2).padStart(2,'0')}` };
+        }
+        if (q === 'last') {
+          const ly = t.m === 1 ? t.y - 1 : t.y, lm = t.m === 1 ? 12 : t.m - 1;
+          return { from: pacificMidnightUTC(ly, lm, 1),
+                   to: pacificMidnightUTC(t.y, t.m, 1),
+                   label: `${ly}-${String(lm).padStart(2,'0')}` };
+        }
+        return { from: pacificMidnightUTC(t.y, t.m, 1), to: null,
+                 label: `${t.y}-${String(t.m).padStart(2,'0')}` };
+      };
+      const period = periodBounds(req.query.period);
+      const monthStart = period.from;
+      /* An explicit end for last month and custom ranges; open-ended for the current
+         one so a charge taken a minute ago still counts. */
+      const inPeriod = ts => ts >= monthStart && (!period.to || ts < period.to);
 
       const NON_PAYMENT = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
       /* The lines BEHIND the two numbers. portal_home already walks every
@@ -767,17 +818,17 @@ if (view === 'portal_share_due') {
           // unless the owner shared, which is applied below
           const ratio = collectedRatio(r, all.rows || []);
           const full = fee * pct / 100;
-          if (isOwner && r.ts >= monthStart) {
+          if (isOwner && inPeriod(r.ts)) {
             const share = Number(r.helper_share_pct || 0);
             earned  += full * ratio * (1 - share / 100);
             pending += full * (1 - ratio) * (1 - share / 100);   // waiting on the balance
           }
-          if (!isOwner && r.helper_email === me && r.ts >= monthStart) {
+          if (!isOwner && r.helper_email === me && inPeriod(r.ts)) {
             const share = Number(r.helper_share_pct || 0) / 100;
             earned  += full * ratio * share;
             pending += full * (1 - ratio) * share;
           }
-          if (isOwner && r.ts >= monthStart) {
+          if (isOwner && inPeriod(r.ts)) {
             const share = Number(r.helper_share_pct || 0);
             earned_lines.push({
               id: r.id, ts: r.ts, client_no: r.client_id,
@@ -796,7 +847,7 @@ if (view === 'portal_share_due') {
                 ? (AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent)) : null,
             });
           }
-          if (!isOwner && r.ts >= monthStart) {
+          if (!isOwner && inPeriod(r.ts)) {
             const iCharged = agentEmailOf(r.agent) === me;
             const iFinished = agentEmailOf(r.audit_completed_by) === me;
             if (iCharged || iFinished) {
@@ -819,7 +870,7 @@ if (view === 'portal_share_due') {
         } else if (r.kind !== 'charge_captured' || r.audit_status) {
           // needs proof of payment / audit
           const feeGuess = fee != null ? fee * pct / 100 : null;
-          if (isOwner && r.ts >= monthStart && feeGuess != null) pending += feeGuess;
+          if (isOwner && inPeriod(r.ts) && feeGuess != null) pending += feeGuess;
           unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount),
             purpose: r.purpose, audit_status: r.audit_status || 'client_paid',
             mine: isOwner,
@@ -841,6 +892,7 @@ if (view === 'portal_share_due') {
       return res.status(200).json({
         ok: true, email: me, role: who.role,
         commission: { rate: pct, earned_month: +earned.toFixed(2), pending_month: +pending.toFixed(2) },
+        period: period.label, period_from: monthStart, period_to: period.to,
         unfinished_count: unfinished.length, unfinished,
         earned_lines: earned_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60),
         helped_lines: helped_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 40),

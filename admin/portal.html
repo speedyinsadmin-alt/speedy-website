@@ -62,7 +62,15 @@
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
   .clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
-  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet{position:fixed;inset:0;background:var(--scrim);overflow-y:auto;z-index:50;padding:16px}
+  /* Sheets are taller than the screen constantly - fourteen policies, sixteen
+     notifications, a month of earnings. Relying on the outer container to scroll was
+     not enough in practice, so the CARD itself is capped to the viewport and scrolls.
+     100dvh, not 100vh: on mobile 100vh is the height WITHOUT the browser chrome, so
+     the last rows sit under the address bar and cannot be reached. */
+  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet{position:fixed;inset:0;background:var(--scrim);overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:50;padding:16px}
+  #chargeSheet > div,#todoSheet > div,#newsSheet > div,#shareSheet > div,#helpSheet > div,#earnSheet > div{max-height:calc(100dvh - 32px)}
+  #chargeSheet > div > .card,#todoSheet > div > .card,#newsSheet > div > .card,#shareSheet > div > .card,#helpSheet > div > .card,#earnSheet > div > .card{
+    max-height:calc(100dvh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch}
   .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
   .todoitem:hover{border-color:var(--amber-ink)}
@@ -151,7 +159,7 @@
     </div>
     <div id="earnWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div onclick="openEarnings()" style="background:linear-gradient(135deg,rgba(47,191,113,.15),rgba(77,124,254,.08));border:1px solid rgba(47,191,113,.3);border-radius:12px;padding:13px;cursor:pointer">
-        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Earned this month &rsaquo;</div>
+        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em" id="earnedLabel">Earned this month &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--green)" id="earned">$0.00</div>
       </div>
       <div style="background:var(--field);border:1px solid var(--line);border-radius:12px;padding:13px">
@@ -174,7 +182,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v4.0</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v4.1</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -490,13 +498,18 @@ function applyOffice(office){
 }
 
 async function loadHome(){
-  const r = await api('portal_home');
+  const r = await api('portal_home&period=' + encodeURIComponent(EARN_PERIOD));
   if(!r || !r.ok) return;
   $('#earned').textContent = money(r.commission.earned_month);
   $('#pending').textContent = money(r.commission.pending_month);
   UNFINISHED = r.unfinished || [];
   HELP_OPEN = r.help_open || [];
   EARN_LINES = r.earned_lines || [];
+  /* The server says which period it used, so the tile can never disagree with the
+     number under it. */
+  const el = document.getElementById('earnedLabel');
+  if(el) el.innerHTML = (EARN_PERIOD === 'last' ? 'Earned ' + esc(r.period || 'last month')
+                                                : 'Earned this month') + ' &rsaquo;';
   HELPED_LINES = r.helped_lines || [];
   const hb = document.getElementById('helpBox');
   if(HELP_OPEN.length){
@@ -575,12 +588,31 @@ function openTodo(){
 /* The lines behind "earned this month", plus the work done on other people's
    payments. A total with nothing behind it is something an agent can only accept
    or dispute; this is what makes it checkable. */
+let EARN_PERIOD = 'this';
+/* Even with the Pacific fix, "this month" is the wrong question on the 1st: an
+   agent's real work is last month's. The picker makes the period explicit. */
+function setEarnPeriod(p){
+  EARN_PERIOD = p;
+  loadHome().then(() => openEarnings());
+}
+function earnPickerHtml(){
+  const btn = (val, label) =>
+    '<div onclick="setEarnPeriod(\'' + val + '\')" style="flex:1;text-align:center;padding:7px;'
+    + 'border-radius:8px;font-size:12px;cursor:pointer;'
+    + (EARN_PERIOD === val
+        ? 'background:var(--blue);color:#fff;font-weight:700'
+        : 'background:var(--field);color:var(--blue-l);border:1px solid var(--line)')
+    + '">' + label + '</div>';
+  return '<div style="display:flex;gap:6px;margin-bottom:12px">'
+    + btn('this', 'This month') + btn('last', 'Last month') + '</div>';
+}
 function openEarnings(){
   const m = a => '$' + Number(a || 0).toFixed(2);
   const d = ts => String(ts || '').slice(0, 10);
-  let h = '';
+  let h = earnPickerHtml();
 
-  if(!EARN_LINES.length) h += '<div class="dim" style="font-size:12.5px">Nothing earned yet this month.</div>';
+  if(!EARN_LINES.length) h += '<div class="dim" style="font-size:12.5px">Nothing earned in '
+      + (EARN_PERIOD === 'last' ? 'that month' : 'this period') + ' yet.</div>';
   else h += EARN_LINES.map(x =>
       '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px">'
       + '<div style="display:flex;justify-content:space-between;gap:10px">'

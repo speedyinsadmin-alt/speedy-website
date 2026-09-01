@@ -330,6 +330,23 @@ export default async function handler(req, res) {
       }
     }
 
+    /* Does a carrier receipt ALREADY exist for this payment? The page only knew about
+       a file dropped in the current session, so an agent returning to a half-finished
+       audit was asked to upload a receipt HawkSoft already holds. After the Sep 1
+       outage, five payments had between 2 and 5 receipts attached and filed - every
+       retry added another - and without this they would have added one more. */
+    let existing = null;
+    if (body.payment_id) {
+      try {
+        const a = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(body.payment_id)}`
+          + `&doc_type=in.(carrier_receipt,endorsement_no_payment,cancellation_no_payment,renewal_no_payment)`
+          + `&select=id,filename,doc_type,filed_hawksoft,created_at&order=created_at.desc&limit=1`);
+        const r = (a.rows || [])[0];
+        if (r) existing = { id: r.id, filename: r.filename, doc_type: r.doc_type,
+                            filed_hawksoft: r.filed_hawksoft === true, created_at: r.created_at };
+      } catch { /* absence is handled; a lookup failure must not block the audit */ }
+    }
+
     // carriers already on this client's policies go to the top — nearly always the answer
     let mine = [];
     if (client_no) {
@@ -345,7 +362,7 @@ export default async function handler(req, res) {
       .map(r => ({ name: String(r.name || '').trim(), policies: r.policies }))
       .filter(x => x.name && mine.indexOf(x.name) === -1);
 
-    return res.status(200).json({ ok: true, suggested, program, purpose, onThisClient: mine, carriers: ranked });
+    return res.status(200).json({ ok: true, suggested, program, purpose, existing_receipt: existing, onThisClient: mine, carriers: ranked });
   }
 
   /* ---------- Storage reachability probe (admin only) ----------
@@ -590,7 +607,18 @@ export default async function handler(req, res) {
        agent upload a document that was not a receipt on a $102 endorsement: faking one
        was the only way to close the audit. carrier_zero_ack is still required, so a
        missing receipt always comes with an explicit statement that none exists. */
-    if (complete && !receipt_b64 && carrier_zero_ack !== true) {
+    /* A receipt already on file counts. Re-uploading one HawkSoft already holds
+       creates a duplicate over there that cannot be deleted - the API has no
+       attachment-delete endpoint. */
+    let hasFiledReceipt = false;
+    if (complete && !receipt_b64 && payment_id) {
+      try {
+        const a = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(payment_id)}`
+          + `&doc_type=in.(carrier_receipt,endorsement_no_payment,cancellation_no_payment,renewal_no_payment)&select=id&limit=1`);
+        hasFiledReceipt = ((a.rows || []).length > 0);
+      } catch { hasFiledReceipt = false; }
+    }
+    if (complete && !receipt_b64 && carrier_zero_ack !== true && !hasFiledReceipt) {
       return res.status(400).json({ ok: false, error: 'Carrier receipt is required to submit to audit' });
     }
 

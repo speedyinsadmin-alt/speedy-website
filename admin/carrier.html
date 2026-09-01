@@ -196,6 +196,12 @@
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null, FILE_THUMB = null;
+/* A carrier receipt already attached to this payment on a previous attempt. The page
+   knew only about a file dropped in THIS session, so returning to a half-finished
+   audit demanded a receipt HawkSoft already held - and every retry filed another copy
+   that cannot be deleted, because the API has no attachment-delete endpoint. After
+   the Sep 1 outage five payments carried between 2 and 5 receipts each. */
+let HAS_RECEIPT = null;
 let DOCS = [];
 const $ = s => document.querySelector(s);
 const qp = new URLSearchParams(location.search);
@@ -600,6 +606,20 @@ async function loadCarriers(){
     $('#carrier').placeholder = 'Carrier paid';
     return;
   }
+  /* Show what is already on file BEFORE anything else, so the agent is never asked
+     for a document that exists. */
+  if(r.existing_receipt){
+    HAS_RECEIPT = r.existing_receipt;
+    const drop = $('#drop'), txt = $('#droptxt'), ic = $('#dropic'), badge = $('#recReq');
+    if(txt) txt.innerHTML = 'Receipt already on file &mdash; <b>' + escAttr(HAS_RECEIPT.filename || 'attached') + '</b>';
+    if(ic) ic.textContent = '\u2713';
+    if(drop) drop.style.borderColor = 'var(--green)';
+    if(badge) badge.textContent = HAS_RECEIPT.filed_hawksoft ? 'on file \u00b7 in hawksoft' : 'on file';
+    const h2 = $('#recHint');
+    if(h2) h2.textContent = 'Drop a new one only if this is the wrong receipt.';
+    updateSubmit();
+  }
+
   const opt = (v,l) => '<option value="' + escAttr(v) + '">' + escAttr(l) + '</option>';
   let html = '<option value="">Select the carrier\u2026</option>';
   if(r.onThisClient && r.onThisClient.length)
@@ -774,7 +794,7 @@ function updateSubmit(){
   /* A receipt is not required when nothing was paid to a carrier. This gate is why an
      agent uploaded a document that was not a receipt on a $102 endorsement - it was
      the only way to make the audit close. */
-  const needReceipt = !feeOnly();
+  const needReceipt = !feeOnly() && !HAS_RECEIPT;
   $('#submitBtn').disabled = !(!!effCarrier() && amtOk && cardOk && (!needReceipt || FILE_B64));
 }
 /* Shows the acknowledgement only on an exact zero, and carries the live amount so the
@@ -840,7 +860,9 @@ function applyFeeOnly(){
   const z = $('#zeroAck'); if(z) z.checked = on;     // the statement is still recorded
   const rc = $('#recCard'); if(rc) rc.style.opacity = on ? .5 : '';
   const badge = $('#recReq');
-  if(badge){ badge.textContent = on ? 'not needed' : 'required for audit'; }
+  if(badge){ badge.textContent = on ? 'not needed'
+              : (HAS_RECEIPT ? (HAS_RECEIPT.filed_hawksoft ? 'on file \u00b7 in hawksoft' : 'on file')
+                             : 'required for audit'); }
   recalcFee();   // NOT recalc() - that does not exist
   updateSubmit();
 }

@@ -865,7 +865,12 @@ if (view === 'portal_share_due') {
     if (view === 'portal_home') {
       /* `me` comes from the top of the portal block. */
       // Pull this agent's own ledger rows (match any agent string containing their email)
-      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status,total_owed,balance_of&order=ts.desc&limit=500');
+      /* audit_completed_by and audit_completed_at were BOTH missing from this
+         select while the code below read them - finished_by was silently undefined
+         on every line since it shipped. The period test now depends on
+         audit_completed_at, so a missing column here would put every payment in the
+         wrong month rather than just dropping a name. */
+      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status,total_owed,balance_of,audit_completed_by,audit_completed_at&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
@@ -921,6 +926,17 @@ if (view === 'portal_share_due') {
                  label: `${t.y}-${String(t.m).padStart(2,'0')}` };
       };
       const period = periodBounds(req.query.period);
+      /* WHICH DATE DECIDES THE MONTH. Tony's rule, Sep 1: commission is earned in the
+         month the audit is APPROVED, not the month the payment was charged. A month
+         that has closed can then never move afterwards.
+
+         Historical rows were backfilled from their carrier_leg.completed event - 116
+         of 116, none approved before it was charged. Four cross a month boundary and
+         are the cases this rule exists for.
+
+         Falls back to the charge date only if a completed row somehow has no approval
+         time, so a payment can never silently vanish from every period. */
+      const earnedAt = r => r.audit_completed_at || r.ts;
       const monthStart = period.from;
       /* An explicit end for last month and custom ranges; open-ended for the current
          one so a charge taken a minute ago still counts. */
@@ -954,20 +970,23 @@ if (view === 'portal_share_due') {
           // unless the owner shared, which is applied below
           const ratio = collectedRatio(r, all.rows || []);
           const full = fee * pct / 100;
-          if (isOwner && inPeriod(r.ts)) {
+          if (isOwner && inPeriod(earnedAt(r))) {
             const share = Number(r.helper_share_pct || 0);
             earned  += full * ratio * (1 - share / 100);
             pending += full * (1 - ratio) * (1 - share / 100);   // waiting on the balance
           }
-          if (!isOwner && r.helper_email === me && inPeriod(r.ts)) {
+          if (!isOwner && r.helper_email === me && inPeriod(earnedAt(r))) {
             const share = Number(r.helper_share_pct || 0) / 100;
             earned  += full * ratio * share;
             pending += full * (1 - ratio) * share;
           }
-          if (isOwner && inPeriod(r.ts)) {
+          if (isOwner && inPeriod(earnedAt(r))) {
             const share = Number(r.helper_share_pct || 0);
             earned_lines.push({
               id: r.id, ts: r.ts, client_no: r.client_id,
+              /* Both dates. An agent seeing August work in a September total will ask
+                 why, and the answer should be on the line rather than in a message. */
+              approved_at: r.audit_completed_at || null,
               amount: Number(r.amount),
               carrier: r.carrier_name || null,
               carrier_cost: r.service_cost != null ? Number(r.service_cost) : null,
@@ -983,7 +1002,7 @@ if (view === 'portal_share_due') {
                 ? (AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent)) : null,
             });
           }
-          if (!isOwner && inPeriod(r.ts)) {
+          if (!isOwner && inPeriod(earnedAt(r))) {
             const iCharged = agentEmailOf(r.agent) === me;
             const iFinished = agentEmailOf(r.audit_completed_by) === me;
             if (iCharged || iFinished) {
@@ -1006,7 +1025,7 @@ if (view === 'portal_share_due') {
         } else if (r.kind !== 'charge_captured' || r.audit_status) {
           // needs proof of payment / audit
           const feeGuess = fee != null ? fee * pct / 100 : null;
-          if (isOwner && inPeriod(r.ts) && feeGuess != null) pending += feeGuess;
+          if (isOwner && inPeriod(earnedAt(r)) && feeGuess != null) pending += feeGuess;
           unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount),
             purpose: r.purpose, audit_status: r.audit_status || 'client_paid',
             mine: isOwner,

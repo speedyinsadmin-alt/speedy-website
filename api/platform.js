@@ -495,6 +495,13 @@ function matchesAllTokens(row, toks) {
 const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
+    /* Declared HERE, at the top of the portal block. portal_share_due and portal_news
+       both use `me`, and it only ever existed inside portal_home's own if-block - so
+       both have thrown ReferenceError since 2026-08-14, 169 times across 3 agents.
+       That is why the notification bell never appeared for anyone, and why the share
+       prompt never asked an owner about sharing. Lowercased once: every comparison
+       against it is an email identity check. */
+    const me = String((who && who.email) || '').toLowerCase();
     if (!who) return res.status(401).json({ ok: false, error: 'Not authorized' });
     const s = sb();
     if (!s) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
@@ -720,7 +727,7 @@ if (view === 'portal_share_due') {
     }
 
     if (view === 'portal_home') {
-      const me = who.email;
+      /* `me` comes from the top of the portal block. */
       // Pull this agent's own ledger rows (match any agent string containing their email)
       const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status,total_owed,balance_of&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';

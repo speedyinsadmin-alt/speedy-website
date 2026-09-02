@@ -1529,10 +1529,14 @@ function updatePolicyPreview(){
   const prev = chgEl('chgPolPrev'), val = chgEl('chgPolPrevVal'), odd = chgEl('chgPolOdd');
   if(!w || !sel || !prev || !val || !odd) return;
   if(w.classList.contains('hide')){ prev.classList.add('hide'); odd.classList.add('hide'); return; }
-  const pn = sel.value || '';
+  const raw = sel.value || '';
+  const pn = raw.startsWith('guid:') ? '' : raw;   // never show a guid as a policy number
   const label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
   prev.classList.remove('hide');
-  val.innerHTML = pn ? ('Policy # <b>' + esc(label) + '</b>') : '<b>No policy</b> — filing at client level';
+  val.innerHTML = raw
+    ? (pn ? ('Policy # <b>' + esc(label) + '</b>')
+          : ('<b>' + esc(label) + '</b> — no number yet, files to that tab'))
+    : '<b>No policy</b> — filing at client level';
   const msg = policyLooksOdd(pn);
   if(msg){
     odd.classList.remove('hide');
@@ -1540,10 +1544,19 @@ function updatePolicyPreview(){
   } else { odd.classList.add('hide'); }
 }
 
+/* The selected value is either a policy NUMBER or 'guid:<uuid>'. These two split it
+   so the number never carries a guid prefix onto a receipt. */
 function chgPolicy(){
   const w = chgEl('chgPolWrap');
   if(w.classList.contains('hide')) return '';
-  return chgEl('chgPolSel').value || '';
+  const v = chgEl('chgPolSel').value || '';
+  return v.startsWith('guid:') ? '' : v;
+}
+function chgPolicyGuid(){
+  const w = chgEl('chgPolWrap');
+  if(w.classList.contains('hide')) return '';
+  const v = chgEl('chgPolSel').value || '';
+  return v.startsWith('guid:') ? v.slice(5) : '';
 }
 
 async function hsPost(body){
@@ -1621,11 +1634,23 @@ function renderPolicyPicker(keepValue){
   };
   const byTab = (a, b) => Number((a.carrier_extras||{}).policyIndex ?? 999)
                         - Number((b.carrier_extras||{}).policyIndex ?? 999);
-  const all  = ((cached && cached.policies) || []).filter(p => p.policy_number);
+  /* Include policies with NO policy number. A brand-new tab has none until the
+     carrier issues one, and that is exactly the policy someone is taking a down
+     payment on today - Sammy, client 23822. 429 such policies across 373 clients.
+     They were filtered out here, so a refresh that worked perfectly looked broken.
+     A policy with neither a number nor a GUID is skipped: there would be nothing to
+     file against. */
+  const all  = ((cached && cached.policies) || [])
+    .filter(p => p.policy_number || p.hs_policy_guid);
   const ins  = all.filter(p => p.record_type !== 'dmv_service').sort(byTab);
   const dmvs = all.filter(p => p.record_type === 'dmv_service').sort(byTab);
   const pols = ins.concat(dmvs);
-  const opt  = p => '<option value="' + esc(p.policy_number) + '">' + tabNo(p) + esc(p.policy_number)
+  /* An unnumbered policy travels by GUID. The charge path matches on the number, so
+     without this the receipt would file at client level while the agent believed it
+     went to the tab - worse than hiding the option. */
+  const polValue = p => p.policy_number || ('guid:' + p.hs_policy_guid);
+  const opt  = p => '<option value="' + esc(polValue(p)) + '">' + tabNo(p)
+      + esc(p.policy_number || 'no policy number yet')
       + ' — ' + esc(p.carrier || (p.record_type === 'dmv_service' ? 'DMV service' : ''))
       + (isExpired(p) ? ' (expired)' : '') + '</option>';
   const sel = chgEl('chgPolSel'), w = chgEl('chgPolWrap');
@@ -1642,8 +1667,8 @@ function renderPolicyPicker(keepValue){
       sel.value = keepValue;
     } else if(HL.armed && HL.policy && String(CHG.clientNo) === String(HL.client)){
       const want = HL.policy.trim().toUpperCase();
-      const hit = pols.find(p => String(p.policy_number).trim().toUpperCase() === want);
-      if(hit) sel.value = hit.policy_number;
+      const hit = pols.find(p => String(p.policy_number || '').trim().toUpperCase() === want);
+      if(hit) sel.value = polValue(hit);
     }
     w.classList.remove('hide');
   } else {
@@ -1852,6 +1877,7 @@ function baseBody(amt){
   const c = CHG.confirmed;
   return { clientId: c.clientNumber, clientName: c.name || '', amount: amt,
     purpose: chgPurposeText(), note: chgNoteText(), policyNumber: chgPolicy(),
+    policyGuid: chgPolicyGuid(),
     clientEmail: (c.emails && c.emails[0]) || '', office: OFFICE,
     commissionTo: chgEl('chgComm').value || EMAIL,
     totalOwed: chgEl('chgTotal').value || '',

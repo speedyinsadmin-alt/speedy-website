@@ -39,6 +39,9 @@ const TEST_CLIENT_ID = 26081;
    client level with nothing said. Five policies in the book sit exactly at 25.
    This value is only used for matching and for display on the receipt — it is
    never written back to HawkSoft as a policy number — so a generous cap is free. */
+/* A policy id arriving from the browser is a CLAIM, not a fact - it is verified
+   against HawkSoft's own policy list before anything is filed against it. */
+const CHG_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POLICY_NUM_MAX = 60;
 
 function parseMoney(v, dflt = 0) {
@@ -905,10 +908,25 @@ export default async function handler(req, res) {
 
       // Resolve policy GUID + matching open invoice (fail-soft on both)
       let policyGuid = null, policyCarrier = null, policyProgram = null, invPick = { invoices: null, how: 'lookup failed' };
+      /* A brand-new policy has no number until the carrier issues one, so the picker
+         sends its GUID instead. Without this, matching on the number finds nothing and
+         the receipt files at client level while the agent believes it went to the tab.
+         429 such policies across 373 clients. */
+      const suppliedGuid = CHG_UUID_RE.test(String(b.policyGuid || '').trim())
+        ? String(b.policyGuid).trim().toLowerCase() : null;
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
-        if (policyNumber) {
-          const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+        const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+        if (suppliedGuid) {
+          const hitG = pols.find(pl => String(pl.id || pl.policyId || pl.guid || pl.Id || '')
+                                        .toLowerCase() === suppliedGuid);
+          if (hitG) {
+            policyGuid = hitG.id || hitG.policyId || hitG.guid || hitG.Id || null;
+            policyCarrier = String(hitG.carrier || hitG.Carrier || hitG.writingCarrier || '').trim().slice(0, 30) || null;
+            policyProgram = String(hitG.program || hitG.Program || '').trim().slice(0, 40) || null;
+          }
+        }
+        if (!policyGuid && policyNumber) {
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
           if (hit) {
@@ -924,7 +942,11 @@ export default async function handler(req, res) {
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
-      out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
+      out.policyLink = policyGuid
+        ? (suppliedGuid ? 'linked by guid (no policy number yet)' : 'linked')
+        : (policyNumber ? 'no match — filed at client level'
+           : (suppliedGuid ? 'guid not found on this client — filed at client level'
+                           : 'no policy # given'));
       out.invoiceApply = invPick.how;
 
       // 2) Accounting receipt
@@ -1076,10 +1098,25 @@ export default async function handler(req, res) {
       const out = {};
 
       let policyGuid = null, policyCarrier = null, policyProgram = null, invPick = { invoices: null, how: 'lookup failed' };
+      /* A brand-new policy has no number until the carrier issues one, so the picker
+         sends its GUID instead. Without this, matching on the number finds nothing and
+         the receipt files at client level while the agent believes it went to the tab.
+         429 such policies across 373 clients. */
+      const suppliedGuid = CHG_UUID_RE.test(String(b.policyGuid || '').trim())
+        ? String(b.policyGuid).trim().toLowerCase() : null;
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
-        if (policyNumber) {
-          const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+        const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+        if (suppliedGuid) {
+          const hitG = pols.find(pl => String(pl.id || pl.policyId || pl.guid || pl.Id || '')
+                                        .toLowerCase() === suppliedGuid);
+          if (hitG) {
+            policyGuid = hitG.id || hitG.policyId || hitG.guid || hitG.Id || null;
+            policyCarrier = String(hitG.carrier || hitG.Carrier || hitG.writingCarrier || '').trim().slice(0, 30) || null;
+            policyProgram = String(hitG.program || hitG.Program || '').trim().slice(0, 40) || null;
+          }
+        }
+        if (!policyGuid && policyNumber) {
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
           if (hit) {
@@ -1094,7 +1131,11 @@ export default async function handler(req, res) {
         invPick = pickInvoices(pc.body, total, policyGuid);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
-      out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
+      out.policyLink = policyGuid
+        ? (suppliedGuid ? 'linked by guid (no policy number yet)' : 'linked')
+        : (policyNumber ? 'no match — filed at client level'
+           : (suppliedGuid ? 'guid not found on this client — filed at client level'
+                           : 'no policy # given'));
       out.invoiceApply = invPick.how;
 
       const receipt = [{
@@ -1313,10 +1354,25 @@ export default async function handler(req, res) {
         }
       } catch (e) { /* never block on the safety net */ }
       let policyGuid = null, policyCarrier = null, policyProgram = null, invPick = { invoices: null, how: 'lookup failed' };
+      /* A brand-new policy has no number until the carrier issues one, so the picker
+         sends its GUID instead. Without this, matching on the number finds nothing and
+         the receipt files at client level while the agent believes it went to the tab.
+         429 such policies across 373 clients. */
+      const suppliedGuid = CHG_UUID_RE.test(String(b.policyGuid || '').trim())
+        ? String(b.policyGuid).trim().toLowerCase() : null;
       try {
         const pc = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,policies,invoices`);
-        if (policyNumber) {
-          const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+        const pols = (pc.body && (pc.body.policies || pc.body.Policies)) || [];
+        if (suppliedGuid) {
+          const hitG = pols.find(pl => String(pl.id || pl.policyId || pl.guid || pl.Id || '')
+                                        .toLowerCase() === suppliedGuid);
+          if (hitG) {
+            policyGuid = hitG.id || hitG.policyId || hitG.guid || hitG.Id || null;
+            policyCarrier = String(hitG.carrier || hitG.Carrier || hitG.writingCarrier || '').trim().slice(0, 30) || null;
+            policyProgram = String(hitG.program || hitG.Program || '').trim().slice(0, 40) || null;
+          }
+        }
+        if (!policyGuid && policyNumber) {
           const want = policyNumber.toUpperCase();
           const hit = pols.find(pl => String(pl.policyNumber || pl.PolicyNumber || '').trim().toUpperCase() === want);
           if (hit) {
@@ -1332,7 +1388,11 @@ export default async function handler(req, res) {
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
-      out.policyLink = policyGuid ? 'linked' : (policyNumber ? 'no match — filed at client level' : 'no policy # given');
+      out.policyLink = policyGuid
+        ? (suppliedGuid ? 'linked by guid (no policy number yet)' : 'linked')
+        : (policyNumber ? 'no match — filed at client level'
+           : (suppliedGuid ? 'guid not found on this client — filed at client level'
+                           : 'no policy # given'));
       out.invoiceApply = invPick.how;
 
       const receipt = [{

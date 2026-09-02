@@ -446,15 +446,29 @@ async function acceptReceiptFiles(files){
 const DOC_TYPES = [
   ['carrier_application','Carrier application'], ['vehicle_photo','Vehicle photo'],
   ['property_photo','Property photo'], ['driver_license','Driver license'],
-  ['dec_page','Dec page'], ['other','Other'],
+  ['id_card','ID card'], ['dec_page','Dec page'],
+  ['hawksoft_endo','HawkSoft endorsement'], ['carrier_endo','Carrier endorsement'],
+  ['cancellation','Cancellation'], ['other','Other'],
 ];
 let REVIEW_FILES = [];
 
 function guessType(name){
   const n = String(name || '').toLowerCase();
-  if(/licen[cs]e|dl[_-]|\bid\b/.test(n))              return 'driver_license';
+  /* id_card is checked FIRST and \bid\b removed from the licence rule: in insurance
+     an "ID card" is the proof-of-insurance card, not a driver's licence, and the old
+     rule claimed "ID CARD.pdf" for driver_license. A licence still wins on the word
+     licence or a dl_ prefix. */
+  if(/id[_ -]?card|\bidcard\b/.test(n))                return 'id_card';
+  if(/licen[cs]e|dl[_-]/.test(n))                      return 'driver_license';
   if(/applicat|signed[_-]?app|\bapp\b/.test(n))       return 'carrier_application';
   if(/dec[_-]?page|declarat/.test(n))                  return 'dec_page';
+  if(/cancel/.test(n))                                 return 'cancellation';
+  /* HawkSoft endorsement vs carrier endorsement: whichever system is named wins,
+     and a bare "endo" is left unguessed rather than guessed wrong - the review sheet
+     marks an unguessed file amber so it gets a deliberate choice. */
+  if(/hawksoft|hs[_-]?endo/.test(n))                   return 'hawksoft_endo';
+  if(/carrier[_-]?endo/.test(n))                       return 'carrier_endo';
+
   // property words are checked first: "roof_damage" is a property photo, and
   // "damage" alone would otherwise claim it for vehicles
   if(/propert|home|roof|dwelling|kitchen|garage/.test(n)) return 'property_photo';
@@ -486,7 +500,19 @@ function renderReview(){
       ? '<img src="' + p.thumb + '" alt="" style="width:46px;height:36px;object-fit:cover;border-radius:6px;display:block">'
       : '<div style="width:46px;height:36px;background:var(--field);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px">📄</div>';
     const needs = r.guessed && !r.confirmed;
-    return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)">'
+    /* "Other" needs to say WHAT. The single-file path has always had this box; the
+       review sheet never did, so an agent dragging several files could pick Other and
+       had no way to describe any of them. Laura hit exactly this. */
+    const otherRow = r.type === 'other'
+      ? '<div style="padding:0 0 9px 55px;border-bottom:1px solid var(--line)">'
+        + '<input type="text" maxlength="41" placeholder="What is this document?" '
+        + 'value="' + escAttr(r.label || '') + '" oninput="setLabel(' + r.i + ',this.value)" '
+        + 'style="margin:0;font-size:12px;padding:6px 9px' + (!(r.label || '').trim() ? ';border-color:var(--amber)' : '') + '">'
+        + '<div class="muted" style="font-size:10px;margin-top:3px">'
+        + ((r.label || '').length) + '/41 — becomes the description in HawkSoft</div></div>'
+      : '';
+    return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;'
+      + (r.type === 'other' ? '' : 'border-bottom:1px solid var(--line)') + '">'
       + thumb
       + '<div style="flex:1;min-width:0">'
       + '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.name) + '</div>'
@@ -496,11 +522,18 @@ function renderReview(){
       + '<select onchange="setType(' + r.i + ',this.value)" style="margin:0;width:auto;min-width:130px;'
       + (needs ? 'border-color:var(--amber)' : '') + '">' + typeOptions(r.type) + '</select>'
       + '<span onclick="dropFile(' + r.i + ')" style="cursor:pointer;color:var(--mute);font-size:15px">✕</span>'
-      + '</div>';
+      + '</div>' + otherRow;
   }).join('');
   const pending = REVIEW_FILES.filter(r => r.guessed && !r.confirmed).length;
+  /* An unlabelled "Other" is as unusable as an unconfirmed guess - it arrives in
+     HawkSoft described as nothing. */
+  const unlabelled = REVIEW_FILES.filter(r => r.type === 'other' && !String(r.label || '').trim()).length;
   const warn = $('#revWarn'), add = $('#revAdd');
-  if(pending){
+  if(unlabelled && !pending){
+    warn.classList.remove('hide');
+    warn.textContent = unlabelled + ' marked Other — say what ' + (unlabelled > 1 ? 'they are' : 'it is') + ' before adding.';
+    add.disabled = true;
+  } else if(pending){
     warn.classList.remove('hide');
     warn.textContent = pending + ' file' + (pending > 1 ? 's were' : ' was') + ' labelled from the filename. Confirm or change ' + (pending > 1 ? 'them' : 'it') + ' before adding.';
     add.disabled = true; add.style.opacity = '.5';
@@ -510,6 +543,16 @@ function renderReview(){
   }
   add.textContent = 'Add ' + REVIEW_FILES.length + ' document' + (REVIEW_FILES.length === 1 ? '' : 's');
 }
+function setLabel(i, v){
+  const r = REVIEW_FILES.find(x => x.i === i);
+  if(!r) return;
+  r.label = String(v || '').slice(0, 41);
+  /* Deliberately NOT re-rendering: that would rebuild the input and lose the caret
+     mid-word. The counter updates on the next render, which is enough. */
+  const add = $('#revAdd');
+  if(add) add.disabled = REVIEW_FILES.some(x => x.type === 'other' && !String(x.label || '').trim());
+}
+
 function setType(i, v){
   const r = REVIEW_FILES.find(x => x.i === i); if(!r) return;
   r.type = v; r.confirmed = true; renderReview();
@@ -536,7 +579,7 @@ function cancelReview(){
 function confirmReview(){
   if(REVIEW_FILES.some(r => r.guessed && !r.confirmed)) return;
   for(const r of REVIEW_FILES){
-    DOCS.push({ doc_type: r.type, name: r.p.name, mime: r.p.mime, b64: r.p.b64, thumb: r.p.thumb, note: sizeNote(r.p) });
+    DOCS.push({ doc_type: r.type, doc_label: (r.label || '').trim() || null, name: r.p.name, mime: r.p.mime, b64: r.p.b64, thumb: r.p.thumb, note: sizeNote(r.p) });
   }
   cancelReview();
   renderDocs();

@@ -795,7 +795,14 @@ function updateSubmit(){
      agent uploaded a document that was not a receipt on a $102 endorsement - it was
      the only way to make the audit close. */
   const needReceipt = !feeOnly() && !HAS_RECEIPT;
-  $('#submitBtn').disabled = !(!!effCarrier() && amtOk && cardOk && (!needReceipt || FILE_B64));
+  /* A carrier is only required when one was actually PAID. Sammy hit this on client
+     23822: he ticked "this is a fee", and Submit stayed dead because the gate still
+     demanded the name of a carrier that received nothing. The server has never
+     required it - it writes `carrier || null` throughout - so this gate was the only
+     thing asking. Same shape as the receipt gate: a control demanding something that
+     does not exist for this kind of charge. */
+  const needCarrier = !feeOnly();
+  $('#submitBtn').disabled = !((!needCarrier || !!effCarrier()) && amtOk && cardOk && (!needReceipt || FILE_B64));
 }
 /* Shows the acknowledgement only on an exact zero, and carries the live amount so the
    agent reads the real consequence, not a generic warning. No purpose gate: zero is
@@ -856,7 +863,7 @@ function applyFeeOnly(){
     else { amt.readOnly = false; }
     amt.style.opacity = on ? .45 : '';
   }
-  ['carrierWrap','card'].forEach(id => { const e = $('#' + id); if(e) e.style.opacity = on ? .45 : ''; });
+  ['carrierWrap','card','carrierSel'].forEach(id => { const e = $('#' + id); if(e) e.style.opacity = on ? .45 : ''; });
   const z = $('#zeroAck'); if(z) z.checked = on;     // the statement is still recorded
   const rc = $('#recCard'); if(rc) rc.style.opacity = on ? .5 : '';
   const badge = $('#recReq');

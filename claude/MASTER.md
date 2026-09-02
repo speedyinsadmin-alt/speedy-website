@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 1, 2026 · maintained by Saif + Claude**
+**Last updated: September 1, 2026 (evening) · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 > **THIS IS THE ONLY COPY.** On Aug 28 the project held **six separate documents
@@ -424,6 +424,123 @@ render on the payments they wrote.
 
 ---
 
+## SEP 1 — COMMISSION BY APPROVAL DATE, FEE-ONLY, AND TWO OUTAGES I CAUSED
+
+### Shipped
+- **`audit_completed_at`** (`69593c45`) — commission is earned in the month the audit
+  is **APPROVED**, Tony's rule. A closed month can never move afterwards. Backfilled
+  116/116 from `carrier_leg.completed`; none approved before charged. One agent moved:
+  Sammy's August fee base 9,496.23 → 9,888.65.
+- **Fee-only** (`1ba56a46`, `f3849d91`) — "This is a fee — no carrier payment" on the
+  carrier page. Sets amount 0, waives the receipt, keeps `carrier_zero_ack`.
+- **Existing receipt counts** (`5665bb83`) — the page reads receipts already attached
+  and stops demanding a re-upload.
+- **`admin/ops.html`** (`b77c4c7e`, `f647d9f4`) — the ops console, out of the artifact
+  and into the repo. Empty shell; everything from the gated `ops_summary`.
+- **`claude/MASTER.md` + WORKSPACE + BUILD_MAP** in the repo (`f30fe573`, `5af209c5`).
+  Project files are down to one PDF. **No more uploads.**
+
+### ⚠️ OUTAGE 1 — Submit to audit threw for 3 hours. My scope error.
+Adding `audit_completed_at`, I inserted `const nowIso` before the FIRST
+`if (payment_id) {` in the file — which is inside `resolvePolicyGuid`, not
+`save_carrier_leg`. The completion branch referenced a free variable, so the whole
+PATCH threw before running.
+
+**Save & finish later worked; Submit to audit did not** — the partial save never
+evaluates the completion branch. Three agents blocked. Five audits half-written.
+**They retried, and each retry uploaded another carrier receipt: 16 across 5
+payments, two with five each.** HawkSoft has no attachment-delete endpoint, so every
+duplicate is permanent.
+
+Hotfix `d06ea9c5`: timestamp computed inline. **Second time this exact mistake hit
+production** — `loadRoster` on Aug 30 was the same thing.
+
+> **RULE: an anchor that matches a common line must be verified to be the RIGHT
+> occurrence before writing.** `if (payment_id) {` appears many times.
+
+### ⚠️ OUTAGE 2 — the fee-only toggle called `recalc()`, which does not exist
+The function is `recalcFee()`. The handler threw on its first line, so the fee stayed
+em-dash and Submit never enabled. Third name-resolution error in one day.
+
+> **RULE, and this one changed how I work: PARSING IS NOT ENOUGH for a page whose
+> behaviour lives in handlers.** `node --check` and `new Function()` both pass on a
+> call to a function that does not exist. The harness now EXECUTES the real handlers
+> in a DOM complete enough to load the whole page — URL params, auto-created
+> elements, `getComputedStyle` — and reproduces the exact reported case. That is the
+> standard for carrier.html and portal.html from now on. It caught the next bug
+> immediately.
+
+### ✅ The "refresh from HawkSoft is broken" report — it is not
+Sammy, client **23822** ARQUELAO AREVALO LEMUS. His 16:41 refresh **worked**: 4
+clients, 22 policies, and his new ANCHOR GENERAL tab landed in `policies`.
+
+**It has no policy number yet, and the picker filters on `p.policy_number`.** So it
+syncs, stores, and is then hidden. To the agent that is indistinguishable from a
+broken refresh.
+
+**429 unnumbered policies across 373 clients.** Not an edge case.
+
+### ⛔ NEXT: unnumbered policies — DO NOT SHIP HALF OF THIS
+Showing them in the picker is easy. Making them FILE is not: the charge resolves the
+policy by matching the NUMBER against HawkSoft's live list —
+
+```js
+const hit = pols.find(pl => pl.policyNumber.toUpperCase() === want);
+```
+
+— so no number means no match and the receipt silently files at client level with
+`policyLink: 'no policy # given'`. **Showing the option without fixing filing is
+WORSE than hiding it**: the agent picks it, believes it filed to the tab, and it did
+not.
+
+Doing it properly = the charge path accepts a policy **GUID** directly and skips the
+number match. That is `hawksoft.js`, money path, and needs the executing harness plus
+a ZZTEST run before any real client.
+
+**Agent workaround meanwhile:** pick "No policy — file at client level", take the
+payment, link once the carrier issues the number.
+
+**Also agreed for that piece:** group the picker by status (active, new, DMV,
+cancelled last), and **no preselect above 3 tabs** — a glance at a pre-filled field is
+how a receipt lands on a policy HawkSoft cannot move it off. Average is 1.8 tabs;
+only 119 of 25,648 clients exceed 10; worst is 63.
+
+**A picker SHEET was mocked up and deliberately declined for now** — 99.5% of charges
+are 1–2 tabs, and replacing a control used on every charge was not worth it the same
+day I broke the system twice. Revisit if agents complain about picking; its real
+advantage is search.
+
+### Roles and the agents table — agreed, not built
+`is_admin` → `role`: **agent / admin / owner**. Admin gets Console + audit approval;
+owner gets commission overrides, deactivation, changing another admin. `tony@` is
+`is_admin` in the table but NOT in code — correct that when wiring.
+
+**info@ is the ONLY admin** (Saif, Sep 1). All other `@speedyins.com` agents get
+portal + charge. Portal keeps the **explicit allowlist**, not a domain gate — a
+departed agent keeps access until their Google account is disabled, and NRR (2,326
+clients) shows that does not happen reliably.
+
+**Then an Agents panel in the Console** — list, add, change branch, deactivate. Never
+"invite": the Workspace mailbox already exists, we only grant access. Guardrails: it
+cannot remove the last admin or demote yourself; `active=false` never deletes; every
+change writes to `events`.
+
+### Two-stage audit — agreed, blocked on Tony
+Stage 1 money (carrier cost + receipt, exists today). Stage 2 file (required documents
+present and approved by Tony). Green today means only stage 1, which is why nobody can
+tell if a charge is genuinely finished.
+
+**Blocked on the document checklist per purpose** — new business needs signed policy,
+charge receipt, broker fee agreement, car photos; an endorsement needs something else.
+Without that list Tony is typing free text at people. **Saif: keep it open until Tony's
+approval design is studied.**
+
+### Tony's by-agent commission tab — agreed, not built
+By agent, by period, every payment with the full math: charged, carrier cost, fee,
+percentage, commission, shares. So "why did Sammy make that much" is read, not asked.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -806,6 +923,11 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 67. **Earnings breakdown needs more detail and a search** — Saif, Aug 29: show the charge and the payment alongside the commission, and make the list searchable/filterable. Currently one flat list of up to 60 lines
 68. **⚠️ NOTIFICATIONS STILL NOT SHOWING IN THE PORTAL** — events fire correctly (3 `audit.completed_by_other` rows for sammy@, unread count right, filter and render branch both live), and v3.8 added polling, but Saif reports the bell still does not appear. **NOT diagnosed. First thing tomorrow.** Check: does `#newsBell` unhide, is `loadNews()` returning items, is the agent's browser on v3.9
 69. ~~Run receipt_tender_probe~~ **DONE Sep 1 — the finding it was chasing was wrong. Bridge receipts tender correctly**
+69c. **⛔ UNNUMBERED POLICIES — picker + charge GUID path.** Do not ship half. See SEP 1
+69d. **Roles: agent/admin/owner**, then the Agents panel in the Console
+69e. **Tony's by-agent commission tab**
+69f. **Jorge's 25185 ($351.26)** still needs its carrier cost — never had one
+69g. **15 duplicate carrier receipts in HawkSoft** from the Sep 1 outage. No delete endpoint; permanent
 69b. **⛔ DUPLICATE RECEIPTS — agents re-key what the bridge already posted.** Esmeralda confirmed. Ask her what she sees after a charge before building anything
 70. **Finish the roster table** — `public.agents` is seeded and verified; nothing reads it. See the retry rules above
 71. **Earnings breakdown needs more detail + search** — Saif, Aug 31: show the charge and the payment beside the commission, make it searchable
@@ -903,6 +1025,17 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 - **Ask what we already pay for before adding a vendor.** I chose Vercel Blob because
   a half-written helper pointed there; Supabase Pro already included 100 GB of file
   storage, the credential was already in the environment, and Saif had to point it out.
+- **PARSING IS NOT ENOUGH (Sep 1).** `node --check` and `new Function()` both pass on
+  a call to a function that does not exist. Execute the real handlers in a DOM real
+  enough to load the page, and reproduce the reported case exactly.
+- **An anchor matching a common line must be verified to be the RIGHT occurrence
+  (Sep 1).** `if (payment_id) {` appears many times; inserting at the first one put a
+  declaration in the wrong function and took Submit to audit down for three hours.
+- **A gate that refuses a legitimate case gets satisfied in the smallest way that
+  passes.** The $0.01 problem, and then an agent uploading a non-receipt on a $102
+  endorsement because the audit would not close without one.
+- **Showing an option that cannot work is worse than hiding it.** An unnumbered policy
+  in the picker would file to client level and say nothing.
 - **Never infer the identifying attribute from the pattern you are trying to explain
   (Sep 1).** I decided which receipts were ours from the Tendered column, then used
   Tendered as proof about our receipts. Find a column that STATES ownership — Created
@@ -969,7 +1102,9 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 
 **Aug 29, in order:** `719adcf9` melisa access · `edf9912b` refid probe · `dbacd6e9` phone search · `0d5fab52` **restore melisa after my own revert** · `ff6371f7` portal v3.1 refresh · `ea05d748` producer codes · `6070c22d` name search · `e737a4b3` portal v3.2 accordion · `5f891b80` receipt vault policy · `93570a67` portal v3.3 ownership · `7e921fae` audit_completed_by · `e1329bdb` blob probe · `1ea946e9` **documents to private Supabase bucket** · `7850e558` migration · `4f7c7c23` migration idempotent + orphan sweep · `52a246bc` policy documents · `01640c2f` portal v3.5 charge-this-policy · `eb1b8365` v3.6 help list · `e1896c46` **save_carrier_leg opened to helpers** · `e57e4263` v3.7 help sheet fixes · `8ff141c8` v3.8 bell polling · `176f05b2` v3.9 earnings breakdown
 
-**Aug 30-31:** `7016eda9` v4.0 light mode · `1554abeb` tender probe · `59185635` daisy@ · `bdea98a1` roster table (REVERTED) · `2f99ba89` additive admins · `32b4bfa5` **revert roster, restore Console** · `d9dc30fd` `me` scope fix · **`d65c59e6` v4.1 Pacific month + period picker + scroll (current)**
+**Aug 30-31:** `7016eda9` v4.0 light mode · `1554abeb` tender probe · `59185635` daisy@ · `bdea98a1` roster table (REVERTED) · `2f99ba89` additive admins · `32b4bfa5` **revert roster, restore Console** · `d9dc30fd` `me` scope fix · `d65c59e6` v4.1 Pacific month + period picker + scroll
+
+**Sep 1:** `f30fe573` MASTER.md to repo · `5af209c5` WORKSPACE + BUILD_MAP · `b77c4c7e` ops.html · `f647d9f4` ops full · `69593c45` **approval-date commission** · `d06ea9c5` **hotfix nowIso scope** · `1ba56a46` fee-only · `f3849d91` **hotfix recalcFee** · **`5665bb83` existing receipt counts (current)**
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

@@ -1908,6 +1908,34 @@ if (view === 'portal_share_due') {
      'no policy # given', so the sweep will not revisit them. Re-sends from the
      payment.policy_linked events, which hold everything needed. Idempotent by
      intent: skips any payment that already has a successful note recorded. */
+  /* Does a log note with policyId actually land on the POLICY TAB, or fall back to
+     client level? The nine resent notes went to client level because I dropped
+     policyId from the resend. The live sync path DOES send it - but I assumed a
+     payload shape once today and was wrong, so this proves it rather than claiming
+     it. Two notes on ZZTEST: one with the policy id, one without, so the difference
+     is visible side by side. */
+  if (view === 'policy_note_probe') {
+    const guid = '4ceb4d34-d201-4a43-bf5f-495647047ac5';   // ZZTEST · SAIF-TEST · tab 1
+    const stamp = new Date().toISOString();
+    const send = (label, withPolicy) => hsCall(`/vendor/agency/${AGENCY_ID}/client/26081/log?version=4.0`, {
+      method: 'POST',
+      body: JSON.stringify({
+        refId: crypto.randomUUID(), ts: stamp, channel: 32,
+        note: `POLICY NOTE PROBE — ${label}. Safe to ignore or void.`,
+        ...(withPolicy ? { policyId: guid } : {}),
+      }),
+    });
+    const withId = await send('WITH policyId — should appear on the SAIF-TEST tab', true);
+    const noId   = await send('WITHOUT policyId — should appear at client level', false);
+    return res.status(200).json({ ok: true,
+      with_policy_id: { status: withId && withId.status, body: withId && withId.body },
+      without_policy_id: { status: noId && noId.status, body: noId && noId.body },
+      readMe: 'Open ZZTEST 26081 in CMS. Look at the Pol column on the two new notes. '
+            + 'If the first shows 1 and the second shows 0, policyId works and future '
+            + 'links will land on the tab. If both show 0, the API ignores it and the '
+            + 'note belongs at client level anyway.' });
+  }
+
   if (view === 'resend_policy_notes') {
     const s = sb();
     const ev = await sbGet(s, `events?kind=eq.payment.policy_linked&select=client_no,payload,ts&order=ts.asc&limit=100`);

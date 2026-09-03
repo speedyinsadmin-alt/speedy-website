@@ -438,6 +438,31 @@ async function linkDownPayments(s, clientNo, actor) {
   return out;
 }
 
+/* Hanging the linker off "clients this sync touched" was too narrow, and every real
+   case proved it: all 7 resolvable payments had their policies synced DAYS earlier -
+   08-26, 08-31, 09-01, 09-02 - so the watermark had long moved past those clients and
+   they would never be pulled again. The link would only ever have fired when a policy
+   happened to arrive in the same run.
+
+   So the sweep looks at UNLINKED PAYMENTS, not at changed clients. Cheap: it reads
+   the handful of down payments still carrying 'no policy # given' and checks each
+   client's policies, which are already in our own tables. */
+async function sweepUnlinkedPayments(s, actor) {
+  const out = { linked: 0, notes: [] };
+  try {
+    const open = await sbGet(s, `bridge_ledger`
+      + `?extra->>policyLink=eq.${encodeURIComponent('no policy # given')}`
+      + `&is_test=is.false&select=client_id&order=ts.desc&limit=60`);
+    const clients = [...new Set((open.rows || []).map(r => Number(r.client_id)).filter(isFinite))];
+    for (const cn of clients) {
+      const r = await linkDownPayments(s, cn, actor);
+      out.linked += r.linked || 0;
+      if (r.notes) out.notes.push(...r.notes);
+    }
+  } catch (e) { out.error = String(e).slice(0, 160); }
+  return out;
+}
+
 async function runDeltaSync(s, actor, budgetMs) {
   const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
   const last = (st.rows && st.rows[0] && st.rows[0].last_sync) || '2026-07-23T00:00:00Z';
@@ -465,14 +490,9 @@ async function runDeltaSync(s, actor, budgetMs) {
       const r = await upsertHsClient(s, c);
       if (r.ok) {
         clients++; pols += r.policies;
-        /* The policies for this client have just been written, so an unlinked down
-           payment can now be matched against them. */
-        const cn = Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id'));
-        if (isFinite(cn)) {
-          const lk = await linkDownPayments(s, cn, actor);
-          linked += lk.linked || 0;
-          if (lk.notes) pendingNotes.push(...lk.notes);
-        }
+        /* Linking happens in one sweep after the loop - see sweepUnlinkedPayments.
+           Doing it per client here only ever caught policies arriving in the same
+           run, which is not how this actually happens. */
       }
     }
   }
@@ -480,6 +500,11 @@ async function runDeltaSync(s, actor, budgetMs) {
   // Only advance the watermark when the whole window was processed. If we ran out of
   // time, leave it where it was so the next press picks up the same window and keeps
   // going — a four-day gap is caught up by pressing the button a few times.
+  /* Every unlinked payment, not only the clients this run happened to touch. */
+  const swept = await sweepUnlinkedPayments(s, actor);
+  linked += swept.linked || 0;
+  if (swept.notes) pendingNotes.push(...swept.notes);
+
   /* ---------- The note an auditor in CMS actually needs ----------
      The receipt is already filed at CLIENT LEVEL and HawkSoft has no receipt-modify
      endpoint, so it can never be moved onto the policy. Without a note, somebody

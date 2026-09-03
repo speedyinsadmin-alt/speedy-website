@@ -67,6 +67,12 @@
     <header>
       <div class="dot"></div>
       <h1>Carrier Payment <small>internal · audit capture</small></h1>
+      <!-- Present from page load, not only after a successful submit. This is a full
+           page, not an overlay, so without it an agent who opens it and changes their
+           mind - or whose submit fails - has only the browser button. That is exactly
+           where three agents were stranded during the Sep 1 outage. -->
+      <a id="topBack" href="#" onclick="return goBack(event)"
+         style="margin-left:auto;color:var(--blue);font-size:13px;text-decoration:none;white-space:nowrap">&#8592; Back</a>
     </header>
 
     <div class="card">
@@ -195,6 +201,7 @@
 </div>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
+let SUBMITTED = false;   // set on a successful submit, so Back stops warning
 let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null, FILE_THUMB = null;
 /* A carrier receipt already attached to this payment on a previous attempt. The page
    knew only about a file dropped in THIS session, so returning to a half-finished
@@ -612,6 +619,34 @@ function msgLine(t){ const m = $('#msg'); if(m){ m.className = ''; m.textContent
 
    NOTE: this page has no esc() or post() helper. Both were assumed once before
    and blanked the page. Escaping is done locally here. */
+/* Returns to the CLIENT they came from, not the portal home. They arrived from a
+   client card; landing on the search screen means finding that client again. */
+function backHref(){
+  const c = String((typeof CTX !== 'undefined' && CTX.client_no) || '').trim();
+  return c ? ('/admin/portal.html?client=' + encodeURIComponent(c)) : '/admin/portal.html';
+}
+/* Warns only when there is work that would be LOST - a carrier cost typed or a file
+   dropped but not submitted. That is precisely what vanished for three agents on
+   Sep 1 while Submit was throwing. */
+function hasUnsavedWork(){
+  if(SUBMITTED) return false;
+  const amt = $('#camt'), card = $('#card');
+  const typed = !!(amt && String(amt.value || '').trim() && Number(amt.value) !== 0);
+  const chose = !!(card && card.value);
+  const filed = !!FILE_B64;
+  const docs  = !!(typeof DOCS !== 'undefined' && DOCS && DOCS.length);
+  const staged = !!(typeof REVIEW_FILES !== 'undefined' && REVIEW_FILES && REVIEW_FILES.length);
+  return typed || chose || filed || docs || staged;
+}
+function goBack(e){
+  if(e && e.preventDefault) e.preventDefault();
+  if(hasUnsavedWork() && !confirm(
+      'Leave without submitting?\n\nThe carrier cost and any files you added here have '
+      + 'not been sent yet and will be lost.')) return false;
+  location.href = backHref();
+  return false;
+}
+
 function escAttr(s){
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -1069,7 +1104,8 @@ async function submit(complete){
     if(CTX.payment_id){
       const back = document.createElement('div');
       back.style.cssText = 'margin-top:12px;text-align:center';
-      back.innerHTML = '<a href="/admin/portal.html" style="color:#4d7cfe;font-size:13px;text-decoration:none">\u2190 Back to my portal</a>';
+      SUBMITTED = true;
+      back.innerHTML = '<a href="' + backHref() + '" style="color:#4d7cfe;font-size:13px;text-decoration:none">\u2190 Back to ' + (CTX.name ? escAttr(CTX.name) : 'the client') + '</a>';
       msg.appendChild(back);
     }
     if(complete){ /* keep disabled — done */ }

@@ -484,12 +484,27 @@ function onCred(resp){
     applyOffice(home);
     return;
   }
+  /* Coming back from the carrier page, the agent already chose an office minutes ago.
+     Making them choose again is the same interruption as making them sign in again -
+     and the office is not a fresh decision, it is the one they are already working
+     under. Only honoured for a KNOWN staff member and a real office, so it can never
+     silently stamp a branch on a payment for someone with no STAFF entry. */
+  if(HANDOFF_BACK && staff){
+    let saved = null;
+    try { saved = localStorage.getItem('speedy_handoff_office'); } catch(e){}
+    if(saved && OFFICES.indexOf(saved) !== -1){
+      applyOffice(saved);
+      return;
+    }
+  }
   $('#officePick').classList.remove('hide');
 }
 
 function confirmOffice(){ applyOffice($('#officeSel').value); }
 function applyOffice(office){
   OFFICE = office;
+  /* Remembered so a return trip does not ask again. Cleared on sign-out. */
+  try { localStorage.setItem('speedy_handoff_office', office); } catch(e){}
   $('#officeLabel').textContent = OFFICE;
   var wa=$('#workingAt'); if(wa) wa.textContent = OFFICE;
   $('#officePick').classList.add('hide');
@@ -740,7 +755,11 @@ function hlChangeOffice(){
   applyOffice(hit);
   if(CHG && CHG.clientNo) chgEl('chgSub').innerHTML = chgSubHtml(CHG.clientNo);
 }
-function signOut(){ clearAuthWarn(); TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; UNFINISHED=[]; document.getElementById('chargeSheet').classList.add('hide'); document.getElementById('todoSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
+function signOut(){ clearAuthWarn();
+  /* Signing out must forget the office and the handoff, or the next person on a
+     shared branch machine inherits both. */
+  try { localStorage.removeItem('speedy_handoff_office'); localStorage.removeItem('speedy_handoff_tok'); } catch(e){}
+  TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; UNFINISHED=[]; document.getElementById('chargeSheet').classList.add('hide'); document.getElementById('todoSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
 
 // ===== STAGE 2: client search, tabs (max 5), compact card =====
 const MAX_TABS = 5;
@@ -2044,12 +2063,14 @@ function jwtAlive(t){
     return !!c.exp && (c.exp * 1000) > (Date.now() + 30000);   // 30s of headroom
   } catch { return false; }
 }
+let HANDOFF_BACK = false;
 function tryHandoffBack(){
   let tok = null;
   try { tok = localStorage.getItem('speedy_handoff_tok'); } catch(e){}
   if(!tok) return false;
   try { localStorage.removeItem('speedy_handoff_tok'); } catch(e){}
   if(!jwtAlive(tok) || !jwtEmail(tok)) return false;   // fall through to normal sign-in
+  HANDOFF_BACK = true;
   onCred({ credential: tok });
   return true;
 }

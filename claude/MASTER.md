@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 1, 2026 (evening) · maintained by Saif + Claude**
+**Last updated: September 3, 2026 · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 > **THIS IS THE ONLY COPY.** On Aug 28 the project held **six separate documents
@@ -541,6 +541,89 @@ percentage, commission, shares. So "why did Sammy make that much" is read, not a
 
 ---
 
+## SEP 2–3 — UNNUMBERED POLICIES, RETRO-LINKING, AND A RECEIPT ON THE WRONG TAB
+
+### Shipped
+- **Fee-only carrier fix** (`ec18b795`) — the gate still demanded the NAME of a
+  carrier that was not paid. Sammy on 23822 had nothing to select and no way forward.
+- **Four document types** (`b2ac1537`) — ID card, HawkSoft endo, Carrier endo,
+  Cancellation. And the multi-file review sheet finally lets "Other" say what it is:
+  it never had the text box the single-file path has, and its `DOCS.push` carried **no
+  `doc_label` at all**, so a description would have been dropped anyway. Laura hit it.
+  `ID CARD.pdf` was also being guessed `driver_license` — the licence rule matched any
+  word "id". In insurance an ID card is the proof-of-insurance card; `id_card` now wins.
+- **Unnumbered policies chargeable** (`558ac86f`) — see below.
+- **Retro-linking down payments** (`2a0c9d4d`, `505b4987`, `42840261`) — see below.
+- **Picker grouped by status** (`aa5970cc`) — see below.
+- **`note_wrong_policy`** (`7af8e9ce`) — admin action, writes to BOTH tabs.
+
+### A POLICY WITH NO NUMBER YET — 429 across 373 clients
+Sammy, 23822: he created an ANCHOR GENERAL tab, the refresh **worked**, and the picker
+hid it because it filtered on `policy_number`. A brand-new policy has none until the
+carrier issues one — which is exactly the policy a down payment is taken against.
+
+Explicitly **not** shipped as display-only: the charge resolves by matching the NUMBER,
+so showing the option alone would have filed at client level while the agent believed
+it went to the tab. **All THREE charge paths** — live, cash, pay link — now accept a
+policy GUID. The anchor matched 3 times, which is the Sep 1 lesson working.
+
+The GUID is **verified, not trusted**: well-formed uuid AND present in HawkSoft's own
+policy list for that client. An id from a browser is a claim.
+
+### CHARGE FIRST, POLICY AFTER — I had the model backwards
+I proposed warning when a client has no policy. Saif: *"the whole idea of the charge is
+that the agency charges before buying the policy."* The data agrees — **all 9 unlinked
+charges are Down payments, nothing else.** It is the signature of new business, not an
+error, and a warning would fire on every one.
+
+So the receipt files at client level, permanently (no receipt-modify endpoint). What we
+can do is make OUR record true when the policy arrives, and leave a note.
+
+**Matching uses CLIENT AND TIMING, NOT AMOUNT** — Saif's correction, and the right one:
+two down payments can be the same figure. Single New policy effective −3/+14 days of the
+charge. All 9 real cases: **7 resolve to exactly one candidate, 0 ambiguous**, 2 had no
+policy yet. One candidate or abstain.
+
+**Three places, one per reader:** ledger says `linked retroactively by sync` (never plain
+`linked`); an `events` row carries the EVIDENCE; a HawkSoft log note so an auditor can
+follow the money.
+
+> **Two mistakes on this, both mine, both caught by Saif asking "where?":**
+> 1. I hung the linker off *clients the sync touched*. Every real case had its policy
+>    synced days earlier, so the watermark had moved past them and it could never fire.
+>    Now `sweepUnlinkedPayments` drives from **unlinked payments**.
+> 2. All nine HawkSoft notes were **rejected** — I wrapped the body in an ARRAY;
+>    `hawksoft.js` has posted a single OBJECT for months. I rewrote working code
+>    instead of copying it. And a bare `catch {}` hid it, so the sync reported success.
+>    **The same silent-catch mistake as loadRoster on Aug 30, in the same file.**
+>    Now: status checked, `payment.note_failed` event, counts on the sync event.
+
+### ⚠️ A RECEIPT ON THE WRONG POLICY — client 7941
+Sammy took $191.88 of new business and it filed onto `CAN23006496-00`, an ONWARD policy
+from 2023 that **expired March 2024**. The one he wanted was tab 6, ASPIRE, effective
+that day. **Not a wiring fault** — the system filed exactly where he pointed it.
+
+The picker was a flat list of six tabs: two 2020/2021 DMV records sharing a number, an
+expired 2023 policy, a cancelled 2026 one, and today's policy at the bottom.
+
+Now grouped **Active → New (no number yet) → DMV → Cancelled & expired**, newest tab
+first, dead ones labelled on the line. **Above three tabs nothing is preselected** —
+the field reads "Choose the policy… (6 tabs)". At or below three, unchanged: average is
+1.8 tabs and 99% of clients have one or two.
+
+`note_wrong_policy` writes to **both** tabs — the one holding the receipt says it does
+not belong there, the one that should have it says where it sits. One note alone leaves
+the other tab lying.
+
+### Standing facts worth not relearning
+- **A log note CAN carry `policyId` and land on the tab.** The bridge has done it for
+  months. Saif pointed this out when I was about to probe a capability in daily use —
+  the nine notes went to client level only because I dropped `policyId` from the resend.
+- **HawkSoft cannot move a receipt or delete an attachment or a log note.** Every wrong
+  file and every duplicate is permanent. This is why gates abstain rather than guess.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -923,7 +1006,10 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 67. **Earnings breakdown needs more detail and a search** — Saif, Aug 29: show the charge and the payment alongside the commission, and make the list searchable/filterable. Currently one flat list of up to 60 lines
 68. **⚠️ NOTIFICATIONS STILL NOT SHOWING IN THE PORTAL** — events fire correctly (3 `audit.completed_by_other` rows for sammy@, unread count right, filter and render branch both live), and v3.8 added polling, but Saif reports the bell still does not appear. **NOT diagnosed. First thing tomorrow.** Check: does `#newsBell` unhide, is `loadNews()` returning items, is the agent's browser on v3.9
 69. ~~Run receipt_tender_probe~~ **DONE Sep 1 — the finding it was chasing was wrong. Bridge receipts tender correctly**
-69c. **⛔ UNNUMBERED POLICIES — picker + charge GUID path.** Do not ship half. See SEP 1
+69c. ~~Unnumbered policies~~ **DONE Sep 2** (`558ac86f`)
+69h. **7941's $191.88 sits on an expired 2023 policy** — permanent. Note written to both tabs
+69i. **Back button on carrier.html** — agreed Sep 1, still not built. Only appears after a successful submit, and goes to the portal home instead of the client
+
 69d. **Roles: agent/admin/owner**, then the Agents panel in the Console
 69e. **Tony's by-agent commission tab**
 69f. **Jorge's 25185 ($351.26)** still needs its carrier cost — never had one
@@ -1025,6 +1111,12 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 - **Ask what we already pay for before adding a vendor.** I chose Vercel Blob because
   a half-written helper pointed there; Supabase Pro already included 100 GB of file
   storage, the credential was already in the environment, and Saif had to point it out.
+- **Do not rewrite working code from scratch — COPY it (Sep 3).** I wrote a HawkSoft
+  log note from memory, wrapped it in an array, and all nine were rejected.
+  `hawksoft.js` had the correct shape three files away.
+- **A bare `catch {}` on a write is how a failure reports success (Sep 3).** Second
+  time in five days. Check the status, record the failure, count it.
+- **Ask whether a capability is already in use before building a probe for it (Sep 3).**
 - **PARSING IS NOT ENOUGH (Sep 1).** `node --check` and `new Function()` both pass on
   a call to a function that does not exist. Execute the real handlers in a DOM real
   enough to load the page, and reproduce the reported case exactly.
@@ -1104,7 +1196,9 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 
 **Aug 30-31:** `7016eda9` v4.0 light mode · `1554abeb` tender probe · `59185635` daisy@ · `bdea98a1` roster table (REVERTED) · `2f99ba89` additive admins · `32b4bfa5` **revert roster, restore Console** · `d9dc30fd` `me` scope fix · `d65c59e6` v4.1 Pacific month + period picker + scroll
 
-**Sep 1:** `f30fe573` MASTER.md to repo · `5af209c5` WORKSPACE + BUILD_MAP · `b77c4c7e` ops.html · `f647d9f4` ops full · `69593c45` **approval-date commission** · `d06ea9c5` **hotfix nowIso scope** · `1ba56a46` fee-only · `f3849d91` **hotfix recalcFee** · **`5665bb83` existing receipt counts (current)**
+**Sep 1:** `f30fe573` MASTER.md to repo · `5af209c5` WORKSPACE + BUILD_MAP · `b77c4c7e` ops.html · `f647d9f4` ops full · `69593c45` **approval-date commission** · `d06ea9c5` **hotfix nowIso scope** · `1ba56a46` fee-only · `f3849d91` **hotfix recalcFee** · `5665bb83` existing receipt counts
+
+**Sep 2-3:** `ec18b795` fee-only carrier fix · `b2ac1537` doc types + Other label · `558ac86f` **unnumbered policies chargeable** · `2a0c9d4d` retro-link · `505b4987` sweep all unlinked · `42840261` note payload fix · `aa5970cc` **picker grouped, no preselect >3 tabs** · **`7af8e9ce` note_wrong_policy (current)**
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

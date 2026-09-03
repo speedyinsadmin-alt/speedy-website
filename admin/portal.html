@@ -1642,9 +1642,21 @@ function renderPolicyPicker(keepValue){
      file against. */
   const all  = ((cached && cached.policies) || [])
     .filter(p => p.policy_number || p.hs_policy_guid);
-  const ins  = all.filter(p => p.record_type !== 'dmv_service').sort(byTab);
-  const dmvs = all.filter(p => p.record_type === 'dmv_service').sort(byTab);
-  const pols = ins.concat(dmvs);
+  /* GROUPED BY STATUS, LIVE FIRST. Client 7941 is why: six tabs, and the receipt
+     for a brand-new ASPIRE policy went onto a 2023 ONWARD policy that expired in
+     March 2024 - because the expired one sat above it in a flat list. HawkSoft
+     cannot move a receipt, so that $191.88 is on the wrong policy permanently.
+     Newest tab first within each group: the policy someone is charging is almost
+     always the one just created. */
+  const dead = p => isExpired(p) || /cancel|expir/i.test(String(p.status || ''));
+  const byTabDesc = (a, b) => Number((b.carrier_extras||{}).policyIndex ?? -1)
+                            - Number((a.carrier_extras||{}).policyIndex ?? -1);
+  const insAll = all.filter(p => p.record_type !== 'dmv_service');
+  const live   = insAll.filter(p => !dead(p) && p.policy_number).sort(byTabDesc);
+  const fresh  = insAll.filter(p => !dead(p) && !p.policy_number).sort(byTabDesc);
+  const gone   = insAll.filter(dead).sort(byTabDesc);
+  const dmvs   = all.filter(p => p.record_type === 'dmv_service').sort(byTabDesc);
+  const pols = live.concat(fresh, dmvs, gone);
   /* An unnumbered policy travels by GUID. The charge path matches on the number, so
      without this the receipt would file at client level while the agent believed it
      went to the tab - worse than hiding the option. */
@@ -1652,16 +1664,27 @@ function renderPolicyPicker(keepValue){
   const opt  = p => '<option value="' + esc(polValue(p)) + '">' + tabNo(p)
       + esc(p.policy_number || 'no policy number yet')
       + ' — ' + esc(p.carrier || (p.record_type === 'dmv_service' ? 'DMV service' : ''))
-      + (isExpired(p) ? ' (expired)' : '') + '</option>';
+      + (isExpired(p) ? ' \u2014 EXPIRED' : (/cancel/i.test(String(p.status||'')) ? ' \u2014 CANCELLED' : ''))
+      + '</option>';
   const sel = chgEl('chgPolSel'), w = chgEl('chgPolWrap');
   if(pols.length){
     sel.innerHTML =
-        (ins.length  ? '<optgroup label="Insurance policies">' + ins.map(opt).join('')  + '</optgroup>' : '')
-      + (dmvs.length ? '<optgroup label="DMV services">'      + dmvs.map(opt).join('') + '</optgroup>' : '')
+        (live.length  ? '<optgroup label="Active policies">'        + live.map(opt).join('')  + '</optgroup>' : '')
+      + (fresh.length ? '<optgroup label="New — no policy number yet">' + fresh.map(opt).join('') + '</optgroup>' : '')
+      + (dmvs.length  ? '<optgroup label="DMV services">'          + dmvs.map(opt).join('')  + '</optgroup>' : '')
+      + (gone.length  ? '<optgroup label="Cancelled &amp; expired">' + gone.map(opt).join('') + '</optgroup>' : '')
       + '<option value="">No policy — file at client level</option>';
     /* A selection the agent already made outranks the launch URL. If the policy is
        gone we do NOT silently fall through to another one - the dropdown resets to
        its first entry and the preview line below it changes, which is visible. */
+    /* Above three tabs, nothing is preselected. A glance at a pre-filled field is how
+       a receipt lands on a policy HawkSoft cannot move it off - which is exactly what
+       happened on 7941. Below that, preselecting is genuinely helpful. */
+    const MANY = pols.length > 3;
+    if(MANY){
+      sel.insertAdjacentHTML('afterbegin',
+        '<option value="" selected>Choose the policy… (' + pols.length + ' tabs)</option>');
+    }
     const kept = keepValue && [].slice.call(sel.options).some(o => o.value === keepValue);
     if(kept){
       sel.value = keepValue;

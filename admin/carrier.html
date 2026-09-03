@@ -259,7 +259,10 @@ window.addEventListener('load', () => {
     let passed = hash.get('tok');
     if (!passed) { try { passed = localStorage.getItem('speedy_handoff_tok'); } catch(e){} }
     if (passed) {
-      try { localStorage.removeItem('speedy_handoff_tok'); } catch(e){}
+      /* KEEP it. Removing the handoff here is why Back landed on the sign-in screen:
+         the token was consumed on arrival, so there was nothing left to hand back.
+         It is a short-lived Google id token in this browser's own storage, and it is
+         overwritten on the next handoff either way. */
       history.replaceState(null, '', location.pathname + location.search);
       TOKEN = passed;
       $('#gate').style.display='none';
@@ -640,6 +643,9 @@ function hasUnsavedWork(){
 }
 function goBack(e){
   if(e && e.preventDefault) e.preventDefault();
+  /* Hand the session back, so returning does not mean signing in again. The portal
+     reads this on load. */
+  try { if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); } catch(err){}
   if(hasUnsavedWork() && !confirm(
       'Leave without submitting?\n\nThe carrier cost and any files you added here have '
       + 'not been sent yet and will be lost.')) return false;
@@ -1105,7 +1111,7 @@ async function submit(complete){
       const back = document.createElement('div');
       back.style.cssText = 'margin-top:12px;text-align:center';
       SUBMITTED = true;
-      back.innerHTML = '<a href="' + backHref() + '" style="color:#4d7cfe;font-size:13px;text-decoration:none">\u2190 Back to ' + (CTX.name ? escAttr(CTX.name) : 'the client') + '</a>';
+      back.innerHTML = '<a href="' + backHref() + '" onclick="try{if(TOKEN)localStorage.setItem(\'speedy_handoff_tok\',TOKEN)}catch(e){}" style="color:#4d7cfe;font-size:13px;text-decoration:none">\u2190 Back to ' + (CTX.name ? escAttr(CTX.name) : 'the client') + '</a>';
       msg.appendChild(back);
     }
     if(complete){ /* keep disabled — done */ }

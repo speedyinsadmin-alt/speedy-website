@@ -2009,7 +2009,32 @@ async function emailLink(){
   window.open('https://mail.google.com/mail/?view=cm&fs=1' + to + '&su=' + encodeURIComponent('Your Speedy Insurance payment link'), '_blank', 'noopener');
 }
 
+/* A session handed back from carrier.html. Without this, pressing Back there landed
+   the agent on the sign-in screen every time - and carrier.html consumed the token on
+   arrival, so nothing could restore it either.
+
+   Calls onCred, the SAME path a real sign-in uses, rather than a second one that
+   would drift from it. Checks the expiry first: an expired token would set TOKEN,
+   hide the gate, and then 401 on the first read, which looks like a broken portal
+   rather than an expired session. */
+function jwtAlive(t){
+  try {
+    const c = JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return !!c.exp && (c.exp * 1000) > (Date.now() + 30000);   // 30s of headroom
+  } catch { return false; }
+}
+function tryHandoffBack(){
+  let tok = null;
+  try { tok = localStorage.getItem('speedy_handoff_tok'); } catch(e){}
+  if(!tok) return false;
+  try { localStorage.removeItem('speedy_handoff_tok'); } catch(e){}
+  if(!jwtAlive(tok) || !jwtEmail(tok)) return false;   // fall through to normal sign-in
+  onCred({ credential: tok });
+  return true;
+}
+
 window.addEventListener('load', () => {
+  tryHandoffBack();
   const t = setInterval(() => {
     if(!window.google) return;
     clearInterval(t);

@@ -792,6 +792,88 @@ async function runSearch(q){
   renderSearchResults(r.results);
 }
 
+/* Creates the client in HawkSoft and opens the card. Uses charge_create_client - the
+   SAME action charge.html has used for months - rather than a second implementation.
+   There are already two create-client actions on the server and that duplication is
+   why the policy picker went missing from charge.html for months; this does not add
+   a third.
+
+   OFFICES: HawkSoft has only 0-3 (agency, Moreno Valley, Riverside 1 Van Buren,
+   Riverside 2 Magnolia). Lake Elsinore and Colton do not exist there yet — Tony to
+   add them in Setup → Offices. Until then those branches genuinely cannot be filed
+   correctly, so the list shows what exists rather than pretending. */
+function newClientFormHtml(){
+  return '<div id="newClientForm" class="hide" style="background:var(--card);border:1px solid var(--blue);'
+    + 'border-radius:10px;padding:13px;margin-top:9px">'
+    + '<div style="font-size:13px;font-weight:700;margin-bottom:9px">New client in HawkSoft</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    + '<div><label style="font-size:11px">First name</label>'
+    + '<input id="ncFirst" maxlength="14" autocomplete="off" style="margin:0"></div>'
+    + '<div><label style="font-size:11px">Last name</label>'
+    + '<input id="ncLast" maxlength="24" autocomplete="off" style="margin:0"></div></div>'
+    + '<label style="font-size:11px;margin-top:8px">Cell phone</label>'
+    + '<input id="ncPhone" type="tel" placeholder="951 555 1234" autocomplete="off" style="margin:0">'
+    + '<label style="font-size:11px;margin-top:8px">Branch</label>'
+    + '<select id="ncOffice" style="margin:0">'
+    + '<option value="1">Moreno Valley</option>'
+    + '<option value="2">Riverside \u2014 Van Buren</option>'
+    + '<option value="3">Riverside \u2014 Magnolia</option></select>'
+    + '<div class="dim" style="font-size:11px;margin-top:5px">Lake Elsinore and Colton are not set up as offices in HawkSoft yet \u2014 use the closest branch until they are.</div>'
+    + '<div id="ncOut" class="dim" style="font-size:12px;margin-top:9px"></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px">'
+    + '<div onclick="hideNewClient()" style="text-align:center;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:12.5px;cursor:pointer">Cancel</div>'
+    + '<div id="ncGo" onclick="createClientPortal()" style="text-align:center;background:var(--blue);color:#fff;border-radius:8px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer">Create &amp; open</div>'
+    + '</div></div>';
+}
+function showNewClient(q){
+  const box = document.getElementById('newClientForm');
+  if(!box) return;
+  box.classList.remove('hide');
+  /* Split what they typed so they do not retype it. Two words = first last; one word
+     goes in last, because a surname is what people search by. */
+  const parts = String(q || '').trim().split(/\s+/).filter(Boolean);
+  const f = document.getElementById('ncFirst'), l = document.getElementById('ncLast');
+  if(parts.length >= 2){ if(f) f.value = parts[0]; if(l) l.value = parts.slice(1).join(' '); }
+  else if(parts.length === 1){ if(l) l.value = parts[0]; }
+  if(f) f.focus();
+}
+function hideNewClient(){
+  const box = document.getElementById('newClientForm');
+  if(box) box.classList.add('hide');
+}
+async function createClientPortal(){
+  const out = document.getElementById('ncOut'), go = document.getElementById('ncGo');
+  const first = (document.getElementById('ncFirst').value || '').trim();
+  const last  = (document.getElementById('ncLast').value || '').trim();
+  const phone = (document.getElementById('ncPhone').value || '').replace(/\D/g,'');
+  const office = document.getElementById('ncOffice').value;
+  if(!first || !last){ out.textContent = 'First and last name are both needed.'; return; }
+  if(phone.length !== 10){ out.textContent = 'A 10-digit cell phone is needed.'; return; }
+  go.style.opacity = .5; go.style.pointerEvents = 'none';
+  out.textContent = 'Creating in HawkSoft…';
+  try{
+    const j = await hsPost({ action:'charge_create_client', firstName:first, lastName:last,
+                             phone:phone, officeId:office });
+    if(j && j.ok && j.clientNumber){
+      out.textContent = '\u2713 Created \u2014 client #' + j.clientNumber;
+      hideNewClient();
+      document.getElementById('searchResults').innerHTML = '';
+      document.getElementById('searchBox').value = '';
+      openClient(j.clientNumber, last.toUpperCase() + ', ' + first.toUpperCase());
+    } else {
+      /* Created but no number back means it EXISTS in HawkSoft - saying "failed"
+         would send the agent off to create a duplicate. */
+      out.textContent = (j && j.ok)
+        ? 'Created, but HawkSoft did not return a client number. Check CMS before creating another.'
+        : ('Could not create: ' + ((j && j.error) || 'unknown error'));
+      go.style.opacity = ''; go.style.pointerEvents = '';
+    }
+  }catch(e){
+    out.textContent = 'Could not reach HawkSoft. Check CMS before trying again.';
+    go.style.opacity = ''; go.style.pointerEvents = '';
+  }
+}
+
 function renderSearchResults(results){
   const box = document.getElementById('searchResults');
   box.innerHTML = '<div style="background:var(--navy);border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:8px">'
@@ -812,7 +894,16 @@ function emptySearchHtml(q){
     + '<div class="dim" style="font-size:12.5px;margin-bottom:9px">A client added in HawkSoft in the last few minutes may not be here yet.</div>'
     + '<span id="refreshBtn" onclick="refreshClients(\'' + esc(q).replace(/\x27/g,'') + '\')" '
     + 'style="display:inline-block;cursor:pointer;font-size:12.5px;background:var(--blue);color:#fff;padding:8px 15px;border-radius:8px">'
-    + 'Refresh client list</span></div>';
+    + 'Refresh client list</span>'
+    /* Charge-first is the model: the agent takes the money, then buys the policy. So a
+       walk-in with no HawkSoft record has to be creatable HERE, not only on the
+       HawkSoft-launched charge page where this has quietly existed all along. */
+    + '<div style="border-top:1px solid var(--line);margin-top:11px;padding-top:11px">'
+    + '<div class="dim" style="font-size:12.5px;margin-bottom:9px">Brand new walk-in, not in HawkSoft at all?</div>'
+    + '<span onclick="showNewClient(\'' + esc(q).replace(/\x27/g,'') + '\')" '
+    + 'style="display:inline-block;cursor:pointer;font-size:12.5px;border:1px solid var(--line);'
+    + 'color:var(--blue-l);padding:8px 15px;border-radius:8px">\uff0b New client in HawkSoft</span>'
+    + '</div></div>' + newClientFormHtml();
 }
 
 async function refreshClients(q){

@@ -171,7 +171,16 @@
     <!-- search + tabs -->
     <div class="card" style="padding:14px 16px">
       <input id="searchBox" placeholder="🔍 Search any client — name, #, phone…" autocomplete="off">
+      <!-- Always here, not only after a search fails. A walk-in who has never been to
+           Speedy is a known situation before anyone searches, not something discovered
+           by failing to find them. -->
+      <div style="display:flex;justify-content:flex-end;margin-top:6px">
+        <span onclick="showNewClient(document.getElementById('searchBox').value)"
+              style="font-size:12px;color:var(--blue-l);cursor:pointer">&#65291; New client in HawkSoft</span>
+      </div>
+      <div id="newClientHost"></div>
       <div id="searchResults"></div>
+      <div id="chargeHint" class="hide" style="font-size:12px;color:var(--amber);margin-top:8px"></div>
       <div class="dim" style="font-size:11px;margin-top:10px">Open clients — up to 5</div>
       <div id="tabbar" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
         <div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>
@@ -826,6 +835,10 @@ function newClientFormHtml(){
     + '</div></div>';
 }
 function showNewClient(q){
+  /* Rendered into its own host, NOT into searchResults - those get cleared on the
+     next keystroke, which would wipe a half-typed new client. */
+  const host = document.getElementById('newClientHost');
+  if(host && !document.getElementById('newClientForm')) host.innerHTML = newClientFormHtml();
   const box = document.getElementById('newClientForm');
   if(!box) return;
   box.classList.remove('hide');
@@ -903,7 +916,7 @@ function emptySearchHtml(q){
     + '<span onclick="showNewClient(\'' + esc(q).replace(/\x27/g,'') + '\')" '
     + 'style="display:inline-block;cursor:pointer;font-size:12.5px;border:1px solid var(--line);'
     + 'color:var(--blue-l);padding:8px 15px;border-radius:8px">\uff0b New client in HawkSoft</span>'
-    + '</div></div>' + newClientFormHtml();
+    + '</div></div>';
 }
 
 async function refreshClients(q){
@@ -1705,7 +1718,20 @@ function reauth(){ if(window.google) google.accounts.id.prompt(); }
 /* preselectPolicy: launched from a specific policy row, so the picker should open
    on that policy rather than the first in the list. The agent chose it already. */
 async function openCharge(no, preselectPolicy){
-  if(!no){ alert('Open a client first — search above, then charge from their card.'); return; }
+  if(!no){
+    /* An alert whose only job is to tell the agent off does nothing for them. The
+       button always means "start a charge" - it just begins with "who?". Put the
+       cursor in the search box so they are one step closer, not one step back. */
+    const sb = document.getElementById('searchBox');
+    if(sb){ sb.focus(); sb.scrollIntoView({ behavior:'smooth', block:'center' }); }
+    const hint = document.getElementById('chargeHint');
+    if(hint){
+      hint.textContent = 'Search a client to charge \u2014 or add a new one.';
+      hint.classList.remove('hide');
+      setTimeout(() => hint.classList.add('hide'), 6000);
+    }
+    return;
+  }
   CHG = { clientNo: no, confirmed: null };
   CHG_PURPOSE = 'Down payment'; CHG_METHOD = 'card';
   chgEl('chgResult').innerHTML = ''; LEDGER_ID = null;

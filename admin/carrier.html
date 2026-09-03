@@ -626,7 +626,9 @@ function msgLine(t){ const m = $('#msg'); if(m){ m.className = ''; m.textContent
    client card; landing on the search screen means finding that client again. */
 function backHref(){
   const c = String((typeof CTX !== 'undefined' && CTX.client_no) || '').trim();
-  return c ? ('/admin/portal.html?client=' + encodeURIComponent(c)) : '/admin/portal.html';
+  /* ?open=, NOT ?client=. The latter is the HawkLink launch format and ARMS a charge,
+     so Back reopened the charge sheet instead of returning the agent to the card. */
+  return c ? ('/admin/portal.html?open=' + encodeURIComponent(c)) : '/admin/portal.html';
 }
 /* Warns only when there is work that would be LOST - a carrier cost typed or a file
    dropped but not submitted. That is precisely what vanished for three agents on

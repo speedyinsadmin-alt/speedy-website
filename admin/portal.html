@@ -399,6 +399,17 @@ const STAFF = {
 let TOKEN = null, EMAIL = null, OFFICE = null;
 
 const HL = { client:null, policy:'', last:'', armed:false, opened:false };
+/* ?open=N — show this client's card and nothing else. Distinct from the HawkLink
+   ?client=N launch below, which ARMS a charge and opens the sheet. Back from the
+   carrier page used ?client= and so reopened the charge sheet instead of returning
+   the agent to where they were. */
+const OPEN_ONLY = (function(){
+  try{
+    var n = parseInt((new URLSearchParams(location.search).get('open') || '').replace(/\D/g,''), 10);
+    return (n && isFinite(n)) ? n : null;
+  }catch(e){ return null; }
+})();
+
 (function readLaunch(){
   try{
     var q = new URLSearchParams(location.search);
@@ -490,6 +501,10 @@ function applyOffice(office){
   applyThemeLabel();
   /* A launched client opens through here so BOTH paths -- picker and auto-lock --
      open it after an office is settled, through ONE function. */
+  /* Returning from the carrier page: open the card, do not arm a charge. */
+  if(OPEN_ONLY && !OPEN_TABS.length){
+    openClient(OPEN_ONLY, '#' + OPEN_ONLY);
+  }
   if(HL.armed && HL.client && !HL.opened){
     HL.opened = true;
     openClient(HL.client, HL.last || ('#' + HL.client));
@@ -803,6 +818,11 @@ async function refreshClients(q){
 
 // --- tabs ---
 function openClient(no, name){
+  /* ALWAYS a number. HL.client is a String, every other caller passes a number, and
+     closeTab compares with !== - so a client opened from a launch URL could never be
+     closed: "26081" !== 26081 is true for every row. The named recurring bug: a value
+     transformed on one side and compared against the untransformed other. */
+  no = Number(no);
   document.getElementById('searchResults').innerHTML='';
   document.getElementById('searchBox').value='';
   if(OPEN_TABS.find(t => t.client_no === no)){ ACTIVE_TAB = no; renderTabs(); renderPanel(); return; }
@@ -814,7 +834,8 @@ function openClient(no, name){
 }
 function closeTab(no, ev){
   if(ev) ev.stopPropagation();
-  OPEN_TABS = OPEN_TABS.filter(t => t.client_no !== no);
+  no = Number(no);                      // defence in depth: never compare across types
+  OPEN_TABS = OPEN_TABS.filter(t => Number(t.client_no) !== no);
   if(ACTIVE_TAB === no) ACTIVE_TAB = OPEN_TABS.length ? OPEN_TABS[OPEN_TABS.length-1].client_no : null;
   renderTabs(); renderPanel();
 }

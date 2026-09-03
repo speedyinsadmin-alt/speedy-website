@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 3, 2026 · maintained by Saif + Claude**
+**Last updated: September 3, 2026 (evening) · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 > **THIS IS THE ONLY COPY.** On Aug 28 the project held **six separate documents
@@ -624,6 +624,88 @@ the other tab lying.
 
 ---
 
+## SEP 3 EVENING — BACK, A NEW CLIENT, AND A TAGGED RESTORE POINT
+
+### 🔖 RESTORE POINT — `working-2026-09-03` → `e54daf2b`
+Tag **and** branch `backup/working-2026-09-03`, verified byte-for-byte against main
+across all 9 tracked files. Everything below was working and tested at that commit.
+
+```
+git checkout working-2026-09-03          # inspect
+git checkout -b fix backup/working-2026-09-03   # work from it
+```
+
+### Shipped
+- **Back on carrier.html** (`39dcc3e6`, `cff1ba6a`, `1c01182d`, `2139f7e3`) — four
+  commits for one button. See below; each miss was a layer deeper.
+- **Create a walk-in client from the portal** (`9a579268`).
+- **New charge helps instead of scolding; New client always visible** (`e54daf2b`).
+
+### The Back button took FOUR attempts, and that is the lesson
+| Attempt | Where it landed | Why |
+|---|---|---|
+| 1 | Portal home | I sent it to `portal.html` |
+| 2 | Sign-in screen | portal never read the handoff; carrier DELETED the token on arrival |
+| 3 | A charge sheet | `?client=N` is the **HawkLink launch** format and ARMS a charge |
+| 4 | Office picker | the office was never persisted at all |
+
+> **LESSON: trace the whole path the agent walks, once, before fixing any hop of it.**
+> I fixed one hop at a time and shipped four times for one button.
+
+Now: `?open=N` shows the card only; the session is handed back and verified for
+expiry BEFORE the gate is hidden; the office is restored, but only on a handoff
+return, only for a KNOWN staff member, and only for an office in the list. Sign-out
+clears both, or the next person on a shared branch machine inherits them.
+
+### ⚠️ THE X COULD NOT CLOSE A LAUNCH-OPENED CLIENT
+`HL.client` is a **String**; every other caller passes a number; `closeTab` compares
+with `!==`. So `"26081" !== 26081` was true for every row and nothing was ever
+removed. **The named recurring bug** — a value transformed on one side and compared
+against the untransformed other, same as the phone search and the full-name search.
+`openClient` now normalises at the door.
+
+### Creating a client already existed — I said it did not
+Saif asked on Sep 2 whether we could add a client to HawkSoft. I said it was not
+built. **It has been in `charge.html` for months** (`charge_create_client`). A grep
+would have answered it. The real gap was that it lived only on the HawkSoft-launched
+page, not in the portal where agents work.
+
+Now offered beside the search box permanently — a walk-in is a known situation before
+anyone searches, not something discovered by failing to find them. Reuses the same
+action rather than adding a third implementation.
+
+### ⛔ HAWKSOFT HAS ONLY FOUR OFFICES — the agency has five branches
+```
+0  speedy insurance agency (primary)
+1  Moreno Valley
+2  Riverside 1 — Van Buren
+3  Riverside 2 — Magnolia
+```
+**Lake Elsinore and Colton do not exist in HawkSoft.** So the hard-coded `[1,2,3]`
+was never stale — the AGENCY is ahead of HawkSoft by two branches. Any client created
+at those branches is filed under the closest one, and office-based reporting is wrong
+for them.
+
+> **⏰ TONY: add Lake Elsinore and Colton in HawkSoft CMS → Setup → Offices.**
+> Remind Saif every session until done.
+
+> **🔑 ROTATE THE ADMIN KEY.** It appeared in a chat screenshot on Sep 3 and it reaches
+> every HawkSoft write endpoint. The Clover App Secret is still outstanding too.
+
+### Agreed with Saif, not yet built
+- **Write a log from the portal to HawkSoft.** The strongest adoption lever raised so
+  far — agents live in the logs, and if they can log a call from the client card the
+  portal becomes where they work. **Open question: which channels to offer.** A phone
+  call logged as a walk-in is a false record, and a HawkSoft log note cannot be edited
+  or deleted, so it needs a confirm showing exactly what will be written and where.
+- **Read logs on the client card.** We do not sync logs and there is no `logs` table,
+  so this is a HawkSoft call per client and a busy client has hundreds of entries.
+  **Fetch on demand behind a Logs section, never on card render** — performance is the
+  first priority. **Open question: should every agent read every note?** Logs carry
+  complaints, payment problems, personal circumstances.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -1008,7 +1090,11 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 69. ~~Run receipt_tender_probe~~ **DONE Sep 1 — the finding it was chasing was wrong. Bridge receipts tender correctly**
 69c. ~~Unnumbered policies~~ **DONE Sep 2** (`558ac86f`)
 69h. **7941's $191.88 sits on an expired 2023 policy** — permanent. Note written to both tabs
-69i. **Back button on carrier.html** — agreed Sep 1, still not built. Only appears after a successful submit, and goes to the portal home instead of the client
+69i. ~~Back button on carrier.html~~ **DONE Sep 3** — four attempts, see above
+69k. **⏰ TONY: add Lake Elsinore and Colton as HawkSoft offices** (Setup → Offices). Until then those clients file under the closest branch
+69l. **🔑 Rotate the admin key** — exposed in a Sep 3 screenshot. Clover App Secret still outstanding too
+69m. **Write a log from the portal to HawkSoft** — biggest adoption lever. Needs a channel decision
+69n. **Read logs on the client card** — on demand only, never on render. Needs a visibility decision
 
 69d. **Roles: agent/admin/owner**, then the Agents panel in the Console
 69e. **Tony's by-agent commission tab**
@@ -1111,6 +1197,11 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 - **Ask what we already pay for before adding a vendor.** I chose Vercel Blob because
   a half-written helper pointed there; Supabase Pro already included 100 GB of file
   storage, the credential was already in the environment, and Saif had to point it out.
+- **Trace the whole path before fixing any hop of it (Sep 3).** Four commits for one
+  Back button: portal home, sign-in screen, charge sheet, office picker. Each fix was
+  correct and each revealed the next layer.
+- **Grep before saying something is not built (Sep 3).** Creating a HawkSoft client
+  had existed in charge.html for months when I said it did not exist.
 - **Do not rewrite working code from scratch — COPY it (Sep 3).** I wrote a HawkSoft
   log note from memory, wrapped it in an array, and all nine were rejected.
   `hawksoft.js` had the correct shape three files away.
@@ -1198,7 +1289,7 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 
 **Sep 1:** `f30fe573` MASTER.md to repo · `5af209c5` WORKSPACE + BUILD_MAP · `b77c4c7e` ops.html · `f647d9f4` ops full · `69593c45` **approval-date commission** · `d06ea9c5` **hotfix nowIso scope** · `1ba56a46` fee-only · `f3849d91` **hotfix recalcFee** · `5665bb83` existing receipt counts
 
-**Sep 2-3:** `ec18b795` fee-only carrier fix · `b2ac1537` doc types + Other label · `558ac86f` **unnumbered policies chargeable** · `2a0c9d4d` retro-link · `505b4987` sweep all unlinked · `42840261` note payload fix · `aa5970cc` **picker grouped, no preselect >3 tabs** · **`7af8e9ce` note_wrong_policy (current)**
+**Sep 2-3:** `ec18b795` fee-only carrier fix · `b2ac1537` doc types + Other label · `558ac86f` **unnumbered policies chargeable** · `2a0c9d4d` retro-link · `505b4987` sweep all unlinked · `42840261` note payload fix · `aa5970cc` **picker grouped, no preselect >3 tabs** · `7af8e9ce` note_wrong_policy · `39dcc3e6` back control · `cff1ba6a` session handoff · `1c01182d` ?open= + tab close · `2139f7e3` office restore · `9a579268` new client from portal · **`e54daf2b` = TAG `working-2026-09-03` (current, verified restore point)**
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

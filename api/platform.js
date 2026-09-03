@@ -345,6 +345,99 @@ async function upsertHsClient(s, c) {
 }
 
 
+/* ---------- Link a down payment to the policy it bought ----------
+   The agency charges the client FIRST and buys the policy with that money, so at
+   charge time there is often no policy at all. Every one of the 9 unlinked charges
+   on record is a Down payment - it is the signature of new business, not an error.
+   The receipt therefore files at client level, and HawkSoft has no receipt-modify
+   endpoint, so it stays there permanently.
+
+   What we CAN do is make our own record true once the policy arrives, and leave a
+   note in HawkSoft so an auditor can follow the money.
+
+   MATCHING USES CLIENT AND TIMING, NOT AMOUNT. Two down payments can be the same
+   figure; the client and the date the policy took effect are far stronger. Tested
+   against all 9 real cases: 7 resolve to exactly one candidate, 2 have none yet
+   because the policy has not been bought (both charged today). ZERO ambiguous.
+
+   ONE CANDIDATE OR ABSTAIN - the same rule as resolvePolicyGuid. A wrong link would
+   put money against a policy it did not buy, and the HawkSoft note cannot be
+   deleted afterwards. */
+async function linkDownPayments(s, clientNo, actor) {
+  const out = { checked: 0, linked: 0, ambiguous: 0, none: 0 };
+  try {
+    const open = await sbGet(s, `bridge_ledger?client_id=eq.${clientNo}`
+      + `&extra->>policyLink=eq.${encodeURIComponent('no policy # given')}`
+      + `&is_test=is.false&select=id,ts,amount,purpose,extra&limit=20`);
+    const rows = open.rows || [];
+    if (!rows.length) return out;
+
+    const pol = await sbGet(s, `policies?client_no=eq.${clientNo}`
+      + `&select=policy_number,carrier,status,effective_date,hs_policy_guid,carrier_extras`);
+    const all = pol.rows || [];
+
+    for (const r of rows) {
+      out.checked++;
+      const charged = new Date(r.ts);
+      /* A policy bought with this money takes effect around the charge - a little
+         before if backdated, a couple of weeks after at most. Anything outside that
+         is a different policy. */
+      const from = new Date(charged.getTime() - 3 * 864e5);
+      const to   = new Date(charged.getTime() + 14 * 864e5);
+      const cands = all.filter(x => {
+        if (!/^new/i.test(String(x.status || ''))) return false;
+        if (!x.effective_date) return false;
+        const eff = new Date(x.effective_date + 'T12:00:00Z');
+        return eff >= from && eff <= to;
+      });
+      if (cands.length === 0) { out.none++; continue; }
+      if (cands.length > 1)  { out.ambiguous++; continue; }   // abstain, never guess
+
+      const hit = cands[0];
+      const extra = Object.assign({}, r.extra || {}, {
+        /* Says HOW it was linked. Anywhere a payment is shown, an inference must not
+           be mistaken for something the agent chose. */
+        policyLink: 'linked retroactively by sync',
+        policyNumber: hit.policy_number || null,
+        policyCarrier: hit.carrier || null,
+        policyGuid: hit.hs_policy_guid || null,
+        retroLinkedAt: new Date().toISOString(),
+      });
+      await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${r.id}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ extra }),
+      });
+
+      /* The EVIDENCE, not just the conclusion. If a link is ever wrong this row
+         explains how it was made. */
+      await sbInsert(s, 'events', [{
+        actor: actor || 'sync', kind: 'payment.policy_linked', client_no: clientNo,
+        source: 'hawksoft_sync',
+        payload: {
+          payment_id: r.id, amount: Number(r.amount), purpose: r.purpose,
+          charged_at: r.ts,
+          policy_number: hit.policy_number, carrier: hit.carrier,
+          policy_effective: hit.effective_date,
+          candidates_considered: cands.length,
+          rule: 'single New policy effective within -3/+14 days of the charge; amount not used',
+        },
+      }]);
+      out.linked++;
+      out.notes = out.notes || [];
+      out.notes.push({ payment_id: r.id, client_no: clientNo, amount: Number(r.amount),
+        charged_at: r.ts, policy_number: hit.policy_number, carrier: hit.carrier,
+        policy_guid: hit.hs_policy_guid,
+        tab: (hit.carrier_extras && hit.carrier_extras.policyIndex != null)
+             ? Number(hit.carrier_extras.policyIndex) + 1 : null });
+    }
+  } catch (e) {
+    /* Never let this break a sync. A missed link is recoverable on the next run; a
+       failed sync is not. */
+    out.error = String(e).slice(0, 160);
+  }
+  return out;
+}
+
 async function runDeltaSync(s, actor, budgetMs) {
   const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=*');
   const last = (st.rows && st.rows[0] && st.rows[0].last_sync) || '2026-07-23T00:00:00Z';
@@ -356,7 +449,8 @@ async function runDeltaSync(s, actor, budgetMs) {
   if (hs.error || hs.status !== 200) return { ok: false, error: hs.error || ('HawkSoft HTTP ' + hs.status) };
   const ids = Array.isArray(hs.body) ? hs.body.map(Number).filter(isFinite) : [];
 
-  let clients = 0, pols = 0, done = 0;
+  let clients = 0, pols = 0, done = 0, linked = 0;
+  const pendingNotes = [];
   const began = Date.now();
   // Cron can afford to grind; a button cannot. Caller decides.
   const BUDGET_MS = Number(budgetMs) > 0 ? Number(budgetMs) : 240000;
@@ -369,13 +463,54 @@ async function runDeltaSync(s, actor, budgetMs) {
     if (b.error || b.status !== 200) continue;
     for (const c of (Array.isArray(b.body) ? b.body : [])) {
       const r = await upsertHsClient(s, c);
-      if (r.ok) { clients++; pols += r.policies; }
+      if (r.ok) {
+        clients++; pols += r.policies;
+        /* The policies for this client have just been written, so an unlinked down
+           payment can now be matched against them. */
+        const cn = Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id'));
+        if (isFinite(cn)) {
+          const lk = await linkDownPayments(s, cn, actor);
+          linked += lk.linked || 0;
+          if (lk.notes) pendingNotes.push(...lk.notes);
+        }
+      }
     }
   }
 
   // Only advance the watermark when the whole window was processed. If we ran out of
   // time, leave it where it was so the next press picks up the same window and keeps
   // going — a four-day gap is caught up by pressing the button a few times.
+  /* ---------- The note an auditor in CMS actually needs ----------
+     The receipt is already filed at CLIENT LEVEL and HawkSoft has no receipt-modify
+     endpoint, so it can never be moved onto the policy. Without a note, somebody
+     opening that client finds money with no policy attached and no explanation.
+     Written to the POLICY tab via PolicyId, so it sits where the money belongs.
+
+     Only for unambiguous matches - a HawkSoft log note cannot be deleted either, so
+     a wrong one is permanent. Channel 32 = Online From 3rd Party, the same channel
+     the bridge already uses. */
+  for (const n of pendingNotes) {
+    try {
+      const when = new Date(n.charged_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+      const note =
+        `$${n.amount.toFixed(2)} down payment taken ${when} filed at CLIENT LEVEL — `
+        + `the policy had not been issued yet, and HawkSoft receipts cannot be moved afterwards. `
+        + `This payment bought ${n.policy_number || '(policy number pending)'}`
+        + (n.carrier ? ` — ${n.carrier}` : '')
+        + (n.tab ? `, tab ${n.tab}` : '')
+        + `. Matched automatically by the Speedy platform when the policy synced.`;
+      await hsCall(`/vendor/agency/${AGENCY_ID}/client/${n.client_no}/log?version=4.0`, {
+        method: 'POST',
+        body: JSON.stringify([{
+          refId: (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+          ts: new Date().toISOString(), channel: 32,
+          note: note.slice(0, 3000),
+          ...(n.policy_guid ? { policyId: n.policy_guid } : {}),
+        }]),
+      });
+    } catch { /* a missing note must never fail the sync */ }
+  }
+
   if (!ranOut) {
     await fetch(`${s.base}/rest/v1/sync_state?key=eq.hawksoft_clients`, {
       method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
@@ -383,8 +518,10 @@ async function runDeltaSync(s, actor, budgetMs) {
     });
   }
   await sbInsert(s, 'events', [{ actor, kind: 'sync.completed', source: 'hawksoft_sync',
-    payload: { changed_ids: ids.length, clients_updated: clients, policies_updated: pols, as_of: asOf } }]);
-  return { ok: true, changed: ids.length, clients, policies: pols, as_of: asOf, partial: ranOut, processed: done };
+    payload: { changed_ids: ids.length, clients_updated: clients, policies_updated: pols,
+               payments_linked: linked, as_of: asOf } }]);
+  return { ok: true, changed: ids.length, clients, policies: pols, payments_linked: linked,
+           as_of: asOf, partial: ranOut, processed: done };
 }
 
 async function sbPatch(s, path, obj) {

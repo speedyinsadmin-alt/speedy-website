@@ -1908,32 +1908,53 @@ if (view === 'portal_share_due') {
      'no policy # given', so the sweep will not revisit them. Re-sends from the
      payment.policy_linked events, which hold everything needed. Idempotent by
      intent: skips any payment that already has a successful note recorded. */
-  /* Does a log note with policyId actually land on the POLICY TAB, or fall back to
-     client level? The nine resent notes went to client level because I dropped
-     policyId from the resend. The live sync path DOES send it - but I assumed a
-     payload shape once today and was wrong, so this proves it rather than claiming
-     it. Two notes on ZZTEST: one with the policy id, one without, so the difference
-     is visible side by side. */
-  if (view === 'policy_note_probe') {
-    const guid = '4ceb4d34-d201-4a43-bf5f-495647047ac5';   // ZZTEST · SAIF-TEST · tab 1
-    const stamp = new Date().toISOString();
-    const send = (label, withPolicy) => hsCall(`/vendor/agency/${AGENCY_ID}/client/26081/log?version=4.0`, {
+  /* A receipt filed against the WRONG policy. HawkSoft has no receipt-modify
+     endpoint, so it cannot be moved - the only honest remedy is a note on BOTH tabs
+     so neither reader is misled: the tab holding the receipt says it does not belong
+     there, and the tab that should have it says where it actually sits.
+
+     Deliberately generic and admin-only. This will happen again, and a one-off script
+     for 7941 would have to be rewritten next time. */
+  if (view === 'note_wrong_policy') {
+    const q = req.query;
+    const clientNo = parseInt(q.client, 10);
+    const amount = Number(q.amount);
+    const wrongGuid = String(q.wrong_guid || '').trim();
+    const rightGuid = String(q.right_guid || '').trim();
+    const wrongLabel = String(q.wrong_label || 'the policy it was filed against');
+    const rightLabel = String(q.right_label || 'the correct policy');
+    const when = String(q.when || '');
+    if (!clientNo || !isFinite(amount) || !wrongGuid || !rightGuid) {
+      return res.status(400).json({ ok: false,
+        error: 'client, amount, wrong_guid, right_guid required' });
+    }
+    const send = (guid, text) => hsCall(`/vendor/agency/${AGENCY_ID}/client/${clientNo}/log?version=4.0`, {
       method: 'POST',
-      body: JSON.stringify({
-        refId: crypto.randomUUID(), ts: stamp, channel: 32,
-        note: `POLICY NOTE PROBE — ${label}. Safe to ignore or void.`,
-        ...(withPolicy ? { policyId: guid } : {}),
-      }),
+      body: JSON.stringify({ refId: crypto.randomUUID(), ts: new Date().toISOString(),
+                             channel: 32, note: text.slice(0, 3000), policyId: guid }),
     });
-    const withId = await send('WITH policyId — should appear on the SAIF-TEST tab', true);
-    const noId   = await send('WITHOUT policyId — should appear at client level', false);
-    return res.status(200).json({ ok: true,
-      with_policy_id: { status: withId && withId.status, body: withId && withId.body },
-      without_policy_id: { status: noId && noId.status, body: noId && noId.body },
-      readMe: 'Open ZZTEST 26081 in CMS. Look at the Pol column on the two new notes. '
-            + 'If the first shows 1 and the second shows 0, policyId works and future '
-            + 'links will land on the tab. If both show 0, the API ignores it and the '
-            + 'note belongs at client level anyway.' });
+    const money = '$' + amount.toFixed(2);
+    const a = await send(wrongGuid,
+      `CORRECTION — the ${money} receipt on this policy${when ? ' (taken ' + when + ')' : ''} `
+      + `does NOT belong here. It was filed against this tab in error and should sit on `
+      + `${rightLabel}. HawkSoft receipts cannot be moved once filed, so the receipt stays `
+      + `on this tab; treat ${rightLabel} as the policy this payment paid for.`);
+    const b = await send(rightGuid,
+      `${money} was paid for THIS policy${when ? ' on ' + when : ''}, but the receipt was `
+      + `filed against ${wrongLabel} in error and cannot be moved - HawkSoft has no way to `
+      + `re-file a receipt. The money is recorded; the receipt is simply on the wrong tab.`);
+    const okA = a && (a.status === 200 || a.status === 202);
+    const okB = b && (b.status === 200 || b.status === 202);
+    if (okA || okB) {
+      await sbInsert(sb(), 'events', [{ actor: email, kind: 'payment.wrong_policy_noted',
+        client_no: clientNo, source: 'manual',
+        payload: { amount, wrong_guid: wrongGuid, right_guid: rightGuid,
+                   wrong_label: wrongLabel, right_label: rightLabel,
+                   note_on_wrong_tab: okA, note_on_right_tab: okB } }]);
+    }
+    return res.status(200).json({ ok: okA && okB,
+      note_on_wrong_tab: { ok: okA, status: a && a.status },
+      note_on_right_tab: { ok: okB, status: b && b.status } });
   }
 
   if (view === 'resend_policy_notes') {

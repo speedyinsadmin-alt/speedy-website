@@ -514,6 +514,7 @@ async function runDeltaSync(s, actor, budgetMs) {
      Only for unambiguous matches - a HawkSoft log note cannot be deleted either, so
      a wrong one is permanent. Channel 32 = Online From 3rd Party, the same channel
      the bridge already uses. */
+  let noteOk = 0, noteFail = 0;
   for (const n of pendingNotes) {
     try {
       const when = new Date(n.charged_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
@@ -524,16 +525,40 @@ async function runDeltaSync(s, actor, budgetMs) {
         + (n.carrier ? ` — ${n.carrier}` : '')
         + (n.tab ? `, tab ${n.tab}` : '')
         + `. Matched automatically by the Speedy platform when the policy synced.`;
-      await hsCall(`/vendor/agency/${AGENCY_ID}/client/${n.client_no}/log?version=4.0`, {
+      /* A SINGLE OBJECT, not an array. hawksoft.js has posted log notes this way for
+         months; I rewrote it from scratch instead of copying it, wrapped the body in
+         an array, and HawkSoft rejected all nine. */
+      const lr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${n.client_no}/log?version=4.0`, {
         method: 'POST',
-        body: JSON.stringify([{
-          refId: (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+        body: JSON.stringify({
+          refId: crypto.randomUUID(),
           ts: new Date().toISOString(), channel: 32,
           note: note.slice(0, 3000),
           ...(n.policy_guid ? { policyId: n.policy_guid } : {}),
-        }]),
+        }),
       });
-    } catch { /* a missing note must never fail the sync */ }
+      const okNote = lr && (lr.status === 200 || lr.status === 202);
+      noteOk += okNote ? 1 : 0;
+      if (okNote) {
+        await sbInsert(s, 'events', [{ actor: actor || 'sync', kind: 'payment.note_sent',
+          client_no: n.client_no, source: 'hawksoft_sync',
+          payload: { payment_id: n.payment_id, policy_number: n.policy_number } }]);
+      }
+      if (!okNote) {
+        /* The silent catch is what hid this: the sync reported success while every
+           note failed. A failure now leaves a row that can be found. */
+        noteFail++;
+        await sbInsert(s, 'events', [{ actor: actor || 'sync', kind: 'payment.note_failed',
+          client_no: n.client_no, source: 'hawksoft_sync',
+          payload: { payment_id: n.payment_id, status: lr && lr.status,
+                     body: JSON.stringify(lr && lr.body).slice(0, 300) } }]);
+      }
+    } catch (e) {
+      noteFail++;
+      try { await sbInsert(s, 'events', [{ actor: actor || 'sync', kind: 'payment.note_failed',
+        client_no: n.client_no, source: 'hawksoft_sync',
+        payload: { payment_id: n.payment_id, error: String(e).slice(0, 200) } }]); } catch {}
+    }
   }
 
   if (!ranOut) {
@@ -544,8 +569,10 @@ async function runDeltaSync(s, actor, budgetMs) {
   }
   await sbInsert(s, 'events', [{ actor, kind: 'sync.completed', source: 'hawksoft_sync',
     payload: { changed_ids: ids.length, clients_updated: clients, policies_updated: pols,
-               payments_linked: linked, as_of: asOf } }]);
+               payments_linked: linked, notes_written: noteOk, notes_failed: noteFail,
+               as_of: asOf } }]);
   return { ok: true, changed: ids.length, clients, policies: pols, payments_linked: linked,
+           notes_written: noteOk, notes_failed: noteFail,
            as_of: asOf, partial: ranOut, processed: done };
 }
 
@@ -1876,6 +1903,49 @@ if (view === 'portal_share_due') {
 
      COUNTS AND STATUS ONLY. No client names, no amounts, no policy numbers, and
      never a credential. Links point at dashboards; keys stay in Vercel env. */
+  /* One-time re-send. The nine payments linked at 14:37 today had their HawkSoft
+     notes rejected (array instead of object) and have already moved past
+     'no policy # given', so the sweep will not revisit them. Re-sends from the
+     payment.policy_linked events, which hold everything needed. Idempotent by
+     intent: skips any payment that already has a successful note recorded. */
+  if (view === 'resend_policy_notes') {
+    const s = sb();
+    const ev = await sbGet(s, `events?kind=eq.payment.policy_linked&select=client_no,payload,ts&order=ts.asc&limit=100`);
+    const done = await sbGet(s, `events?kind=eq.payment.note_sent&select=payload&limit=200`);
+    const already = new Set((done.rows || []).map(r => r.payload && r.payload.payment_id).filter(Boolean));
+    const out = { attempted: 0, sent: 0, failed: [], skipped: 0 };
+    for (const e of (ev.rows || [])) {
+      const q = e.payload || {};
+      if (!q.payment_id) continue;
+      if (already.has(q.payment_id)) { out.skipped++; continue; }
+      out.attempted++;
+      try {
+        const when = new Date(q.charged_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+        const note =
+          `$${Number(q.amount).toFixed(2)} down payment taken ${when} filed at CLIENT LEVEL — `
+          + `the policy had not been issued yet, and HawkSoft receipts cannot be moved afterwards. `
+          + `This payment bought ${q.policy_number || '(policy number pending)'}`
+          + (q.carrier ? ` — ${q.carrier}` : '')
+          + `. Matched automatically by the Speedy platform when the policy synced.`;
+        const lr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${e.client_no}/log?version=4.0`, {
+          method: 'POST',
+          body: JSON.stringify({ refId: crypto.randomUUID(), ts: new Date().toISOString(),
+                                 channel: 32, note: note.slice(0, 3000) }),
+        });
+        if (lr && (lr.status === 200 || lr.status === 202)) {
+          out.sent++;
+          await sbInsert(s, 'events', [{ actor: email, kind: 'payment.note_sent',
+            client_no: e.client_no, source: 'hawksoft_sync',
+            payload: { payment_id: q.payment_id, policy_number: q.policy_number, resent: true } }]);
+        } else {
+          out.failed.push({ client_no: e.client_no, status: lr && lr.status,
+                            body: JSON.stringify(lr && lr.body).slice(0, 200) });
+        }
+      } catch (err) { out.failed.push({ client_no: e.client_no, error: String(err).slice(0, 160) }); }
+    }
+    return res.status(200).json({ ok: true, ...out });
+  }
+
   if (view === 'ops_summary') {
     const s = sb();
     const num = r => Number((r.rows && r.rows[0] && r.rows[0].n) || 0);

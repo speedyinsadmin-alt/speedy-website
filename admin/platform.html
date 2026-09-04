@@ -138,11 +138,32 @@ async function onCred(resp) {
   render();
 }
 
+/* An expired Google id token used to come back as {ok:false} and every tab rendered
+   its own generic failure - "Call read failed." with no hint that the session had
+   simply run out. That is exactly what an app window left open for an hour looks
+   like, while a freshly opened tab works, which is how this presented.
+   Tokens last about an hour; this page is often left open far longer. */
+let AUTH_DEAD = false;
 async function api(view) {
   try {
     const r = await fetch('/api/platform?view=' + view, { headers: { 'x-id-token': TOKEN } });
+    if (r.status === 401 || r.status === 403) { showAuthExpired(); return { ok: false, expired: true }; }
     return await r.json();
   } catch { return null; }
+}
+function showAuthExpired() {
+  if (AUTH_DEAD) return;                 // one banner, not one per tab render
+  AUTH_DEAD = true;
+  let b = document.getElementById('authDead');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'authDead';
+    b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;background:#f5a623;'
+      + 'color:#2a1a00;padding:11px 16px;font-size:13.5px;font-weight:600;text-align:center';
+    document.body.appendChild(b);
+  }
+  b.innerHTML = 'Your sign-in expired — nothing is wrong with the data. '
+    + '<span style="text-decoration:underline;cursor:pointer" onclick="location.reload()">Reload to sign in again</span>';
 }
 
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
@@ -1353,7 +1374,12 @@ let CALL_DAYS = 1, CALL_OPEN = null;
 
 async function renderCalls(el) {
   const r = await api('calls&days=' + CALL_DAYS);
-  if (!r || !r.ok) { el.innerHTML = '<div class="err">Call read failed.</div>'; return; }
+  if (!r || !r.ok) {
+    el.innerHTML = '<div class="err">' + (r && r.expired
+      ? 'Your sign-in expired. Reload the page to sign in again.'
+      : 'Could not read the calls' + (r && r.error ? ': ' + esc(r.error) : '.')) + '</div>';
+    return;
+  }
 
   const dur = v => { v = Number(v)||0; if(!v) return '—'; const m=Math.floor(v/60), x=v%60; return m? m+'m '+x+'s' : x+'s'; };
   const hhmm = t => t ? new Date(t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—';

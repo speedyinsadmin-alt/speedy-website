@@ -880,6 +880,10 @@ async function setAgentPct(email, val){
 
 let AUDIT_CACHE = null;
 let AUDIT_PERIOD = 'month';   // default: this month — the number an owner actually wants
+/* 'action' = what still needs doing first. The default, because the reason to open
+   this page is almost always to find what is unfinished, not to read history. */
+let AUDIT_SORT = 'action';
+function setAuditSort(s){ AUDIT_SORT = s; render(); }
 let AUDIT_FROM = '', AUDIT_TO = '';
 function periodLabel(){
   return AUDIT_PERIOD==='today' ? 'today'
@@ -953,7 +957,27 @@ async function renderAudit(el){
     return true;
   };
   const allRows = rows;
-  const periodRows = allRows.filter(x => inPeriod(x.ts));
+  let periodRows = allRows.filter(x => inPeriod(x.ts));
+
+  /* ---------- Sort by WHAT IS MISSING, not by date ----------
+     Melisa left three audits at carrier_pending on Sep 3 and lost track of ~$45 of
+     her own commission, because a half-finished audit looks identical to a finished
+     one in a list ordered by date. The two unfinished states need different actions,
+     so they are separate buckets rather than one "needs attention":
+       1. no carrier cost - the receipt is there, a NUMBER is missing
+       2. no proof        - nothing uploaded at all
+     Newest first inside each bucket. Date order remains available. */
+  const needsCost  = x => x.audit_status !== 'complete' && x.audit_status !== 'pre_audit'
+                          && (x.service_cost == null) && (x.doc_count > 0);
+  const needsProof = x => x.audit_status !== 'complete' && x.audit_status !== 'pre_audit'
+                          && !(x.doc_count > 0);
+  const bucket = x => needsProof(x) ? 0 : (needsCost(x) ? 1 : 2);
+  if(AUDIT_SORT === 'action'){
+    periodRows = periodRows.slice().sort((a,b) =>
+      (bucket(a) - bucket(b)) || String(b.ts).localeCompare(String(a.ts)));
+  }
+  const nProof = periodRows.filter(needsProof).length;
+  const nCost  = periodRows.filter(needsCost).length;
 
   const totFees = periodRows.reduce((a,x)=> a + (x.fee||0), 0);
   const totComm = periodRows.reduce((a,x)=> a + (x.commission||0), 0);
@@ -975,6 +999,21 @@ async function renderAudit(el){
           + '<input type="date" id="auditFrom" value="'+esc(AUDIT_FROM||'')+'" onchange="setRange()" class="dinput">'
           + '<span class="muted" style="font-size:12px">to</span>'
           + '<input type="date" id="auditTo" value="'+esc(AUDIT_TO||'')+'" onchange="setRange()" class="dinput"></span>'
+        : '')
+    + '</div>';
+  const schip = (k,label,count,colour) =>
+    '<span class="perchip'+(AUDIT_SORT===k?' sel':'')+'" onclick="setAuditSort(\''+k+'\')">' + label
+    + (count ? ' <b style="color:'+colour+'">'+count+'</b>' : '') + '</span>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
+    + '<span class="muted" style="font-size:12px;margin-right:2px">Order</span>'
+    + schip('action','Needs action first', nProof + nCost, '#f5a623')
+    + schip('date','By date', 0, '')
+    + (nProof || nCost
+        ? '<span class="muted" style="font-size:12px;margin-left:8px">'
+          + (nProof ? nProof + ' with no proof' : '')
+          + (nProof && nCost ? ' \u00b7 ' : '')
+          + (nCost ? nCost + ' waiting on a carrier cost' : '')
+          + '</span>'
         : '')
     + '</div>';
   h += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px">'

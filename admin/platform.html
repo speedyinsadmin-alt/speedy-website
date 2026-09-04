@@ -54,6 +54,7 @@
   .docbtn{display:inline-block;padding:4px 11px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent}
   .docbtn.g{background:rgba(47,191,113,.15);color:#7ee2a8;border-color:rgba(47,191,113,.35)}
   .docbtn.r{background:rgba(224,49,49,.15);color:#ff8f8f;border-color:rgba(224,49,49,.35)}
+  .docbtn.a{background:rgba(245,166,35,.14);border-color:rgba(245,166,35,.45);color:#f5a623}
   .docbtn.b{background:rgba(77,124,254,.15);color:#8fadff;border-color:rgba(77,124,254,.35)}
   #docModal{position:fixed;inset:0;background:rgba(6,9,24,.92);z-index:80;padding:20px;overflow-y:auto}
   .docwrap{max-width:1040px;margin:0 auto;background:var(--navy2);border:1px solid var(--line);border-radius:14px;padding:16px}
@@ -181,13 +182,24 @@ function docsCell(docs, needsProof, rowKey, title){
   const own   = docs.filter(d => d.payment_id === rowKey);
   const other = docs.filter(d => d.payment_id !== rowKey);
   DOC_ROWS[rowKey] = { own, other, title };
-  const hasCarrier = own.some(d => (d.doc_type || d.kind) === 'carrier_receipt');
+  /* A no-payment document IS the proof on a fee-only charge - there is no carrier
+     receipt to have, which is exactly why that path exists. */
+  const hasCarrier = own.some(d => {
+    const dt = String(d.doc_type || d.kind || '');
+    return dt === 'carrier_receipt' || dt.endsWith('_no_payment');
+  });
   const n = own.length;
   if(!n && !other.length && !needsProof) return '<span class="muted">\u2014</span>';
-  const cls = hasCarrier ? 'g' : (needsProof ? 'r' : 'b');
-  const label = hasCarrier ? ('\u2713 ' + n + ' file' + (n>1?'s':''))
-              : needsProof ? 'No proof'
-              : (n ? n + ' file' + (n>1?'s':'') : 'Files');
+  /* One question, one colour: is the proof requirement satisfied?
+       green  - yes (a receipt, or a finished fee-only charge with nothing to prove)
+       amber  - files are here but the receipt is not
+       red    - nothing at all
+     Blue used to mean "not green", which is not a meaning: a completed fee-only
+     charge and an audit missing its receipt wore the same badge. */
+  const settled = hasCarrier || !needsProof;
+  const cls = settled ? 'g' : (n ? 'a' : 'r');
+  const label = settled ? (n ? ('\u2713 ' + n + ' file' + (n>1?'s':'')) : '\u2713 nothing to prove')
+              : (n ? n + ' file' + (n>1?'s':'') + ' \u00b7 no receipt' : 'No proof');
   return '<span class="docbtn ' + cls + '" onclick="openDocs(\'' + rowKey + '\')">'
        + '<i class="ti"></i>' + label + '</span>';
 }
@@ -802,10 +814,18 @@ function renderAgentView(r){
     if(d){ if(!g.first || d<g.first) g.first=d; if(!g.last || d>g.last) g.last=d; }
   }
   const list = Object.values(byAgent).sort((a,b)=> b.earned - a.earned || b.fees - a.fees);
+  /* The order control lives on BOTH sub-views. It was only ever rendered on
+     Transactions, so switching to By agent silently dropped it. */
+  const agSort = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
+    + '<span class="muted" style="font-size:12px;margin-right:2px">Order</span>'
+    + '<span class="perchip'+(AUDIT_SORT==='action'?' sel':'')+'" onclick="setAuditSort(\'action\')">Needs action first</span>'
+    + '<span class="perchip'+(AUDIT_SORT==='date'?' sel':'')+'" onclick="setAuditSort(\'date\')">By date</span>'
+    + '</div>';
   const totEarned = list.reduce((a,x)=>a+x.earned,0);
 
   let h = '<div class="muted" style="font-size:12.5px;margin:-4px 0 10px">Commission is earned only when a transaction'+"'"+'s audit is complete. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
   h += '<div style="margin-bottom:14px;font-size:14px">Total earned commission: <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></div>';
+  h += agSort;
 
   if(!list.length) h += '<div class="muted">No agent activity.</div>';
 
@@ -851,7 +871,21 @@ function renderAgentView(r){
       }
       h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th>Fee</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
       const atts = r.attachments || [];
-      for(const x of g.tx){
+      /* THE SAME ORDER AS THE TRANSACTIONS VIEW. An agent opening their own row is
+         looking for what they still have to do; date order buries it. Melisa's three
+         unfinished audits sat below finished ones. Honours the same AUDIT_SORT
+         control, so the two views cannot disagree. */
+      const agNeedsCost  = z => z.audit_status !== 'complete' && !z.pre_audit
+                                && (z.service_cost == null)
+                                && atts.some(a => a.payment_id === z.id);
+      const agNeedsProof = z => z.audit_status !== 'complete' && !z.pre_audit
+                                && !atts.some(a => a.payment_id === z.id);
+      const agBucket = z => agNeedsProof(z) ? 0 : (agNeedsCost(z) ? 1 : 2);
+      const txList = (AUDIT_SORT === 'action')
+        ? g.tx.slice().sort((p,q) => (agBucket(p) - agBucket(q))
+                                     || String(q.ts).localeCompare(String(p.ts)))
+        : g.tx;
+      for(const x of txList){
         const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(String(x.audit_status||'open').replace(/_/g,' '))+'</span>';
         const docs = atts.filter(a => (a.payment_id===x.id) || (a.client_no===x.client_no));
         const docCell = docsCell(docs, !x.pre_audit && x.audit_status !== 'complete', x.id, (x.client_name||('#'+x.client_no))+' \u00b7 '+money(x.amount));
@@ -1037,7 +1071,17 @@ async function renderAudit(el){
     const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount));
     const nm = row.client_name ? esc(row.client_name) : '';
     const canComplete = !row.pre_audit && row.audit_status !== 'complete';
-    const completeBtn = canComplete ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">+ proof</span>' : '';
+    /* This is a BUTTON, not a status, and it used to be labelled "+ proof" on every
+       unfinished audit - including ones whose receipt was already attached and showing
+       a green tick two columns away. Same words, two meanings. It now says what is
+       actually missing: a receipt, or the carrier cost. */
+    const rowHasReceipt = docs.some(d => d.payment_id === row.id
+                          && ((d.doc_type || d.kind) === 'carrier_receipt'
+                              || String(d.doc_type || '').endsWith('_no_payment')));
+    const completeBtn = canComplete
+      ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">'
+        + (rowHasReceipt ? '+ carrier cost' : '+ proof') + '</span>'
+      : '';
     h += '<tr>'
       + '<td class="muted" style="font-size:12px">'+esc(PT_STAMP(row.ts))+'</td>'
       + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span></td>'

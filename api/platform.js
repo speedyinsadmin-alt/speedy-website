@@ -1616,27 +1616,38 @@ if (view === 'portal_share_due') {
   if (view === 'audit_list') {
     const q = String(req.query.q || '').trim().toLowerCase();
     const AUDIT_CUTOFF = '2026-07-29'; // proof-of-payment process started ~here; older charges are pre-audit
-    const tasks = await sbGet(s, 'audit_tasks?select=*&order=created_at.desc&limit=500');
-    const atts = await sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft,bytes,mime&order=created_at.desc&limit=1000');
-    const pays = await sbGet(s, 'bridge_ledger?is_test=is.false&select=*&order=ts.desc&limit=500');
+    /* PERFORMANCE. This view was six queries run strictly one after another, so the
+       page waited for the sum of six round trips rather than the slowest one.
+       Measured before changing anything:
+         bridge_ledger select=*  192 kB  (the `extra` jsonb alone is 126 kB - 66%)
+         attachments             76 kB
+         audit_tasks             0 ROWS - the table is empty and has no writer in
+                                 either API, so `task` was always undefined and
+                                 auditStatus always fell through to p.audit_status.
+       audit_tasks is dropped. The three that remain are independent, so they run in
+       PARALLEL - the page now waits for the slowest, not the total. */
+    const [atts, pays, comm] = await Promise.all([
+      sbGet(s, 'attachments?select=id,client_no,payment_id,kind,doc_type,filename,carrier,amount,created_at,filed_hawksoft&order=created_at.desc&limit=1000'),
+      sbGet(s, 'bridge_ledger?is_test=is.false&select=*&order=ts.desc&limit=500'),
+      sbGet(s, 'agent_commission?select=*'),
+    ]);
     // client names for the payments (dedupe client ids)
     const ids = [...new Set((pays.rows || []).map(p => p.client_id).filter(x => x != null))];
     const nameMap = {};
+    const typeMap = {};   // per client: has ANY insurance, has ANY dmv (both possible)
     if (ids.length) {
-      const cl = await sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`);
+      /* Both depend on the id list but not on each other. */
+      const [cl, po] = await Promise.all([
+        sbGet(s, `clients?client_no=in.(${ids.join(',')})&select=client_no,first_name,last_name,business_name`),
+        sbGet(s, `policies?client_no=in.(${ids.join(',')})&select=client_no,record_type`),
+      ]);
       for (const c of (cl.rows || [])) nameMap[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
-    }
-    // record_type per client — track whether client has ANY insurance and ANY dmv (a client can have both)
-    const typeMap = {};
-    if (ids.length) {
-      const po = await sbGet(s, `policies?client_no=in.(${ids.join(',')})&select=client_no,record_type`);
       for (const r of (po.rows || [])) {
         if (!typeMap[r.client_no]) typeMap[r.client_no] = { insurance: false, dmv: false };
         if (r.record_type === 'dmv_service') typeMap[r.client_no].dmv = true;
         else typeMap[r.client_no].insurance = true;
       }
     }
-    const comm = await sbGet(s, 'agent_commission?select=*');
     const commMap = {}; for (const c of (comm.rows || [])) commMap[c.agent_email] = Number(c.percentage);
 
     const NON_PAYMENT_STATUS = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
@@ -1661,8 +1672,8 @@ if (view === 'portal_share_due') {
         }
       }
       const docs = (atts.rows || []).filter(a => (a.payment_id === p.id) || (a.client_no === p.client_id));
-      const task = (tasks.rows || []).find(t => t.payment_id === p.id);
-      const auditStatus = preAudit ? 'pre_audit' : (task ? task.status : (p.audit_status || 'client_paid'));
+      /* audit_tasks was empty and unwritten, so this was always p.audit_status. */
+      const auditStatus = preAudit ? 'pre_audit' : (p.audit_status || 'client_paid');
       const cost = p.service_cost != null ? Number(p.service_cost) : (p.carrier_paid_amount != null ? Number(p.carrier_paid_amount) : null);
       const fee = p.fee_amount != null ? Number(p.fee_amount) : (cost != null ? Number(p.amount) - cost : null);
       // Normalize agent identity: extract the email from the free-text agent string

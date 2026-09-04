@@ -1697,7 +1697,10 @@ if (view === 'portal_share_due') {
         helper_share_pct: p.helper_share_pct != null ? Number(p.helper_share_pct) : null,
         share_locked_at: p.share_locked_at || null,
         receipt_pending: (p.kind === 'charge_captured') || !!(p.extra && p.extra.receipt_pending === true),
-        service_cost: cost, fee, pct, commission, doc_count: docs.length, task_id: task ? task.id : null,
+        /* task_id was always null: audit_tasks is empty and has no writer. I removed
+           the declaration and MISSED this second use, which took the audit tab down.
+           Grep every use of a name before deleting it, not just the one you read. */
+        service_cost: cost, fee, pct, commission, doc_count: docs.length, task_id: null,
       };
     });
     if (q) {

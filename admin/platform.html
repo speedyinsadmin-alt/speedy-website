@@ -875,11 +875,14 @@ function renderAgentView(r){
          looking for what they still have to do; date order buries it. Melisa's three
          unfinished audits sat below finished ones. Honours the same AUDIT_SORT
          control, so the two views cannot disagree. */
-      const agNeedsCost  = z => z.audit_status !== 'complete' && !z.pre_audit
-                                && (z.service_cost == null)
-                                && atts.some(a => a.payment_id === z.id);
-      const agNeedsProof = z => z.audit_status !== 'complete' && !z.pre_audit
-                                && !atts.some(a => a.payment_id === z.id);
+      /* Same test as the badge and as the transactions view - a carrier receipt, not
+         merely any document. */
+      const agHasReceipt = z => atts.some(a => a.payment_id === z.id
+        && (String(a.doc_type || a.kind || '') === 'carrier_receipt'
+            || String(a.doc_type || '').endsWith('_no_payment')));
+      const agOpen = z => z.audit_status !== 'complete' && !z.pre_audit;
+      const agNeedsProof = z => agOpen(z) && !agHasReceipt(z);
+      const agNeedsCost  = z => agOpen(z) &&  agHasReceipt(z) && (z.service_cost == null);
       const agBucket = z => agNeedsProof(z) ? 0 : (agNeedsCost(z) ? 1 : 2);
       const txList = (AUDIT_SORT === 'action')
         ? g.tx.slice().sort((p,q) => (agBucket(p) - agBucket(q))
@@ -1001,10 +1004,16 @@ async function renderAudit(el){
        1. no carrier cost - the receipt is there, a NUMBER is missing
        2. no proof        - nothing uploaded at all
      Newest first inside each bucket. Date order remains available. */
-  const needsCost  = x => x.audit_status !== 'complete' && x.audit_status !== 'pre_audit'
-                          && (x.service_cost == null) && (x.doc_count > 0);
-  const needsProof = x => x.audit_status !== 'complete' && x.audit_status !== 'pre_audit'
-                          && !(x.doc_count > 0);
+  /* The bucket test must be the SAME test as the badge, or the order contradicts the
+     colours. doc_count counts ANY document - a client receipt is not proof of what was
+     paid to the carrier - so a row showing "1 file · no receipt" was landing in the
+     carrier-cost bucket and mixing with rows that genuinely had their receipt. */
+  const hasReceipt = x => atts.some(a => a.payment_id === x.id
+    && (String(a.doc_type || a.kind || '') === 'carrier_receipt'
+        || String(a.doc_type || '').endsWith('_no_payment')));
+  const open_ = x => x.audit_status !== 'complete' && x.audit_status !== 'pre_audit';
+  const needsProof = x => open_(x) && !hasReceipt(x);
+  const needsCost  = x => open_(x) &&  hasReceipt(x) && (x.service_cost == null);
   const bucket = x => needsProof(x) ? 0 : (needsCost(x) ? 1 : 2);
   if(AUDIT_SORT === 'action'){
     periodRows = periodRows.slice().sort((a,b) =>

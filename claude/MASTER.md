@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 3, 2026 (evening) · maintained by Saif + Claude**
+**Last updated: September 4, 2026 · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 > **THIS IS THE ONLY COPY.** On Aug 28 the project held **six separate documents
@@ -706,6 +706,94 @@ for them.
 
 ---
 
+## SEP 4 — AUDIT VISIBILITY, AND A BROKEN CALLS TAB I DID NOT FIX
+
+### 🚩 START HERE NEXT SESSION
+1. **CALLS TAB IS DOWN.** Diagnosed, not fixed. See below — the fix is a view rewrite.
+2. **Carrier receipt ⇒ carrier cost becomes MANDATORY** (Saif's rule, agreed, not built).
+3. Then: roles, the Agents panel, Tony's by-agent tab.
+
+### ⛔ CALLS TAB — `call_sessions` takes 8.06 SECONDS, so the function times out
+`EXPLAIN ANALYZE` on the exact query the Console runs:
+
+```
+Execution Time: 8057 ms
+SubPlan 2 → 369 loops, each scanning all 35,742 rows of the `legs` CTE
+Buffers: temp read = 2,153,712 blocks  (~16 GB of temp I/O for 369 result rows)
+```
+
+The view builds a CTE of **every** call leg, then re-scans that whole CTE **once per
+session** for "who answered", "which office", "longest customer leg". Quadratic, so it
+has been degrading as `call_log` grows (35,742 rows now) and has just crossed the
+10-second function limit. Vercel then returns an HTML error page, `r.json()` throws,
+and the page shows a generic failure.
+
+**NOT caused by any recent change.** It has been getting slower for weeks.
+
+**The fix:** push the date filter INTO the CTE so it builds a few thousand legs
+instead of all of them — on "Today" that is ~400 rows rather than 35,742, making the
+per-session re-scans ~90× smaller — and turn the correlated subqueries into aggregates
+computed once. The view is 4,927 chars; its OUTPUT COLUMNS MUST NOT CHANGE.
+
+> **I misdiagnosed this three times before measuring**: blamed my own audit_list
+> change, then HTTP cache, then an expired session. Each was plausible, each was
+> wrong. **A timeout-shaped failure — generic error, no server exception logged —
+> should go straight to EXPLAIN ANALYZE.**
+
+Two of the three changes made while chasing it are worth keeping and are shipped:
+- **`/admin/*.html` is now `no-store`** (`e0097a21`). There is no service worker, so an
+  app window left open was running whatever HTML it last fetched. That is also how an
+  agent hits a bug fixed hours ago.
+- **An expired sign-in now says so** (`2fc134f8`). `api()` had NO 401 handling, so a
+  dead token rendered as each tab's generic error. Tokens last ~1 hour; the Console is
+  left open far longer.
+
+### Shipped — the audit is now honest about what is unfinished
+- **`PT_DAY is not defined`** (`2f353148`) — the Pacific helpers were declared inside
+  the transactions renderer while `renderAgentView` is a sibling top-level function, so
+  the by-agent tab had NEVER worked. Found by measuring brace depth: the scope returns
+  to 0 at line 853, between the use and the definition.
+- **audit_list was 6 sequential queries** (`1ce34e63`, hotfix `75e80547`) — one of them
+  against `audit_tasks`, an EMPTY table with no writer in either API, so `task` was
+  always undefined. Now two parallel waves. The hotfix: I deleted the declaration and
+  missed a SECOND use, taking the tab down. **Grep every use of a name before deleting
+  it.**
+- **A half-finished audit no longer reports success** (`5de08482`). Melisa left three
+  audits at carrier_pending and pressed save THREE TIMES IN SEVEN SECONDS on client
+  9014 — Submit was disabled because the carrier cost was missing, so the only button
+  was *Save & finish later*, which replied **"✓ Saved as pending"**. A green tick on an
+  unfinished audit. ~$45 of her commission unclaimed with nothing on screen saying why.
+  Now names what is missing, in amber. **Green is reserved for an actual completion.**
+- **Sort by what is missing** (`b462d842`, `09e40c40`, `3a77d2d8`) — three commits,
+  because the first two got the definition wrong. Final: buckets use the SAME test as
+  the badge — is there a carrier receipt (or a `*_no_payment` doc, which IS the proof
+  on a fee-only charge)? `doc_count` counts ANY document and a client receipt is not
+  proof, so rows showing "1 file · no receipt" were sorting into the carrier-cost
+  bucket. Also: "+ proof" was a BUTTON, not a status, shown on every unfinished audit —
+  it now says "+ carrier cost" when the receipt is already there. And blue meant "not
+  green", which is not a meaning: a completed fee-only charge wore the same badge as an
+  audit missing its receipt.
+
+### Client 26371 — documents at client level, and it is NOT the upload code
+Alejandra uploaded four documents at 10:46–10:58. The policy did not reach OUR database
+until **11:03:33**. There was no policy row on the card, so no tab to file against.
+
+**"+ Documents" on a policy row DOES file to that tab** — it passes `hs_policy_guid`
+and `resolvePolicyGuid` takes it first. The gap is sync latency on brand-new business,
+not the upload path.
+
+**Candidate fix (not built):** when an agent opens a client whose card shows NO
+policies at all, refresh from HawkSoft automatically. Zero policies means brand new or
+stale, and one call fixes both.
+
+### Data worth keeping
+- Charge → completed audit: **median 17 minutes**, 78 of 160 within 15 min. But **47 of
+  160 took over 4 hours and 33 took over 2 days** — so "waiting on the carrier" is a
+  real workflow and a partial save must stay possible. That is why the rule is *receipt
+  ⇒ cost mandatory*, not *cost always mandatory*.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -1093,6 +1181,9 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 69i. ~~Back button on carrier.html~~ **DONE Sep 3** — four attempts, see above
 69k. **⏰ TONY: add Lake Elsinore and Colton as HawkSoft offices** (Setup → Offices). Until then those clients file under the closest branch
 69l. **🔑 Rotate the admin key** — exposed in a Sep 3 screenshot. Clover App Secret still outstanding too
+69o. **⛔ CALLS TAB DOWN — rewrite the `call_sessions` view.** 8.06s, times out. See SEP 4
+69p. **Carrier receipt ⇒ carrier cost mandatory** — Saif's rule. Prevents the state instead of chasing it
+69q. **Auto-refresh a client with zero policies** — would have put the tab on screen before Alejandra uploaded
 69m. **Write a log from the portal to HawkSoft** — biggest adoption lever. Needs a channel decision
 69n. **Read logs on the client card** — on demand only, never on render. Needs a visibility decision
 
@@ -1197,6 +1288,13 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 - **Ask what we already pay for before adding a vendor.** I chose Vercel Blob because
   a half-written helper pointed there; Supabase Pro already included 100 GB of file
   storage, the credential was already in the environment, and Saif had to point it out.
+- **A timeout-shaped failure goes straight to EXPLAIN ANALYZE (Sep 4).** Generic error,
+  no server exception logged, works in one window and not another — I guessed three
+  times before measuring, and the measurement answered it immediately.
+- **Grep every use of a name before deleting it (Sep 4).** Removing a dead query, I
+  deleted the declaration and one use, missed a second, and took the audit tab down.
+- **The order and the colours must be computed by the SAME test (Sep 4).** Two
+  definitions of "needs proof" made the sort contradict the badges.
 - **Trace the whole path before fixing any hop of it (Sep 3).** Four commits for one
   Back button: portal home, sign-in screen, charge sheet, office picker. Each fix was
   correct and each revealed the next layer.
@@ -1289,7 +1387,9 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 
 **Sep 1:** `f30fe573` MASTER.md to repo · `5af209c5` WORKSPACE + BUILD_MAP · `b77c4c7e` ops.html · `f647d9f4` ops full · `69593c45` **approval-date commission** · `d06ea9c5` **hotfix nowIso scope** · `1ba56a46` fee-only · `f3849d91` **hotfix recalcFee** · `5665bb83` existing receipt counts
 
-**Sep 2-3:** `ec18b795` fee-only carrier fix · `b2ac1537` doc types + Other label · `558ac86f` **unnumbered policies chargeable** · `2a0c9d4d` retro-link · `505b4987` sweep all unlinked · `42840261` note payload fix · `aa5970cc` **picker grouped, no preselect >3 tabs** · `7af8e9ce` note_wrong_policy · `39dcc3e6` back control · `cff1ba6a` session handoff · `1c01182d` ?open= + tab close · `2139f7e3` office restore · `9a579268` new client from portal · **`e54daf2b` = TAG `working-2026-09-03` (current, verified restore point)**
+**Sep 2-3:** `ec18b795` fee-only carrier fix · `b2ac1537` doc types + Other label · `558ac86f` **unnumbered policies chargeable** · `2a0c9d4d` retro-link · `505b4987` sweep all unlinked · `42840261` note payload fix · `aa5970cc` **picker grouped, no preselect >3 tabs** · `7af8e9ce` note_wrong_policy · `39dcc3e6` back control · `cff1ba6a` session handoff · `1c01182d` ?open= + tab close · `2139f7e3` office restore · `9a579268` new client from portal · `e54daf2b` = TAG `working-2026-09-03` (verified restore point)
+
+**Sep 4:** `2f353148` PT_DAY scope · `1ce34e63` audit parallel + `75e80547` hotfix · `5de08482` **partial save tells the truth** · `b462d842`/`09e40c40`/`3a77d2d8` sort by what is missing · `e0097a21` admin HTML no-store · **`2fc134f8` expired sign-in banner (current)**
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

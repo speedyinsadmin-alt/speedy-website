@@ -1006,6 +1006,21 @@ async function setShare(paymentId, pct){
   }catch(e){ alert('Could not save it.'); }
 }
 
+/* What is still needed, named exactly. "Saved as pending" tells an agent nothing
+   about why it is pending or what to do next. */
+function pendingMsg(){
+  const missing = [];
+  if(!feeOnly() && !effCarrier()) missing.push('which carrier was paid');
+  if(!feeOnly() && carrierAmt() === null) missing.push('the amount paid to the carrier');
+  if(!feeOnly() && !HAS_RECEIPT && !FILE_B64) missing.push('the carrier receipt');
+  const kept = 'Your work so far is saved.';
+  if(!missing.length) return 'Saved — not submitted to audit yet. ' + kept;
+  const list = missing.length === 1 ? missing[0]
+    : missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1];
+  return 'NOT FINISHED — this audit still needs ' + list + '. ' + kept
+    + ' Come back and press Submit to audit, or your commission stays unpaid.';
+}
+
 function friendlyError(status, complete){
   if(status === 401) return 'Your sign-in expired. Sign in again — nothing you typed is lost.';
   if(status === 403) return 'You are not able to add proof for this payment. If it was taken by another agent, they need to finish it.';
@@ -1054,11 +1069,17 @@ async function submit(complete){
       mainOk = true;
       mainMsg = complete
         ? '✓ Audit complete — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')
-        : '✓ Saved as pending — task flagged';
+        /* NOT a tick. Melisa saved three audits on Sep 3 and pressed save three times
+           in seven seconds on one of them - Submit was disabled because the carrier
+           cost was missing, so the only button available was this one, and it replied
+           with a green "✓ Saved as pending". She had every reason to think she was
+           finished. Three audits stranded and $45 of her commission unclaimed.
+           A partial save must say what is still missing. */
+        : pendingMsg();
     } else if(r.ok && !j){
       // saved but response didn't parse — treat as success (data landed)
       mainOk = true;
-      mainMsg = complete ? '✓ Audit complete — receipt stored' : '✓ Saved as pending';
+      mainMsg = complete ? '✓ Audit complete — receipt stored' : pendingMsg();
     } else {
       mainMsg = (j && j.error) ? j.error : friendlyError(r.status, complete);
     }
@@ -1107,12 +1128,19 @@ async function submit(complete){
       + ' \u2014 still listed below, press Save & finish later to retry just those'
     : '';
   if(mainOk === true){
-    msg.className='ok'; msg.textContent = mainMsg + docPart + failPart + '.';
+    /* GREEN ONLY WHEN THE AUDIT IS ACTUALLY COMPLETE. A partial save used to render
+       'ok' with a tick, which is what let three audits sit unfinished and unnoticed -
+       the colour is what an agent reads before the words. */
+    if(complete){ msg.className='ok'; }
+    else { msg.className=''; msg.style.color='var(--amber)'; }
+    msg.textContent = mainMsg + docPart + failPart + '.';
     if(complete && CTX.payment_id) askShare(CTX.payment_id);
     if(CTX.payment_id){
       const back = document.createElement('div');
       back.style.cssText = 'margin-top:12px;text-align:center';
-      SUBMITTED = true;
+      /* Only a COMPLETED audit means there is nothing left to lose. After a partial
+         save the agent still has work to finish, so Back should still warn. */
+      if(complete) SUBMITTED = true;
       back.innerHTML = '<a href="' + backHref() + '" onclick="try{if(TOKEN)localStorage.setItem(\'speedy_handoff_tok\',TOKEN)}catch(e){}" style="color:#4d7cfe;font-size:13px;text-decoration:none">\u2190 Back to ' + (CTX.name ? escAttr(CTX.name) : 'the client') + '</a>';
       msg.appendChild(back);
     }

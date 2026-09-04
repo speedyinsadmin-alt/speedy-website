@@ -764,6 +764,26 @@ const AGENT_LABEL = {
   'fernando@speedyins.com':'Fernando Salgado','esmeralda@speedyins.com':'Esmeralda Ayala','irene@speedyins.com':'Irene Ayala',
   'melisa@speedyins.com':'Melisa Hernandez','daisy@speedyins.com':'Daisy Hurtado',
 };
+/* ---------- Pacific date helpers ----------
+   TOP LEVEL, above every reader. They were declared inside the transactions renderer
+   while renderAgentView - a sibling top-level function - also called PT_DAY, so the
+   by-agent tab threw "PT_DAY is not defined" on every render. Measured by brace
+   depth: the scope returns to 0 at line 853, between the use and the old definition.
+
+   Declared above their first reader, not merely somewhere in the file: a const in a
+   temporal dead zone reads exactly like an undefined variable (the v2.7 dead zone).
+
+   Day arithmetic is done on the DATE ONLY - subtracting 86400000ms lands on the wrong
+   day across a DST boundary; stepping a UTC calendar date cannot. */
+const PT_TZ = 'America/Los_Angeles';
+const _PT_D = new Intl.DateTimeFormat('en-CA', { timeZone: PT_TZ, year:'numeric', month:'2-digit', day:'2-digit' });
+const _PT_T = new Intl.DateTimeFormat('en-CA', { timeZone: PT_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+const PT_DAY = ts => { if(!ts) return ''; const dt = new Date(ts); return isNaN(dt) ? '' : _PT_D.format(dt); };
+const PT_STAMP = ts => { if(!ts) return ''; const dt = new Date(ts); return isNaN(dt) ? '' : _PT_T.format(dt).replace(',', ''); };
+const PT_TODAY = () => _PT_D.format(new Date());
+const PT_DAY_MINUS = (iso, n) => { const [Y,M,D] = String(iso).split('-').map(Number);
+  const t = new Date(Date.UTC(Y, M-1, D)); t.setUTCDate(t.getUTCDate() - n); return t.toISOString().slice(0,10); };
+
 function renderAgentView(r){
   const rows = r.rows || [];
   const commMap = {}; for(const c of (r.commissions||[])) commMap[c.agent_email] = Number(c.percentage);
@@ -914,18 +934,10 @@ async function renderAudit(el){
 
      Declared ABOVE inPeriod, its first reader (see: the v2.7 dead zone).
      ------------------------------------------------------------------ */
-  const PT_TZ = 'America/Los_Angeles';
-  const _PT_D = new Intl.DateTimeFormat('en-CA', { timeZone: PT_TZ, year:'numeric', month:'2-digit', day:'2-digit' });
-  const _PT_T = new Intl.DateTimeFormat('en-CA', { timeZone: PT_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
-  // YYYY-MM-DD in Pacific for any timestamp. Returns '' on junk rather than throwing.
-  const PT_DAY = ts => { if(!ts) return ''; const dt = new Date(ts); return isNaN(dt) ? '' : _PT_D.format(dt); };
-  // 'YYYY-MM-DD HH:MM' in Pacific, for display.
-  const PT_STAMP = ts => { if(!ts) return ''; const dt = new Date(ts); return isNaN(dt) ? '' : _PT_T.format(dt).replace(',', ''); };
-  const PT_TODAY = () => _PT_D.format(new Date());
-  /* Day arithmetic on the DATE ONLY. Subtracting 86400000ms lands on the
-     wrong day across a DST boundary; stepping a UTC calendar date cannot. */
-  const PT_DAY_MINUS = (iso, n) => { const [Y,M,D] = String(iso).split('-').map(Number);
-    const t = new Date(Date.UTC(Y, M-1, D)); t.setUTCDate(t.getUTCDate() - n); return t.toISOString().slice(0,10); };
+  /* The Pacific helpers now live at TOP LEVEL, above renderAgentView - see there.
+     They used to be declared here, inside this renderer, and the by-agent view is a
+     SEPARATE top-level function, so PT_DAY was never visible to it: "By-agent render
+     error: PT_DAY is not defined". */
 
   // Date filter — "Total fees" with no period read like a business number when it was
   // really "everything ever recorded". Totals below are always for the selected period.

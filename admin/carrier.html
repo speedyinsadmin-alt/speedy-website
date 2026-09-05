@@ -1032,7 +1032,30 @@ function friendlyError(status, complete){
 }
 
 async function submit(complete){
-  const msg = $('#msg'); msg.className=''; msg.textContent = complete ? 'Submitting to audit…' : 'Saving…';
+  const msg = $('#msg');
+
+  /* SAIF'S RULE: a carrier receipt in hand means the amount is printed on it, so
+     there is no honest reason to attach it and not type the number. Blocked here
+     rather than chased afterwards.
+
+     Only blocks a PARTIAL save. "I have not paid the carrier yet" stays possible -
+     the data says 33 of 160 audits took more than two days, so that workflow is real.
+     What is no longer possible is having the receipt and skipping the amount, which
+     is how ten audits ended up unfinished with commission nobody could claim. */
+  if(!complete && !feeOnly()){
+    const haveReceipt = !!FILE_B64 || !!HAS_RECEIPT;
+    if(haveReceipt && carrierAmt() === null){
+      msg.className = '';
+      msg.style.color = 'var(--amber)';
+      msg.textContent = 'The carrier receipt is attached, so the amount paid to the carrier '
+        + 'is needed before saving — it is printed on that receipt. Enter it and this can '
+        + 'go straight to audit.';
+      const amt = $('#camt'); if(amt){ amt.focus(); amt.scrollIntoView({behavior:'smooth',block:'center'}); }
+      return;
+    }
+  }
+
+  msg.className=''; msg.style.color=''; msg.textContent = complete ? 'Submitting to audit…' : 'Saving…';
   const btn = $('#submitBtn'), saveBtn = document.querySelector('.save');
   if(btn) btn.disabled = true; if(saveBtn) saveBtn.disabled = true;
 

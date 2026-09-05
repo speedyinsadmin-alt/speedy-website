@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 4, 2026 · maintained by Saif + Claude**
+**Last updated: September 5, 2026 · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 > **THIS IS THE ONLY COPY.** On Aug 28 the project held **six separate documents
@@ -794,6 +794,90 @@ stale, and one call fixes both.
 
 ---
 
+## SEP 5 — CALLS TAB FIXED, AND SMS WORKS END TO END
+
+### ✅ CALLS TAB FIXED — 8,057ms → 310ms
+`call_sessions` re-scanned a materialised CTE of every call leg **once per session**
+for `customer_number` and the `office_id` fallback: 369 loops over 35,742 rows,
+**2,153,712 temp block reads** to produce 369 rows. Quadratic, so it degraded as
+`call_log` grew and finally crossed the function limit. Vercel returned an HTML error
+page, `r.json()` threw, and the tab showed a generic failure.
+
+Those correlated subqueries are now aggregates in the `GROUP BY` that already existed,
+and the CTE stopped carrying `raw_event`, `tasks`, `score`, `recording_url` and other
+columns nothing reads. Temp reads: **2,153,712 → 1,974**.
+
+> **ONE DELIBERATE BEHAVIOUR CHANGE.** The old fallbacks were an unordered `LIMIT 1` —
+> arbitrary, and it could return a different answer on repeat runs. They now take the
+> FIRST leg by `started_at`, which is where the call arrived. This changes the office
+> on ~20 of 692 recent rows, **every one a call that rang at multiple offices** (one
+> had offices 1, 2 and 3) and so had no correct answer before. The answering agent's
+> office still wins whenever there is one.
+
+### ✅ SMS WORKS — sent and received on a real phone (Sep 5)
+`api/sms.js`. Auth, token cache and the 5-per-60s rate-limit hint are **copied from
+rc-subscribe.js**, not rewritten.
+
+- `action:capabilities` — lists every number and which report `SmsSender`
+- `action:send` — 10-digit US number or refused; **every send writes `sms.sent` or
+  `sms.failed`** to events with number, length, purpose and message id
+
+**Proven Sep 5:** message id 3791309147023, Queued, and it arrived.
+
+### ⛔ THE NUMBER PROBLEM — only a DirectNumber can text
+```
++1 747 229 2938   sms:TRUE    DirectNumber        ← the only one
++1 951 695 1500   sms:false   MainCompanyNumber
++1 800 453 9616   sms:false   CompanyNumber
++1 866 744 0999   sms:false   CompanyNumber
++1 951 268 9900   sms:false   CompanyFaxNumber
++1 951 353 9900   sms:false   CompanyNumber (Liberty Express)
+```
+**A MainCompanyNumber cannot send SMS** — it routes into the auto-attendant, which is
+a menu with no inbox for replies. There is no toggle; this is how RingCentral works.
+
+So texts currently come from a **747 (Los Angeles) area code** while the branches are
+951 and 909. A Riverside client is likely to read that as spam.
+
+> **⏰ ASK RINGCENTRAL (Charmaine / Grace), two things in one message:**
+> 1. A **951 direct number on a shared extension** as a dedicated texting line — the
+>    clean answer, since replies need an inbox that is not one agent's.
+> 2. **A2P 10DLC registration.** Business texting from a 10-digit number needs a brand
+>    and campaign registered with the carriers. Unregistered traffic is accepted, comes
+>    back "Queued", and is then silently dropped. Our test arrived, but that does not
+>    prove registration — confirm it before agents use this with clients.
+
+Swapping the number later is one env var: `RC_SMS_FROM`.
+
+### ✅ CALL RECORDING — legal approved, agents signed (Saif, Sep 5)
+Attorney review is DONE and the agents have signed.
+
+> **STILL OPEN, and it is a different thing:** the agents signing covers the AGENTS.
+> California all-party consent also covers the **CUSTOMER**. That is normally a
+> recorded announcement at the start of the call, not a signature. Confirm that
+> announcement exists before recordings are used for scoring.
+
+### What agent scoring would actually need
+`call_log` has `recording_id`, `transcript`, `summary` and `score` columns — **all four
+are 0% populated across 36,966 legs.** Designed for and never wired. The reason is one
+line in `rc-subscribe.js`:
+
+```js
+const EVENT_FILTERS = ['/restapi/v1.0/account/~/telephony/sessions'];
+```
+
+Call state only. No recordings, no messages.
+
+**Available today with no new plumbing:** answer rate, talk time, missed calls,
+transfers, rang-but-colleague-took-it — 8,027 answered agent legs across 18 agents
+since Aug 7.
+
+**Needs work:** anything based on what was *said* — recording scope, a fetch step,
+transcription, and a scoring rubric that Tony defines. Do not start this before the
+customer-announcement question above is settled.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -1181,7 +1265,11 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 69i. ~~Back button on carrier.html~~ **DONE Sep 3** — four attempts, see above
 69k. **⏰ TONY: add Lake Elsinore and Colton as HawkSoft offices** (Setup → Offices). Until then those clients file under the closest branch
 69l. **🔑 Rotate the admin key** — exposed in a Sep 3 screenshot. Clover App Secret still outstanding too
-69o. **⛔ CALLS TAB DOWN — rewrite the `call_sessions` view.** 8.06s, times out. See SEP 4
+69o. ~~Calls tab down~~ **FIXED Sep 5** — 8,057ms → 310ms
+69r. **⏰ ASK RINGCENTRAL: a 951 direct number for SMS, and A2P 10DLC registration.** Texts currently come from a 747 LA number
+69s. **Customer-side recording consent** — agents signed, but all-party consent covers the customer too. Confirm the call announcement exists
+69t. **Receive SMS** — add `/restapi/v1.0/account/~/extension/~/message-store` to EVENT_FILTERS; the webhook already exists
+69u. **Agent scoring on call metrics** — answer rate, talk time, transfers. Available today, no new plumbing
 69p. **Carrier receipt ⇒ carrier cost mandatory** — Saif's rule. Prevents the state instead of chasing it
 69q. **Auto-refresh a client with zero policies** — would have put the tab on screen before Alejandra uploaded
 69m. **Write a log from the portal to HawkSoft** — biggest adoption lever. Needs a channel decision
@@ -1288,6 +1376,9 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 - **Ask what we already pay for before adding a vendor.** I chose Vercel Blob because
   a half-written helper pointed there; Supabase Pro already included 100 GB of file
   storage, the credential was already in the environment, and Saif had to point it out.
+- **A correlated subquery in a view SELECT runs once per output row (Sep 5).** In
+  `call_sessions` that meant 369 full scans of a 35,742-row CTE. If a value can be
+  computed in a GROUP BY that already exists, put it there.
 - **A timeout-shaped failure goes straight to EXPLAIN ANALYZE (Sep 4).** Generic error,
   no server exception logged, works in one window and not another — I guessed three
   times before measuring, and the measurement answered it immediately.
@@ -1389,7 +1480,9 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 
 **Sep 2-3:** `ec18b795` fee-only carrier fix · `b2ac1537` doc types + Other label · `558ac86f` **unnumbered policies chargeable** · `2a0c9d4d` retro-link · `505b4987` sweep all unlinked · `42840261` note payload fix · `aa5970cc` **picker grouped, no preselect >3 tabs** · `7af8e9ce` note_wrong_policy · `39dcc3e6` back control · `cff1ba6a` session handoff · `1c01182d` ?open= + tab close · `2139f7e3` office restore · `9a579268` new client from portal · `e54daf2b` = TAG `working-2026-09-03` (verified restore point)
 
-**Sep 4:** `2f353148` PT_DAY scope · `1ce34e63` audit parallel + `75e80547` hotfix · `5de08482` **partial save tells the truth** · `b462d842`/`09e40c40`/`3a77d2d8` sort by what is missing · `e0097a21` admin HTML no-store · **`2fc134f8` expired sign-in banner (current)**
+**Sep 4:** `2f353148` PT_DAY scope · `1ce34e63` audit parallel + `75e80547` hotfix · `5de08482` **partial save tells the truth** · `b462d842`/`09e40c40`/`3a77d2d8` sort by what is missing · `e0097a21` admin HTML no-store · `2fc134f8` expired sign-in banner
+
+**Sep 5:** migration `rewrite_call_sessions_no_correlated_subqueries` **(8,057ms → 310ms)** · **`86767870` api/sms.js — SMS proven end to end (current)**
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

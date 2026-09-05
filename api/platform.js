@@ -2031,7 +2031,29 @@ if (view === 'portal_share_due') {
      unfinished audit behind it. */
   if (view === 'trust') {
     const s = sb();
-    const period = periodBounds(req.query.period);
+    /* periodBounds lives inside portal_home at depth 3 and is NOT visible here - the
+       same scope mistake as PT_DAY, loadRoster and nowIso. Rather than move a function
+       the earnings figures depend on, the month boundary is computed here, in Pacific,
+       by the same rule: the offset is MEASURED for the date so PST and PDT both land
+       correctly. */
+    const ptParts = d => {
+      const [y, m, dd] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles',
+        year: 'numeric', month: '2-digit', day: '2-digit' }).format(d).split('-').map(Number);
+      return { y, m, d: dd };
+    };
+    const ptMidnightUTC = (y, m, dd) => {
+      const probe = new Date(Date.UTC(y, m - 1, dd, 12, 0, 0));
+      const hh = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles',
+        hour: '2-digit', hour12: false }).format(probe));
+      return new Date(Date.UTC(y, m - 1, dd, 12 - hh, 0, 0)).toISOString();
+    };
+    const nowT = ptParts(new Date());
+    const period = (String(req.query.period || 'this') === 'last')
+      ? (() => { const ly = nowT.m === 1 ? nowT.y - 1 : nowT.y, lm = nowT.m === 1 ? 12 : nowT.m - 1;
+                 return { from: ptMidnightUTC(ly, lm, 1), to: ptMidnightUTC(nowT.y, nowT.m, 1),
+                          label: ly + '-' + String(lm).padStart(2, '0') }; })()
+      : { from: ptMidnightUTC(nowT.y, nowT.m, 1), to: null,
+          label: nowT.y + '-' + String(nowT.m).padStart(2, '0') };
 
     const rows = (await sbGet(s, 'bridge_ledger?is_test=is.false'
       + '&select=id,ts,client_id,amount,purpose,agent,commission_to,audit_status,'

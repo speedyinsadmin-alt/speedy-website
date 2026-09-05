@@ -2,6 +2,51 @@
 **Last updated: September 5, 2026 · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
+---
+
+# ⛔ THE MISTAKE I KEEP MAKING — READ BEFORE WRITING ANY CODE
+
+**Inserting code that calls a name it did not define, without checking that name is in
+scope.** Four times in one week:
+
+| | What broke | Cost |
+|---|---|---|
+| Aug 30 | `loadRoster` landed inside the handler, not module scope | **Locked Tony out of the Console** |
+| Sep 1 | `const nowIso` inserted at the first `if (payment_id) {`, which is in `resolvePolicyGuid` | **Submit to audit down 3 hours, 3 agents blocked, 16 duplicate receipts permanently in HawkSoft** |
+| Sep 4 | Pacific helpers declared inside the transactions renderer | **By-agent tab had NEVER worked** |
+| Sep 5 | Trust view called `periodBounds`, defined inside `portal_home` at depth 3 | Trust tab dead on arrival |
+
+**`node --check` cannot see any of these. Parsing cannot either.** They are runtime
+name resolution, not syntax.
+
+## The rule
+**Any time new code calls a name it did not define, measure the brace depth of the
+definition and of the use, BEFORE pushing.**
+
+```js
+// depth of every definition and every use, in one pass
+let d=0; lines.forEach((l,i)=>{
+  if(/NAME/.test(l)) console.log(i+1, 'depth', d, l.trim().slice(0,60));
+  const c=l.replace(/'[^']*'/g,"''").replace(/`[^`]*`/g,'``').replace(/\/\/.*/,'');
+  for(const ch of c){ if(ch==='{')d++; else if(ch==='}')d--; }
+});
+```
+Then check whether the depth returns to 0 **between** the definition and the use. If it
+does, they are in different blocks and the name is invisible.
+
+**Two more from the same family:**
+- **An anchor matching a common line must be verified to be the RIGHT occurrence.**
+  `if (payment_id) {` appears many times.
+- **Grep EVERY use of a name before deleting it**, not just the one you are reading.
+  Sep 4: removed a declaration, missed a second use, took the audit tab down.
+
+**And the harness lesson:** extracting a function and supplying its variables by hand is
+exactly what HIDES a scope bug. Run the whole file, or run the real handler in a DOM
+complete enough to load the page.
+
+---
+
+
 > **THIS IS THE ONLY COPY.** On Aug 28 the project held **six separate documents
 > all named `Speedy_Insurance_Master_Project.md`** (Aug 21 ×4, Aug 24, Aug 28).
 > They were not version history — they were independent docs sharing a filename,
@@ -1457,6 +1502,9 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 - **Ask what we already pay for before adding a vendor.** I chose Vercel Blob because
   a half-written helper pointed there; Supabase Pro already included 100 GB of file
   storage, the credential was already in the environment, and Saif had to point it out.
+- **Measure scope BEFORE pushing, not after it breaks (Sep 5).** I have the technique
+  and used it four times this week only after Saif reported the failure. Having the
+  tool is not the same as reaching for it.
 - **Ask who actually relies on a system before designing around it (Sep 5).** Weeks of
   duplicate-receipt work assumed HawkSoft trust accounting was the book of record. One
   question — does Tony rely on it? — changed what was worth building.
@@ -1566,7 +1614,7 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 
 **Sep 4:** `2f353148` PT_DAY scope · `1ce34e63` audit parallel + `75e80547` hotfix · `5de08482` **partial save tells the truth** · `b462d842`/`09e40c40`/`3a77d2d8` sort by what is missing · `e0097a21` admin HTML no-store · `2fc134f8` expired sign-in banner
 
-**Sep 5:** migration `rewrite_call_sessions_no_correlated_subqueries` **(8,057ms → 310ms)** · `86767870` api/sms.js — SMS proven end to end · `afed8f0a` receipt implies cost · **`faf662ed` Trust tab (current)**
+**Sep 5:** migration `rewrite_call_sessions_no_correlated_subqueries` **(8,057ms → 310ms)** · `86767870` api/sms.js — SMS proven end to end · `afed8f0a` receipt implies cost · `faf662ed` Trust tab · **`d6587d1e` hotfix: trust scope (current)**
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

@@ -2009,6 +2009,89 @@ if (view === 'portal_share_due') {
     return res.status(200).json({ ok: true, ...out });
   }
 
+  /* ---------- TRUST LEDGER ----------
+     Premium collected, what went to carriers, what Speedy kept - built ENTIRELY from
+     our own tables. Clover reports the charge, the agent enters the carrier cost, the
+     fee is the difference. HawkSoft contributes nothing to any figure here; it only
+     ever receives a copy of the receipt afterwards. So this is independent of it by
+     construction, not by migration.
+
+     WHAT THIS IS: a report over data we already own.
+     WHAT THIS IS NOT: the book of record. `service_cost` is what the AGENT recorded
+     paying a carrier, evidenced by an attached receipt - it is not a bank movement.
+     Real trust accounting reconciles to the bank on both sides, and Clover deposits
+     do not match charges (processing fees come out, batches settle on different days,
+     refunds net off). Until that reconciliation exists this is an accurate picture of
+     what was collected and owed, and an estimate of cash position. California DOI
+     rules make being wrong here a compliance problem rather than a bug, so the
+     distinction is stated rather than assumed.
+
+     UNACCOUNTED is the number to act on: money collected where no carrier cost has
+     been entered. It is not a hole in the data - every dollar has an agent and an
+     unfinished audit behind it. */
+  if (view === 'trust') {
+    const s = sb();
+    const period = periodBounds(req.query.period);
+
+    const rows = (await sbGet(s, 'bridge_ledger?is_test=is.false'
+      + '&select=id,ts,client_id,amount,purpose,agent,commission_to,audit_status,'
+      + 'service_cost,fee_amount,carrier_name,kind,audit_completed_at'
+      + '&order=ts.desc&limit=2000')).rows || [];
+
+    /* Only real, collected money. A declined attempt never moved a cent, and a pay
+       link that was merely sent is not a payment. */
+    const collected = rows.filter(r =>
+      ['charge_live', 'charge_cash', 'paylink_charge', 'terminal_charge'].includes(r.kind)
+      && !/declin|fail|void|refund/i.test(String(r.kind || ''))
+      && String(r.ts) >= period.from && (!period.to || String(r.ts) < period.to));
+
+    const money = v => Math.round(Number(v || 0) * 100) / 100;
+    let inTotal = 0, toCarriers = 0, kept = 0, unaccounted = 0;
+    const byCarrier = {}, openItems = [];
+
+    for (const r of collected) {
+      const amt = Number(r.amount) || 0;
+      inTotal += amt;
+      if (r.service_cost == null) {
+        /* Collected, but nobody has said how much of it belongs to a carrier. Until
+           they do, the whole amount is unattributed - it is NOT profit. */
+        unaccounted += amt;
+        openItems.push({ id: r.id, client_no: r.client_id, amount: money(amt),
+          purpose: r.purpose, ts: r.ts, audit_status: r.audit_status,
+          agent: r.commission_to || r.agent || null });
+        continue;
+      }
+      const cost = Number(r.service_cost) || 0;
+      const fee = r.fee_amount != null ? Number(r.fee_amount) : (amt - cost);
+      toCarriers += cost; kept += fee;
+      const name = r.carrier_name || '(carrier not named)';
+      if (!byCarrier[name]) byCarrier[name] = { carrier: name, payments: 0, collected: 0, to_carrier: 0, fees: 0 };
+      const c = byCarrier[name];
+      c.payments++; c.collected += amt; c.to_carrier += cost; c.fees += fee;
+    }
+
+    return res.status(200).json({
+      ok: true,
+      period: period.label, period_from: period.from, period_to: period.to,
+      source: 'Speedy platform only — no HawkSoft data is used in any figure below.',
+      totals: {
+        payments: collected.length,
+        collected: money(inTotal),
+        to_carriers: money(toCarriers),
+        speedy_kept: money(kept),
+        unaccounted: money(unaccounted),
+        unaccounted_count: openItems.length,
+      },
+      by_carrier: Object.values(byCarrier)
+        .map(c => ({ ...c, collected: money(c.collected), to_carrier: money(c.to_carrier), fees: money(c.fees) }))
+        .sort((a, b) => b.to_carrier - a.to_carrier),
+      unaccounted_items: openItems.sort((a, b) => b.amount - a.amount).slice(0, 50),
+      caveat: 'service_cost is what the agent recorded paying a carrier, evidenced by an '
+            + 'attached receipt — not a bank movement. Reconciliation against Clover '
+            + 'deposits and the bank is not built, so treat cash position as an estimate.',
+    });
+  }
+
   if (view === 'ops_summary') {
     const s = sb();
     const num = r => Number((r.rows && r.rows[0] && r.rows[0].n) || 0);

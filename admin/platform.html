@@ -105,6 +105,7 @@
       <button data-tab="ledger">Ledger</button>
       <button data-tab="calls">Calls</button>
       <button data-tab="audit">Audit</button>
+      <button data-tab="trust">Trust</button>
       <button data-tab="tables">Tables</button>
       <button data-tab="health">Health</button>
     </nav>
@@ -235,6 +236,7 @@ async function render() {
   if (TAB === 'ledger') return renderLedger(el);
   if (TAB === 'calls') return renderCalls(el);
   if (TAB === 'audit') return renderAudit(el);
+  if (TAB === 'trust') return renderTrust(el);
   if (TAB === 'health') return renderHealth(el);
   if (TAB === 'tables') return renderTables(el);
 }
@@ -816,6 +818,75 @@ const PT_STAMP = ts => { if(!ts) return ''; const dt = new Date(ts); return isNa
 const PT_TODAY = () => _PT_D.format(new Date());
 const PT_DAY_MINUS = (iso, n) => { const [Y,M,D] = String(iso).split('-').map(Number);
   const t = new Date(Date.UTC(Y, M-1, D)); t.setUTCDate(t.getUTCDate() - n); return t.toISOString().slice(0,10); };
+
+/* Premium collected, what went to carriers, what Speedy kept - from OUR data only.
+   Tony does not rely on HawkSoft accounting, and no figure here comes from it. */
+let TRUST_PERIOD = 'this';
+function setTrustPeriod(p){ TRUST_PERIOD = p; render(); }
+async function renderTrust(el){
+  el.innerHTML = '<h2>Trust — premium collected and owed</h2><div class="muted">Loading…</div>';
+  let r;
+  try { r = await api('trust&period=' + encodeURIComponent(TRUST_PERIOD)); }
+  catch(e){ el.innerHTML = '<div class="err">Trust read failed: ' + esc(String(e&&e.message||e)) + '</div>'; return; }
+  if(!r || !r.ok){
+    el.innerHTML = '<div class="err">' + (r && r.expired
+      ? 'Your sign-in expired. Reload the page to sign in again.'
+      : 'Could not read the trust ledger' + (r && r.error ? ': ' + esc(r.error) : '.')) + '</div>';
+    return;
+  }
+  const T = r.totals || {};
+  const chip = (k,l) => '<span class="perchip'+(TRUST_PERIOD===k?' sel':'')+'" onclick="setTrustPeriod(\''+k+'\')">'+l+'</span>';
+
+  let h = '<h2>Trust — premium collected and owed</h2>';
+  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">'+esc(r.source)+'</div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:14px">'+chip('this','This month')+chip('last','Last month')+'</div>';
+
+  /* Unaccounted sits beside the others deliberately: it is collected money that is
+     neither owed to a carrier nor earned, and it should look unresolved. */
+  const cell = (label, val, colour, sub) =>
+    '<div class="cell"><div class="n" style="'+(colour?'color:'+colour:'')+'">'+esc(val)+'</div>'
+    + '<div class="k">'+esc(label)+'</div>'+(sub?'<div class="muted" style="font-size:10.5px;margin-top:2px">'+esc(sub)+'</div>':'')+'</div>';
+  h += '<div class="strip">'
+    + cell('COLLECTED', money(T.collected), '', (T.payments||0)+' payments')
+    + cell('OWED / PAID TO CARRIERS', money(T.to_carriers), '#7fa8ff')
+    + cell('SPEEDY KEPT', money(T.speedy_kept), '#2fbf71')
+    + cell('UNACCOUNTED', money(T.unaccounted), T.unaccounted > 0 ? '#f5a623' : '#8f9ac4',
+           (T.unaccounted_count||0) + ' unfinished audits')
+    + '</div>';
+
+  if(T.unaccounted > 0){
+    h += '<div style="border-left:3px solid var(--amber);padding:9px 12px;margin:0 0 16px;font-size:12.5px;color:var(--mute)">'
+      + '<b style="color:var(--ink)">'+money(T.unaccounted)+'</b> was collected but no carrier cost has been entered, '
+      + 'so it is neither owed to a carrier nor earned by Speedy. Every one has an agent and an unfinished audit behind it.</div>';
+  }
+
+  h += '<h3 style="font-size:13px;margin:18px 0 8px">By carrier</h3>';
+  if(!(r.by_carrier||[]).length) h += '<div class="muted">Nothing in this period.</div>';
+  else {
+    h += '<table><tr><th>Carrier</th><th>Payments</th><th>Collected</th><th>To carrier</th><th>Speedy kept</th></tr>';
+    for(const c of r.by_carrier){
+      h += '<tr><td>'+esc(c.carrier)+'</td><td>'+c.payments+'</td><td>'+money(c.collected)+'</td>'
+        + '<td style="color:#7fa8ff">'+money(c.to_carrier)+'</td><td style="color:#2fbf71">'+money(c.fees)+'</td></tr>';
+    }
+    h += '</table>';
+  }
+
+  if((r.unaccounted_items||[]).length){
+    h += '<h3 style="font-size:13px;margin:20px 0 8px">Unaccounted — needs a carrier cost</h3><table>'
+      + '<tr><th>When</th><th>Client</th><th>Amount</th><th>Purpose</th><th>Agent</th><th>Status</th></tr>';
+    for(const u of r.unaccounted_items){
+      h += '<tr><td class="muted">'+esc(PT_DAY(u.ts))+'</td><td>#'+esc(u.client_no)+'</td>'
+        + '<td style="color:#f5a623">'+money(u.amount)+'</td><td>'+esc(u.purpose||'')+'</td>'
+        + '<td>'+esc(String(u.agent||'').replace('@speedyins.com',''))+'</td>'
+        + '<td class="muted">'+esc(String(u.audit_status||'').replace(/_/g,' '))+'</td></tr>';
+    }
+    h += '</table>';
+  }
+
+  h += '<div class="muted" style="font-size:11.5px;margin-top:18px;border-top:1px solid var(--rule);padding-top:10px">'
+    + esc(r.caveat) + '</div>';
+  el.innerHTML = h;
+}
 
 function renderAgentView(r){
   const rows = r.rows || [];

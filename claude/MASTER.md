@@ -878,6 +878,83 @@ customer-announcement question above is settled.
 
 ---
 
+## SEP 5 (LATER) — A TRUST LEDGER OF OUR OWN
+
+### How we got here — the reasoning matters more than the feature
+1. Duplicate receipts kept appearing because **two parties record the same payment**:
+   our bridge posts one, the agent keys one. Esmeralda did it twice on Rudy inside a
+   minute.
+2. Saif: *"can we exclude HawkSoft — just log our receipt as a log and attachment, and
+   not deposit to client trust?"* The one thing blocking that was whether HawkSoft
+   trust accounting is the book of record.
+3. **Tony does not rely on HawkSoft accounting** (Saif, Sep 5). That removes the
+   blocker.
+4. So: build the trust ledger in our own system.
+
+### ✅ TRUST TAB — shipped `faf662ed`
+Collected · owed/paid to carriers · Speedy kept · **UNACCOUNTED**, by period and by
+carrier. On live data at build time:
+
+```
+collected      $69,653.19   (196 payments)
+to carriers    $40,100.63
+Speedy kept    $23,703.17
+UNACCOUNTED     $5,849.39   (17 unfinished audits)
+```
+
+**No figure comes from HawkSoft.** Clover reports the charge, the agent enters the
+carrier cost, the fee is the difference. Independent by construction, not by
+migration — there is nothing to migrate.
+
+**Unaccounted is its own number on purpose.** Money collected with no carrier cost
+entered is neither owed to a carrier nor earned by Speedy, and folding it into either
+would be wrong. Every row is listed with its agent and status, so it reads as a work
+list. Invariant asserted in tests: `collected = to_carriers + kept + unaccounted`.
+
+> **⛔ THIS IS NOT THE BOOK OF RECORD, and the page says so.** `service_cost` is what
+> the AGENT recorded paying a carrier, evidenced by an attached receipt — **not a bank
+> movement**. Clover deposits do not match charges: processing fees come out, batches
+> settle on different days, refunds net off. Cash position is an ESTIMATE until that
+> reconciliation is built.
+>
+> **Stage 2 is reconciliation to Clover deposits and the bank. Stage 3 — becoming the
+> book of record — needs an accountant, not Claude.** California DOI trust rules make
+> being wrong here a compliance problem rather than a bug.
+
+### Also shipped
+- **Carrier receipt ⇒ carrier cost mandatory** (`afed8f0a`). Saif's rule, and better
+  than the reminder I proposed. A receipt in hand means the amount is printed on it.
+  Blocks only a PARTIAL save, only when a receipt is present; "not paid the carrier
+  yet" stays possible because 33 of 160 audits took over two days. Fee-only exempt.
+
+### Disputes and refunds — discussed, NOT built
+- **Wrong client ALREADY EXISTS**: `move_client`, `correction_status` pending/moved,
+  Tony's approval, `client.corrected` event, and the audit skips anything pending.
+  **Test it before rebuilding it.**
+- **Dispute / chargeback** — agent flags, Tony approves, fee and commission go to zero.
+  Nothing moves money. Not built.
+- **Refunds** — buildable: charges go to `scl.clover.com/v1/charges`, the same API has
+  refunds, and `txn_id` is already stored on every ledger row. **Decisions needed
+  first:** agent-requested but owner-approved (charging takes money in with a client
+  present; refunding sends money out with neither); full before partial; and a HawkSoft
+  log note, since the receipt says the client paid and cannot be modified. **Prove on
+  ZZTEST before trusting the payload shape** — I have assumed one twice this week and
+  been wrong both times.
+
+> **A Clover charge CANNOT be edited.** "Charged extra" is either a second charge for
+> the difference, or a refund. Changing the amount in our database would make the
+> record disagree with the money, which is the one thing the ledger exists to prevent.
+
+### Sendblue — evaluated, NOT recommended for now
+$100/line/month, no A2P registration, ports numbers, sends media (a receipt PDF could
+go as an attachment rather than a link). But **the $100 plan is inbound-first; full
+outbound is Enterprise "contact sales"** — and outbound is our use case. Porting a
+number REMOVES it from RingCentral, so the main line is not an option. RingCentral SMS
+already works and costs nothing extra. Revisit only if RingCentral cannot supply a 951
+texting number.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -1270,7 +1347,11 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 69s. **Customer-side recording consent** — agents signed, but all-party consent covers the customer too. Confirm the call announcement exists
 69t. **Receive SMS** — add `/restapi/v1.0/account/~/extension/~/message-store` to EVENT_FILTERS; the webhook already exists
 69u. **Agent scoring on call metrics** — answer rate, talk time, transfers. Available today, no new plumbing
-69p. **Carrier receipt ⇒ carrier cost mandatory** — Saif's rule. Prevents the state instead of chasing it
+69p. ~~Carrier receipt ⇒ cost mandatory~~ **DONE Sep 5** (`afed8f0a`)
+69v. **Trust stage 2 — reconcile to Clover deposits and the bank.** Until then cash position is an estimate
+69w. **Dispute / chargeback flow** — agent flags, Tony approves, fee and commission to zero
+69x. **Full refund via Clover** — owner-approved, prove on ZZTEST first, plus a HawkSoft note
+69y. **Test the EXISTING wrong-client correction** before building anything near it
 69q. **Auto-refresh a client with zero policies** — would have put the tab on screen before Alejandra uploaded
 69m. **Write a log from the portal to HawkSoft** — biggest adoption lever. Needs a channel decision
 69n. **Read logs on the client card** — on demand only, never on render. Needs a visibility decision
@@ -1376,6 +1457,9 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 - **Ask what we already pay for before adding a vendor.** I chose Vercel Blob because
   a half-written helper pointed there; Supabase Pro already included 100 GB of file
   storage, the credential was already in the environment, and Saif had to point it out.
+- **Ask who actually relies on a system before designing around it (Sep 5).** Weeks of
+  duplicate-receipt work assumed HawkSoft trust accounting was the book of record. One
+  question — does Tony rely on it? — changed what was worth building.
 - **A correlated subquery in a view SELECT runs once per output row (Sep 5).** In
   `call_sessions` that meant 369 full scans of a 35,742-row CTE. If a value can be
   computed in a GROUP BY that already exists, put it there.
@@ -1482,7 +1566,7 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 
 **Sep 4:** `2f353148` PT_DAY scope · `1ce34e63` audit parallel + `75e80547` hotfix · `5de08482` **partial save tells the truth** · `b462d842`/`09e40c40`/`3a77d2d8` sort by what is missing · `e0097a21` admin HTML no-store · `2fc134f8` expired sign-in banner
 
-**Sep 5:** migration `rewrite_call_sessions_no_correlated_subqueries` **(8,057ms → 310ms)** · **`86767870` api/sms.js — SMS proven end to end (current)**
+**Sep 5:** migration `rewrite_call_sessions_no_correlated_subqueries` **(8,057ms → 310ms)** · `86767870` api/sms.js — SMS proven end to end · `afed8f0a` receipt implies cost · **`faf662ed` Trust tab (current)**
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

@@ -1059,6 +1059,125 @@ Copying HawkSoft's ids into them would silently mislabel calls. Colton calls sta
 
 ---
 
+## SEP 8 — HAWKSOFT STOPS RECEIVING RECEIPTS NOBODY ASKED FOR
+
+**The rule: an accounting receipt is posted ONLY when an agent explicitly picks an
+open invoice.** No pick, no receipt — on every path, cash included. Money is recorded
+in our own trust ledger regardless. This is the Sep 5 decision carried into the money
+path: Tony does not rely on HawkSoft accounting, so the duplicate-receipt problem is
+solved by not posting the receipt, not by reconciling it afterwards.
+
+### `pickInvoices()` deleted — I checked its record before removing it
+Three rules, measured across **254 charges**:
+
+| rule | times fired |
+|---|---|
+| `applied — exact match on policy` | **0** |
+| `applied — oldest open invoice on policy` | **0** |
+| `applied — exact amount match` | **93** |
+| no invoices / no match / lookup failed | 161 |
+
+**The only rule that ever fired is the one that matches on AMOUNT ALONE and never
+looks at the policy.** Every invoice we have ever applied was chosen by an amount
+coincidence. The third rule was an untested partial-payment guess (`balance >= total`)
+sitting in the money path waiting to fire on a case nobody had ever seen.
+
+Replaced by `verifyInvoicePick`, which applies the agent's pick or abstains. The pick
+is **verified against HawkSoft's own open-invoice list** — an id from a browser is a
+claim, the same rule the policy GUID follows.
+
+### The $320 invoice paid $150 — abstain, never refuse
+Picking a $320 invoice and editing the amount to $150 would post a **partial
+application**, which we have never sent: all 93 applied receipts were exact-amount
+matches. HawkSoft may leave the remainder open, reject the receipt, or apply the
+payment and **CLOSE the invoice**, erasing $170 of receivable with no way to reverse
+it. So `verifyInvoicePick` compares cents and abstains on any difference.
+
+> **Abstain, never refuse.** A gate that blocks a legitimate case gets satisfied in the
+> smallest way that passes — the $0.01 problem again. Tell an agent the amount must
+> equal the invoice and they will charge the full $320 the client does not have, or key
+> it by hand in Trust Accounting, which is the thing we are retiring. Taking $150 stays
+> possible; only the accounting application is withheld.
+
+### The client file does not get quieter
+The payment detail used to ride on the receipt's `logNote`. With the receipt gone on
+most charges it moved to the **attachment's LogNote**, written on every charge, and it
+says plainly that HawkSoft trust accounting was NOT touched — which is what stops a
+second hand-keyed receipt. Every field is guarded: a missing value drops its line
+rather than printing `undefined` onto a note that can never be edited or deleted.
+
+**Shipping as ONE line, and the length was measured, not assumed:**
+
+| | bytes |
+|---|---|
+| NEW attachment note, longest of five real cases | **302** |
+| OLD attachment note today — same base64 HEADER transport | **178** |
+| OLD receipt logNote (JSON body, not a header) | 224 |
+| NEW at the server-side caps (purpose 80 + note 120, policy 60) | 543 (724-byte header) |
+
+Header-to-header that is **+124 bytes, 170%**. Observed maxima today are purpose 50,
+agent 54, policy number 25 — far below the caps, but the caps allow it. **Length is now
+the one untested property.**
+
+### Both pickers changed, and the pay link is the exception
+`charge.html` read the invoice, filled the amount box and **threw the id away** — no
+browser has ever sent an `invoiceId`. `portal.html` did the same. Both now send it,
+both default to **"No invoice — just take the payment"** with nothing preselected (the
+policy-picker rule), and both show what HawkSoft will receive *before* the charge.
+
+**A pay link posts no accounting receipt, ever** — it is paid in the CLIENT's browser
+and a client cannot pick an invoice. The portal preview reads the method so it stops
+claiming an invoice is applied the moment the agent switches to a link; `charge.html`
+shows every method at once, so it states the exception instead.
+
+The **"Invoice needed" follow-up task is dropped** — it asked someone to create an
+invoice in Trust Accounting, which is what we are retiring.
+
+### ⛔ NOT MERGED — this is NOT live. Branch `probe/lognote`.
+Nothing in this section is running in production. Do not read it as deployed behaviour.
+**⏰ ON MERGE: change this heading and delete the four blockers below — one line.**
+
+Two probes gate it, both ZZTEST-hard-capped and admin-key only:
+- **`probe_lognote`** — writes the shipping single-line note plus LF and CRLF
+  multi-line variants to ZZTEST. Settles both the newline question and the length one.
+- **`probe_partial_invoice`** — reads a balance, applies a genuine partial, reads it
+  back, and names which of the four behaviours happened. **Writes a real accounting
+  receipt to ZZTEST that cannot be deleted.**
+
+**In this order:**
+
+1. **🔑 ROTATE THE ADMIN KEY — before the probes, not after.** It has been open since
+   Sep 3, when it appeared in a chat screenshot, and it reaches every HawkSoft write
+   endpoint. Running a probe puts it in a curl against a **public preview URL**:
+   `speedy-website` has neither SSO nor password protection (verified Sep 8). Rotating
+   afterwards does not help — the exposure is at the moment it is used.
+2. **Env vars to Preview.** They are scoped to Production, so a preview returns
+   `Missing HAWKSOFT_CLIENT_ID or HAWKSOFT_SECRET`. Branch-scope them to
+   `probe/lognote` and redeploy — that keeps them off every other preview.
+3. **Run both probes, read ZZTEST #26081 in CMS.**
+4. **📣 TELL THE AGENTS — before the merge, not with it.** **93 invoices used to close
+   on their own.** From now on nothing closes unless someone picks it. If nobody says
+   so, invoices quietly stop closing and we find out in a fortnight — and the person
+   who notices will be whoever reconciles, not the agent who caused it. One message:
+   the picker now defaults to *"No invoice — just take the payment"*, and an invoice
+   only closes if you pick it and the amount matches it exactly.
+
+### Lessons
+- **Check what a rule actually did before deleting it — and before trusting it.** Two
+  of three rules had never fired; the one that had ignored the policy entirely.
+- **A guarded template is not guarded until every call site passes the fields.** The
+  first version of the note read five fields no caller passed — every charge would have
+  written `undefined` onto a permanent client note. `node --check` passes on that.
+- **Deletion order is part of the change.** Removing the cash handler's `taskEmail`
+  before its task block would have been a `ReferenceError` on every cash charge.
+- **Measure the property you are actually risking.** Folding the note to one line
+  removed a newline risk and created a length risk; comparing against the receipt
+  logNote flattered it, because that one travels in a JSON body, not an HTTP header.
+- **A behaviour change that removes automatic work needs telling, not just shipping.**
+  Nothing breaks loudly when invoices stop closing by themselves.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`

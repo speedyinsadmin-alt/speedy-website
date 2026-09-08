@@ -199,28 +199,34 @@ const readToken = (t, key) => {
   } catch { return null; }
 };
 
-/* Pick the invoice(s) a payment should apply to (requires Accounting/Invoices scope, enabled 7/20/2026).
-   Conservative: exact amount on the policy -> exact amount anywhere -> oldest open on the policy covering it -> none. */
-function pickInvoices(clientBody, total, policyGuid) {
+/* THE SERVER NEVER CHOOSES AN INVOICE. It applies the one the agent picked, or none.
+
+   pickInvoices() stood here and guessed with three rules. Measured over 254 charges:
+   "exact match on policy" fired 0 times, "oldest open invoice on policy" fired 0
+   times, and the ONLY rule that ever fired - 93 times - was the one that matches on
+   AMOUNT ALONE and never looks at the policy. So every invoice we ever applied was
+   chosen by an amount coincidence, and the third rule was an untested partial-payment
+   guess (balance >= total) sitting in the money path waiting to fire.
+
+   HawkSoft has no receipt-modify endpoint: a receipt applied to the wrong invoice is
+   permanent. And every receipt we post is one an agent may key again by hand, which
+   is what produced the duplicate-receipt problem in the first place. Money is
+   recorded in OUR trust ledger on every path regardless of what HawkSoft holds.
+
+   An id from a browser is a claim, so the pick is VERIFIED against HawkSoft's own
+   open-invoice list for this client - the same rule the policy GUID follows. A pick
+   we cannot verify abstains rather than guesses. */
+function verifyInvoicePick(clientBody, pickedId, total) {
+  const want = String(pickedId || '').trim();
+  if (!want) return { invoices: null, how: 'no invoice picked — no accounting receipt posted' };
   const raw = (clientBody && (clientBody.invoices || clientBody.Invoices)) || [];
-  const cents = x => Math.round(Number(x) * 100);
-  const inv = raw.map(i => ({
+  const hit = raw.map(i => ({
     id: i.id || i.invoiceId || i.guid || i.Id || null,
     bal: Number(i.balance ?? i.balanceDue ?? i.amountDue ?? i.due ?? i.remaining ?? i.amount ?? NaN),
-    pol: i.policyId || i.policyGuid || i.PolicyId || null,
-    dueDate: i.dueDate || i.DueDate || '',
     num: i.invoiceNumber || i.number || i.InvoiceNumber || '',
-  })).filter(i => i.id && isFinite(i.bal) && i.bal > 0);
-  let hit = policyGuid ? inv.find(i => i.pol === policyGuid && cents(i.bal) === cents(total)) : null;
-  let how = hit ? 'applied — exact match on policy' : '';
-  if (!hit) { hit = inv.find(i => cents(i.bal) === cents(total)) || null; if (hit) how = 'applied — exact amount match'; }
-  if (!hit && policyGuid) {
-    const cands = inv.filter(i => i.pol === policyGuid && i.bal >= total)
-      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
-    hit = cands[0] || null; if (hit) how = 'applied — oldest open invoice on policy';
-  }
-  if (!hit) return { invoices: null, how: raw.length ? 'no matching open invoice — left unapplied' : 'no invoices on file' };
-  return { invoices: [{ invoiceId: hit.id, amount: total }], how: how + (hit.num ? ` (${hit.num})` : '') };
+  })).find(i => i.id && String(i.id) === want && isFinite(i.bal) && i.bal > 0);
+  if (!hit) return { invoices: null, how: 'picked invoice is not open on this client — no accounting receipt posted' };
+  return { invoices: [{ invoiceId: hit.id, amount: total }], how: `applied — picked by the agent${hit.num ? ` (${hit.num})` : ''}` };
 }
 
 /* ---------- Google Sign-In (charge page) ---------- */
@@ -545,6 +551,33 @@ async function buildReceiptPdf(o) {
   return Buffer.from(await doc.save());
 }
 
+/* THE PAYMENT DETAIL WRITTEN ONTO THE CLIENT FILE. It used to ride on the accounting
+   receipt's logNote, and that receipt is no longer posted unless an agent picked an
+   invoice. Without this the client file would show a PDF and say nothing about the
+   money. The attachment is written on EVERY charge, so it is the one place the detail
+   is guaranteed to land - and it says plainly that HawkSoft trust accounting was NOT
+   touched, which is what stops a second receipt being keyed by hand.
+
+   EVERY field is guarded. A HawkSoft log note cannot be edited or deleted, so a missing
+   value must drop its line, never print "undefined" onto a client file forever. Nothing
+   here interpolates a caller-supplied value unchecked.
+
+   At module scope so probe_lognote can write the EXACT string a real charge writes,
+   rather than a copy of it that could drift. */
+function buildAttachmentNote(o) {
+  const seg = parts => parts.filter(p => p != null && String(p).trim() !== '').join(' · ');
+  return [
+    seg([`$${o.total.toFixed(2)}`, o.purpose, o.policyNumber ? `policy ${o.policyNumber}` : null]),
+    seg([o.who ? `Charged by ${o.who}` : null, o.methodRef]),
+    seg([o.methodLine, o.stamp ? `${o.stamp} PT` : null]),
+  ].filter(Boolean).concat([
+    '',
+    'Recorded in the Speedy trust ledger.',
+    'NOT deposited to HawkSoft trust accounting.',
+    'Do not key this payment again.',
+  ]).join('\n');
+}
+
 /* Attach the receipt PDF to the HawkSoft client record AND store it in our vault.
    Returns { fname, attachment, vault } — fail-soft, same shape for every path. */
 async function fileReceiptPdf(o) {
@@ -553,13 +586,14 @@ async function fileReceiptPdf(o) {
   const fname = `${o.filePrefix}_${o.now.toISOString().slice(0, 10)}_${String(o.total.toFixed(2)).replace('.', '-')}usd`;
   /* Held rather than generated inline, so the vault row can record it. */
   const refId = crypto.randomUUID();
+  const detail = buildAttachmentNote(o);
   const r2 = await o.hs(`/vendor/agency/${AGENCY_ID}/client/${o.clientId}/attachment?version=4.0`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/octet-stream',
       RefId: refId, TS: o.now.toISOString(),
       Desc: b64h(String(o.desc).slice(0, 41)),
-      LogNote: b64h(`Receipt PDF "${fname}.pdf" filed by the Speedy payment bridge. ${o.logNoteTail || ''}`.trim()),
+      LogNote: b64h(detail),
       FileName: b64h(fname), FileExt: 'pdf', Channel: '32', // Online From 3rd Party
       ...(o.policyGuid ? { PolicyId: o.policyGuid } : {}),
     },
@@ -908,8 +942,12 @@ export default async function handler(req, res) {
         } catch (e) { /* never block on the safety net itself */ }
       }
 
-      // Resolve policy GUID + matching open invoice (fail-soft on both)
+      // Resolve policy GUID + verify the invoice the agent picked (fail-soft on both)
       let policyGuid = null, policyCarrier = null, policyProgram = null, invPick = { invoices: null, how: 'lookup failed' };
+      /* A pay-link charge runs in the CLIENT's browser. The client never picks an
+         invoice and must never be able to, so a pay-link charge posts no accounting
+         receipt at all. Only an agent's pick counts, and only from the charge page. */
+      const pickedInvoiceId = (action === 'paylink_charge') ? '' : String(b.invoiceId || '').trim();
       /* A brand-new policy has no number until the carrier issues one, so the picker
          sends its GUID instead. Without this, matching on the number finds nothing and
          the receipt files at client level while the agent believes it went to the tab.
@@ -940,7 +978,7 @@ export default async function handler(req, res) {
             policyProgram = String(hit.program || hit.Program || '').trim().slice(0, 40) || null;
           }
         }
-        invPick = pickInvoices(pc.body, total, policyGuid);
+        invPick = verifyInvoicePick(pc.body, pickedInvoiceId, total);
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
@@ -951,32 +989,23 @@ export default async function handler(req, res) {
                            : 'no policy # given'));
       out.invoiceApply = invPick.how;
 
-      // 2) Accounting receipt
-      const receipt = [{
-        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
-        payMethod: 'CreditCard', total, policyId: policyGuid,
-        ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
-        logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Charged via Speedy payment bridge.`,
-      }];
-      if (!invPick.invoices && taskEmail) {
-        receipt[0].task = {
-          title: `Invoice needed — payment $${total.toFixed(2)}`.slice(0, 50),
-          description: `Payment of $${total.toFixed(2)} (${purpose}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply Clover ${txnId}.`,
-          dueDate: now.toISOString(),
-          assignedToRole: 'SpecifiedUser',
-          assignedToEmail: taskEmail,
-        };
-      }
-      let r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
-        method: 'POST', body: JSON.stringify(receipt) });
-      if (!(r1.status === 200 || r1.status === 202) && receipt[0].task) {
-        delete receipt[0].task; // never lose the payment record over a task problem
-        r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+      /* 2) Accounting receipt — ONLY when the agent picked an open invoice.
+         No pick, no receipt. The money is recorded in our own trust ledger on every
+         path regardless, and the payment detail rides on the attachment's log note
+         below, so nothing about the client file gets quieter. */
+      if (invPick.invoices) {
+        const receipt = [{
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 29, // Online From Insured — the payer
+          payMethod: 'CreditCard', total, policyId: policyGuid,
+          invoices: invPick.invoices,
+          logNote: `CHARGE PAGE receipt — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Charged via Speedy payment bridge.`,
+        }];
+        const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
           method: 'POST', body: JSON.stringify(receipt) });
-        out.taskDropped = true;
+        out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status, posted: true };
+      } else {
+        out.receipt = { ok: true, posted: false, reason: invPick.how };
       }
-      out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
-      out.followUpTask = receipt[0].task ? `assigned to ${taskEmail}` : (invPick.invoices ? 'not needed — invoice applied' : 'none');
 
       // 3) Branded receipt PDF -> attachment + vault (shared: buildReceiptPdf / fileReceiptPdf)
       const pdfBuf = await buildReceiptPdf({
@@ -1002,9 +1031,16 @@ export default async function handler(req, res) {
           'system of record (transaction ID + auth code).', '',
           'Filed automatically to the HawkSoft client record', 'by the Speedy payment bridge.'],
       });
+      /* purpose/policyNumber/stamp/methodRef/methodLine build the payment detail on the
+         attachment's log note. Every one is guarded inside fileReceiptPdf, and the two
+         method fields are guarded here too, because a HawkSoft note is permanent.
+         Serves the pay link as well as the charge page - the only difference is `who`,
+         which reads "Client — secure link (sent by ...)" on a pay-link charge. */
       const filedLive = await fileReceiptPdf({ hs, clientId, pdfBuf, now, total, who, policyGuid, txnId,
         filePrefix: 'Clover_Receipt', desc: `Clover receipt $${total.toFixed(2)}`,
-        logNoteTail: `Charged by ${who}. Clover ${txnId}.` });
+        purpose, policyNumber, stamp,
+        methodRef: txnId ? `Clover ${txnId}` : null,
+        methodLine: last4 ? `${brand} ****${last4}` : (brand || null) });
       out.attachment = filedLive.attachment;
       out.vault = filedLive.vault;
 
@@ -1033,7 +1069,7 @@ export default async function handler(req, res) {
               invoice_status: out.invoiceApply || null,
               extra: { safety_net: true, receipt_pending: false, finalized: true, brand, last4,
                        receipt: out.receipt, attachment: out.attachment, log: out.log,
-                       followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail,
+                       confirmationEmail: out.confirmationEmail,
                        /* Recorded so "did this file under the policy or at client level?"
                           is answerable from our own data instead of by reading HawkSoft. */
                        policyNumber: policyNumber || null, policyLink: out.policyLink || null,
@@ -1052,7 +1088,7 @@ export default async function handler(req, res) {
           auditSaved = (pr.status === 200 || pr.status === 204) ? { id: safetyLedgerId } : false;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
@@ -1070,6 +1106,57 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, status: pc.status,
         invoices: (pc.body && (pc.body.invoices || pc.body.Invoices)) || [],
         keys: pc.body ? Object.keys(pc.body) : [] });
+    }
+
+    /* ---------- Diagnostics: how does HawkSoft STORE a multi-line attachment note? ----------
+       Every note the bridge has written for months is a single line. Moving the payment
+       detail onto the attachment makes it seven, and a HawkSoft log note can never be
+       edited or deleted — so this is answered by probing ZZTEST, the same way the RefId
+       and channel questions were, rather than by assuming base64 newlines survive.
+
+       Writes three tiny .txt attachments to #26081 and nothing else: no money, no
+       receipt, no vault row, no ledger row. Admin key only — deliberately NOT in the
+       staff action list, because it writes. Hard-capped to ZZTEST. */
+    if (action === 'probe_lognote') {
+      const clientId = parseInt((req.body || {}).clientId, 10);
+      if (clientId !== TEST_CLIENT_ID) {
+        return res.status(400).json({ ok: false,
+          error: `Log-note probe is limited to ZZTEST client #${TEST_CLIENT_ID}.` });
+      }
+      const { gzipSync } = await import('node:zlib');
+      const b64h = str => Buffer.from(str, 'utf8').toString('base64');
+      const now = new Date();
+      /* Built by the SHIPPING function, not retyped here — the whole point is to prove
+         the exact string a real charge will write. */
+      const real = buildAttachmentNote({
+        total: 141.94, purpose: 'PROBE — not a real payment', policyNumber: 'ZZTEST-POLICY',
+        who: 'log-note probe', methodRef: 'Clover PROBEONLY0001', methodLine: 'VISA ****0000',
+        stamp: now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }),
+      });
+      const variants = [
+        ['A-single-line', 'CONTROL — this is the one-line note format the bridge writes today. Charged by log-note probe. Clover PROBEONLY0001.'],
+        ['B-multi-line-LF', real],
+        ['C-multi-line-CRLF', real.replace(/\n/g, '\r\n')],
+      ];
+      const results = [];
+      for (const [label, note] of variants) {
+        const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/attachment?version=4.0`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            RefId: crypto.randomUUID(), TS: now.toISOString(),
+            Desc: b64h(`LOGNOTE PROBE ${label}`.slice(0, 41)),
+            LogNote: b64h(note),
+            FileName: b64h(`lognote_probe_${label}`), FileExt: 'txt', Channel: '32',
+          },
+          body: gzipSync(Buffer.from(`Log-note formatting probe, variant ${label}. No money moved. Safe to ignore.`, 'utf8')),
+        });
+        results.push({ label, status: r.status, ok: r.status === 200 || r.status === 202,
+          lines: note.split(/\r?\n/).length, noteBytes: Buffer.byteLength(note, 'utf8'),
+          headerBytes: b64h(note).length, ...(r.status >= 400 ? { error: r.body } : {}) });
+      }
+      return res.status(200).json({ ok: results.every(x => x.ok), clientId, results, sentNote: real,
+        next: 'Open ZZTEST #26081 in HawkSoft CMS and read the three PROBE rows. (1) Does B keep its line breaks? (2) Does C differ from B? (3) Is anything truncated at the first newline? If the breaks do not survive, the note must be collapsed to one line BEFORE this ships.' });
     }
 
     /* ---------- Charge page: record a CASH payment (no card, full HawkSoft trail) ---------- */
@@ -1091,7 +1178,6 @@ export default async function handler(req, res) {
       const policyNumber = String(b.policyNumber || '').trim().slice(0, POLICY_NUM_MAX);
       const clientName = String(b.clientName || '').slice(0, 40);
       const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
-      const taskEmail = userEmail || 'info@speedyins.com';
       const now = new Date();
       const stamp = now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
       // ref prefix by method: CASH- / ZELLE- / OTHER-
@@ -1130,7 +1216,9 @@ export default async function handler(req, res) {
             policyProgram = String(hit.program || hit.Program || '').trim().slice(0, 40) || null;
           }
         }
-        invPick = pickInvoices(pc.body, total, policyGuid);
+        /* Read inline rather than hoisted into a variable: there is nothing to decide
+           here, and a declaration is one more thing to put in the wrong scope. */
+        invPick = verifyInvoicePick(pc.body, String(b.invoiceId || '').trim(), total);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
       out.policyLink = policyGuid
@@ -1140,31 +1228,22 @@ export default async function handler(req, res) {
                            : 'no policy # given'));
       out.invoiceApply = invPick.how;
 
-      const receipt = [{
-        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured
-        payMethod: hsPayMethod, total, policyId: policyGuid,
-        ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
-        logNote: `CHARGE PAGE ${payMethod} — $${total.toFixed(2)} · ${purposeFull}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
-      }];
-      if (!invPick.invoices && taskEmail) {
-        receipt[0].task = {
-          title: `Invoice needed — cash $${total.toFixed(2)}`.slice(0, 50),
-          description: `${payMethod} payment of $${total.toFixed(2)} (${purposeFull}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply ref ${ref}.`,
-          dueDate: now.toISOString(),
-          assignedToRole: 'SpecifiedUser',
-          assignedToEmail: taskEmail,
-        };
-      }
-      let r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
-        method: 'POST', body: JSON.stringify(receipt) });
-      if (!(r1.status === 200 || r1.status === 202) && receipt[0].task) {
-        delete receipt[0].task;
-        r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+      /* Accounting receipt — ONLY when the agent picked an open invoice. Cash is in
+         this rule deliberately: a cash payment produces a duplicate hand-keyed receipt
+         exactly as readily as a card one. No pick, no receipt. */
+      if (invPick.invoices) {
+        const receipt = [{
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured
+          payMethod: hsPayMethod, total, policyId: policyGuid,
+          invoices: invPick.invoices,
+          logNote: `CHARGE PAGE ${payMethod} — $${total.toFixed(2)} · ${purposeFull}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ref ${ref}. Recorded via Speedy payment bridge.`,
+        }];
+        const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
           method: 'POST', body: JSON.stringify(receipt) });
-        out.taskDropped = true;
+        out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status, posted: true };
+      } else {
+        out.receipt = { ok: true, posted: false, reason: invPick.how };
       }
-      out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
-      out.followUpTask = receipt[0].task ? `assigned to ${taskEmail}` : (invPick.invoices ? 'not needed — invoice applied' : 'none');
 
       const pdfBuf = await buildReceiptPdf({
         total, stamp, clientName, clientId, purpose: purposeFull, policyNumber, policyCarrier,
@@ -1187,9 +1266,13 @@ export default async function handler(req, res) {
             : (payMethod + ' payment received and'),
           'recorded to the HawkSoft client record by the', 'Speedy payment bridge.'],
       });
+      /* Cash has no Clover id and no card, so the two method fields carry the payment's
+         own reference and its method label instead. Same guarded builder. */
       const filedCash = await fileReceiptPdf({ hs, clientId, pdfBuf, now, total, who, policyGuid, txnId: ref,
         filePrefix: 'Cash_Receipt', desc: `Cash receipt $${total.toFixed(2)}`,
-        logNoteTail: `Cash received by ${who}. Ref ${ref}.` });
+        purpose: purposeFull, policyNumber, stamp,
+        methodRef: ref ? `ref ${ref}` : null,
+        methodLine: payMethod || null });
       out.attachment = filedCash.attachment;
       out.vault = filedCash.vault;
 
@@ -1204,7 +1287,7 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
-      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, followUpTask: out.followUpTask, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: out });
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
         await linkReceiptToPayment(out.vault.id, auditSaved.id);
@@ -1386,7 +1469,9 @@ export default async function handler(req, res) {
             policyProgram = String(hit.program || hit.Program || '').trim().slice(0, 40) || null;
           }
         }
-        invPick = pickInvoices(pc.body, total, policyGuid);
+        /* Read inline rather than hoisted into a variable: there is nothing to decide
+           here, and a declaration is one more thing to put in the wrong scope. */
+        invPick = verifyInvoicePick(pc.body, String(b.invoiceId || '').trim(), total);
         if (!clientName) clientName = String(clientNameFrom(pc.body) || '').slice(0, 40);
         if (!b.clientEmail) b.clientEmail = emailFrom(pc.body);
       } catch { policyGuid = null; }
@@ -1397,27 +1482,20 @@ export default async function handler(req, res) {
                            : 'no policy # given'));
       out.invoiceApply = invPick.how;
 
-      const receipt = [{
-        refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured — counter payment
-        payMethod: 'CreditCard', total, policyId: policyGuid,
-        ...(invPick.invoices ? { invoices: invPick.invoices } : {}),
-        logNote: `CHARGE PAGE terminal — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ${branch.branch} Flex · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Card-present via Speedy payment bridge.`,
-      }];
-      if (!invPick.invoices && userEmail) {
-        receipt[0].task = {
-          title: `Invoice needed — payment $${total.toFixed(2)}`.slice(0, 50),
-          description: `Terminal payment of $${total.toFixed(2)} (${purpose}) on client #${clientId}${policyNumber ? ', policy ' + policyNumber : ''} had no matching open invoice (${invPick.how}). Create the invoice in Trust Accounting and apply Clover ${txnId}.`,
-          dueDate: now.toISOString(), assignedToRole: 'SpecifiedUser', assignedToEmail: userEmail,
-        };
-      }
-      let r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
-        method: 'POST', body: JSON.stringify(receipt) });
-      if (!(r1.status === 200 || r1.status === 202) && receipt[0].task) {
-        delete receipt[0].task;
-        r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+      /* Accounting receipt — ONLY when the agent picked an open invoice. */
+      if (invPick.invoices) {
+        const receipt = [{
+          refId: crypto.randomUUID(), ts: now.toISOString(), channel: 21, // Walk In From Insured — counter payment
+          payMethod: 'CreditCard', total, policyId: policyGuid,
+          invoices: invPick.invoices,
+          logNote: `CHARGE PAGE terminal — $${total.toFixed(2)} · ${purpose}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who} · ${branch.branch} Flex · Clover ${txnId}${authCode ? ' auth ' + authCode : ''} · ${brand} ****${last4}. Card-present via Speedy payment bridge.`,
+        }];
+        const r1 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
           method: 'POST', body: JSON.stringify(receipt) });
+        out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status, posted: true };
+      } else {
+        out.receipt = { ok: true, posted: false, reason: invPick.how };
       }
-      out.receipt = { ok: r1.status === 200 || r1.status === 202, status: r1.status };
 
       // Branded receipt PDF -> attachment + vault. Terminal previously skipped this
       // entirely, so card-present charges filed a receipt + log but no PDF.
@@ -1445,7 +1523,9 @@ export default async function handler(req, res) {
       });
       const filedTerm = await fileReceiptPdf({ hs, clientId, pdfBuf, now, total, who, policyGuid, txnId,
         filePrefix: 'Clover_Terminal_Receipt', desc: `Terminal receipt $${total.toFixed(2)}`,
-        logNoteTail: `Card present via ${branch.branch || 'Clover'} Flex. Charged by ${who}. Clover ${txnId}.` });
+        purpose, policyNumber, stamp,
+        methodRef: txnId ? `Clover ${txnId}` : null,
+        methodLine: last4 ? `${brand} ****${last4}` : (brand || null) });
       out.attachment = filedTerm.attachment;
       out.vault = filedTerm.vault;
 

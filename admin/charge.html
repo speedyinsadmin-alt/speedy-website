@@ -173,6 +173,8 @@
   <!-- Amount + test write -->
   <div class="card hide" id="chargecard">
     <div id="invList"></div>
+    <!-- What HawkSoft will receive, under the picker, before the charge is made. -->
+    <div id="hsPreview" class="hide" style="background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.10);border-radius:8px;padding:9px 11px;margin-bottom:14px"></div>
     <div class="eyebrow">Amount</div>
     <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00"></div>
     <label>Payment for</label>
@@ -429,6 +431,11 @@ async function createClient(){
 }
 let LEDGER_ID = null;   // bridge_ledger row id of the charge just made — becomes payment_id
                         // on the carrier page so the audit can close the loop (fee + commission)
+/* The invoice the AGENT picked, or null for "no invoice". This used to be read,
+   used to fill the amount box, and then thrown away — no browser has ever sent an
+   invoiceId. The server no longer guesses, so if this is not sent, no accounting
+   receipt is posted at all. null is the default and a deliberate answer. */
+let PICKED_INV = null;
 function nextCarrierLink(amt){
   const c = (typeof confirmed!=='undefined' && confirmed) ? confirmed : {};
   const params = new URLSearchParams({
@@ -474,23 +481,60 @@ function confirmClient(n){
 function renderInvList(){
   const el = document.getElementById('invList');
   const list = (confirmed && confirmed.openInvoices) || [];
-  if(!list.length){ el.innerHTML=''; return; }
-  el.innerHTML = '<div class="eyebrow" style="color:#7ee2a8">Open invoices — tap to charge the exact amount</div>'
+  PICKED_INV = null;              // cleared on every open; it applies to THIS charge only
+  if(!list.length){ el.innerHTML=''; renderHsPreview(); return; }
+  el.innerHTML = '<div class="eyebrow" style="color:#7ee2a8">Open invoices — pick one to apply this payment to it</div>'
     + '<div class="purpose" style="margin-bottom:14px">'
     + list.map((iv,i) => `<button type="button" style="text-align:left" onclick="pickInvoice(${i}, this)">
         <b>$${iv.bal.toFixed(2)}</b> \u00b7 ${esc(iv.num || 'Invoice')}${iv.policyNumber ? '<br><span style="opacity:.65;font-size:12px">policy ' + esc(iv.policyNumber) + '</span>' : ''}${iv.dueDate ? '<br><span style="opacity:.5;font-size:11.5px">due ' + esc(iv.dueDate) + '</span>' : ''}
       </button>`).join('')
+    + '<button type="button" class="sel" style="text-align:left" onclick="pickInvoice(-1, this)">'
+    + '<b>No invoice</b><br><span style="opacity:.65;font-size:12px">just take the payment</span></button>'
     + '</div>';
+  renderHsPreview();
 }
+/* Nothing is preselected among the real invoices - the same rule the policy picker
+   follows, and for the same reason: a glance at a pre-filled field is how money lands
+   somewhere nobody chose, and HawkSoft cannot move a receipt once it is posted.
+   "No invoice" is the default and is a real answer, not an absence. */
 function pickInvoice(i, btn){
+  document.querySelectorAll('#invList button').forEach(x=>x.classList.remove('sel'));
+  btn.classList.add('sel');
+  if(i < 0){ PICKED_INV = null; renderHsPreview(); return; }
   const iv = confirmed.openInvoices[i];
+  PICKED_INV = iv;                // the id is what the server needs - it used to be dropped here
   document.getElementById('amount').value = iv.bal.toFixed(2);
   if(iv.policyNumber){
     document.getElementById('hsPolicyNumber').value = iv.policyNumber;
     updatePolToggle();
   }
-  document.querySelectorAll('#invList button').forEach(x=>x.classList.remove('sel'));
-  btn.classList.add('sel');
+  renderHsPreview();
+}
+/* What HawkSoft will receive, shown BEFORE the charge. Every line on this list is
+   permanent the moment the button is pressed: HawkSoft has no endpoint to modify a
+   receipt, delete an attachment or edit a log note. Shown even when the client has no
+   open invoices, because "no accounting receipt" is exactly what the agent needs to
+   know then too. */
+function renderHsPreview(){
+  const el = document.getElementById('hsPreview');
+  if(!el) return;
+  if(!confirmed){ el.classList.add('hide'); return; }
+  el.classList.remove('hide');
+  /* Unlike the portal, this page shows every method at once, so the pay-link exception
+     is stated rather than swapped in: a link is paid in the CLIENT's browser and the
+     client cannot pick an invoice, so a link posts no accounting receipt whatever is
+     selected above. Without this line the preview would be a lie for one of the
+     buttons sitting right below it. */
+  const rows = PICKED_INV
+    ? ['Accounting receipt applied to <b>' + esc(PICKED_INV.num || 'the picked invoice') + '</b> — that invoice closes',
+       'Log note on the client file',
+       'Receipt PDF attached',
+       '<span style="opacity:.7">Pay link is the exception — a client cannot pick an invoice, so a link applies nothing</span>']
+    : ['Log note on the client file',
+       'Receipt PDF attached',
+       '<b>No accounting receipt</b> — open invoices stay open'];
+  el.innerHTML = '<div style="font-size:11px;color:#888;margin-bottom:5px">What HawkSoft will receive</div>'
+    + rows.map(r => '<div style="font-size:12.5px;line-height:1.5">· ' + r + '</div>').join('');
 }
 /* Policy picker.
    Previously this was a toggle that only appeared when HawkLink flooded a policy
@@ -623,7 +667,8 @@ async function chargeLive(){
     out.textContent = 'Charging card\u2026';
     const j = await post({action:'charge_live', clientId: confirmed.clientNumber,
       clientName: confirmed.name || '', amount: amt, purpose: purposeText(), note: noteText(),
-      source: tk.token, policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
+      source: tk.token, policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||'',
+      invoiceId: PICKED_INV ? PICKED_INV.id : ''});
     out.style.display='none'; out.textContent='';
     const rb = document.getElementById('resultbox');
     if(j.ok){
@@ -687,7 +732,8 @@ async function chargeCash(method){
   try{
     const j = await post({action:'charge_cash', clientId: confirmed.clientNumber, clientName: confirmed.name || '',
       amount: amt, purpose: purposeText(), policyNumber: effPolicy(), clientEmail: (confirmed.emails&&confirmed.emails[0])||'',
-      note: noteText(), payMethod: methLabel, altRef: altRef});
+      note: noteText(), payMethod: methLabel, altRef: altRef,
+      invoiceId: PICKED_INV ? PICKED_INV.id : ''});
     out.style.display='none';
     if(j.ok){
       LEDGER_ID = j.ledgerId || null;
@@ -823,7 +869,8 @@ async function chargeTerminal(){
   try{
     const j = await post({action:'terminal_charge', clientId: confirmed.clientNumber,
       clientName: confirmed.name || '', amount: amt, purpose: purposeText(),
-      policyNumber: effPolicy(), branchId: document.getElementById('branchSel').value, clientEmail: (confirmed.emails&&confirmed.emails[0])||''});
+      policyNumber: effPolicy(), branchId: document.getElementById('branchSel').value, clientEmail: (confirmed.emails&&confirmed.emails[0])||'',
+      invoiceId: PICKED_INV ? PICKED_INV.id : ''});
     out.style.display='none';
     if(j.ok){
       LEDGER_ID = j.ledgerId || null;

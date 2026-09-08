@@ -12,7 +12,7 @@
 // Phone numbers are normalized to bare 10 digits on both sides, because HawkSoft
 // stores them as (###)###-#### and vendors send E.164 (+1##########).
 
-const OFFICES = { 0: 'Primary', 1: 'Moreno Valley', 2: 'Riverside — Van Buren', 3: 'Riverside — Magnolia', 4: 'Lake Elsinore' };
+const OFFICES = { 0: 'Primary', 1: 'Moreno Valley', 2: 'Riverside — Van Buren', 3: 'Riverside — Magnolia', 4: 'Lake Elsinore', 5: 'Colton' };
 
 const digits10 = (v) => {
   const d = String(v == null ? '' : v).replace(/\D/g, '');

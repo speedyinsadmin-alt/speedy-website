@@ -123,7 +123,8 @@ const ALLOWLIST = ADMIN_ALLOWLIST; // back-compat for existing admin checks
 const AGENCY_ID = 15112;
 const TEST_CLIENT = 26081; // ZZTEST — the only client sync/HawkSoft-read will touch
 const HS_BASE = 'https://integration.hawksoft.app';
-const OFFICE_MAP = { '1': 'Moreno Valley', '2': 'Riverside Van Buren', '3': 'Riverside Magnolia', '4': 'Lake Elsinore' };
+// HawkSoft office ids (NOT RingCentral office groups — see the calls view).
+const OFFICE_MAP = { '1': 'Moreno Valley', '2': 'Riverside Van Buren', '3': 'Riverside Magnolia', '4': 'Lake Elsinore', '5': 'Colton' };
 
 // Carrier name normalization (misspellings / variants -> canonical). Grow as needed.
 const CARRIER_NORMALIZE = {

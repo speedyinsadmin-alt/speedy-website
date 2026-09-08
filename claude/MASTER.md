@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 5, 2026 · maintained by Saif + Claude**
+**Last updated: September 8, 2026 · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 ---
@@ -719,20 +719,14 @@ Now offered beside the search box permanently — a walk-in is a known situation
 anyone searches, not something discovered by failing to find them. Reuses the same
 action rather than adding a third implementation.
 
-### ⛔ HAWKSOFT HAS ONLY FOUR OFFICES — the agency has five branches
+### ✅ RESOLVED SEP 8 — HAWKSOFT NOW HAS SIX OFFICES
+On Sep 3 this said HawkSoft held only 0–3 and the agency was ahead of it by two
+branches. **Tony has added them.** See the Sep 8 section.
 ```
-0  speedy insurance agency (primary)
-1  Moreno Valley
-2  Riverside 1 — Van Buren
-3  Riverside 2 — Magnolia
+0  speedy insurance agency (primary)   3  Riverside 2 — Magnolia
+1  Moreno Valley                       4  Lake Elsinore   ← added
+2  Riverside 1 — Van Buren             5  Colton          ← added
 ```
-**Lake Elsinore and Colton do not exist in HawkSoft.** So the hard-coded `[1,2,3]`
-was never stale — the AGENCY is ahead of HawkSoft by two branches. Any client created
-at those branches is filed under the closest one, and office-based reporting is wrong
-for them.
-
-> **⏰ TONY: add Lake Elsinore and Colton in HawkSoft CMS → Setup → Offices.**
-> Remind Saif every session until done.
 
 > **🔑 ROTATE THE ADMIN KEY.** It appeared in a chat screenshot on Sep 3 and it reaches
 > every HawkSoft write endpoint. The Clover App Secret is still outstanding too.
@@ -997,6 +991,71 @@ outbound is Enterprise "contact sales"** — and outbound is our use case. Porti
 number REMOVES it from RingCentral, so the main line is not an option. RingCentral SMS
 already works and costs nothing extra. Revisit only if RingCentral cannot supply a 951
 texting number.
+
+---
+
+## SEP 8 — SIX OFFICES: ALL FIVE BRANCHES CAN FINALLY BE FILED
+
+**Tony added Lake Elsinore and Colton in HawkSoft Setup → Offices.** The standing
+reminder from Sep 3 is closed. Verified against the LIVE endpoint before touching a
+line — the ids are HawkSoft's, not ours to choose:
+
+```
+0 speedy insurance agency (primary)  ·  1 Moreno Valley  ·  2 Riverside 1 (Van Buren)
+3 Riverside 2 (Magnolia)             ·  4 Lake Elsinore  ·  5 Colton
+```
+None archived. Addresses match the branch list at the top of this file, including
+Van Buren at **2995**.
+
+### The real blocker was a server gate, not a dropdown
+`charge_create_client` in `hawksoft.js` rejected anything outside `[1,2,3]` with
+"Pick a branch". Widening the two pickers alone would have produced a **400 on
+create** for a Lake Elsinore or Colton walk-in — an error at the counter with the
+client standing there. Gate and pickers were changed together and asserted equal.
+
+### Changed
+| Where | What |
+|---|---|
+| `api/hawksoft.js` | `charge_create_client` gate `[1,2,3]` → `[1,2,3,4,5]` |
+| `api/platform.js` | `OFFICE_MAP` + Colton |
+| `api/screenpop.js` | `OFFICES` + Colton (caller ID popup named it "Office 5") |
+| `admin/charge.html` | picker + client chip map gain 4 and 5; stale hint deleted |
+| `admin/portal.html` | picker gains 4 and 5; stale hint and stale comment deleted |
+| `admin/hawksoft.html` | picker gains 4 and 5; office check rewritten (below) |
+| `admin/index.html` | the July "offices cleanup" task closed |
+
+### The Van Buren check was inverted and would have warned forever
+`hasVanBurenMismatch()` flagged HawkSoft whenever it showed **2995** — but 2995 is
+the CORRECT number; **2955 was our error, corrected Aug 28**. The check outlived the
+thing it was checking and kept the API console amber on a fact that was already
+right. Deleted, with a comment saying not to reinstate it.
+
+`EXPECTED_BRANCHES` was a dead array of strings nothing read. It is now a list of
+`{label, test}` pairs and `missingBranches(d)` drives the warn cards, so adding a
+sixth branch some day is one line. **Archived offices do not count as present.**
+
+> **The Aug 30 / Sep 4 lesson worked, twice.** Deleting `hasLakeElsinore` left
+> `hasAllOffices` calling a name that no longer existed — a `ReferenceError` that
+> would have taken the whole console down, and `node --check` passes on it. Caught by
+> grepping EVERY use before deleting, then by measuring brace depth: all definitions
+> at depth 0, all uses inside `load()` at depth 1–2.
+
+### How it was verified — the real handler, the real data
+- The page's **actual `load()`** was executed in a DOM stub against the **verbatim
+  live payload**: verdict `v-ok`, six office cards, zero warn cards, no Van Buren
+  warning. Regressions still fail correctly — Colton removed → `["Colton"]`, Lake
+  Elsinore archived → `["Lake Elsinore"]`, empty list → all five.
+- The gate line was **read out of `hawksoft.js` and run**, not retyped, against the
+  option values **parsed out of both pickers**: charge `1,2,3,4,5`, portal
+  `1,2,3,4,5`, every one accepted, nothing offered that the server refuses, nothing
+  accepted that nobody offers. `0` and `6` still rejected.
+
+### ⛔ DELIBERATELY NOT TOUCHED — two numbering systems, not one
+`platform.js` calls view and `rc-webhook.js` `OFFICE_BY_EXT` use **RingCentral office
+groups**, which happen to run 1–4 as well and have **no Colton extension mapped**.
+Copying HawkSoft's ids into them would silently mislabel calls. Colton calls stay
+`office_id: null` until someone supplies that branch's real extensions — open item
+69k-2. This is the same trap as Melisa's extension sitting in the Van Buren group.
 
 ---
 
@@ -1385,7 +1444,8 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 69c. ~~Unnumbered policies~~ **DONE Sep 2** (`558ac86f`)
 69h. **7941's $191.88 sits on an expired 2023 policy** — permanent. Note written to both tabs
 69i. ~~Back button on carrier.html~~ **DONE Sep 3** — four attempts, see above
-69k. **⏰ TONY: add Lake Elsinore and Colton as HawkSoft offices** (Setup → Offices). Until then those clients file under the closest branch
+69k. ~~⏰ TONY: add Lake Elsinore and Colton as HawkSoft offices~~ **DONE Sep 8** — offices 4 and 5 exist; code accepts 1–5 everywhere
+69k-2. **RingCentral office groups still have no Colton.** `rc-webhook.js` `OFFICE_BY_EXT` maps extensions to 1–4 only, so Colton calls carry `office_id: null` and the Console calls tab cannot attribute them. **This is a DIFFERENT numbering system from HawkSoft's** — do not "fix" it by copying the HawkSoft ids. Needs Colton's real extensions
 69l. **🔑 Rotate the admin key** — exposed in a Sep 3 screenshot. Clover App Secret still outstanding too
 69o. ~~Calls tab down~~ **FIXED Sep 5** — 8,057ms → 310ms
 69r. **⏰ ASK RINGCENTRAL: a 951 direct number for SMS, and A2P 10DLC registration.** Texts currently come from a 747 LA number
@@ -1615,6 +1675,8 @@ Full list — Clover merchants and devices, GBP store codes, app IDs, scheduled 
 **Sep 4:** `2f353148` PT_DAY scope · `1ce34e63` audit parallel + `75e80547` hotfix · `5de08482` **partial save tells the truth** · `b462d842`/`09e40c40`/`3a77d2d8` sort by what is missing · `e0097a21` admin HTML no-store · `2fc134f8` expired sign-in banner
 
 **Sep 5:** migration `rewrite_call_sessions_no_correlated_subqueries` **(8,057ms → 310ms)** · `86767870` api/sms.js — SMS proven end to end · `afed8f0a` receipt implies cost · `faf662ed` Trust tab · **`d6587d1e` hotfix: trust scope (current)**
+**Sep 8:** six HawkSoft offices — `charge_create_client` gate 1–5, both pickers, screenpop + platform labels, `admin/hawksoft.html` office check rewritten, inverted Van Buren check deleted
+
 `speedy-dashboard` production: `5c540afa`, then Aug 27 — Colton + address + KPI fixes, and `b00c3ba` ticket.html deleted. **Do not promote the metadata-less deploys.**
 
 ## WORKING STYLE (Saif)

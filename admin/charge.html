@@ -162,8 +162,9 @@
       <option value="1">Moreno Valley</option>
       <option value="2">Riverside — Van Buren</option>
       <option value="3">Riverside — Magnolia</option>
+      <option value="4">Lake Elsinore</option>
+      <option value="5">Colton</option>
     </select>
-    <div class="hint">Lake Elsinore isn't configured as an office in HawkSoft yet — use the closest branch until Tony adds it (Setup → Offices).</div>
     <button class="btn btn-red" onclick="createClient()">Create client & continue</button>
     <button class="btn btn-ghost" onclick="document.getElementById('newclient').classList.add('hide')">Cancel</button>
     <pre id="ncOut"></pre>
@@ -381,7 +382,7 @@ async function verify(){
         ${nameBlock}
         <div class="meta">
           <span class="chip">Client #${c.clientNumber}</span>
-          ${c.officeId?`<span class="chip b">${({1:'Moreno Valley',2:'Riverside — Van Buren',3:'Riverside — Magnolia'})[c.officeId]||('Office '+c.officeId)}</span>`:''}
+          ${c.officeId?`<span class="chip b">${({1:'Moreno Valley',2:'Riverside — Van Buren',3:'Riverside — Magnolia',4:'Lake Elsinore',5:'Colton'})[c.officeId]||('Office '+c.officeId)}</span>`:''}
           ${(c.phones||[]).map(p=>`<span class="chip">${esc(p)}</span>`).join('')}
           ${c.status?`<span class="chip">${esc(c.status)}</span>`:''}
         </div>

@@ -748,7 +748,9 @@ export default async function handler(req, res) {
       const officeId = parseInt(b.officeId, 10);
       if (!first || !last) return res.status(400).json({ ok: false, error: 'First and last name required' });
       if (phone.length !== 10) return res.status(400).json({ ok: false, error: 'Phone must be 10 digits' });
-      if (![1, 2, 3].includes(officeId)) return res.status(400).json({ ok: false, error: 'Pick a branch' });
+      // HawkSoft offices 1-5 (Tony added Lake Elsinore=4 and Colton=5, Sep 2026).
+      // 0 is the agency-level primary office and is deliberately not offered here.
+      if (![1, 2, 3, 4, 5].includes(officeId)) return res.status(400).json({ ok: false, error: 'Pick a branch' });
       const who = userEmail
         ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail)
         : 'admin key';

@@ -178,6 +178,8 @@
         <option value="1">Office: Moreno Valley</option>
         <option value="2">Office: Riverside 1 (Van Buren)</option>
         <option value="3">Office: Riverside 2 (Magnolia)</option>
+        <option value="4">Office: Lake Elsinore</option>
+        <option value="5">Office: Colton</option>
         <option value="0">Office: Primary (0)</option>
       </select>
       <select id="ncStatus" style="padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:var(--navy);color:#fff;font-family:'Outfit';font-size:14px;outline:none">
@@ -273,8 +275,17 @@ const SCOPE_NAMES = {
   'receipts':'Receipts (accounting)',
   'invoices':'Invoices (accounting)',
 };
-/* Branches we EXPECT to exist as offices in HawkSoft */
-const EXPECTED_BRANCHES = ['Moreno Valley','Van Buren / Riverside 1','Magnolia / Riverside 2','Lake Elsinore'];
+/* Branches we EXPECT to exist as offices in HawkSoft.
+   All five exist as of Sep 2026 (Lake Elsinore = 4, Colton = 5).
+   Each entry is a test against the office NAME or ADDRESS, because HawkSoft's own
+   names are "Riverside 1" / "Riverside 2" and do not carry the street. */
+const EXPECTED_BRANCHES = [
+  { label: 'Moreno Valley',            test: o => /moreno/i.test(o.name) || /frederick/i.test(o.address || '') },
+  { label: 'Riverside 1 — Van Buren',  test: o => /riverside 1/i.test(o.name) || /van buren/i.test(o.address || '') },
+  { label: 'Riverside 2 — Magnolia',   test: o => /riverside 2/i.test(o.name) || /magnolia/i.test(o.address || '') },
+  { label: 'Lake Elsinore',            test: o => /elsinore/i.test(o.name) || /mission trail/i.test(o.address || '') },
+  { label: 'Colton',                   test: o => /colton/i.test(o.name) || /mt\.? ?vernon|mount vernon/i.test(o.address || '') },
+];
 
 /* ---------- Load ---------- */
 async function load(){
@@ -330,24 +341,24 @@ async function load(){
   (d.offices||[]).forEach(o=>{
     off += card('ok', `${o.name}${o.primary?' · primary':''}`, `Office ID ${o.id} — ${o.address||'no address on file'}`, o.id);
   });
-  if(!hasLakeElsinore(d)){
-    off += card('warn','Lake Elsinore — missing from HawkSoft',
-      'Not configured as an office (32285 Mission Trail P5). Add it in HawkSoft Setup → Offices, or that branch can never be attributed in any integration.','!');
-  }
-  if(hasVanBurenMismatch(d)){
-    off += card('warn','Van Buren address — confirm street number',
-      'HawkSoft shows 2995 Van Buren Blvd; agency records say 2955. Confirm the correct number and fix whichever is wrong (affects GBP, website, mail).','!');
-  }
+  missingBranches(d).forEach(label=>{
+    off += card('warn', label + ' — missing from HawkSoft',
+      'Not configured as an office. Add it in HawkSoft Setup → Offices, or that branch can never be attributed in any integration.','!');
+  });
   document.getElementById('offices').innerHTML = off || card('warn','No offices returned','The offices endpoint returned no data.','!');
 }
 
-function hasLakeElsinore(d){
-  return (d.offices||[]).some(o=>/elsinore/i.test(o.name)||/mission trail/i.test(o.address||''));
+/* Which expected branches are NOT present in HawkSoft's offices list.
+   Archived offices do not count as present. */
+function missingBranches(d){
+  const live = (d.offices||[]).filter(o=>!o.archived);
+  return EXPECTED_BRANCHES.filter(b=>!live.some(o=>b.test(o))).map(b=>b.label);
 }
-function hasVanBurenMismatch(d){
-  return (d.offices||[]).some(o=>/van buren/i.test(o.address||'') && /2995/.test(o.address||''));
-}
-function hasAllOffices(d){ return hasLakeElsinore(d) && !hasVanBurenMismatch(d); }
+/* The Van Buren address check is GONE on purpose. It warned whenever HawkSoft
+   showed 2995 — but 2995 is the CORRECT street number; 2955 was our own error,
+   corrected Aug 28. The check was inverted and would have kept this console amber
+   forever. Do not reinstate it. */
+function hasAllOffices(d){ return missingBranches(d).length === 0; }
 
 /* ---------- Test Lab ---------- */
 if (sessionStorage.getItem('splabkey')) {

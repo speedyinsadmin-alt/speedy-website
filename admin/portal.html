@@ -807,10 +807,12 @@ async function runSearch(q){
    why the policy picker went missing from charge.html for months; this does not add
    a third.
 
-   OFFICES: HawkSoft has only 0-3 (agency, Moreno Valley, Riverside 1 Van Buren,
-   Riverside 2 Magnolia). Lake Elsinore and Colton do not exist there yet — Tony to
-   add them in Setup → Offices. Until then those branches genuinely cannot be filed
-   correctly, so the list shows what exists rather than pretending. */
+   OFFICES: HawkSoft now has 0-5 (agency, Moreno Valley, Riverside 1 Van Buren,
+   Riverside 2 Magnolia, Lake Elsinore, Colton). Tony added Lake Elsinore=4 and
+   Colton=5 in Setup → Offices, Sep 2026, so all five branches file correctly.
+   Verified against the live /api/hawksoft offices endpoint before this list was
+   widened — the ids are HawkSoft's, not ours to choose. 0 is the agency-level
+   primary office and is deliberately not offered. */
 function newClientFormHtml(){
   return '<div id="newClientForm" class="hide" style="background:var(--card);border:1px solid var(--blue);'
     + 'border-radius:10px;padding:13px;margin-top:9px">'
@@ -826,8 +828,9 @@ function newClientFormHtml(){
     + '<select id="ncOffice" style="margin:0">'
     + '<option value="1">Moreno Valley</option>'
     + '<option value="2">Riverside \u2014 Van Buren</option>'
-    + '<option value="3">Riverside \u2014 Magnolia</option></select>'
-    + '<div class="dim" style="font-size:11px;margin-top:5px">Lake Elsinore and Colton are not set up as offices in HawkSoft yet \u2014 use the closest branch until they are.</div>'
+    + '<option value="3">Riverside \u2014 Magnolia</option>'
+    + '<option value="4">Lake Elsinore</option>'
+    + '<option value="5">Colton</option></select>'
     + '<div id="ncOut" class="dim" style="font-size:12px;margin-top:9px"></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px">'
     + '<div onclick="hideNewClient()" style="text-align:center;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:12.5px;cursor:pointer">Cancel</div>'

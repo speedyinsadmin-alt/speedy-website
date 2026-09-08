@@ -176,7 +176,7 @@
     <!-- What HawkSoft will receive, under the picker, before the charge is made. -->
     <div id="hsPreview" class="hide" style="background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.10);border-radius:8px;padding:9px 11px;margin-bottom:14px"></div>
     <div class="eyebrow">Amount</div>
-    <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00"></div>
+    <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00" oninput="renderHsPreview()"></div>
     <label>Payment for</label>
     <div class="purpose" id="purp">
       <button class="sel" type="button" onclick="pick(this)">Down payment</button>
@@ -515,6 +515,21 @@ function pickInvoice(i, btn){
    receipt, delete an attachment or edit a log note. Shown even when the client has no
    open invoices, because "no accounting receipt" is exactly what the agent needs to
    know then too. */
+/* The amount box is the money. If the agent edits it away from the picked invoice's
+   balance we ABSTAIN rather than send a partial application: we have never sent one,
+   and HawkSoft may leave the remainder open, reject the receipt, or close the invoice
+   and erase the rest. The SERVER enforces this — verifyInvoicePick compares the same
+   two numbers — so this is only the agent seeing the outcome before they commit.
+   Returns '' when there is nothing to say, so it doubles as the "is it applied?" test. */
+function invMismatch(){
+  if(!PICKED_INV) return '';
+  const cents = v => Math.round((parseFloat(v) || 0) * 100);
+  const amt = cents(document.getElementById('amount').value);
+  const bal = cents(PICKED_INV.bal);
+  if(amt === bal) return '';
+  return '$' + (amt/100).toFixed(2) + ' does not match ' + esc(PICKED_INV.num || 'the picked invoice')
+       + ' ($' + (bal/100).toFixed(2) + '), so nothing is applied';
+}
 function renderHsPreview(){
   const el = document.getElementById('hsPreview');
   if(!el) return;
@@ -525,14 +540,16 @@ function renderHsPreview(){
      client cannot pick an invoice, so a link posts no accounting receipt whatever is
      selected above. Without this line the preview would be a lie for one of the
      buttons sitting right below it. */
-  const rows = PICKED_INV
+  const mism = invMismatch();
+  const rows = (PICKED_INV && !mism)
     ? ['Accounting receipt applied to <b>' + esc(PICKED_INV.num || 'the picked invoice') + '</b> — that invoice closes',
        'Log note on the client file',
        'Receipt PDF attached',
        '<span style="opacity:.7">Pay link is the exception — a client cannot pick an invoice, so a link applies nothing</span>']
     : ['Log note on the client file',
        'Receipt PDF attached',
-       '<b>No accounting receipt</b> — open invoices stay open'];
+       mism ? ('<b>No accounting receipt</b> — ' + mism)
+            : '<b>No accounting receipt</b> — open invoices stay open'];
   el.innerHTML = '<div style="font-size:11px;color:#888;margin-bottom:5px">What HawkSoft will receive</div>'
     + rows.map(r => '<div style="font-size:12.5px;line-height:1.5">· ' + r + '</div>').join('');
 }

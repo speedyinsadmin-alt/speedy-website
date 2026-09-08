@@ -301,7 +301,7 @@
         <div id="chgHsPreview" class="hide" style="border:1px solid var(--hair);border-radius:10px;padding:9px 12px;margin-bottom:12px"></div>
 
         <label for="chgAmt">Amount</label>
-        <input id="chgAmt" inputmode="decimal" placeholder="0.00" autocomplete="off">
+        <input id="chgAmt" inputmode="decimal" placeholder="0.00" autocomplete="off" oninput="renderChgHsPreview()">
 
         <label style="margin-top:12px">Purpose</label>
         <div id="chgPurp" class="chips"></div>
@@ -2018,6 +2018,20 @@ function pickInv(i, btn){
    the client never picks an invoice, so a link posts no accounting receipt whatever is
    selected above. Saying "applied to INV…" on a link would be a lie the agent only
    discovers days later. */
+/* The amount box is the money. If the agent edits it away from the picked invoice's
+   balance we ABSTAIN rather than send a partial application: we have never sent one,
+   and HawkSoft may leave the remainder open, reject the receipt, or close the invoice
+   and erase the rest. The SERVER enforces this — verifyInvoicePick compares the same
+   two numbers — so this is only the agent seeing the outcome before they commit. */
+function chgInvMismatch(){
+  if(!CHG_PICKED_INV) return '';
+  const cents = v => Math.round((parseFloat(v) || 0) * 100);
+  const amt = cents(chgEl('chgAmt').value);
+  const bal = cents(CHG_PICKED_INV.bal);
+  if(amt === bal) return '';
+  return '$' + (amt/100).toFixed(2) + ' does not match ' + esc(CHG_PICKED_INV.num || 'the picked invoice')
+       + ' ($' + (bal/100).toFixed(2) + '), so nothing is applied';
+}
 function renderChgHsPreview(){
   const el = chgEl('chgHsPreview');
   if(!el) return;
@@ -2028,14 +2042,16 @@ function renderChgHsPreview(){
     rows = ['A payment link is created and logged now',
             'When the client pays: log note + receipt PDF',
             '<b>No accounting receipt</b> — a client cannot pick an invoice, so nothing is applied'];
-  } else if(CHG_PICKED_INV){
+  } else if(CHG_PICKED_INV && !chgInvMismatch()){
     rows = ['Accounting receipt applied to <b>' + esc(CHG_PICKED_INV.num || 'the picked invoice') + '</b> — that invoice closes',
             'Log note on the client file',
             'Receipt PDF attached'];
   } else {
+    const mism = chgInvMismatch();
     rows = ['Log note on the client file',
             'Receipt PDF attached',
-            '<b>No accounting receipt</b> — open invoices stay open'];
+            mism ? ('<b>No accounting receipt</b> — ' + mism)
+                 : '<b>No accounting receipt</b> — open invoices stay open'];
   }
   el.innerHTML = '<div class="dim" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">What HawkSoft will receive</div>'
     + rows.map(r => '<div style="font-size:12.5px;line-height:1.5">· ' + r + '</div>').join('');

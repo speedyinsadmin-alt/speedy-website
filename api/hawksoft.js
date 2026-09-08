@@ -226,6 +226,22 @@ function verifyInvoicePick(clientBody, pickedId, total) {
     num: i.invoiceNumber || i.number || i.InvoiceNumber || '',
   })).find(i => i.id && String(i.id) === want && isFinite(i.bal) && i.bal > 0);
   if (!hit) return { invoices: null, how: 'picked invoice is not open on this client — no accounting receipt posted' };
+  /* THE AMOUNT MUST EQUAL THE BALANCE. We have never sent a partial application to
+     HawkSoft — all 93 receipts ever applied were exact-amount matches — so we do not
+     know what it does with one. It may leave the remainder open, reject the receipt,
+     or apply the payment and CLOSE the invoice, silently erasing the rest of the
+     receivable with no way to reverse it. Abstaining is the only safe answer until
+     probe_partial_invoice has settled it on ZZTEST.
+
+     Abstain, never refuse. A gate that blocks a legitimate case gets satisfied in the
+     smallest way that passes — tell an agent "the amount must equal the invoice" and
+     they will charge the full $320 the client does not have, or key it by hand in
+     Trust Accounting, which is the thing we are retiring. Taking $150 stays possible;
+     only the accounting application is withheld. */
+  const cents = x => Math.round(Number(x) * 100);
+  if (cents(hit.bal) !== cents(total)) {
+    return { invoices: null, how: `amount $${total.toFixed(2)} does not match ${hit.num || 'the picked invoice'} ($${hit.bal.toFixed(2)}) — no accounting receipt posted` };
+  }
   return { invoices: [{ invoiceId: hit.id, amount: total }], how: `applied — picked by the agent${hit.num ? ` (${hit.num})` : ''}` };
 }
 
@@ -562,20 +578,26 @@ async function buildReceiptPdf(o) {
    value must drop its line, never print "undefined" onto a client file forever. Nothing
    here interpolates a caller-supplied value unchecked.
 
-   At module scope so probe_lognote can write the EXACT string a real charge writes,
+   SINGLE LINE is what ships. Every note the bridge has written for months is one line,
+   so a one-line note is the only form we have evidence HawkSoft stores correctly. The
+   multi-line form is built by the same guards and the same fields, and is written ONLY
+   by probe_lognote against ZZTEST until we have read the result in CMS. Until then,
+   multiline:true must not reach a real client.
+
+   At module scope so the probe writes the EXACT string a real charge would write,
    rather than a copy of it that could drift. */
-function buildAttachmentNote(o) {
+function buildAttachmentNote(o, multiline = false) {
   const seg = parts => parts.filter(p => p != null && String(p).trim() !== '').join(' · ');
-  return [
+  const head = [
     seg([`$${o.total.toFixed(2)}`, o.purpose, o.policyNumber ? `policy ${o.policyNumber}` : null]),
     seg([o.who ? `Charged by ${o.who}` : null, o.methodRef]),
     seg([o.methodLine, o.stamp ? `${o.stamp} PT` : null]),
-  ].filter(Boolean).concat([
-    '',
-    'Recorded in the Speedy trust ledger.',
-    'NOT deposited to HawkSoft trust accounting.',
-    'Do not key this payment again.',
-  ]).join('\n');
+  ].filter(Boolean);
+  return multiline
+    ? head.concat(['', 'Recorded in the Speedy trust ledger.',
+                   'NOT deposited to HawkSoft trust accounting.',
+                   'Do not key this payment again.']).join('\n')
+    : head.concat(['Recorded in the Speedy trust ledger, NOT deposited to HawkSoft trust accounting — do not key this payment again.']).join(' · ');
 }
 
 /* Attach the receipt PDF to the HawkSoft client record AND store it in our vault.
@@ -1127,16 +1149,21 @@ export default async function handler(req, res) {
       const b64h = str => Buffer.from(str, 'utf8').toString('base64');
       const now = new Date();
       /* Built by the SHIPPING function, not retyped here — the whole point is to prove
-         the exact string a real charge will write. */
-      const real = buildAttachmentNote({
+         the exact string a real charge will write.
+         A is now the single line that ships to main; B and C are the multi-line
+         candidates this probe exists to settle. All three come from one builder, so
+         what lands in CMS is the real string and not a sample of it. */
+      const probeFields = {
         total: 141.94, purpose: 'PROBE — not a real payment', policyNumber: 'ZZTEST-POLICY',
         who: 'log-note probe', methodRef: 'Clover PROBEONLY0001', methodLine: 'VISA ****0000',
         stamp: now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }),
-      });
+      };
+      const real = buildAttachmentNote(probeFields);
+      const multi = buildAttachmentNote(probeFields, true);
       const variants = [
-        ['A-single-line', 'CONTROL — this is the one-line note format the bridge writes today. Charged by log-note probe. Clover PROBEONLY0001.'],
-        ['B-multi-line-LF', real],
-        ['C-multi-line-CRLF', real.replace(/\n/g, '\r\n')],
+        ['A-shipping-single-line', real],
+        ['B-multi-line-LF', multi],
+        ['C-multi-line-CRLF', multi.replace(/\n/g, '\r\n')],
       ];
       const results = [];
       for (const [label, note] of variants) {
@@ -1155,8 +1182,80 @@ export default async function handler(req, res) {
           lines: note.split(/\r?\n/).length, noteBytes: Buffer.byteLength(note, 'utf8'),
           headerBytes: b64h(note).length, ...(r.status >= 400 ? { error: r.body } : {}) });
       }
-      return res.status(200).json({ ok: results.every(x => x.ok), clientId, results, sentNote: real,
-        next: 'Open ZZTEST #26081 in HawkSoft CMS and read the three PROBE rows. (1) Does B keep its line breaks? (2) Does C differ from B? (3) Is anything truncated at the first newline? If the breaks do not survive, the note must be collapsed to one line BEFORE this ships.' });
+      return res.status(200).json({ ok: results.every(x => x.ok), clientId, results,
+        sentNote: { shipping: real, multiline: multi },
+        next: 'Open ZZTEST #26081 in HawkSoft CMS and read the three PROBE rows. (1) Does A — the format now shipping — read cleanly at full length? (2) Does B keep its line breaks? (3) Does C differ from B, or is either truncated at the first newline? Only swap the shipping note to multi-line if B or C reads better than A.' });
+    }
+
+    /* ---------- Diagnostics: what does HawkSoft DO with a PARTIAL application? ----------
+       verifyInvoicePick now abstains when the amount differs from the invoice balance,
+       because we have never sent a partial: all 93 receipts we ever applied were
+       exact-amount matches. The three possible behaviours are not equally survivable —
+       if HawkSoft applies $1 and CLOSES a $320 invoice, $319 of receivable is erased
+       and a receipt can never be modified or deleted.
+
+       So measure it: read the balance, apply a small partial, read the balance again,
+       and name which of the three happened. ZZTEST only, $5 ceiling, and it refuses
+       unless the target balance is strictly GREATER than the amount — otherwise it is
+       not a partial and proves nothing. Admin key only: this writes a real receipt. */
+    if (action === 'probe_partial_invoice') {
+      const pb = req.body || {};
+      const clientId = parseInt(pb.clientId, 10);
+      if (clientId !== TEST_CLIENT_ID) {
+        return res.status(400).json({ ok: false,
+          error: `Partial-application probe is limited to ZZTEST client #${TEST_CLIENT_ID}.` });
+      }
+      const amount = Math.round(parseMoney(pb.amount, 1) * 100) / 100;
+      if (!amount || amount <= 0 || amount > 5) {
+        return res.status(400).json({ ok: false, error: 'Probe amounts are capped at $5.00.' });
+      }
+      const readInvoices = async () => {
+        const r = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}?version=4.0&include=details,invoices`);
+        return ((r.body && (r.body.invoices || r.body.Invoices)) || []).map(i => ({
+          id: i.id || i.invoiceId || i.guid || i.Id || null,
+          num: i.invoiceNumber || i.number || i.InvoiceNumber || '',
+          bal: Number(i.balance ?? i.balanceDue ?? i.amountDue ?? i.due ?? i.remaining ?? i.amount ?? NaN),
+        })).filter(i => i.id && isFinite(i.bal));
+      };
+      const before = await readInvoices();
+      const target = before.find(i => i.bal > amount);
+      if (!target) {
+        return res.status(200).json({ ok: false,
+          error: `No open invoice on ZZTEST #${clientId} with a balance greater than $${amount.toFixed(2)}. Create one in CMS first — without a genuine partial this probe proves nothing.`,
+          openInvoices: before });
+      }
+      const pNow = new Date();
+      const receipt = [{
+        refId: crypto.randomUUID(), ts: pNow.toISOString(), channel: 21,
+        payMethod: 'Cash', total: amount,
+        invoices: [{ invoiceId: target.id, amount }],
+        logNote: `PARTIAL-APPLICATION PROBE — applying $${amount.toFixed(2)} against ${target.num || target.id}, balance $${target.bal.toFixed(2)}. Testing whether HawkSoft leaves the remainder open, rejects the receipt, or closes the invoice. No money moved.`,
+      }];
+      const post = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/receipts?version=4.0`, {
+        method: 'POST', body: JSON.stringify(receipt) });
+      const accepted = post.status === 200 || post.status === 202;
+      const after = await readInvoices();
+      const now2 = after.find(i => i.id === target.id) || null;
+      const c = x => Math.round(Number(x) * 100);
+      let verdict;
+      if (!accepted) {
+        verdict = `REFUSED — HawkSoft rejected the receipt (HTTP ${post.status}). Partial applications are not possible. KEEP the abstain rule.`;
+      } else if (!now2) {
+        verdict = 'GONE — the invoice is no longer returned as open. Treat as CLOSED: a partial erases the remainder. KEEP the abstain rule.';
+      } else if (c(now2.bal) === c(target.bal) - c(amount)) {
+        verdict = `PARTIAL WORKS — balance $${target.bal.toFixed(2)} -> $${now2.bal.toFixed(2)}, down by exactly what was applied. The abstain rule can be relaxed.`;
+      } else if (c(now2.bal) === 0) {
+        verdict = `DANGER — balance $${target.bal.toFixed(2)} -> $0.00. HawkSoft CLOSED the invoice on a partial payment and erased the remainder. The abstain rule MUST stay.`;
+      } else if (c(now2.bal) === c(target.bal)) {
+        verdict = `NOT APPLIED — balance unchanged at $${now2.bal.toFixed(2)} even though the receipt was accepted. The application is silently ignored. KEEP the abstain rule.`;
+      } else {
+        verdict = `UNEXPECTED — balance $${target.bal.toFixed(2)} -> $${now2.bal.toFixed(2)}. Read the invoice in CMS before drawing any conclusion.`;
+      }
+      return res.status(200).json({ ok: true, clientId, amountApplied: amount,
+        invoice: { id: target.id, num: target.num,
+                   balanceBefore: target.bal, balanceAfter: now2 ? now2.bal : null },
+        receiptStatus: post.status, receiptAccepted: accepted, verdict,
+        next: 'Confirm the verdict by reading the invoice AND the receipt in HawkSoft CMS. This wrote a REAL accounting receipt to ZZTEST and it cannot be deleted.' });
     }
 
     /* ---------- Charge page: record a CASH payment (no card, full HawkSoft trail) ---------- */

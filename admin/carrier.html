@@ -1031,6 +1031,62 @@ function friendlyError(status, complete){
   return 'That did not go through (' + status + '). Try again, or check the Audit tab first.';
 }
 
+/* B · the total the server asked for. Module scope, beside the other form state — it
+   is written by the prompt below and read by submit()'s payload. Cleared after a
+   successful send so a second audit on this page cannot inherit it. */
+let TOTAL_OWED_ANSWER = null;
+/* The server refuses to guess when the carrier cost exceeds the payment. It hands back
+   the two numbers and the sentence to show; this renders them with an input and puts
+   the derived Speedy fee under it, so the agent checks their own arithmetic before the
+   number becomes somebody's commission. */
+function askTotalOwed(j, complete){
+  const cost = Number(j.service_cost || 0), paid = Number(j.charge_amount || 0);
+  const msg = $('#msg');
+  msg.className = ''; msg.style.color = '';
+  msg.textContent = '';
+  /* Only tokens and classes this file actually defines: --amber / --line / --mute /
+     --green and .hint / .btns / .submit. `--amber-ink` and `--field` are portal.html
+     light-mode variables and do not exist here, and there is no .btn or .muted rule in
+     this file — the setShare box above uses both and they silently do nothing. That is
+     the "CSS assumed to exist because it does in a sibling file" bug in MASTER.md. */
+  const box = document.createElement('div');
+  box.style.cssText = 'background:rgba(245,166,35,.08);border:1.5px solid rgba(245,166,35,.5);border-radius:12px;padding:14px;margin-top:14px';
+  box.innerHTML = '<div style="font-size:13.5px;font-weight:700;color:var(--amber)">What did the client owe in total?</div>'
+    + '<div class="hint" style="font-size:11.5px;line-height:1.5;margin-top:5px">' + escHtml(j.message || '') + '</div>'
+    + '<input id="owedIn" inputmode="decimal" placeholder="Total owed, e.g. ' + (cost + 20).toFixed(2) + '" style="margin-top:11px">'
+    + '<div id="owedFee" class="hint" style="font-size:11.5px;margin-top:7px">'
+    + 'Carrier cost $' + cost.toFixed(2) + ' · paid so far $' + paid.toFixed(2) + '</div>'
+    + '<div class="btns" style="margin-top:11px"><button id="owedGo" class="submit">Continue</button></div>';
+  msg.appendChild(box);
+  const inp = $('#owedIn'), out = $('#owedFee'), go = $('#owedGo');
+  const recalcOwed = () => {
+    const v = parseFloat(String(inp.value).replace(/[^0-9.]/g, ''));
+    if(!isFinite(v) || v <= 0){
+      out.style.color = '';
+      out.textContent = 'Carrier cost $' + cost.toFixed(2) + ' · paid so far $' + paid.toFixed(2);
+      return;
+    }
+    if(v < cost){
+      out.style.color = 'var(--amber)';
+      out.textContent = 'That is less than the carrier cost of $' + cost.toFixed(2) + '.';
+      return;
+    }
+    out.style.color = '';
+    out.innerHTML = 'Speedy fee <b style="color:var(--green)">$' + (v - cost).toFixed(2)
+      + '</b> · still owed <b style="color:var(--amber)">$'
+      + Math.max(0, v - paid).toFixed(2) + '</b>';
+  };
+  inp.addEventListener('input', recalcOwed);
+  inp.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); go.click(); } });
+  go.addEventListener('click', () => {
+    const v = parseFloat(String(inp.value).replace(/[^0-9.]/g, ''));
+    if(!isFinite(v) || v <= 0){ inp.focus(); return; }
+    if(v < cost){ inp.focus(); return; }
+    TOTAL_OWED_ANSWER = v.toFixed(2);
+    submit(complete);           // resend the SAME audit, now carrying the total
+  });
+  inp.focus();
+}
 async function submit(complete){
   const msg = $('#msg');
 
@@ -1071,6 +1127,9 @@ async function submit(complete){
     carrier_card: $('#card').value||null,
     receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME, thumb_b64: FILE_THUMB,
     complete: !!complete,
+    /* Null on the first attempt. The server only looks at it when it has already
+       refused once for a missing total, so sending it always is harmless. */
+    total_owed: TOTAL_OWED_ANSWER,
   };
 
   // 1) MAIN submit (carrier leg + receipt) — this is what matters
@@ -1090,6 +1149,7 @@ async function submit(complete){
     let j = null; try { j = await r.json(); } catch(e){ j = null; }
     if(r.ok && j && j.ok){
       mainOk = true;
+      TOTAL_OWED_ANSWER = null;   // answered and written; never carry it to another audit
       mainMsg = complete
         ? '✓ Audit complete — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')
         /* NOT a tick. Melisa saved three audits on Sep 3 and pressed save three times
@@ -1103,6 +1163,14 @@ async function submit(complete){
       // saved but response didn't parse — treat as success (data landed)
       mainOk = true;
       mainMsg = complete ? '✓ Audit complete — receipt stored' : pendingMsg();
+    } else if(j && (j.error === 'total_owed_required' || j.error === 'total_owed_too_low')){
+      /* Not a failure — the server abstained and asked a question. Nothing was written
+         and nothing reached HawkSoft, so re-submitting after the answer files the
+         receipt exactly once. Return before the document loop; the answer comes back
+         through submit() and any attached documents go with it. */
+      if(btn) btn.disabled = false; if(saveBtn) saveBtn.disabled = false;
+      askTotalOwed(j, complete);
+      return;
     } else {
       mainMsg = (j && j.error) ? j.error : friendlyError(r.status, complete);
     }

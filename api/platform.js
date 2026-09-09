@@ -1044,6 +1044,13 @@ if (view === 'portal_share_due') {
           commission_to: r.commission_to || agentEmailOf(r.agent) || null,
           commission_to_name: AGENT_NAME[r.commission_to || agentEmailOf(r.agent)] || null,
           carrier_name: r.carrier_name, service_cost: r.service_cost, fee_amount: r.fee_amount,
+          /* The column was SELECTED above and then dropped here, so the card could not
+             tell a balance payment from a normal one: it wore a "needs proof" chip and
+             offered "Add proof of payment" on a row that carries no audit of its own.
+             Auditing one writes a fee onto it — and the Trust tab reads fee_amount with
+             no audit_status filter (:2088), so that fee lands straight in "Speedy kept".
+             portal_home has always skipped these rows (:1152); the card never could. */
+          balance_of: r.balance_of || null,
           // NOTE: no commission figures here — the client log is shared with every agent
         })),
         producer_code: client && client.extras ? (client.extras.producer || null) : null,

@@ -1231,6 +1231,144 @@ rows, an open invoice with no id, and numeric-id vs string-pick.
 
 ---
 
+## SEP 9 — THE FEE WAS DERIVED FROM THE PART-PAYMENT, NOT THE OBLIGATION
+
+**One defect, three rows.** `carrier.js` computed the fee at audit time as
+`bridge_ledger.amount − service_cost`, reading only the payment in hand. The whole
+partial-payment model says otherwise (`platform.js:89–94`): *the carrier is paid in
+full at binding, so there is ONE audit and ONE fee for the whole obligation, and
+commission releases as the money arrives.* Any short payment therefore produced a
+**negative fee**, and commission is a straight percentage of it (`platform.js:1162`).
+
+| client | agent | shape | fee was | status |
+|---|---|---|---|---|
+| 25420 | Esmeralda | paid 130.50 of 184.50, carrier 164.50 | **−34.00** → paid **−$3.40** | corrected by hand Sep 9 |
+| 14968 | Yasmin | paid 274.10, carrier 285.00 | **−10.90** → paid **−$1.09** | ⛔ **STILL OPEN** — needs her account of what was owed |
+| 24615 | Esmeralda | 100.00 card + 87.00 cash, 82s apart, unlinked | not yet audited | linked by hand Sep 9 |
+
+**The $34 on 25420 was never recorded and Saif knows it** — one row in the whole
+ledger for that client. Not a system fault. $20 of it is still outstanding.
+
+### Fixed at the root — A and B, one change
+- **A · the obligation, not the part-payment.** `carrier.js` now selects
+  `amount,total_owed,balance_of` and derives the fee from `owedAmt`, mirroring
+  `owedFor()` in `platform.js:101` exactly. A blank total, or one no greater than the
+  payment, still means the payment IS the whole obligation — so nothing changes for
+  the 99% case.
+- **B · ask, do not guess.** The agency cannot have paid a carrier more than it
+  collected on a row, so `service_cost > amount` with no total recorded is *proof* the
+  client paid in parts and nobody entered the total. The audit now **abstains and asks**
+  instead of writing a negative fee. The agent's answer is validated (≥ carrier cost)
+  and written to `total_owed`, which also switches on the "Pay this balance" button.
+  An existing total is never overwritten.
+
+**The ledger read moved ABOVE every write, deliberately.** B has to be able to refuse
+before anything reaches HawkSoft — an attachment cannot be deleted, so a refusal after
+the upload turns each retry into a permanent duplicate. That is the Sep 1 outage, 16 of
+them across 5 payments. One fetch now serves both the gate and the fee.
+
+### ⚠️ THE KNOWN GAP IN B — written down so it is not rediscovered
+**B only fires when the carrier cost is ABOVE the part-payment.** An underpayment whose
+carrier cost is *below* it is invisible to both A and B:
+
+> Client owes **$187** ( carrier **$80** + fee **$107** ) and pays **$100**.
+> `service_cost (80) > amount (100)` is FALSE, so B never asks. `total_owed` stays
+> NULL, so A treats $100 as the whole obligation and writes **fee $20 instead of $107**.
+
+It is **quiet rather than negative**, which makes it harder to spot, not easier — no
+red number, no failed audit, just commission understated by 87% of the fee. Neither
+gate can detect it, because nothing in the row contradicts anything else.
+
+**Closing it needs the total captured at CHARGE time**, or an agent-settable total on an
+existing charge — see open item 75. Until then the only defence is the agent entering
+the Total on the charge sheet, which is exactly what did not happen in all three cases.
+
+### ⛔ THE PARTIAL-SAVE RESIDUAL IS NOT TRANSIENT — open item 79
+B only gates **submission**, so a **partial save** (`complete:false`) still writes the
+negative fee. Blocking a partial save is not an option: *"I have not paid the carrier
+yet"* is a real workflow — **33 of 160 audits took more than two days** — so a negative
+fee can sit on the row for a **working week**.
+
+**And it is not cosmetic while it sits.** The Trust tab reads `fee_amount` directly:
+
+```js
+const fee = r.fee_amount != null ? Number(r.fee_amount) : (amt - cost);
+toCarriers += cost; kept += fee;        // platform.js:2088-2089
+```
+
+Its `collected` filter (`:2060–2069`) tests **`kind` and date only — there is no
+`audit_status` filter**, so a `carrier_pending` row is included the moment it is saved.
+Worse, it does **not** fall through to `unaccounted`: that branch requires
+`service_cost == null` (`:2078`), and a partial save DOES write `service_cost`. So the
+negative fee is counted as **Speedy profit**, reducing "Speedy kept" for as long as the
+audit stays open.
+
+`platform.js:1158` still pays no commission on an incomplete audit, and `:1217` shows
+it as negative *pending*. **Money is not misdirected — the agency's own profit figure
+is.** Correcting it means either applying B's question at partial-save time for the
+`service_cost > amount` case only, or having the Trust tab ignore
+`audit_status != 'complete'` rows. **Saif's call.**
+
+### ✅ Item 76 closed in the same change — the side door
+A `balance_of` row still gets a fee written if audited directly (`platform.js:1152`
+skips those rows for commission, but the Trust tab above does not). **The client card
+was what put that button in front of the agent**, so closing A/B while leaving it open
+would have been worse than either alone — and 24615 was about to become exactly such a
+row.
+
+`portal_client` **selected** `balance_of` and then dropped it from the mapped output, so
+the card could not tell a balance payment from a normal one. Now returned, and the card:
+- badge reads **"balance payment"**, not "needs proof"
+- **no** "Add proof of payment", no "No documents yet", no "owner still confirms the
+  carrier cost"
+- says **"Pays down the $100.00 payment from 2026-09-08 · that one carries the audit"**,
+  falling back to *"earlier charge on this client"* when the parent is outside the
+  50-row window — never printing a raw id
+- keeps `addDocsFor` (documents-only, cannot reach the carrier audit) as **"+ Add
+  documents"**, because a cash balance may well have a receipt
+
+A row arriving **without** `balance_of` (an old cached response) renders exactly as
+before — verified.
+
+*Minor and left alone:* a balance row still shows "Commission to … change · wrong
+client". `reassign_commission` on such a row is a no-op for commission and "wrong
+client" is genuinely useful there.
+
+### Verified before pushing
+`node --check` on `carrier.js`, `new Function()` on both `carrier.html` script blocks.
+**Brace depth:** `svcCost`/`ledRow`/`ledAmt`/`ledOwed`/`totalOwedPatch` declared at
+depth 2 and minimum depth across lines 638–778 is **2** — the block never closes, so
+every name is in scope at every use. `TOTAL_OWED_ANSWER` and `askTotalOwed` are at
+depth **0** in `carrier.html`. `chargeAmt`, the name A removed, returns **zero** hits
+anywhere in the file.
+
+**Executing harness**, the real handler with only the network edge stubbed — 11 cases,
+all passing: fee 20 where the old code gave −67; unchanged where the cost is below the
+payment; total equal to amount not treated as a part-payment; refusal writes **zero**
+patches; a valid answer writes the total; an answer below the carrier cost refused on
+both sides; `$` and commas parsed; no fire on a partial save or a `balance_of` row; an
+existing total never overwritten.
+
+> **The harness failed first, and it was the harness.** All 11 cases returned 401
+> because `GOOGLE_CLIENT_ID` is **hardcoded at `carrier.js:7`, not read from env**, so
+> the stubbed `aud` never matched. The fix extracts the real value FROM the file rather
+> than retyping it, and asserts the test agent is on `AGENT_ALLOWLIST` — a stub that
+> guesses either one produces a 401 that looks exactly like a code bug.
+
+### Also caught: CSS assumed to exist because it exists in a sibling file
+B's prompt was first written with `--amber-ink`, `--field`, `.btn` and `.muted`, copied
+from the `setShare` box directly above it. **None of the four exists in
+`carrier.html`** — its `:root` defines only `--navy --navy2 --line --red --blue --green
+--amber --ink --mute --radius`, and its classes are `.btns .card .drop .fee .hide .hint
+.ok .pill .row .save .submit .wrap`. `--amber-ink` and `--field` are **portal.html
+light-mode** variables. Rewritten against what the file actually defines.
+
+> **The `setShare` box above it has the same bug and has shipped with it** — it uses
+> `class="btn"` and `class="muted"`, both of which do nothing in this file. Cosmetic,
+> not money. Open item 77.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -1673,6 +1811,11 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 72. **Light mode is portal.html only** — charge.html, carrier.html, platform.html still dark
 73. **Reverse the ZZTEST probe receipts** — 1.11 / 1.22 / 1.33 / 1.44, posted twice on Sep 1
 74. **In a month: drop `file_b64`** once `portal_doc` shows `served: "storage"`. Reclaims 28 MB from Postgres
+75. **The quiet underpayment — B's known gap.** A part-payment whose carrier cost is BELOW it understates the fee silently and no gate can see it. Needs the total captured at CHARGE time, or an agent-settable total on an existing unaudited charge (`set_total_owed` as a 5th `AGENT_ACTIONS` entry + one inline link on the payment card, guards mirroring `reassign_commission` at `platform.js:1385`). **Held deliberately** — see the Sep 9 section
+76. ~~**Client card cannot tell a `balance_of` row from a normal one**~~ **CLOSED Sep 9** — `portal_client` now returns `balance_of` and the card suppresses every audit affordance on those rows. Folded into the A+B change at Saif's direction: closing the gate and leaving the side door open is worse than either alone
+77. **`carrier.html`'s `setShare` box uses `.btn` and `.muted`, which have no rule in that file** — cosmetic only, found Sep 9 while writing B's prompt
+78. **Client 14968 still reads `fee_amount` −10.90** (Yasmin, Sep 8, paid 274.10 against a 285.00 carrier cost). Needs her account of what the client actually owed before anything is written. A alone does NOT fix it — `total_owed` is NULL, so there is nothing for the new derivation to read
+79. **The partial-save negative fee is NOT transient** — `complete:false` still writes it, 33 of 160 audits take over 2 days, and the Trust tab counts it as Speedy profit (`platform.js:2088`, no `audit_status` filter, and `service_cost` is written so it never reaches `unaccounted`). Fix is either B's question at partial-save time for the `service_cost > amount` case, or the Trust tab ignoring incomplete audits. **Saif's call**
 59. ~~**`portal_client` leaks money to every agent**~~ **CLOSED Sep 9 — there was no leak.** `portal_client` returns no commission figure; `fee_amount` and `service_cost` are SHARED by decision. Number kept so older references still resolve. Successor: **when roles land, re-check `audit_list`'s unfiltered `agent_commission?select=*` (`platform.js:1633`)** — only the `info@`-only admin gate keeps it private
 60. **Merge the redundant third HawkSoft log row** — each charge posts receipt + attachment + a text-only summary. Mocked up, parked by Saif
 61. **Malcolm's home branch still unknown** — deliberately no `STAFF` entry, so he gets the visible branch picker. Do NOT infer it from `call_log.office_id`; that was wrong for Melisa

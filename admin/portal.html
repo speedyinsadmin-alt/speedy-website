@@ -1113,6 +1113,15 @@ function payHistoryHtml(c){
     const iCharged = (p.charged_by_email === EMAIL);
     const dl = byPay[p.id] || [];
     const complete = p.audit_status === 'complete';
+    /* A balance payment pays down an earlier charge and carries NO audit of its own —
+       the original holds the carrier cost and the single fee. Without this the card
+       showed it as "needs proof" and offered the full audit, which would write a
+       SECOND fee onto the balance row; the Trust tab reads fee_amount with no
+       audit_status filter, so that fee would count as Speedy profit. `portal_home` has
+       always skipped these rows; the card could not, because balance_of was never
+       returned. Documents stay available — a cash balance may well have a receipt. */
+    const isBal = !!p.balance_of;
+    const parent = isBal ? pays.find(q => q.id === p.balance_of) : null;
     const hasCarrier = dl.some(d => docType(d) === 'carrier_receipt');
     return '<div style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:7px">'
       + '<div class="row" style="align-items:flex-start">'
@@ -1122,8 +1131,10 @@ function payHistoryHtml(c){
             + (p.total_owed - (p.collected || p.amount)).toFixed(2) + ' still owed</span>' : '')
       + ' <span class="dim" style="font-size:11.5px">' + esc(p.purpose || '') + '</span></div>'
       + '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;'
-      + (complete ? 'background:rgba(47,191,113,.15);color:var(--green)' : 'background:rgba(245,166,35,.15);color:var(--amber-ink)')
-      + '">' + (complete ? 'audited' : 'needs proof') + '</span></div>'
+      + (isBal ? 'background:rgba(77,124,254,.15);color:var(--blue-l)'
+               : complete ? 'background:rgba(47,191,113,.15);color:var(--green)'
+                          : 'background:rgba(245,166,35,.15);color:var(--amber-ink)')
+      + '">' + (isBal ? 'balance payment' : complete ? 'audited' : 'needs proof') + '</span></div>'
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
       + (p.ref ? ' · ' + esc(p.ref) : '')
@@ -1139,14 +1150,25 @@ function payHistoryHtml(c){
             + ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();moveClient(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')">wrong client</span>'
           : '')
       + '</div>'
+      /* Says which charge it pays down, so a $34 line beside a $130.50 line is not a
+         mystery second sale. The original may be outside this client's 50-row window,
+         in which case the id alone would mean nothing — so say only what is known. */
+      + (isBal
+          ? '<div class="dim" style="font-size:11px;margin-top:3px;color:var(--blue-l)">'
+            + 'Pays down the '
+            + (parent ? '$' + Number(parent.amount || 0).toFixed(2) + ' payment from '
+                        + esc(String(parent.ts || '').slice(0, 10))
+                      : 'earlier charge on this client')
+            + ' · that one carries the audit</div>'
+          : '')
       + (dl.length
           ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">'
             + dl.map(d => '<span class="docchip" id="pd' + d.id + '" onclick="openPortalDoc(\'' + d.id + '\')">'
                 + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '')
                 + (d.uploaded_by ? ' · ' + esc(uploaderShort(d.uploaded_by)) : '') + '</span>').join('')
             + '</div>'
-          : (!complete ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
-      + (!complete && mine
+          : (!complete && !isBal ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
+      + (!complete && !isBal && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
           : '')
@@ -1155,7 +1177,7 @@ function payHistoryHtml(c){
          carrier cost and then be refused after the work. The owner still confirms
          the cost, and the line below says so - otherwise the amber badge staying put
          afterwards reads as broken. */
-      + (!complete && !mine
+      + (!complete && !isBal && !mine
           ? '<div onclick="addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">Add documents to help</div>'
             + '<div class="dim" style="font-size:11px;text-align:center;margin-top:4px">'
@@ -1165,9 +1187,13 @@ function payHistoryHtml(c){
          !complete, so an agent who noticed a missing document after submitting had
          no way back in. Open to ANY agent — adding paperwork is follow-up finishing,
          not a money change, and every chip above names its uploader. */
-      + (complete
+      /* Balance rows get this too, and ONLY this. addDocsFor is the documents-only
+         screen — it never reaches the carrier audit, so a cash balance can still carry
+         its receipt without anyone being able to write a fee onto the row. */
+      + (complete || isBal
           ? '<div onclick="addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
-            + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">+ Add more documents</div>'
+            + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">'
+            + (isBal ? '+ Add documents' : '+ Add more documents') + '</div>'
           : '')
       + '</div>';
   }).join('');

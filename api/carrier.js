@@ -622,6 +622,59 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: 'Carrier receipt is required to submit to audit' });
     }
 
+    /* ---- A · THE OBLIGATION, NOT THE PART-PAYMENT ----
+       The fee is the agency's cut of what the CLIENT OWES IN FULL. Tony's partial-
+       payment rule, implemented in platform.js as owedFor()/collectedRatio(): the
+       carrier is paid in full at binding, so there is ONE audit and ONE fee for the
+       whole obligation, and commission releases as the money arrives. Deriving the fee
+       from `amount` instead produced a NEGATIVE fee on every short payment — client
+       25420 read -34.00 and paid Esmeralda -$3.40 on a sale that earns the agency $20;
+       14968 read -10.90.
+
+       Read HERE, above every write, because the gate below has to be able to refuse
+       BEFORE anything reaches HawkSoft. An attachment cannot be deleted, so refusing
+       after the upload turns every retry into a permanent duplicate — that is the Sep 1
+       outage, 16 of them across 5 payments. */
+    const svcCost = (body.service_cost != null) ? Number(body.service_cost)
+                  : (carrier_amount != null ? Number(carrier_amount) : null);
+    let ledRow = null;
+    if (payment_id) {
+      const led0 = await sbGet(s, `bridge_ledger?id=eq.${payment_id}&select=amount,total_owed,balance_of`);
+      ledRow = (led0.rows || [])[0] || null;
+    }
+    const ledAmt  = (ledRow && ledRow.amount     != null) ? Number(ledRow.amount)     : null;
+    const ledOwed = (ledRow && ledRow.total_owed != null) ? Number(ledRow.total_owed) : null;
+
+    /* ---- B · ASK, DO NOT GUESS ----
+       The agency cannot have paid a carrier more than it collected on this row, so a
+       carrier cost ABOVE the payment with no total recorded is proof the client paid in
+       parts and nobody entered the total. That is exactly how 25420 and 14968 happened.
+       Abstain and ask the agent, who has the answer in front of them — a guessed total
+       silently changes what the owner earns.
+
+       ⚠ KNOWN GAP, deliberately not covered here: an underpayment whose carrier cost is
+       BELOW the part-payment (client pays $100 of $187, carrier $80) does not trip this
+       and still understates the fee — $20 instead of $107. It is quiet rather than
+       negative, which makes it harder to spot, not easier. Recorded in MASTER.md;
+       closing it needs the total captured at CHARGE time, not at audit. */
+    let totalOwedPatch = null;
+    if (complete && ledRow && !ledRow.balance_of
+        && svcCost != null && ledAmt != null && ledOwed == null && svcCost > ledAmt) {
+      const raw = (body.total_owed != null) ? String(body.total_owed).replace(/[^0-9.]/g, '') : '';
+      const supplied = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(supplied) || supplied <= 0) {
+        return res.status(400).json({ ok: false, error: 'total_owed_required',
+          charge_amount: ledAmt, service_cost: svcCost,
+          message: `The carrier cost ($${svcCost.toFixed(2)}) is more than this payment ($${ledAmt.toFixed(2)}), so the client paid this in parts. Enter what they owed IN TOTAL for this sale — the carrier cost plus the Speedy fee. Anything not collected yet will show as still owed.` });
+      }
+      if (supplied < svcCost) {
+        return res.status(400).json({ ok: false, error: 'total_owed_too_low',
+          charge_amount: ledAmt, service_cost: svcCost,
+          message: `The total owed cannot be less than the carrier cost. You entered $${supplied.toFixed(2)} and the carrier cost is $${svcCost.toFixed(2)}.` });
+      }
+      totalOwedPatch = +supplied.toFixed(2);
+    }
+
     /* Which policy the carrier receipt belongs to. Declared above BOTH readers —
        the attachments insert and the HawkSoft PolicyId header. Resolved after
        payment_id, because the ledger row is one of the places it looks. */
@@ -699,14 +752,14 @@ export default async function handler(req, res) {
     const status = complete ? 'complete' : 'carrier_pending';
     let chargeAmtSeen = null;
     if (payment_id) {
-      // fetch the charge amount to compute the fee
-      const svcCost = (body.service_cost != null) ? Number(body.service_cost)
-                    : (carrier_amount != null ? Number(carrier_amount) : null);
+      /* svcCost and the ledger row are read ABOVE the gate — one fetch, not two.
+         owedAmt mirrors owedFor() in platform.js exactly: a blank total, or one no
+         greater than the payment, means this payment IS the whole obligation. */
       let feeAmt = null;
-      const led = await sbGet(s, `bridge_ledger?id=eq.${payment_id}&select=amount`);
-      const chargeAmt = led.rows && led.rows[0] ? Number(led.rows[0].amount) : null;
-      chargeAmtSeen = chargeAmt;
-      if (chargeAmt != null && svcCost != null) feeAmt = +(chargeAmt - svcCost).toFixed(2);
+      const owedNow = (totalOwedPatch != null) ? totalOwedPatch : ledOwed;
+      const owedAmt = (owedNow != null && ledAmt != null && owedNow > ledAmt) ? owedNow : ledAmt;
+      chargeAmtSeen = ledAmt;
+      if (owedAmt != null && svcCost != null) feeAmt = +(owedAmt - svcCost).toFixed(2);
       await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${payment_id}`, {
         method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
         body: JSON.stringify({
@@ -720,6 +773,9 @@ export default async function handler(req, res) {
           carrier_card: carrier_card || null,
           service_cost: svcCost,
           fee_amount: feeAmt,
+          /* Only when B just captured it. Never overwrite a total already on the row —
+             the agent answered a question we only ask when it was blank. */
+          ...(totalOwedPatch != null ? { total_owed: totalOwedPatch } : {}),
           service_path: body.service_path || body.svc || null,
           /* Who actually finished it. The column has existed since the ledger was
              built and NOTHING wrote it: 73 audits complete, 1 row populated. It

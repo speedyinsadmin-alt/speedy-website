@@ -666,6 +666,12 @@ the other tab lying.
   the nine notes went to client level only because I dropped `policyId` from the resend.
 - **HawkSoft cannot move a receipt or delete an attachment or a log note.** Every wrong
   file and every duplicate is permanent. This is why gates abstain rather than guess.
+- **The attachment body is validated against the declared `FileExt`** (Sep 8). Sending
+  gzipped text as `FileExt: 'txt'` returns **400 "Invalid file signature"** — and it is
+  rejected BEFORE the `LogNote` header is read, so a bad body makes a header experiment
+  measure nothing. `fileReceiptPdf` sends a gzipped PDF as `'pdf'`; anything posting an
+  attachment must match that shape. Found when `probe_lognote` failed on all three
+  variants including its own control.
 
 ---
 

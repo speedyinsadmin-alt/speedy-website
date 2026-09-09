@@ -1248,13 +1248,43 @@ In this order, after the Blob store exists:
    ⚠️ **This changes who can affect another agent's commission — Tony should be
    told.**
 
-**Visibility rule agreed with Saif:** every agent sees everything EXCEPT commission;
-commission shows only to the agent who earns it. Half-implemented — `portal_home`
-is correct, but `portal_client` still returns `fee_amount`, `service_cost` and
-`commission_to` on every payment to whoever is looking. **Must be stripped
-server-side, not hidden in the browser.** Open question: is the FEE sensitive, or
-only the commission? Keep the owner's NAME visible — the "not mine, change" flow
-needs it.
+### ✅ SETTLED SEP 9 — the visibility rule is ALREADY satisfied. There was no leak.
+**Decision (Saif, Sep 9): commission is the ONLY private figure. Fee and carrier cost
+are SHARED. The owner's NAME stays visible** — the "not mine, change" flow needs it.
+That closes the old open question ("is the FEE sensitive, or only the commission?").
+
+This file said `portal_client` leaked and **must be stripped server-side**. Checked
+against the code rather than the note, and **the note was wrong.** `portal_client`
+returns `commission_to`, `commission_to_name`, `carrier_name`, `service_cost` and
+`fee_amount` — and **no commission figure at all**. `platform.js:1047` already says so
+in a comment. Under the rule above, every one of those fields is shared by design.
+
+Commission is `fee_amount × the agent's own percentage` (`platform.js:911`, `:1162`,
+`:1686`). Every path that emits a commission number is self-scoped:
+
+| path | scoping |
+|---|---|
+| `portal_share_due` | queries `commission_to=eq.me`; own rate (`:893`) |
+| `portal_home` | derives from `mine`, own rows only; own rate (`:1065`) |
+| `portal_news` | the shared-commission item is guarded by `p.helper === me` (`:953`) |
+| `portal_client` | emits no commission figure |
+| `help_open` | **carries no money at all** — no fee, no cost, no commission (`:1250`) |
+
+> **⚠️ ONE CORRECTION to "`agent_commission` is only ever fetched for the signed-in
+> agent" — it is not.** There are four call sites. Two are `me`-filtered (`:893`,
+> `:1065`), one is an admin write (`:1358`), and **`audit_list` reads
+> `agent_commission?select=*` — every agent's percentage, unfiltered (`:1633`)**. That
+> is safe TODAY only because `audit_list` sits below the `verifyGoogle` gate at
+> `:1281`, and `verifyGoogle` returns an email only for `ADMIN_ALLOWLIST`
+> (`info@speedyins.com`). **It is the admin gate, not the query, that keeps it
+> private.** If `audit_list` ever moves into `portalViews`, or the admin list widens
+> when roles land, that line becomes a real leak of every agent's rate. Filter it or
+> re-check it at that point.
+
+**Known and accepted consequence:** `pct` falls back to **10** when an agent has no
+`agent_commission` row, so anyone on the default can estimate another agent's
+commission from the shared fee. That is inference from a published default, not a
+disclosure, and it is accepted under the rule above.
 
 **Also agreed:** agent can click their earnings and see the lines behind it —
 charge, carrier receipt, commission, client id, carrier name. `portal_home` already
@@ -1643,7 +1673,7 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 72. **Light mode is portal.html only** — charge.html, carrier.html, platform.html still dark
 73. **Reverse the ZZTEST probe receipts** — 1.11 / 1.22 / 1.33 / 1.44, posted twice on Sep 1
 74. **In a month: drop `file_b64`** once `portal_doc` shows `served: "storage"`. Reclaims 28 MB from Postgres
-59. **`portal_client` leaks money to every agent** — `fee_amount`, `service_cost`, `commission_to` are returned to whoever opens the client. Agreed rule: everyone sees everything EXCEPT commission. Must be stripped SERVER-side
+59. ~~**`portal_client` leaks money to every agent**~~ **CLOSED Sep 9 — there was no leak.** `portal_client` returns no commission figure; `fee_amount` and `service_cost` are SHARED by decision. Number kept so older references still resolve. Successor: **when roles land, re-check `audit_list`'s unfiltered `agent_commission?select=*` (`platform.js:1633`)** — only the `info@`-only admin gate keeps it private
 60. **Merge the redundant third HawkSoft log row** — each charge posts receipt + attachment + a text-only summary. Mocked up, parked by Saif
 61. **Malcolm's home branch still unknown** — deliberately no `STAFF` entry, so he gets the visible branch picker. Do NOT infer it from `call_log.office_id`; that was wrong for Melisa
 62. **Melisa's RingCentral extension sits in the Van Buren office group** — she works Moreno Valley. Cosmetic until the call-log by-agent view is built, then it misattributes her calls

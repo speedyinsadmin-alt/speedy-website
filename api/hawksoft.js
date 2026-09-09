@@ -218,13 +218,24 @@ const readToken = (t, key) => {
    we cannot verify abstains rather than guesses. */
 function verifyInvoicePick(clientBody, pickedId, total) {
   const want = String(pickedId || '').trim();
-  if (!want) return { invoices: null, how: 'no invoice picked — no accounting receipt posted' };
   const raw = (clientBody && (clientBody.invoices || clientBody.Invoices)) || [];
-  const hit = raw.map(i => ({
+  /* ONE definition of "open", shared by the count and the lookup. Counting raw rows
+     instead would report "3 open invoices, none picked" on a client whose three
+     invoices are all settled — inflating the exact number the rollout wants to read,
+     and disagreeing with the line below about what is pickable. */
+  const open = raw.map(i => ({
     id: i.id || i.invoiceId || i.guid || i.Id || null,
     bal: Number(i.balance ?? i.balanceDue ?? i.amountDue ?? i.due ?? i.remaining ?? i.amount ?? NaN),
     num: i.invoiceNumber || i.number || i.InvoiceNumber || '',
-  })).find(i => i.id && String(i.id) === want && isFinite(i.bal) && i.bal > 0);
+  })).filter(i => i.id && isFinite(i.bal) && i.bal > 0);
+  /* TWO DIFFERENT SILENCES. 'no invoice picked' collapsed them, so the ledger could not
+     answer "how many invoices should have closed and did not?" — nothing was owed on
+     the first, something was and the agent walked past it on the second. Only the
+     second is a missed close. */
+  if (!want) return { invoices: null, how: open.length
+    ? `${open.length} open invoice${open.length === 1 ? '' : 's'} on this client, none picked — no accounting receipt posted`
+    : 'no open invoices on this client — no accounting receipt posted' };
+  const hit = open.find(i => String(i.id) === want);
   if (!hit) return { invoices: null, how: 'picked invoice is not open on this client — no accounting receipt posted' };
   /* THE AMOUNT MUST EQUAL THE BALANCE. We have never sent a partial application to
      HawkSoft — all 93 receipts ever applied were exact-amount matches — so we do not

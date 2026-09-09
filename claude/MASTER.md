@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 8, 2026 · maintained by Saif + Claude**
+**Last updated: September 9, 2026 · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 ---
@@ -1178,13 +1178,37 @@ note RENDERS untruncated — read one in CMS to close that off.
      HAWKSOFT_CLIENT_ID`), so running them needs the vars branch-scoped to a preview,
      or a deliberate run against production.
 
-**⚠️ NEW, found by reading the live data:** the abstain message no longer distinguishes
-*"this client has no open invoices"* from *"the agent did not pick one"* — both write
-`no invoice picked`. The old code separated them (`no invoices on file` vs `no matching
-open invoice`). So the ledger cannot currently answer **"how many invoices should have
-closed and did not?"**, which is exactly the question the agent rollout needs. Split the
-two messages in `verifyInvoicePick`; it is a two-line change and it is not urgent
-enough to justify a second unplanned deploy.
+### ✅ RESOLVED SEP 9 — the abstain message now says WHICH silence (`57ab9da`)
+`no invoice picked` covered two different situations: nothing was owed, and something
+was owed and the agent walked past it. **Only the second is a missed close**, so the
+ledger could not answer *"how many invoices should have closed and did not?"* — the
+number item 1 above exists to measure. Four distinct outcomes now:
+
+| situation | `invoice_status` |
+|---|---|
+| nothing owed | `no open invoices on this client — no accounting receipt posted` |
+| owed, not picked | `N open invoice(s) on this client, none picked — …` |
+| pick not verifiable | `picked invoice is not open on this client — …` |
+| amount differs | `amount $X does not match INV-N ($Y) — …` *(unchanged)* |
+
+The count comes from `clientBody`. All three calling paths already fetch it with
+`include=...,invoices`, so there is **no new HawkSoft call**.
+
+**ONE definition of "open", shared by the count and the pick lookup.** Counting raw rows
+instead would report *"3 open invoices, none picked"* on a client whose three invoices
+are all settled — inflating the exact number the rollout wants to read, and disagreeing
+with the line below it about what is pickable.
+
+**Nothing HawkSoft receives changed.** `invoices` — the field that decides what gets
+posted — is byte-identical to the old code across 28 cases run old-against-new, with the
+whole file EXECUTED rather than the function extracted. Exactly 16 messages differ: the
+8 nothing-owed and 8 none-picked cases, nothing else. Covered capitalised `Invoices`,
+all three id/balance/number alias sets, null `clientBody`, settled and credit-balance
+rows, an open invoice with no id, and numeric-id vs string-pick.
+
+> **⚠️ RE-RUN ITEM 1's MEASUREMENT AGAINST THE NEW STRINGS.** `no invoice picked` no
+> longer exists in the code, so a grep for it returns only rows written before Sep 9.
+> The *"14 charges, zero applied"* figure above is history, not a live query.
 
 ### Lessons
 - **Check what a rule actually did before deleting it — and before trusting it.** Two

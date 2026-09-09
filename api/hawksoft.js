@@ -1160,6 +1160,31 @@ export default async function handler(req, res) {
       };
       const real = buildAttachmentNote(probeFields);
       const multi = buildAttachmentNote(probeFields, true);
+      /* A REAL PDF, gzipped exactly as fileReceiptPdf does it, built ONCE and posted
+         byte-identically three times so the LogNote header is the ONLY thing that
+         differs between variants.
+
+         The first version of this probe sent gzipped plain text with FileExt 'txt'.
+         HawkSoft returned 400 "Invalid file signature" on ALL THREE variants —
+         including A, the control that matches what the bridge writes every day.
+         A FAILING CONTROL MEANS THE PROBE IS WRONG, NOT THE THING BEING PROBED: the
+         body was rejected before the LogNote was ever read, so that run measured
+         nothing about notes at all. HawkSoft validates the body against the declared
+         extension, so a probe of the header must post the same shape a real charge
+         posts and vary only the header. */
+      const pdfBuf = await buildReceiptPdf({
+        total: probeFields.total, stamp: probeFields.stamp,
+        clientName: 'ZZTEST DELETE ME - API TEST', clientId,
+        purpose: probeFields.purpose, policyNumber: probeFields.policyNumber,
+        policyCarrier: null, branchName: 'Speedy Insurance Agency',
+        headline: 'PROBE — NO MONEY MOVED',
+        detailRows: [['Method', 'Log-note formatting probe'], ['Entry', 'API — not a payment']],
+        recordTitle: 'LOG-NOTE FORMATTING PROBE',
+        recordRows: [['Reference', 'PROBEONLY0001'], ['Written by', 'probe_lognote']],
+        footerLines: ['This document exists only to carry a log note.',
+          'No money moved. Safe to ignore.'],
+      });
+      const gzPdf = gzipSync(pdfBuf);
       const variants = [
         ['A-shipping-single-line', real],
         ['B-multi-line-LF', multi],
@@ -1174,17 +1199,28 @@ export default async function handler(req, res) {
             RefId: crypto.randomUUID(), TS: now.toISOString(),
             Desc: b64h(`LOGNOTE PROBE ${label}`.slice(0, 41)),
             LogNote: b64h(note),
-            FileName: b64h(`lognote_probe_${label}`), FileExt: 'txt', Channel: '32',
+            FileName: b64h(`lognote_probe_${label}`), FileExt: 'pdf', Channel: '32',
           },
-          body: gzipSync(Buffer.from(`Log-note formatting probe, variant ${label}. No money moved. Safe to ignore.`, 'utf8')),
+          body: gzPdf,
         });
         results.push({ label, status: r.status, ok: r.status === 200 || r.status === 202,
           lines: note.split(/\r?\n/).length, noteBytes: Buffer.byteLength(note, 'utf8'),
           headerBytes: b64h(note).length, ...(r.status >= 400 ? { error: r.body } : {}) });
       }
+      /* A is the CONTROL: the note format the bridge writes every day. If it fails,
+         the probe is broken and NOTHING in this response says anything about log
+         notes. Checked here rather than left to the reader, because the first run was
+         read as a result when it was a bug. */
+      const control = results.find(x => x.label === 'A-shipping-single-line');
+      const controlPassed = !!(control && control.ok);
       return res.status(200).json({ ok: results.every(x => x.ok), clientId, results,
+        body: { fileExt: 'pdf', pdfBytes: pdfBuf.length, gzipBytes: gzPdf.length,
+                note: 'identical bytes on all three — only the LogNote header differs' },
         sentNote: { shipping: real, multiline: multi },
-        next: 'Open ZZTEST #26081 in HawkSoft CMS and read the three PROBE rows. (1) Does A — the format now shipping — read cleanly at full length? (2) Does B keep its line breaks? (3) Does C differ from B, or is either truncated at the first newline? Only swap the shipping note to multi-line if B or C reads better than A.' });
+        controlPassed,
+        next: controlPassed
+          ? 'Open ZZTEST #26081 in HawkSoft CMS and read the three PROBE rows. (1) Does A — the format now shipping — read cleanly at full length? (2) Does B keep its line breaks? (3) Does C differ from B, or is either truncated at the first newline? Only swap the shipping note to multi-line if B or C reads better than A.'
+          : 'STOP — variant A is the CONTROL and it FAILED, so the probe is wrong, not the note. Nothing in this response is evidence about log notes. Fix the probe and run it again before concluding anything.' });
     }
 
     /* ---------- Diagnostics: what does HawkSoft DO with a PARTIAL application? ----------

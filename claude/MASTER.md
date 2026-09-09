@@ -1139,34 +1139,52 @@ shows every method at once, so it states the exception instead.
 The **"Invoice needed" follow-up task is dropped** — it asked someone to create an
 invoice in Trust Accounting, which is what we are retiring.
 
-### ⛔ NOT MERGED — this is NOT live. Branch `probe/lognote`.
-Nothing in this section is running in production. Do not read it as deployed behaviour.
-**⏰ ON MERGE: change this heading and delete the four blockers below — one line.**
+### ✅ LIVE since Sep 8 — `main` = `5cdbc4b`
+**It was promoted to production from `probe/lognote` by mistake, before its blockers
+were done.** For about a day production served the branch while `main` sat at
+`c39f4c3`, so the next `main` deploy would have silently reverted the whole thing — the
+Aug 29 revert bug in a new costume, and the reason that one is a standing rule.
+Fast-forwarded on Sep 9: `main`, the branch and production are now byte-identical.
 
-Two probes gate it, both ZZTEST-hard-capped and admin-key only:
-- **`probe_lognote`** — writes the shipping single-line note plus LF and CRLF
-  multi-line variants to ZZTEST. Settles both the newline question and the length one.
-- **`probe_partial_invoice`** — reads a balance, applies a genuine partial, reads it
-  back, and names which of the four behaviours happened. **Writes a real accounting
-  receipt to ZZTEST that cannot be deleted.**
+**What the accident settled, and it is real evidence.** 9 live card charges wrote the
+302-byte single-line attachment note and **HawkSoft returned 200 on all 9**. The length
+question that gated the merge is answered: the note is accepted. It does NOT prove the
+note RENDERS untruncated — read one in CMS to close that off.
 
-**In this order:**
+> **⛔ SHIPPED WITHOUT THESE. They were the merge blockers; being live does not
+> complete them.** Deleting them on merge, as the old heading said, would have thrown
+> away three unfinished jobs.
 
-1. **🔑 ROTATE THE ADMIN KEY — before the probes, not after.** It has been open since
-   Sep 3, when it appeared in a chat screenshot, and it reaches every HawkSoft write
-   endpoint. Running a probe puts it in a curl against a **public preview URL**:
-   `speedy-website` has neither SSO nor password protection (verified Sep 8). Rotating
-   afterwards does not help — the exposure is at the moment it is used.
-2. **Env vars to Preview.** They are scoped to Production, so a preview returns
-   `Missing HAWKSOFT_CLIENT_ID or HAWKSOFT_SECRET`. Branch-scope them to
-   `probe/lognote` and redeploy — that keeps them off every other preview.
-3. **Run both probes, read ZZTEST #26081 in CMS.**
-4. **📣 TELL THE AGENTS — before the merge, not with it.** **93 invoices used to close
-   on their own.** From now on nothing closes unless someone picks it. If nobody says
-   so, invoices quietly stop closing and we find out in a fortnight — and the person
-   who notices will be whoever reconciles, not the agent who caused it. One message:
-   the picker now defaults to *"No invoice — just take the payment"*, and an invoice
-   only closes if you pick it and the amount matches it exactly.
+1. **📣 TELL THE AGENTS — the most urgent item in this file.** **93 invoices used to
+   close on their own; nothing closes now unless someone picks it.** Measured Sep 9:
+   **14 charges since the promotion, zero invoices applied** — every one reads
+   *no invoice picked*. Agents were never told the picker exists, so nobody is picking.
+   Nothing breaks loudly; invoices simply stay open and whoever reconciles finds out in
+   a fortnight. One message: the picker now defaults to *"No invoice — just take the
+   payment"*, and an invoice only closes if you pick it AND the amount matches it
+   exactly.
+2. **🔑 ROTATE THE ADMIN KEY.** Open since Sep 3, when it appeared in a chat
+   screenshot, and it reaches every HawkSoft write endpoint. It no longer has to
+   survive a curl against a public preview URL, but it is still the key to every write
+   we make.
+3. **Neither probe has ever run.** Both are ZZTEST-hard-capped and admin-key only:
+   - **`probe_lognote`** — the length question is now answered by production, but the
+     **multi-line question is still open**. Only run this if we want the note to read
+     as seven lines instead of one.
+   - **`probe_partial_invoice`** — **still entirely unanswered.** We do not know what
+     HawkSoft does with a partial application, which is why `verifyInvoicePick`
+     abstains on any amount mismatch. Until this runs, that rule must not be relaxed.
+   - Preview deployments still lack the HawkSoft env vars (`Missing
+     HAWKSOFT_CLIENT_ID`), so running them needs the vars branch-scoped to a preview,
+     or a deliberate run against production.
+
+**⚠️ NEW, found by reading the live data:** the abstain message no longer distinguishes
+*"this client has no open invoices"* from *"the agent did not pick one"* — both write
+`no invoice picked`. The old code separated them (`no invoices on file` vs `no matching
+open invoice`). So the ledger cannot currently answer **"how many invoices should have
+closed and did not?"**, which is exactly the question the agent rollout needs. Split the
+two messages in `verifyInvoicePick`; it is a two-line change and it is not urgent
+enough to justify a second unplanned deploy.
 
 ### Lessons
 - **Check what a rule actually did before deleting it — and before trusting it.** Two
@@ -1179,6 +1197,11 @@ Two probes gate it, both ZZTEST-hard-capped and admin-key only:
 - **Measure the property you are actually risking.** Folding the note to one line
   removed a newline risk and created a length risk; comparing against the receipt
   logNote flattered it, because that one travels in a JSON body, not an HTTP header.
+- **A branch that can be deployed can be promoted (Sep 8).** `probe/lognote` existed to
+  be built as a preview and was promoted to production by mistake, blockers and all. A
+  commit message saying NOT FOR MAIN stops nobody: only `main` and the promote button
+  decide what agents run. When production and `main` disagree, fix that FIRST — the
+  next ordinary deploy silently reverts whichever one is behind.
 - **A behaviour change that removes automatic work needs telling, not just shipping.**
   Nothing breaks loudly when invoices stop closing by themselves.
 

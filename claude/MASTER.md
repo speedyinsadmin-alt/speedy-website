@@ -1155,8 +1155,36 @@ note RENDERS untruncated — read one in CMS to close that off.
 > complete them.** Deleting them on merge, as the old heading said, would have thrown
 > away three unfinished jobs.
 
-1. **📣 TELL THE AGENTS.** **93 invoices used to close on their own; nothing closes now
-   unless someone picks it.** Agents were never told the picker exists.
+1. ~~**📣 TELL THE AGENTS**~~ **✅ MESSAGE SENT TO THE FLOOR BY SAIF, SEP 10.** Two
+   points, deliberately not three: the **Total box** on the charge sheet when a client
+   pays in parts, and **"Pay this balance"** when they come back with the rest — plus
+   the escape hatch (*"pays down a balance"* on the client card) and one line about the
+   red fee. **The invoice picker was cut on purpose**: lowest stakes of the three, the
+   wordiest to explain, and worth sending on its own once these two have landed.
+
+   **📊 BASELINE FROZEN AT THE MOMENT IT WENT OUT.** Without this, "did the message
+   work?" is unanswerable and someone will guess:
+
+   | metric | at send time |
+   |---|---|
+   | charges since the split went live (Sep 9 21:16) | 17 |
+   | no open invoice on the client — *not* a miss | 15 |
+   | open invoices, none picked — possible miss | **2** |
+   | invoices applied | **0** |
+   | `total_owed` entered at charge time, real clients, **all time** | **2** |
+   | `balance_of` rows, real clients, **all time** | **2** |
+   | balance links made **by an agent** (`payment.balance_linked` events) | **0** |
+   | negative fee, complete | 1 (14968) |
+
+   **AGENTS HAVE USED NONE OF THESE CONTROLS, NOT ONCE.** All four non-zero rows above
+   are corrections *I* made by hand — the two `total_owed` values and the two
+   `balance_of` links are 25420 and 24615. So the "before" is a clean zero, and
+   **anything above zero next week is the message working.** Re-run the same query.
+
+   **93 invoices used to close on their own; nothing closes now unless someone picks
+   it.** Agents were never told the picker exists — which is why this sat here as the
+   most urgent item for two days while two agents did the wrong thing with controls
+   that were on their screens.
 
    **⚠️ RE-MEASURED SEP 10, AND THE OLD FIGURE HERE WAS ALARMIST.** This said *"14
    charges, zero invoices applied"*, which reads as fourteen failures. It was not. That

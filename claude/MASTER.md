@@ -1547,6 +1547,66 @@ Each needs answers before code, not after:
 **Agreed sequencing (Saif, Sep 10):** refund + partial refund as ONE feature, plan and
 mockup first. Voucher parked.
 
+### 🧾 REFUNDS — THE FIVE DECISIONS, ANSWERED BY SAIF SEP 10. Read before designing.
+No code written. These are the answers that were blocking, and each has a consequence
+that is not obvious from the answer alone.
+
+| | decision |
+|---|---|
+| **Commission** | A refund reduces commission **in the month of the REFUND**. A closed month never moves. |
+| **Who** | Agent self-serve inside a window, then it becomes a request for **Tony** — `move_client`'s shape. |
+| **Scope** | **Full AND partial.** All scenarios happen here: duplicates, cancellations, wrong amounts. |
+| **Cash** | Recorded like any refund, **no API call** — the agent states they handed the cash back. |
+| **Carrier money** | **Asked per refund**: does the carrier return it? yes / no / **pending**. |
+
+**On the commission answer — Saif first said reopen the original month, and asked me to
+check.** It is not implementable. Agents are paid **monthly, after Tony approves the
+month**, so reopening September means clawing back money already paid. And the deciding
+fact: **the system has no record of a month being approved or paid** — grep for
+`month_approved`, `payout`, `commission_paid`, `period_locked` returns nothing. So it
+cannot tell whether September is closed, and therefore cannot safely reduce it. Forward
+is the only version that can be built correctly. This is `audit_completed_at`'s rule
+(Sep 1) extended, not overridden.
+
+**On WHO — the guard must ask a permission function, never a hardcoded email.** Roles
+(`agent` / `admin` / `owner`) are already agreed with `public.agents` seeded and nothing
+reading it (item 70), and Saif confirmed a page to grant per-agent permissions is
+coming. Hardcoding `info@` here would be a fifth place to change later.
+
+**On CARRIER MONEY — `pending` is what makes this bigger than it looks.** The system
+cannot infer whether a carrier will refund us, so a refund can sit unfinished exactly
+the way a `carrier_pending` audit does, and unfinished things get forgotten. It needs a
+queue of its own. Trust treatment differs per answer:
+
+| carrier recovery | Trust |
+|---|---|
+| yes | reverse the carrier cost AND the fee |
+| **no** | the carrier cost is a **REAL LOSS** — a line Trust does not have today |
+| pending | reduce collected, hold the attribution open, chase it |
+
+**Facts established while scoping, worth not re-deriving:**
+- Card charges go to **`https://scl.clover.com/v1/charges`** with the private ecommerce
+  key, and `cbody.id` is stored as `txn_id` on every row (`hawksoft.js:920`) — that is
+  what a refund references, and we have it on all 155 charges.
+- **The four paths are not the same.** `charge_live`/`paylink_charge` use `/v1/charges`;
+  `terminal_charge` uses `/v1/payments` (`:1532`) and likely a different refund call;
+  `charge_cash` has no Clover call at all.
+- **The ledger already anticipates refunds:** `audit_status: 'refunded'` is in
+  `NON_PAYMENT` and `/declin|fail|void|refund/i` is tested against `kind` in four
+  places, so a refunded row is already excluded from commission, the audit queue, the
+  help list and `audit_list`.
+- **⚠️ But the Trust filter works AGAINST us.** It is
+  `kind IN (charge_live, charge_cash, paylink_charge, terminal_charge)`, so a new
+  `charge_refund` kind would be excluded **entirely** and a refund would never reduce
+  `collected`. Must be designed, not inherited.
+- **Nothing may be built on an assumed Clover capability.** The refunds endpoint and
+  whether partial refunds are supported are **unverified** — one hard-capped ZZTEST
+  probe first, the `probe_lognote` pattern. This is the `pickInvoices` lesson: three
+  rules shipped into the money path, two of which had never fired.
+
+**Sequence:** probe → full card refund → cash refund → partial → the carrier-recovery
+queue. Each with a mockup before code.
+
 ### ✅ SEP 10 · A NEGATIVE FEE IS NO LONGER GREEN (`533a5a8`)
 **Saif's rule:** red below zero, a warning under $10, a confirm on negative. He was
 right, and it was worse than he thought — **the fee had no colour logic at all.**
@@ -2231,6 +2291,7 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 83. **Should `link_balance` always ask Tony?** It is allowed any time while the row is unaudited, because a balance link is verifiable from the data (same client, open balance, amount fits) unlike a wrong-client move. But it DOES move commission. `move_client`'s 15-minute-then-escalate pattern was deliberately not copied — Tony's call whether to add it
 84. **`portal_client` filters `is_test=is.false`**, so ZZTEST (26081) rows never appear on the client card. Means the balance-link action cannot be exercised end-to-end on the test client through the portal — the only true test is a real client, which costs permanent HawkSoft notes. Consider an admin-only "show test rows" toggle before the next money feature needs floor testing
 85. **The card offers a non-owner documents-only on an OPEN audit, but the server lets anyone finish one.** `mayTouchPayment` returns true for an open audit since `e1896c46` (Tony-approved); `portal.html`'s gate and its comment both predate that and claim they would be refused. The card is undercutting the help-finish feature. Changes who can set a carrier cost — **Saif + Tony's call**
+86. **⚠️ NOTHING RECORDS WHICH MONTHS TONY HAS APPROVED OR PAID.** Agents are paid monthly after he approves the month, but there is no `month_approved`, `payout`, `commission_paid` or `period_locked` anywhere — grep returns nothing. Consequences: nobody can ask the system "was this commission paid?"; the by-agent total mixes paid and unpaid months with nothing to separate them; and a refund cannot check whether the month it belongs to is closed, which is why refunds must land forward (see the refund decisions above). Bigger than refunds — surfaced while scoping them
 59. ~~**`portal_client` leaks money to every agent**~~ **CLOSED Sep 9 — there was no leak.** `portal_client` returns no commission figure; `fee_amount` and `service_cost` are SHARED by decision. Number kept so older references still resolve. Successor: **when roles land, re-check `audit_list`'s unfiltered `agent_commission?select=*` (`platform.js:1633`)** — only the `info@`-only admin gate keeps it private
 60. **Merge the redundant third HawkSoft log row** — each charge posts receipt + attachment + a text-only summary. Mocked up, parked by Saif
 61. **Malcolm's home branch still unknown** — deliberately no `STAFF` entry, so he gets the visible branch picker. Do NOT infer it from `call_log.office_id`; that was wrong for Melisa

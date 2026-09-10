@@ -1381,22 +1381,38 @@ export default async function handler(req, res) {
       /* Partial FIRST and deliberately: if a partial works, full certainly does, and
          a full refund first would leave nothing to test a partial against. */
       const part1 = Math.min(40, cents - 1);
-      await call(`POST /v1/refunds { charge, amount: ${part1} } — PARTIAL, question 2`,
+      const p1 = await call(`POST /v1/refunds { charge, amount: ${part1} } — PARTIAL, question 2`,
         'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: part1 });
-      /* A SECOND partial, because the Refund object describes `amount` as coming from
-         "the balance of unrefunded amount" — which implies repeats are allowed. If they
-         are, a client can be refunded twice and the feature has to handle it. */
-      await call(`POST /v1/refunds { charge, amount: ${cents - part1} } — SECOND partial, the remainder`,
-        'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: cents - part1 });
-      /* And one more, which MUST fail: nothing is left. If it succeeds we can refund
-         more than we took, and that is the single most dangerous thing here. */
-      await call('POST /v1/refunds { charge, amount: 1 } — OVER-REFUND, must be rejected',
-        'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: 1 });
+
+      /* THE BRANCH MATTERS, AND THE FIRST VERSION DID NOT HAVE IT. It fired all three
+         partial attempts unconditionally, so if partials are NOT supported every call
+         failed, the dollar stayed with Clover, and we would still not know whether a
+         FULL refund works — which is the one path the feature definitely needs. Now:
+         partials succeed → test repeats and the over-refund guard; partials fail →
+         fall back to a full refund, which both answers that question and returns the
+         money. Either way the dollar comes back if any refund path works at all. */
+      let fullTried = null;
+      if (p1.status === 200) {
+        /* A SECOND partial, because the Refund object describes `amount` as coming from
+           "the balance of unrefunded amount" — which implies repeats are allowed. If
+           they are, a client can be refunded twice and the feature must handle it. */
+        await call(`POST /v1/refunds { charge, amount: ${cents - part1} } — SECOND partial, the remainder`,
+          'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: cents - part1 });
+        /* And one more, which MUST fail: nothing is left. If it succeeds we can refund
+           more than we took, and that is the single most dangerous thing here. */
+        await call('POST /v1/refunds { charge, amount: 1 } — OVER-REFUND, must be rejected',
+          'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: 1 });
+      } else {
+        fullTried = await call('POST /v1/refunds { charge } — FULL refund, fallback because the partial was refused',
+          'https://scl.clover.com/v1/refunds', { charge: row.txn_id });
+      }
       await readCall('GET /v1/charges/{id} — the charge afterwards, for comparison',
         'https://scl.clover.com/v1/charges/' + encodeURIComponent(row.txn_id));
 
-      const partialWorked = attempts.some(a => /PARTIAL/.test(a.label) && a.status === 200);
+      const partialWorked = p1.status === 200;
+      const secondPartial = attempts.find(a => /SECOND partial/.test(a.label));
       const overRefunded = attempts.some(a => /OVER-REFUND/.test(a.label) && a.status === 200);
+      const fullWorked = fullTried ? fullTried.status === 200 : partialWorked;
       return res.status(200).json({ ok: true, mode,
         payment: { id: row.id, client: row.client_id, kind: row.kind, amount: row.amount,
           txn_id: row.txn_id, charged_minutes_ago: ageMin },
@@ -1405,11 +1421,18 @@ export default async function handler(req, res) {
           : `REFUND — the charge is ${ageMin} minutes old, past Clover's 25-minute void window.`,
         verdict: {
           partial_refund_supported: partialWorked,
-          over_refund_rejected: !overRefunded,
+          repeat_partials_supported: secondPartial ? secondPartial.status === 200 : null,
+          full_refund_works: fullWorked,
+          over_refund_rejected: partialWorked ? !overRefunded : null,
           danger: overRefunded ? 'CLOVER ALLOWED A REFUND BEYOND THE CHARGE AMOUNT. The feature must cap it itself.' : null,
+          /* Said out loud, because a probe that leaves the money with Clover and reports
+             "ok: true" is the kind of result that gets read as a success. */
+          money_returned: fullWorked
+            ? 'yes — $' + Number(row.amount).toFixed(2) + ' went back to the test card'
+            : 'NO — every refund attempt failed, so the $' + Number(row.amount).toFixed(2)
+              + ' is still with Clover. Refund it by hand in the Clover dashboard.',
         },
-        note: 'No ledger row written, no HawkSoft write. The money did move: $'
-          + Number(row.amount).toFixed(2) + ' back to the card used for the test charge.',
+        note: 'No ledger row written, no HawkSoft write.',
         attempts });
     }
 

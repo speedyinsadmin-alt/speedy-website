@@ -1607,6 +1607,75 @@ queue of its own. Trust treatment differs per answer:
 **Sequence:** probe → full card refund → cash refund → partial → the carrier-recovery
 queue. Each with a mockup before code.
 
+### ✅ SEP 10 · STAGE 0 — THE REFUND PROBE RAN. `c55238c`, `69a8523`
+`probe_refund` in `hawksoft.js`, admin key only, deliberately outside the staff action
+list. Two free modes and one that spends a dollar. **Cost so far: $0.00.**
+
+**SETTLED — the key is NOT the problem.** No `401` or `403` on any attempt. This was
+the real risk: Clover's docs say refunds need permissions a charge does not (Payments
+Read + Write + Ecommerce) and several reports describe charges succeeding while refunds
+401 on the same key. The fix for that would have been an app re-authorisation, not code.
+It is not our situation.
+
+**SETTLED — `POST https://scl.clover.com/v1/refunds` is the creation route.** Proven by
+an empty body drawing a real validation error, `400 invalid_request`:
+
+> `Either charge id or reversal id has to be present`
+
+**SETTLED — a 404 from that route means "no such charge", not "no such route".** Proven
+by a control: `POST /v1/refundsZZZZ` returns 404 with a **plain-text** body, while
+`/v1/refunds` returns 404 as **JSON** (`error.code: processing_error`). Different shapes,
+so the two are distinguishable. Without the control the 404 carried no information —
+and the first version of the verdict called that run "REACHABLE — the key is authorised
+to refund", which was true of reading and ahead of the evidence for writing.
+
+**NEW, from the validation message: the endpoint takes a charge id OR A REVERSAL ID.**
+That is Clover's void concept in the same place as refunds, and it lines up with the
+25-minute rule below. Our path is `charge`; `reversal` is not understood yet.
+
+**STILL OPEN — partial vs full.** Nothing free can answer it. Both POSTs in mode `auth`
+failed identically on a non-existent charge, so the `amount` field was never validated.
+Needs mode `live`.
+
+**⏱ THE 25-MINUTE WINDOW IS A DESIGN CONSTRAINT, NOT A PROBE DETAIL.** Clover **voids**
+inside 25 minutes of a charge and **refunds** after. Different operations, different
+settlement. So (a) a probe run straight after the test charge tests the wrong one — the
+probe reports the charge's age and says which it exercised — and (b) **the feature has
+the same problem**: an agent refunding a mistake two minutes after taking it gets a void,
+which may never appear in settlement, so `collected` and the client's statement can
+disagree with a refund of the same amount. Not yet designed for.
+
+**Mode `live` needs a $1 card charge on ZZTEST and there is none.** All 13 test rows on
+#26081 are `charge_cash` with no `txn_id`, and there is no Clover sandbox here —
+production keys, merchant `1K7NR5V6K1ER1`. So it costs a real dollar out and back, and
+someone has to type a card. Saif's call, not started.
+
+**Mode `live` branches, and the first version did not.** It fired all three partial
+attempts unconditionally: if partials are unsupported, every call fails, the dollar stays
+with Clover, and we still would not know whether a FULL refund works — the one path the
+feature definitely needs. Now: partial succeeds → test repeat partials and the
+over-refund guard; partial refused → fall back to a full refund, which answers the
+question and returns the money. `verdict.money_returned` says in words whether the dollar
+came back, because a probe that keeps it and reports `ok: true` reads as a success.
+
+**Mode `read` (free) exists for the next unknown:** how Clover *tracks* a partly-refunded
+charge — `amount_refunded`, a `refunded` flag, a refunds list. That decides the partial
+design. It uses the read-only helper, which sets no method and no body, so it cannot move
+money whatever id it is given; that is why it carries no $1 or ZZTEST cap, and the harness
+pins it down by asserting **zero POSTs** in read mode.
+
+**122 harness checks, on the GUARDS rather than the happy path** — the safety of this is
+entirely in the caps. Thirteen deliberate regressions confirm each check fails: another
+client's payment accepted, the $1 cap gone, `is_test` gone, cash rows allowed, the default
+flipping to `live`, agents allowed to run it, a 401 read as a green light, the loose
+400/404 verdict, the control removed, read mode allowed to POST, the full-refund fallback
+removed, the money claim hardcoded to "yes", and a false over-refund-guard claim.
+
+**Two harness faults worth not repeating:** a stubbed `fetch` left unrestored poisoned
+every case after it (twelve failures, one cause, none about the code); and "an agent
+cannot run this" was first tested with an *invalid* token, which 401s before the
+permission check is reached and so proved nothing about an authenticated agent.
+
 ### ✅ SEP 10 · ITEM 70 STEPS 1–3 — THE ROSTER NOW GATES SIGN-IN (`d3bef0d`, `81793f8`)
 **Refunds and month approval were both blocked on this**, and so was Tony: `tony@` was
 in `AGENT_ALLOWLIST` only, so **he could not open `platform.html` at all** — including

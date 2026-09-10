@@ -1191,8 +1191,9 @@ export default async function handler(req, res) {
       const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
       if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
       const mode = String((req.body || {}).mode || 'auth');
-      if (mode !== 'auth' && mode !== 'live') {
-        return res.status(400).json({ ok: false, error: "mode must be 'auth' (free, no money) or 'live'" });
+      if (mode !== 'auth' && mode !== 'read' && mode !== 'live') {
+        return res.status(400).json({ ok: false,
+          error: "mode must be 'auth' (free), 'read' (free, GET one charge) or 'live' (spends $1 on ZZTEST)" });
       }
 
       /* Every attempt is recorded with its exact request and its exact response, so the
@@ -1257,20 +1258,90 @@ export default async function handler(req, res) {
         await readCall('GET /v1/refunds/{id} — can we READ refunds at all',
           'https://scl.clover.com/v1/refunds/' + FAKE);
 
-        /* 401 and 403 are the answer we are looking for, and they mean the work is a
-           Clover app permission change, not code. Anything that says "no such charge"
-           means the endpoint is reachable and the key is authorised. */
+        /* ---- ADDED AFTER THE FIRST RUN, because its result was weaker than the
+           verdict claimed. Both POSTs came back a bare `404 Not Found` with
+           code processing_error, which reads the same whether Clover meant "no such
+           charge" (fine) or "no such route for POST" (we would be building the feature
+           on the wrong endpoint). The GET's 400 "Please provide a valid refund id"
+           proved the key is authorised and the resource exists, but that is the READ
+           side; nothing yet proves the WRITE side, and because both POSTs failed
+           identically the `amount` field was never even validated.
+
+           These two discriminate it, and both are free:
+           - an EMPTY body: if POST /v1/refunds is a real route, a missing `charge` must
+             come back as a VALIDATION error, not a 404. A validation error is proof
+             the route exists and our key may write to it.
+           - a route that certainly does not exist, as a control. If the control's
+             response is indistinguishable from /v1/refunds', then a 404 from this
+             endpoint carries no information at all and the first run proved less than
+             it appeared to. */
+        const empty = await call('POST /v1/refunds {} — no charge at all: does the ROUTE validate, or 404?',
+          'https://scl.clover.com/v1/refunds', {});
+        const control = await call('POST /v1/refundsZZZZ — a route that cannot exist, as a control',
+          'https://scl.clover.com/v1/refundsZZZZ', { charge: FAKE });
+
         const codes = attempts.map(a => a.status);
+        /* 401/403 anywhere means the work is a Clover app permission change, not code. */
         const blocked = codes.some(c => c === 401 || c === 403);
-        const reachable = codes.some(c => c === 400 || c === 404 || c === 422);
+        const msgOf = a => String((a.body && (a.body.error && a.body.error.message)) || (a.body && a.body.message) || '');
+        /* A validation complaint - anything that is NOT a bare "not found" - is what
+           proves the write route exists. */
+        const validated = (empty.status === 400 || empty.status === 422) && !/not found/i.test(msgOf(empty));
+        /* And the 404 only means "no such charge" if a route that cannot exist answers
+           DIFFERENTLY. Same status and same message = the 404 told us nothing. */
+        const controlDiffers = control.status !== attempts[0].status || msgOf(control) !== msgOf(attempts[0]);
+        const readable = attempts[2].status === 400 && /refund id/i.test(msgOf(attempts[2]));
+
         return res.status(200).json({ ok: true, mode, spent: '$0.00',
           verdict: blocked
             ? 'BLOCKED — the ecommerce key cannot refund. This is an app permission (Payments Read + Write + Ecommerce) and a production re-authorisation, not a code change. Nothing else can be built until it is fixed.'
-            : reachable
-              ? 'REACHABLE — the key is authorised to refund; Clover rejected the charge id, which is what it should do. Run mode "live" against a real $1 ZZTEST card charge to answer partial-vs-full.'
-              : 'UNCLEAR — read the attempts below; do not proceed on a guess.',
+            : validated
+              ? 'WRITE ROUTE CONFIRMED — POST /v1/refunds exists, our key may write to it, and it validated our body. The 404s were "no such charge". Safe to spend $1 on mode "live" to answer partial-vs-full.'
+              : controlDiffers
+                ? 'PROBABLE — the endpoint answers differently from a route that cannot exist, so the 404 does look like "no such charge", but nothing validated our body. Read the attempts before spending anything.'
+                : 'UNPROVEN — this endpoint answers exactly like a route that does not exist, so its 404 carries no information. Do NOT assume POST /v1/refunds is the creation route; find the right one first.',
+          established: {
+            not_blocked_by_permissions: !blocked,
+            can_read_refunds: readable,
+            write_route_validated_our_body: validated,
+            distinguishable_from_a_nonexistent_route: controlDiffers,
+            partial_vs_full_answered: false,   // needs a real charge; nothing here can tell us
+          },
           charge_id_used: FAKE,
           note: 'No money moved. No ledger row. No HawkSoft write.',
+          attempts });
+      }
+
+      /* ---------- mode 'read': the charge object as Clover holds it. GET ONLY. ----------
+         The feature's shape depends on how Clover TRACKS a partly-refunded charge — is
+         there an amount_refunded, a refunded flag, a refunds list? Designing partial
+         refunds without knowing that is guessing. This reads one charge and nothing
+         else: it uses the read-only helper, which sets no method and no body, so it
+         cannot move money whatever id is passed. No $1 charge needed. */
+      if (mode === 'read') {
+        const pid = String((req.body || {}).payment_id || '').trim();
+        if (!pid) return res.status(400).json({ ok: false, error: 'payment_id required for mode "read"' });
+        const u0 = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const k0 = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+          || process.env.SUPABASE_KEY;
+        if (!u0 || !k0) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
+        const lr0 = await fetch(`${u0.replace(/\/$/, '')}/rest/v1/bridge_ledger`
+          + `?id=eq.${encodeURIComponent(pid)}&select=id,ts,client_id,kind,amount,txn_id,is_test`,
+          { headers: { apikey: k0, Authorization: `Bearer ${k0}` } });
+        const row0 = ((lr0.ok ? await lr0.json().catch(() => []) : []) || [])[0];
+        if (!row0) return res.status(404).json({ ok: false, error: 'No such payment.' });
+        if (!row0.txn_id) return res.status(400).json({ ok: false, error: 'That payment has no Clover txn_id (cash rows have none).' });
+        await readCall('GET /v1/charges/{id} — the charge object, read-only',
+          'https://scl.clover.com/v1/charges/' + encodeURIComponent(row0.txn_id));
+        const got = attempts[0].body;
+        return res.status(200).json({ ok: true, mode, spent: '$0.00',
+          payment: { id: row0.id, client: row0.client_id, kind: row0.kind, amount: row0.amount },
+          /* The field names are the answer, so they are listed explicitly rather than
+             left for me to spot by eye in a wall of JSON. */
+          charge_object_fields: (got && typeof got === 'object') ? Object.keys(got).sort() : null,
+          refund_state_fields: (got && typeof got === 'object')
+            ? Object.keys(got).filter(k => /refund/i.test(k)).sort() : null,
+          note: 'Read only. No money moved, nothing written.',
           attempts });
       }
 

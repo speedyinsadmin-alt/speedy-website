@@ -1693,6 +1693,74 @@ stale** — they would not be refused. The card is undercutting the help-finish-
 feature it was built to support. Fixing it changes who can set a carrier cost, so it is
 Saif's and Tony's call, not a silent correction.
 
+### ✅ SEP 10 · ITEMS 80 + 81 CLOSED, AND A CONSOLE THAT DID NOT FIT (`0c54984`, `d04778f`)
+
+**Item 80 was NOT one filter, and I said it was.** Measured before writing: the three
+Trust buckets **already** exceeded collected by **$141.00**, which turned out to be
+exactly `Σ(owed − amount)` across the two part-payments. Since A, the carrier cost and
+fee are the figures for the WHOLE obligation, so a part-payment recognises more than it
+collected. Excluding balance rows from *unaccounted* alone would have left an
+unexplained $20 gap and looked like an arithmetic bug.
+
+So a `balance_of` row now counts in the total and **nowhere else** — its attribution
+lives on the parent, which already carries the cost and the single fee — and the
+receivable is **named** rather than left silent. `balance_of` and `total_owed` had to be
+added to the select; **neither was being fetched**, which is why a balance payment
+landed in unaccounted at all ($121.00 across two rows, where it would have sat forever).
+
+> **THE INVARIANT CHANGED.** It is no longer
+> `collected = carriers + kept + unaccounted`. It is
+> **`collected + not_yet_collected = carriers + kept + unaccounted`**, and the tab now
+> says so on screen: *"comes to $61,116.12, which is more than the $61,096.12 collected.
+> The difference is the $20.00 above."* Any test asserting the old form is wrong.
+
+**Item 81:** by-agent `earned` summed the FULL commission while the per-payment rows
+already showed *"$1.78 released"* under the $2.00. It now applies `collected_ratio` and
+puts the unreleased remainder in `pending`.
+
+**The charge purpose is in the audit table** — Saif's ask, so the Audit tab says what
+each charge was *for*. It was always returned and already searchable; only the display
+was missing. Under the client, not a new column, because width was the problem.
+
+**`money()` printed `$-10.90`.** `carrier.html` was fixed that morning and this was left
+behind — **the same "fix one reader, leave the other" mistake as the missing total,
+twice in one day.** Now `-$10.90`, and a negative fee or commission renders **red**; it
+was plain text two columns from a green *complete* pill.
+
+**⛔ THE TRUST SUMMARY HAD NO CSS AT ALL.** `.strip`, `.cell`, `.n` and `.k` are used by
+`renderTrust` and **not one of the four had a rule in the file**, so the headline figures
+— collected, to carriers, Speedy kept, unaccounted — rendered as a plain vertical stack
+of unstyled text. **Third instance** of "CSS assumed to exist because it exists in a
+sibling file", after `.hide`/`.btn`/`esc()` and `carrier.html`'s `.btn`/`.muted`. It
+parses, it runs, it just looks wrong — which is the one class of bug no harness catches.
+
+A **used-vs-defined class audit** is worth re-running, but READ it before acting: of the
+seven other names it flags, `.chev` is a JS selector and `.sec`/`.sechead`/`.secbody`
+carry their styling inline. Only the Trust strip was genuinely broken.
+
+**The Console did not fit its own page.** The audit table needs ~**1042px**; `.wrap`
+(max-width 1040, 16px padding) inside `.card` (18px padding) gave it **972px**. The
+`.tscroll` wrapper meant nothing was lost, but **the Docs column — which carries the
+action buttons — started off-screen every time.** Widened the page to 1280 rather than
+hide money columns or truncate labels; this is an admin console on a desktop, not a
+reading column. Verified at 1111 (fits, −4px), 900 and 600 (table scrolls inside its own
+box) and at every width **the body never scrolls sideways**, which was the symptom.
+
+> ### ⛔ THE LESSON THAT MATTERS MOST TODAY: A PREVIEW THAT DOES NOT MIRROR THE REAL
+> ### WRAPPER MEASURES NOTHING
+> Saif said *"always check it looks correct"*, and I did check — against a fiction. I
+> rendered the audit table into a container I invented: `max-width:1100px` with 16px
+> padding, **1046px** of usable width. It measured *"fits, −4px"* and I reported the
+> layout fixed. The live page gives the table **972px** and it overflowed by ~70px.
+> **The preview returned exactly the answer I wanted because I had built it to the wrong
+> size.** He had to send a second screenshot of the same broken screen.
+>
+> **Render into the page's OWN `.wrap` and `.card`, extract the real `<style>`, then
+> measure `scrollWidth` against `clientWidth` and assert the body does not scroll
+> sideways.** Screenshot afterwards to see it; the numbers are what prove it.
+> `scratchpad/renderAudit.mjs` does this for the audit and Trust views and is worth
+> keeping — it is the only tool here that finds a layout bug at all.
+
 ### Harness lessons from today, all three worth keeping
 - **`googleClaims` caches claims KEYED ON THE ID TOKEN.** Reusing one literal token for
   every actor made every call after the first run as the *cached* identity, silently
@@ -2157,8 +2225,8 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 77. **`carrier.html`'s `setShare` box uses `.btn` and `.muted`, which have no rule in that file** — cosmetic only, found Sep 9 while writing B's prompt
 78. **Client 14968 still reads `fee_amount` −10.90** (Yasmin, Sep 8, paid 274.10 against a 285.00 carrier cost). Needs her account of what the client actually owed before anything is written. A alone does NOT fix it — `total_owed` is NULL, so there is nothing for the new derivation to read
 79. **The partial-save negative fee is NOT transient** — `complete:false` still writes it, 33 of 160 audits take over 2 days, and the Trust tab counts it as Speedy profit (`platform.js:2088`, no `audit_status` filter, and `service_cost` is written so it never reaches `unaccounted`). Fix is either B's question at partial-save time for the `service_cost > amount` case, or the Trust tab ignoring incomplete audits. **Saif's call**
-80. **Trust tab counts `balance_of` rows as UNACCOUNTED** — its filter tests `kind` and date only, and a row with no `service_cost` goes to unaccounted (`platform.js:2078`), but a balance row never gets a carrier cost because it carries no audit. **$121.00 across 2 rows** measured Sep 10 (25420's $34, 24615's $87), stuck there permanently. One filter fixes it: treat `balance_of` rows as collected-and-attributed, not unaccounted
-81. **By-agent `earned` ignores `collected_ratio`** — `g.earned += x.commission` (`platform.html:903`) sums the FULL commission, so an agent's total counts money not yet released. The per-payment rows are correct (`releasedNote`, `:185`, prints "$1.78 released" under the $2.00). Only the aggregate overstates
+80. ~~**Trust tab counts `balance_of` rows as UNACCOUNTED**~~ **CLOSED Sep 10** — and it was NOT one filter: the three buckets already over-recognised by $141.00, exactly `Σ(owed − amount)` on the part-payments. Balance rows now count in the total only, and the receivable is named as `not_yet_collected`. **The invariant is now `collected + not_yet_collected = carriers + kept + unaccounted`**
+81. ~~**By-agent `earned` ignores `collected_ratio`**~~ **CLOSED Sep 10** — applies the ratio and sends the unreleased remainder to `pending`
 82. ~~**No total / collected / carrier-cost column on the Console transactions row**~~ **CLOSED Sep 10** — `balanceCell` now prints `$164.50 of $184.50 · 89%` above `$20.00 still owed`. Raised by Saif asking "where is the total?" while checking the corrections
 83. **Should `link_balance` always ask Tony?** It is allowed any time while the row is unaudited, because a balance link is verifiable from the data (same client, open balance, amount fits) unlike a wrong-client move. But it DOES move commission. `move_client`'s 15-minute-then-escalate pattern was deliberately not copied — Tony's call whether to add it
 84. **`portal_client` filters `is_test=is.false`**, so ZZTEST (26081) rows never appear on the client card. Means the balance-link action cannot be exercised end-to-end on the test client through the portal — the only true test is a real client, which costs permanent HawkSoft notes. Consider an admin-only "show test rows" toggle before the next money feature needs floor testing
@@ -2227,6 +2295,7 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 ### Verification
 - **`node --check` is the floor, not the gate.** It only parses; a `const` used above its declaration is a runtime error — that shipped as v2.7.
 - **Extract the expression FROM THE FILE, never retype it into the test.**
+- **A PREVIEW THAT DOES NOT MIRROR THE REAL WRAPPER MEASURES NOTHING (Sep 10).** A layout check rendered into an invented container reported "fits" while the live page overflowed by 70px, because the invented box was 74px too wide. Render into the page's own `.wrap`/`.card` with its real `<style>`, measure `scrollWidth` vs `clientWidth`, and assert the body does not scroll sideways.
 - **Pin the clock when testing anything time-dependent.**
 - **Test the OLD code too.** A suite that only proves the new code passes has not proven the diagnosis.
 - **When a harness test fails, prove it is the code before believing it.**

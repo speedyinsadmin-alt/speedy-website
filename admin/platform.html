@@ -36,8 +36,27 @@
   th{color:var(--mute);text-align:left;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
   td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
   td .pill{white-space:nowrap}
-  td.stat{white-space:nowrap}
+  /* The status cell used to be nowrap, which forced the pill AND the "+ proof" button
+     onto one line and pushed the table's minimum width past its container. The pill
+     itself still never breaks (td .pill above); the cell may. */
+  td.stat{min-width:112px}
   td.cli{max-width:230px}
+  /* Wide tables scroll INSIDE their own box. `table{width:100%}` with several nowrap
+     columns has a min-content width larger than the container, so without this the
+     audit table spilled past the card and the Docs column was clipped. */
+  .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -2px;padding:0 2px}
+  .tscroll table{min-width:760px}
+  /* THE TRUST SUMMARY HAD NO CSS AT ALL. `.strip`, `.cell`, `.n` and `.k` are used by
+     renderTrust and none of the four had a rule in this file, so the headline figures -
+     collected, to carriers, Speedy kept, unaccounted - rendered as a plain vertical
+     stack of unstyled text. Found by RENDERING the page and looking at it, which is
+     the only way this class of bug shows up: it parses, it runs, it just looks wrong.
+     Third instance of "CSS assumed to exist because it exists in a sibling file",
+     after .hide/.btn/esc() and carrier.html's .btn/.muted. */
+  .strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 16px}
+  .cell{background:var(--navy2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .cell .n{font-size:19px;font-weight:800;font-family:var(--mono);letter-spacing:-.02em;line-height:1.15}
+  .cell .k{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
   tr:last-child td{border-bottom:0}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
   .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
@@ -237,7 +256,16 @@ function docsCell(docs, needsProof, rowKey, title){
   return '<span class="docbtn ' + cls + '" onclick="openDocs(\'' + rowKey + '\')">'
        + '<i class="ti"></i>' + label + '</span>';
 }
-const money = v => isFinite(v) ? '$' + Number(v).toFixed(2) : '—';
+/* -$10.90, not $-10.90. carrier.html was fixed this morning and this was left behind —
+   the same "fix one reader, leave the other" mistake as the missing total. The minus
+   belongs in front of the money, especially on the one figure that should stand out. */
+const money = v => !isFinite(v) ? '—'
+  : (Number(v) < 0 ? '-$' + Math.abs(Number(v)).toFixed(2) : '$' + Number(v).toFixed(2));
+/* A negative fee or commission is red here for the same reason it is red on the carrier
+   page: it means the agency lost money on the sale, and it was rendering in plain text
+   two columns from a green "complete" pill. */
+const signed = v => (isFinite(v) && Number(v) < 0)
+  ? '<span style="color:var(--red)">' + money(v) + '</span>' : money(v);
 
 let OPEN_CLIENT = null; // client_no currently open in drill-in
 async function render() {
@@ -864,7 +892,24 @@ async function renderTrust(el){
     + cell('SPEEDY KEPT', money(T.speedy_kept), '#2fbf71')
     + cell('UNACCOUNTED', money(T.unaccounted), T.unaccounted > 0 ? '#f5a623' : '#8f9ac4',
            (T.unaccounted_count||0) + ' unfinished audits')
+    /* Named, because it is what makes the three buckets exceed COLLECTED. A part-payment
+       recognises the carrier cost and fee for the WHOLE obligation, so the difference is
+       receivable, not an arithmetic error — and it was invisible, which made the strip
+       look as though it did not add up. */
+    + ((T.not_yet_collected||0) > 0
+        ? cell('NOT YET COLLECTED', money(T.not_yet_collected), '#f5a623', 'still owed on part-payments')
+        : '')
     + '</div>';
+
+  if((T.not_yet_collected||0) > 0){
+    h += '<div style="border-left:3px solid var(--amber);padding:9px 12px;margin:0 0 16px;font-size:12.5px;color:var(--mute)">'
+      + 'Carriers + kept + unaccounted comes to <b style="color:var(--ink)">'
+      + money((T.to_carriers||0) + (T.speedy_kept||0) + (T.unaccounted||0))
+      + '</b>, which is more than the <b style="color:var(--ink)">' + money(T.collected)
+      + '</b> collected. The difference is the <b style="color:var(--amber)">'
+      + money(T.not_yet_collected) + '</b> above: on a part-payment the full carrier cost '
+      + 'and fee are recognised at the charge, so the rest is receivable until the client pays it.</div>';
+  }
 
   if(T.unaccounted > 0){
     h += '<div style="border-left:3px solid var(--amber);padding:9px 12px;margin:0 0 16px;font-size:12.5px;color:var(--mute)">'
@@ -912,7 +957,18 @@ function renderAgentView(r){
     const g = byAgent[a];
     g.tx.push(x);
     g.fees += (x.fee||0);
-    if(x.commission!=null) g.earned += x.commission;
+    /* EARNED means RELEASED. Commission accrues in proportion to what has actually
+       been COLLECTED (Tony's partial-payment rule), and the per-payment rows already
+       show that correctly — releasedNote prints "$1.78 released" under the $2.00. This
+       total summed the FULL commission, so an agent's by-agent figure counted money
+       that has not been released yet. Cents today; it matters the moment someone reads
+       this column as a payout. The unreleased remainder goes to `pending`, where the
+       waiting-on-the-balance money already lives. */
+    if(x.commission!=null){
+      const ratio = x.collected_ratio != null ? Number(x.collected_ratio) : 1;
+      g.earned  += x.commission * ratio;
+      g.pending += x.commission * (1 - ratio);
+    }
     else if(x.fee!=null) g.pending += x.fee*x.pct/100;
     const d = PT_DAY(x.ts);
     if(d){ if(!g.first || d<g.first) g.first=d; if(!g.last || d>g.last) g.last=d; }
@@ -1177,7 +1233,7 @@ async function renderAudit(el){
     h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:#e03131">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
   }
 
-  h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
+  h += '<div class="tscroll"><table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
   if(!periodRows.length) h += '<tr><td colspan="10" class="muted">No transactions in this period.</td></tr>';
   for(const row of periodRows){
     const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
@@ -1197,18 +1253,24 @@ async function renderAudit(el){
       : '';
     h += '<tr>'
       + '<td class="muted" style="font-size:12px">'+esc(PT_STAMP(row.ts))+'</td>'
-      + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span></td>'
+      /* WHAT THE CHARGE WAS FOR. `purpose` has always been returned and is already
+         searchable — the placeholder promises it — but the table never showed it, so
+         every row read as an anonymous amount. Under the client rather than in a new
+         column: the table's minimum width is already the problem here. */
+      + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span>'
+        + (row.purpose ? '<div class="muted" style="font-size:11px;margin-top:1px">'+esc(row.purpose)+'</div>' : '')
+        + '</td>'
       + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
       + '<td class="amount">'+money(row.amount)+balanceCell(row)+'</td>'
       + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
-      + '<td class="amount">'+(row.fee!=null?money(row.fee):'—')+'</td>'
+      + '<td class="amount">'+(row.fee!=null?signed(row.fee):'—')+'</td>'
       + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
-      + '<td class="amount">'+(row.commission!=null?'<b style="color:#7fa8ff">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
+      + '<td class="amount">'+(row.commission!=null?'<b style="color:'+(row.commission<0?'var(--red)':'#7fa8ff')+'">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
       + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+'</td>'
       + '<td class="docs">'+docCell+'</td>'
       + '</tr>';
   }
-  h += '</table>';
+  h += '</table></div>';
 
   // pre-audit note
   if(periodRows.some(x=>x.pre_audit)) h += '<div class="muted" style="font-size:12px;margin-top:10px">— Transactions marked "—" were charged before the proof-of-payment process began; no audit documents are required for them.</div>';

@@ -2233,9 +2233,11 @@ if (view === 'portal_share_due') {
       : { from: ptMidnightUTC(nowT.y, nowT.m, 1), to: null,
           label: nowT.y + '-' + String(nowT.m).padStart(2, '0') };
 
+    /* balance_of and total_owed are needed for the partial-payment arithmetic below.
+       Neither was selected, which is why a balance payment landed in "unaccounted". */
     const rows = (await sbGet(s, 'bridge_ledger?is_test=is.false'
       + '&select=id,ts,client_id,amount,purpose,agent,commission_to,audit_status,'
-      + 'service_cost,fee_amount,carrier_name,kind,audit_completed_at'
+      + 'service_cost,fee_amount,carrier_name,kind,audit_completed_at,balance_of,total_owed'
       + '&order=ts.desc&limit=2000')).rows || [];
 
     /* Only real, collected money. A declined attempt never moved a cent, and a pay
@@ -2246,12 +2248,22 @@ if (view === 'portal_share_due') {
       && String(r.ts) >= period.from && (!period.to || String(r.ts) < period.to));
 
     const money = v => Math.round(Number(v || 0) * 100) / 100;
-    let inTotal = 0, toCarriers = 0, kept = 0, unaccounted = 0;
+    let inTotal = 0, toCarriers = 0, kept = 0, unaccounted = 0, notYetCollected = 0;
     const byCarrier = {}, openItems = [];
 
     for (const r of collected) {
       const amt = Number(r.amount) || 0;
       inTotal += amt;
+
+      /* ---- A BALANCE PAYMENT IS NOT UNATTRIBUTED MONEY ----
+         It pays down an earlier charge, and that charge already carries the carrier
+         cost and the single fee for the whole sale. This row has no service_cost of
+         its own and never will, because it carries no audit — so the old
+         `service_cost == null` test dropped it into "unaccounted", where it would sit
+         FOREVER: $121.00 across two rows measured Sep 10. It is collected money whose
+         attribution lives on the parent, so it counts in the total and nowhere else. */
+      if (r.balance_of) continue;
+
       if (r.service_cost == null) {
         /* Collected, but nobody has said how much of it belongs to a carrier. Until
            they do, the whole amount is unattributed - it is NOT profit. */
@@ -2264,11 +2276,28 @@ if (view === 'portal_share_due') {
       const cost = Number(r.service_cost) || 0;
       const fee = r.fee_amount != null ? Number(r.fee_amount) : (amt - cost);
       toCarriers += cost; kept += fee;
+      /* ---- WHY THE THREE BUCKETS EXCEED WHAT CAME IN ----
+         Since A, the carrier cost and the fee are the figures for the WHOLE
+         obligation, so a part-payment recognises more than it collected. Measured
+         Sep 10: the three buckets exceeded collected by exactly $141.00, which was
+         exactly the sum of (owed - amount) across the two part-payments. That is not
+         an error, it is receivable — but it was invisible, so the tab appeared not to
+         add up. Named and returned instead of left as a silent discrepancy.
+
+         The invariant is therefore NOT collected = carriers + kept + unaccounted. It
+         is:  collected + not_yet_collected = carriers + kept + unaccounted. */
+      const owed = (r.total_owed != null && Number(r.total_owed) > amt) ? Number(r.total_owed) : amt;
+      notYetCollected += (owed - amt);
+
       const name = r.carrier_name || '(carrier not named)';
       if (!byCarrier[name]) byCarrier[name] = { carrier: name, payments: 0, collected: 0, to_carrier: 0, fees: 0 };
       const c = byCarrier[name];
       c.payments++; c.collected += amt; c.to_carrier += cost; c.fees += fee;
     }
+    /* A balance payment that has ARRIVED reduces the receivable, so it comes off the
+       not-yet-collected figure — its parent is where the obligation was recognised. */
+    for (const r of collected) if (r.balance_of) notYetCollected -= (Number(r.amount) || 0);
+    if (notYetCollected < 0) notYetCollected = 0;
 
     return res.status(200).json({
       ok: true,
@@ -2281,6 +2310,10 @@ if (view === 'portal_share_due') {
         speedy_kept: money(kept),
         unaccounted: money(unaccounted),
         unaccounted_count: openItems.length,
+        /* Recognised but not in the till yet: the part of an obligation still owed on
+           charges whose full carrier cost and fee have already been counted above.
+           This is what makes the three buckets exceed `collected`. */
+        not_yet_collected: money(notYetCollected),
       },
       by_carrier: Object.values(byCarrier)
         .map(c => ({ ...c, collected: money(c.collected), to_carrier: money(c.to_carrier), fees: money(c.fees) }))

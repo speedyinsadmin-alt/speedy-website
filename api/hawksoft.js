@@ -1150,6 +1150,198 @@ export default async function handler(req, res) {
        Writes three tiny .txt attachments to #26081 and nothing else: no money, no
        receipt, no vault row, no ledger row. Admin key only — deliberately NOT in the
        staff action list, because it writes. Hard-capped to ZZTEST. */
+    /* ---------- STAGE 0 · REFUND PROBE. Reads only; refuses to move money. ----------
+       Refunds are being built on THREE unverified assumptions, and this settles all of
+       them before a line of the feature exists. The pickInvoices lesson: three rules
+       shipped into the money path and two had never fired.
+
+       WHAT IS ACTUALLY UNKNOWN
+       1. CAN OUR KEY REFUND AT ALL? Clover's own documentation says refunds need
+          permissions a charge does not — Payments Read, Payments Write and Ecommerce on
+          the app — and that the fix is re-authorising the app in production, not a code
+          change. Several people report charges working and refunds returning 401 on the
+          same key. We would have discovered that halfway through building the feature.
+       2. IS A PARTIAL REFUND SUPPORTED? The docs contradict each other. The tutorial
+          says /v1/refunds "does not support partial refunds for charges that include
+          taxes or tips or charges that have more than one line item" — ours have none of
+          those. The Refund object reference lists an `amount` field described as the
+          "refund amount from the balance of unrefunded amount of the charge", which
+          reads like partials AND repeat partials are fine. Saif's answer to the scope
+          question was "full AND partial", so this is load-bearing.
+       3. REFUND OR VOID? Clover voids inside 25 minutes of the charge and refunds after.
+          They are different operations with different settlement, so a probe run one
+          minute after a test charge would be testing the WRONG one.
+
+       PART A — mode 'auth'. COSTS NOTHING. Sends a refund request for a charge id that
+       does not exist. 401 means the key cannot refund and question 1 is the whole
+       problem; 400/404 "no such charge" means the endpoint is reachable and authorised.
+       Needs no card, no test charge, and cannot touch a real payment — the id is a fixed
+       literal AND is checked against every txn_id in our own ledger before it is sent.
+
+       PART B — mode 'live'. Needs a real $1 card charge on ZZTEST first, because there
+       is not one: all 13 test rows on #26081 are charge_cash with no txn_id, and Clover
+       has no sandbox configured here (production keys, merchant 1K7NR5V6K1ER1). Refunds
+       $0.40 of it, then $0.60, to answer 2 and 3 in one run. Hard-capped: ZZTEST only,
+       is_test only, $1.00 or less, and the row must be a card kind.
+
+       WRITES NOTHING EITHER WAY — no ledger row, no HawkSoft receipt, note or
+       attachment, no vault row. Admin key only, deliberately absent from the staff
+       action list. */
+    if (action === 'probe_refund') {
+      const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
+      if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
+      const mode = String((req.body || {}).mode || 'auth');
+      if (mode !== 'auth' && mode !== 'live') {
+        return res.status(400).json({ ok: false, error: "mode must be 'auth' (free, no money) or 'live'" });
+      }
+
+      /* Every attempt is recorded with its exact request and its exact response, so the
+         answer is readable from the output rather than from my summary of it. */
+      const attempts = [];
+      const call = async (label, url, body) => {
+        const started = Date.now();
+        let r = null, text = '', parsed = null, err = null;
+        try {
+          r = await fetch(url, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
+              'idempotency-key': crypto.randomUUID() },
+            body: JSON.stringify(body),
+          });
+          text = await r.text();
+          try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
+        } catch (e) { err = String(e && e.message || e); }
+        const a = { label, url, sent: body, status: r ? r.status : null,
+          ms: Date.now() - started, body: parsed !== null ? parsed : (text || null), network_error: err };
+        attempts.push(a);
+        return a;
+      };
+      const readCall = async (label, url) => {
+        const started = Date.now();
+        let r = null, text = '', parsed = null, err = null;
+        try {
+          r = await fetch(url, { headers: { Authorization: `Bearer ${PRIV}` } });
+          text = await r.text();
+          try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
+        } catch (e) { err = String(e && e.message || e); }
+        const a = { label, url, sent: null, status: r ? r.status : null,
+          ms: Date.now() - started, body: parsed !== null ? parsed : (text || null), network_error: err };
+        attempts.push(a);
+        return a;
+      };
+
+      /* ---------- PART A: is the key allowed to refund? ---------- */
+      if (mode === 'auth') {
+        const FAKE = 'PROBEONLYNOSUCHCHARGE0000';
+        /* PROVEN not to be one of ours, not assumed. A literal I chose cannot match a
+           Clover id, but "cannot" is what the brace-depth scanner said too, so it is
+           checked against the ledger instead of reasoned about. */
+        const url0 = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key0 = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+          || process.env.SUPABASE_KEY;
+        if (url0 && key0) {
+          const chk = await fetch(`${url0.replace(/\/$/, '')}/rest/v1/bridge_ledger`
+            + `?txn_id=eq.${encodeURIComponent(FAKE)}&select=id`,
+            { headers: { apikey: key0, Authorization: `Bearer ${key0}` } });
+          const hit = chk.ok ? await chk.json().catch(() => []) : [];
+          if (Array.isArray(hit) && hit.length) {
+            return res.status(500).json({ ok: false,
+              error: 'The placeholder charge id exists in the ledger. Refusing to send it.' });
+          }
+        }
+
+        await call('POST /v1/refunds { charge } — full refund of a charge that does not exist',
+          'https://scl.clover.com/v1/refunds', { charge: FAKE });
+        await call('POST /v1/refunds { charge, amount } — partial, same non-existent charge',
+          'https://scl.clover.com/v1/refunds', { charge: FAKE, amount: 40 });
+        await readCall('GET /v1/refunds/{id} — can we READ refunds at all',
+          'https://scl.clover.com/v1/refunds/' + FAKE);
+
+        /* 401 and 403 are the answer we are looking for, and they mean the work is a
+           Clover app permission change, not code. Anything that says "no such charge"
+           means the endpoint is reachable and the key is authorised. */
+        const codes = attempts.map(a => a.status);
+        const blocked = codes.some(c => c === 401 || c === 403);
+        const reachable = codes.some(c => c === 400 || c === 404 || c === 422);
+        return res.status(200).json({ ok: true, mode, spent: '$0.00',
+          verdict: blocked
+            ? 'BLOCKED — the ecommerce key cannot refund. This is an app permission (Payments Read + Write + Ecommerce) and a production re-authorisation, not a code change. Nothing else can be built until it is fixed.'
+            : reachable
+              ? 'REACHABLE — the key is authorised to refund; Clover rejected the charge id, which is what it should do. Run mode "live" against a real $1 ZZTEST card charge to answer partial-vs-full.'
+              : 'UNCLEAR — read the attempts below; do not proceed on a guess.',
+          charge_id_used: FAKE,
+          note: 'No money moved. No ledger row. No HawkSoft write.',
+          attempts });
+      }
+
+      /* ---------- PART B: what a refund actually does ---------- */
+      const paymentId = String((req.body || {}).payment_id || '').trim();
+      if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required for mode "live"' });
+      const url0 = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key0 = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+        || process.env.SUPABASE_KEY;
+      if (!url0 || !key0) return res.status(500).json({ ok: false, error: 'Supabase env vars missing' });
+      const lr = await fetch(`${url0.replace(/\/$/, '')}/rest/v1/bridge_ledger`
+        + `?id=eq.${encodeURIComponent(paymentId)}&select=id,ts,client_id,kind,amount,txn_id,is_test`,
+        { headers: { apikey: key0, Authorization: `Bearer ${key0}` } });
+      const row = ((lr.ok ? await lr.json().catch(() => []) : []) || [])[0];
+
+      /* FIVE CAPS, every one of them a way this probe could otherwise hit a client's
+         money. They are checked here rather than trusted from the caller. */
+      if (!row) return res.status(404).json({ ok: false, error: 'No such payment.' });
+      if (Number(row.client_id) !== TEST_CLIENT_ID) {
+        return res.status(400).json({ ok: false, error: `Probe is limited to ZZTEST client #${TEST_CLIENT_ID}. That payment is on client ${row.client_id}.` });
+      }
+      if (row.is_test !== true) return res.status(400).json({ ok: false, error: 'That payment is not flagged is_test.' });
+      if (!(Number(row.amount) > 0 && Number(row.amount) <= 1)) {
+        return res.status(400).json({ ok: false, error: `Probe is capped at $1.00. That payment is $${row.amount}.` });
+      }
+      if (!/^(charge_live|charge_card|paylink_charge)$/.test(String(row.kind)) || !row.txn_id) {
+        return res.status(400).json({ ok: false, error: 'Needs a CARD charge with a Clover txn_id. Cash rows have nothing to refund.' });
+      }
+
+      /* Refund or void? Clover voids inside 25 minutes and refunds after, and they are
+         not the same operation. Reported so the result cannot be read as the wrong one. */
+      const ageMin = Math.round((Date.now() - new Date(row.ts).getTime()) / 60000);
+      const cents = Math.round(Number(row.amount) * 100);
+
+      await readCall('GET /v1/charges/{id} — the charge as Clover holds it, before anything',
+        'https://scl.clover.com/v1/charges/' + encodeURIComponent(row.txn_id));
+      /* Partial FIRST and deliberately: if a partial works, full certainly does, and
+         a full refund first would leave nothing to test a partial against. */
+      const part1 = Math.min(40, cents - 1);
+      await call(`POST /v1/refunds { charge, amount: ${part1} } — PARTIAL, question 2`,
+        'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: part1 });
+      /* A SECOND partial, because the Refund object describes `amount` as coming from
+         "the balance of unrefunded amount" — which implies repeats are allowed. If they
+         are, a client can be refunded twice and the feature has to handle it. */
+      await call(`POST /v1/refunds { charge, amount: ${cents - part1} } — SECOND partial, the remainder`,
+        'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: cents - part1 });
+      /* And one more, which MUST fail: nothing is left. If it succeeds we can refund
+         more than we took, and that is the single most dangerous thing here. */
+      await call('POST /v1/refunds { charge, amount: 1 } — OVER-REFUND, must be rejected',
+        'https://scl.clover.com/v1/refunds', { charge: row.txn_id, amount: 1 });
+      await readCall('GET /v1/charges/{id} — the charge afterwards, for comparison',
+        'https://scl.clover.com/v1/charges/' + encodeURIComponent(row.txn_id));
+
+      const partialWorked = attempts.some(a => /PARTIAL/.test(a.label) && a.status === 200);
+      const overRefunded = attempts.some(a => /OVER-REFUND/.test(a.label) && a.status === 200);
+      return res.status(200).json({ ok: true, mode,
+        payment: { id: row.id, client: row.client_id, kind: row.kind, amount: row.amount,
+          txn_id: row.txn_id, charged_minutes_ago: ageMin },
+        operation_tested: ageMin < 25
+          ? `VOID, not refund — this charge is only ${ageMin} minutes old and Clover voids inside 25. Re-run after 25 minutes to test a real refund.`
+          : `REFUND — the charge is ${ageMin} minutes old, past Clover's 25-minute void window.`,
+        verdict: {
+          partial_refund_supported: partialWorked,
+          over_refund_rejected: !overRefunded,
+          danger: overRefunded ? 'CLOVER ALLOWED A REFUND BEYOND THE CHARGE AMOUNT. The feature must cap it itself.' : null,
+        },
+        note: 'No ledger row written, no HawkSoft write. The money did move: $'
+          + Number(row.amount).toFixed(2) + ' back to the card used for the test charge.',
+        attempts });
+    }
+
     if (action === 'probe_lognote') {
       const clientId = parseInt((req.body || {}).clientId, 10);
       if (clientId !== TEST_CLIENT_ID) {

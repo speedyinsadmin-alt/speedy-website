@@ -1607,6 +1607,83 @@ queue of its own. Trust treatment differs per answer:
 **Sequence:** probe → full card refund → cash refund → partial → the carrier-recovery
 queue. Each with a mockup before code.
 
+### ✅ SEP 10 · ITEM 70 STEPS 1–3 — THE ROSTER NOW GATES SIGN-IN (`d3bef0d`, `81793f8`)
+**Refunds and month approval were both blocked on this**, and so was Tony: `tony@` was
+in `AGENT_ALLOWLIST` only, so **he could not open `platform.html` at all** — including
+the roles page he is meant to manage. Ordering forced itself.
+
+**Step 1 — migration `agents_add_role_grants`.** Adds `role` (closed set
+agent/admin/owner), `grants text[]`, `updated_by`. **`is_admin` KEPT, not dropped** —
+removing a column before the new read is proven is how a rollback becomes impossible.
+Backfilled `tony@` and `info@` to `owner`: both are admin *today*, so it grants nothing
+new operationally and cannot lock the operator out of the tool needed to fix a gate.
+
+**Verified BOTH DIRECTIONS against code first** — the check that caught the Gabriela
+discrepancy in August. Nobody in code missing from the table, no ACTIVE table row
+missing from code, and **exactly one deliberate delta: `tony@`**. So the switch does
+precisely one thing.
+
+**Step 2 — `loadRoster` / `rosterAdmins` / `rosterAgents` / `may()`.**
+
+> **THE CODE LIST IS THE FLOOR. THE TABLE ONLY EVER ADDS.** Aug 30 broke this exact
+> line by *replacing* `ADMIN_ALLOWLIST` with whatever the table returned. A failed
+> read, an empty table or a bad row can now only fail to ADD — never remove.
+
+**Capability BUNDLES live in code, not the table.** The table stores a role name and
+grant names; what they *mean* is defined in `ROLE_CAPS`. An unknown role and an
+unrecognised grant both resolve to nothing, so a bad row cannot invent a permission.
+
+> **⛔ A SECURITY HOLE CAUGHT ONLY BY TIGHTENING A WEAK ASSERTION.** My hostile-row test
+> asserted the row *existed*. When I made it assert what the row actually **gained**:
+> **one table row with `role:'owner'` on ANY address granted the whole Console plus
+> `approve_month`, `manage_agents` and `commission_override`** — and Google sign-in
+> cannot stop that, because `verifyGoogle` only checks `aud` and `email_verified`, which
+> any Google account passes. **The allowlist is the only thing restricting entry, so a
+> table that can add arbitrary addresses IS the allowlist.** The table may now only add
+> `@speedyins.com`, and such a row is **flagged** in `perm_check` rather than silently
+> dropped, so it gets noticed and removed. *A tautological assertion is not a test —
+> and this one nearly shipped a hole.*
+
+**`is_admin` is no longer a grant path.** `role` is the single source; a row with
+`is_admin=true` and `role='agent'` now gains nothing, which fails safe.
+
+**Step 3 — `verifyGoogle` and `verifyPortal` read the roster.** Both additive by
+construction. **Rollback needs NO DEPLOY:** set `role='agent'` on `tony@` and the grant
+is gone within the cache window.
+
+Two things the read needed before it could sit in the auth path:
+
+1. **A 2s timeout with its own `AbortController`** — `sbGet` has none, and the
+   `try/catch` handles a *failure*, not a *hang*. A stalled Supabase would have stalled
+   every authenticated request instead of degrading.
+2. **⚠️ FAILURES MUST BE CACHED, and this was a real bug I nearly shipped.** Only
+   caching SUCCESS meant a failing read was retried by every caller — `perm_check` alone
+   asks `may()` about **126 times** (every email × every capability), each re-running the
+   2s timeout: **roughly four minutes of serial retries for one request.** In production
+   a slow Supabase would stampede identically on any handler asking `may()` more than
+   once. Now a 10s negative TTL: one bad read costs one timeout per request, not dozens.
+
+> **LESSON — THREE WRONG THEORIES ABOUT MY OWN TEST STUB.** The first never resolved and
+> wedged the harness. The second **ignored the abort signal**, so it "proved" the timeout
+> was broken when it had never been asked to — the dangerous kind, a test failing for the
+> wrong reason and sending you to fix working code. Only a **minimal isolated repro**
+> showed the pattern correct at 2002ms, which is what pointed at the missing negative
+> cache. **When a harness fails, prove it is the code — and if two theories fail, repro
+> the mechanism on its own before touching anything.**
+
+**Confirmed live, not just in the harness.** `perm_check` run from the Console by Saif:
+all four REGRESSIONS empty, `would_gain_console` exactly `['tony@speedyins.com']`,
+18 rows. After step 3 the same view shows **`tony@` with `console: true`** and Saif's
+Console still working — the two together *are* the Aug 30 property: the table added Tony
+without being able to remove Saif.
+
+**`perm_check` is a temporary read-only diagnostic. Delete it once the page shows the
+same thing.** It gates nothing; it exists so the resolution can be checked against a real
+request before it goes near `verifyGoogle`.
+
+**Left to do:** step 4 the page, step 5 the activity view (Saif's "everything must show
+so Tony can understand why"), then item 86, then refunds.
+
 ### ✅ SEP 10 · A NEGATIVE FEE IS NO LONGER GREEN (`533a5a8`)
 **Saif's rule:** red below zero, a warning under $10, a confirm on negative. He was
 right, and it was worse than he thought — **the fee had no colour logic at all.**
@@ -2275,7 +2352,7 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 69f. **Jorge's 25185 ($351.26)** still needs its carrier cost — never had one
 69g. **15 duplicate carrier receipts in HawkSoft** from the Sep 1 outage. No delete endpoint; permanent
 69b. **⛔ DUPLICATE RECEIPTS — agents re-key what the bridge already posted.** Esmeralda confirmed. Ask her what she sees after a charge before building anything
-70. **Finish the roster table** — `public.agents` is seeded and verified; nothing reads it. See the retry rules above
+70. **Finish the roster table** — ~~seeded, nothing reads it~~ **STEPS 1–3 DONE Sep 10** (`d3bef0d`, `81793f8`): `role`/`grants` columns, the ADDITIVE read, `may()`, and `verifyGoogle`/`verifyPortal` now gating on the roster. Tony has the Console. **Remaining: step 4 the page, step 5 the activity view.** `perm_check` is a temporary diagnostic to delete once the page exists
 71. **Earnings breakdown needs more detail + search** — Saif, Aug 31: show the charge and the payment beside the commission, make it searchable
 72. **Light mode is portal.html only** — charge.html, carrier.html, platform.html still dark
 73. **Reverse the ZZTEST probe receipts** — 1.11 / 1.22 / 1.33 / 1.44, posted twice on Sep 1

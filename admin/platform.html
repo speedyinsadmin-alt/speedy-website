@@ -132,6 +132,7 @@
       <button data-tab="audit">Audit</button>
       <button data-tab="trust">Trust</button>
       <button data-tab="tables">Tables</button>
+      <button data-tab="staff">Staff</button>
       <button data-tab="health">Health</button>
     </nav>
     <div id="view" class="card"><div class="load">Loading…</div></div>
@@ -285,6 +286,7 @@ async function render() {
   if (TAB === 'trust') return renderTrust(el);
   if (TAB === 'health') return renderHealth(el);
   if (TAB === 'tables') return renderTables(el);
+  if (TAB === 'staff') return renderStaff(el);
 }
 function openClient(no) {
   OPEN_CLIENT = no;
@@ -1697,6 +1699,161 @@ async function decideCorrection(id, approve){
   if(!confirm(approve ? 'Move this payment to the other client and note it on both records?' : 'Reject this correction?')) return;
   const r = await apiPostBody({ action:'decide_correction', payment_id:id, approve });
   if(r && r.ok) render(); else alert((r && r.error) || 'Could not save it.');
+}
+
+/* ---------- Item 70 step 4 · STAFF & PERMISSIONS ----------
+   The visible half. Steps 1-3 changed nothing anyone could see, which was the point
+   (the test was that the Console kept working) but leaves Tony with a permission system
+   and no way to use it.
+
+   The tick-boxes and the roles come from the SERVER (`grantable`, `roles`, `role_caps`),
+   never from a list hardcoded here - a page with its own copy of the capabilities
+   drifts the moment one is added, which is the six-drifting-STAFF-maps bug in a new
+   costume. Everything is refused server-side too; this is only the friendly half. */
+/* Declared ABOVE renderStaff, which assigns it. It would work either way today - the
+   page only renders on a click, long after module load - and it would be a runtime
+   error the moment anything called renderStaff during evaluation. Same shape as v2.7,
+   and as OWED/FEE_LOW in carrier.html earlier today. Placement, not luck. */
+let STAFF_DATA = null;
+async function renderStaff(el) {
+  el.innerHTML = '<h2>Staff &amp; permissions</h2><div class="load">Loading…</div>';
+  let r = null;
+  try { r = await api('agents_list'); } catch (e) { r = null; }
+  if (!r) { el.innerHTML = '<h2>Staff &amp; permissions</h2><div class="err">No response from the server.</div>'; return; }
+  if (!r.ok) {
+    el.innerHTML = '<h2>Staff &amp; permissions</h2><div class="err">' + esc(r.error || 'Not permitted') + '</div>';
+    return;
+  }
+  STAFF_DATA = r;
+
+  const capLabel = c => ({ refund: 'Refunds', approve_month: 'Approve the month',
+    audit_approve: 'Approve audits', correct: 'Corrections',
+    manage_agents: 'Manage staff', commission_override: 'Override commission',
+    console: 'Console access' })[c] || c;
+
+  let h = '<h2>Staff &amp; permissions</h2>'
+    + '<div class="muted" style="font-size:12.5px;margin-bottom:14px;line-height:1.5">'
+    + 'A role sets the defaults; the tick-boxes add permissions to one person. '
+    + '<b style="color:var(--ink)">Turning someone off only stops them signing in</b> — their name and '
+    + 'producer code stay on every payment they have ever written.</div>';
+
+  if ((r.rows || []).some(a => a.external)) {
+    h += '<div style="border:1.5px solid var(--red);background:rgba(224,49,49,.08);border-radius:10px;padding:10px 13px;margin-bottom:14px;font-size:12.5px">'
+      + '<b style="color:var(--red)">A non-Speedy address is on this list.</b> It is granted nothing, but it should not be here.</div>';
+  }
+
+  for (const a of (r.rows || [])) {
+    const isMe = a.email === r.me;
+    const roleCaps = (r.role_caps && r.role_caps[a.role]) || [];
+    h += '<div class="agentcard" style="padding:13px 15px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">'
+      + '<div><div style="font-size:14px;font-weight:700">' + esc(a.full_name || a.email)
+      + (isMe ? ' <span class="muted" style="font-size:11px;font-weight:400">— you</span>' : '') + '</div>'
+      + '<div class="muted" style="font-size:11.5px">' + esc(a.email)
+      + (a.branch ? ' · ' + esc(a.branch) : '') + (a.producer_code ? ' · ' + esc(a.producer_code) : '') + '</div></div>'
+      + '<div style="display:flex;gap:8px;align-items:center">'
+      + '<select id="role_' + esc(a.email) + '"' + (isMe ? ' disabled' : '') + '>'
+      + (r.roles || []).map(x => '<option value="' + esc(x) + '"' + (x === a.role ? ' selected' : '') + '>' + esc(x) + '</option>').join('')
+      + '</select>'
+      + '<label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap' + (isMe ? ';opacity:.5' : '') + '">'
+      + '<input type="checkbox" id="act_' + esc(a.email) + '"' + (a.active ? ' checked' : '') + (isMe ? ' disabled' : '')
+      + ' style="width:auto">' + (a.active ? 'active' : 'off') + '</label>'
+      + '</div></div>';
+
+    /* A capability already implied by the role is shown ticked and disabled, so nobody
+       "grants" an owner something they already have and then wonders why it did not
+       appear to change anything. */
+    h += '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px">'
+      /* A box that is checked-and-disabled at low opacity READS AS UNCHECKED — I
+         misread my own screenshot, and Tony would too. So the inherited state says so
+         in WORDS, "· via owner", rather than relying on a dimmed tick. Colour and
+         opacity are a hint; the text is the statement. */
+      + (r.grantable || []).map(c => {
+          const viaRole = roleCaps.includes(c);
+          return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap'
+            + (viaRole ? ';color:var(--mute)' : '') + '" title="'
+            + (viaRole ? 'always included in the ' + esc(a.role) + ' role' : 'tick to grant this to one person') + '">'
+            + '<input type="checkbox" id="g_' + esc(a.email) + '_' + esc(c) + '" style="width:auto"'
+            + ((viaRole || a.grants.includes(c)) ? ' checked' : '') + (viaRole ? ' disabled' : '') + '>'
+            + esc(capLabel(c))
+            + (viaRole ? '<span style="font-size:10.5px;opacity:.8"> · via ' + esc(a.role) + '</span>' : '')
+            + '</label>';
+        }).join('')
+      + '</div>';
+
+    h += '<div style="display:flex;gap:8px;align-items:center;margin-top:11px">'
+      + '<input id="why_' + esc(a.email) + '" placeholder="Why? (required)" style="flex:1">'
+      + '<button class="go" style="width:auto;padding:8px 16px" onclick="saveAgent(\'' + esc(a.email) + '\')">Save</button>'
+      + '</div>'
+      + '<div id="msg_' + esc(a.email) + '" class="muted" style="font-size:11.5px;margin-top:6px">'
+      + (a.updated_by ? 'last changed by ' + esc(a.updated_by.split('@')[0]) + (a.updated_at ? ' · ' + esc(String(a.updated_at).slice(0, 10)) : '') : '')
+      + '</div>'
+      + (a.notes ? '<div class="muted" style="font-size:11px;margin-top:5px;font-style:italic">' + esc(a.notes) + '</div>' : '')
+      + '</div>';
+  }
+
+  /* Adding someone is granting access to a mailbox that already exists - never an
+     invitation. The Workspace account is created outside this system. */
+  h += '<div class="agentcard" style="padding:13px 15px;margin-top:16px">'
+    + '<div style="font-size:13.5px;font-weight:700;margin-bottom:9px">Add someone</div>'
+    + '<div class="muted" style="font-size:11.5px;margin-bottom:9px">The Workspace mailbox has to exist already — this only grants access to it.</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    + '<input id="new_email" placeholder="name@speedyins.com">'
+    + '<input id="new_name" placeholder="Full name">'
+    + '<input id="new_branch" placeholder="Branch (optional)">'
+    + '<input id="new_pc" placeholder="Producer code (optional)">'
+    + '</div>'
+    + '<div style="display:flex;gap:8px;align-items:center;margin-top:9px">'
+    + '<input id="new_why" placeholder="Why? (required)" style="flex:1">'
+    + '<button class="go" style="width:auto;padding:8px 16px" onclick="addAgent()">Add</button></div>'
+    + '<div id="new_msg" class="muted" style="font-size:11.5px;margin-top:6px"></div>'
+    + '</div>';
+
+  h += '<div class="muted" style="font-size:11.5px;margin-top:14px;line-height:1.5">'
+    + (r.owners_active || 0) + ' active owner' + ((r.owners_active === 1) ? '' : 's') + '. '
+    + 'The last one cannot be demoted or switched off, and nobody can change their own role — '
+    + 'that is how you lock everyone out of the screen you would need to fix it.</div>';
+
+  el.innerHTML = h;
+}
+function staffSay(id, text, bad) {
+  const m = $('#msg_' + id) || $('#new_msg');
+  if (m) { m.textContent = text; m.style.color = bad ? 'var(--red)' : 'var(--green)'; }
+}
+async function saveAgent(target) {
+  const r = STAFF_DATA; if (!r) return;
+  const a = (r.rows || []).find(x => x.email === target); if (!a) return;
+  const why = ($('#why_' + target) || {}).value || '';
+  if (!why.trim()) { staffSay(target, 'A reason is required.', true); return; }
+  const roleCaps = (r.role_caps && r.role_caps[($('#role_' + target) || {}).value || a.role]) || [];
+  /* Only send grants that are NOT already implied by the role: a disabled tick-box is
+     ticked for display, and sending it would store a redundant grant that then looks
+     like a deliberate decision to whoever reads it later. */
+  const grants = (r.grantable || []).filter(c => {
+    const box = $('#g_' + target + '_' + c);
+    return box && box.checked && !roleCaps.includes(c);
+  });
+  const body = { action: 'save_agent', email: target, reason: why.trim(), grants,
+    role: ($('#role_' + target) || {}).value || a.role,
+    active: !!(($('#act_' + target) || {}).checked) };
+  staffSay(target, 'Saving…');
+  const res = await apiPost(body);
+  if (res && res.ok) { staffSay(target, 'Saved.'); renderStaff($('#view')); }
+  else staffSay(target, (res && res.error) || 'Could not save.', true);
+}
+async function addAgent() {
+  const email = (($('#new_email') || {}).value || '').trim().toLowerCase();
+  const why = (($('#new_why') || {}).value || '').trim();
+  if (!email) { staffSay('new', 'An email is required.', true); return; }
+  if (!why) { staffSay('new', 'A reason is required.', true); return; }
+  const res = await apiPost({ action: 'add_agent', email, reason: why,
+    full_name: (($('#new_name') || {}).value || '').trim() || email,
+    branch: (($('#new_branch') || {}).value || '').trim(),
+    producer_code: (($('#new_pc') || {}).value || '').trim(),
+    role: 'agent', grants: [], active: true });
+  const m = $('#new_msg');
+  if (res && res.ok) { if (m) { m.textContent = 'Added.'; m.style.color = 'var(--green)'; } renderStaff($('#view')); }
+  else if (m) { m.textContent = (res && res.error) || 'Could not add them.'; m.style.color = 'var(--red)'; }
 }
 
 async function renderHealth(el) {

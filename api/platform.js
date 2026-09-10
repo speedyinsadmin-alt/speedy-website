@@ -1733,6 +1733,106 @@ if (view === 'portal_share_due') {
         total_owed: owed, collected: nowCollected, still_owed: stillOwed, hawksoft_note: noteOk });
     }
 
+    /* ---------- Item 70 step 4: STAFF & PERMISSIONS, the write side ----------
+       Tony grants capabilities per agent from here. Gated on `manage_agents`, which is
+       resolved by may() rather than by comparing an email - the whole reason step 2
+       exists, so refunds and month approval ask the same question in one place.
+
+       EVERY CHANGE NEEDS A REASON. Saif, Sep 10: everything that happens has to be
+       explainable, so Tony or whoever holds the permission can understand why. A reason
+       cannot be reconstructed later, so it is required at the time and written to
+       `events` alongside a before/after of exactly what moved. */
+    if (action === 'save_agent' || action === 'add_agent') {
+      const me2 = String(email).toLowerCase();
+      if (!(await may(me2, 'manage_agents'))) {
+        return res.status(403).json({ ok: false, error: 'You do not have permission to manage staff.' });
+      }
+      const b2 = req.body || {};
+      const target = String(b2.email || '').toLowerCase().trim();
+      const reason = String(b2.reason || '').trim().slice(0, 200);
+      if (!target) return res.status(400).json({ ok: false, error: 'email required' });
+      if (!reason) return res.status(400).json({ ok: false, error: 'A reason is required — it is what makes the change explainable later.' });
+      /* The table may only ever hold @speedyins.com, enforced here as well as on the
+         read: a row it cannot grant anything to should not be creatable either. */
+      if (!/@speedyins\.com$/.test(target)) {
+        return res.status(400).json({ ok: false, error: 'Only @speedyins.com addresses can be added.' });
+      }
+
+      const cur = await sbGet(s, `agents?email=eq.${encodeURIComponent(target)}&select=*`);
+      const before = (cur.rows || [])[0] || null;
+      if (action === 'add_agent' && before) return res.status(400).json({ ok: false, error: 'That person is already on the list.' });
+      if (action === 'save_agent' && !before) return res.status(404).json({ ok: false, error: 'That person is not on the list.' });
+
+      /* Only ever the closed set, and only capabilities the code understands. A role or
+         grant this build does not know about is rejected rather than stored, so the
+         table can never carry a permission with no meaning. */
+      const role = b2.role === undefined ? (before ? before.role : 'agent') : String(b2.role);
+      if (!ROLE_CAPS[role]) return res.status(400).json({ ok: false, error: 'Unknown role.' });
+      const grants = b2.grants === undefined ? (before ? (before.grants || []) : [])
+        : (Array.isArray(b2.grants) ? b2.grants.map(String) : null);
+      if (!Array.isArray(grants)) return res.status(400).json({ ok: false, error: 'grants must be a list.' });
+      const badGrant = grants.find(g => !ALL_CAPS.has(g));
+      if (badGrant) return res.status(400).json({ ok: false, error: `Unknown permission: ${badGrant}` });
+      const active = b2.active === undefined ? (before ? before.active : true) : (b2.active === true);
+
+      /* ---- GUARDRAILS. Each one exists because its absence is a way to lock the
+         agency out of its own system. ---- */
+      /* You cannot change your OWN role or deactivate yourself. Aug 30's rule in a new
+         place: a gate must never be able to lock the owner out of the tool used to fix
+         it, and the fastest way to do that is a mis-click on your own row. */
+      if (target === me2 && before && (role !== before.role || active !== before.active)) {
+        return res.status(403).json({ ok: false, error: 'You cannot change your own role or deactivate yourself. Ask another owner.' });
+      }
+      /* The last owner may never be removed, demoted or deactivated. */
+      if (before && before.role === 'owner' && (role !== 'owner' || !active)) {
+        const owners = await sbGet(s, 'agents?role=eq.owner&active=is.true&select=email');
+        if ((owners.rows || []).length <= 1) {
+          return res.status(403).json({ ok: false, error: 'That is the last active owner. Make someone else an owner first.' });
+        }
+      }
+
+      const patch = {
+        full_name: b2.full_name !== undefined ? String(b2.full_name).slice(0, 80) : (before ? before.full_name : target),
+        branch: b2.branch !== undefined ? (String(b2.branch).slice(0, 40) || null) : (before ? before.branch : null),
+        producer_code: b2.producer_code !== undefined ? (String(b2.producer_code).toUpperCase().slice(0, 8) || null) : (before ? before.producer_code : null),
+        role, grants, active,
+        updated_by: me2, updated_at: new Date().toISOString(),
+      };
+
+      if (action === 'add_agent') {
+        const ins = await sbInsert(s, 'agents', [{ email: target, ...patch }]);
+        if (!ins.ok) return res.status(500).json({ ok: false, error: 'Could not add them (' + ins.status + ').' });
+      } else {
+        const up = await fetch(`${s.base}/rest/v1/agents?email=eq.${encodeURIComponent(target)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+        if (!up.ok) return res.status(500).json({ ok: false, error: 'Could not save (' + up.status + ').' });
+      }
+
+      /* WHAT ACTUALLY MOVED, field by field, so the activity view can answer "why does
+         Yasmin have refund?" without anyone reconstructing it from memory. */
+      const changed = {};
+      for (const k of ['full_name', 'branch', 'producer_code', 'role', 'active']) {
+        const was = before ? before[k] : null;
+        if (String(was) !== String(patch[k])) changed[k] = { from: was, to: patch[k] };
+      }
+      const wasGrants = before ? (before.grants || []) : [];
+      if (wasGrants.slice().sort().join(',') !== grants.slice().sort().join(',')) {
+        changed.grants = { from: wasGrants, to: grants,
+          added: grants.filter(g => !wasGrants.includes(g)),
+          removed: wasGrants.filter(g => !grants.includes(g)) };
+      }
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: new Date().toISOString(), actor: me2,
+          kind: action === 'add_agent' ? 'agent.added' : 'agent.updated',
+          client_no: null, source: 'console',
+          payload: { agent: target, reason, changed } }) });
+
+      /* The cache is 60s. After a permission change that is far too long to wait, and
+         it is exactly when someone is watching to see if it worked. */
+      _roster = null; _rosterUntil = 0;
+      return res.status(200).json({ ok: true, email: target, changed, reason });
+    }
+
     if (action === 'decide_correction') {
       if (!ADMIN_ALLOWLIST.includes(String(email).toLowerCase())) {
         return res.status(403).json({ ok: false, error: 'Owner only' });
@@ -1937,6 +2037,39 @@ if (view === 'portal_share_due') {
      `verifyGoogle` and locked the owner out of the Console.
 
      Delete this view once the agents page is live and shows the same thing. */
+  /* ---------- Item 70 step 4: STAFF & PERMISSIONS, the read side ----------
+     Gated on `manage_agents` rather than on being admin, so the page is governed by the
+     same question every other guard asks. Returns the roster plus the capability list,
+     so the page renders the tick-boxes from what the SERVER understands - a page with a
+     hardcoded list of permissions drifts the moment a capability is added. */
+  if (view === 'agents_list') {
+    if (!(await may(email, 'manage_agents'))) {
+      return res.status(403).json({ ok: false, error: 'You do not have permission to manage staff.' });
+    }
+    const r = await sbGet(s, 'agents?select=*&order=active.desc,full_name.asc&limit=200');
+    const rows = (r.rows || []).map(a => ({
+      email: a.email, full_name: a.full_name, branch: a.branch || null,
+      producer_code: a.producer_code || null, active: a.active === true,
+      role: ROLE_CAPS[a.role] ? a.role : 'agent',
+      grants: Array.isArray(a.grants) ? a.grants.filter(g => ALL_CAPS.has(g)) : [],
+      /* Flagged so a row the table can grant nothing to is visible on the page. */
+      external: !/@speedyins\.com$/.test(String(a.email || '')),
+      notes: a.notes || null,
+      updated_by: a.updated_by || null, updated_at: a.updated_at || null,
+    }));
+    return res.status(200).json({ ok: true, email,
+      me: String(email).toLowerCase(),
+      roles: Object.keys(ROLE_CAPS),
+      /* What each role already includes, so the page can show that a tick-box is
+         redundant for an owner rather than letting someone "grant" what they have. */
+      role_caps: ROLE_CAPS,
+      /* Grantable = everything except what is implied by a role bundle at agent level.
+         Saif confirmed approve_month IS grantable, against my recommendation. */
+      grantable: [...ALL_CAPS].filter(c => !ROLE_CAPS.agent.includes(c)).sort(),
+      owners_active: rows.filter(a => a.role === 'owner' && a.active).length,
+      rows });
+  }
+
   if (view === 'perm_check') {
     const roster = await loadRoster();
     const admins = await rosterAdmins();

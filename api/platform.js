@@ -1053,6 +1053,14 @@ if (view === 'portal_share_due') {
           balance_of: r.balance_of || null,
           // NOTE: no commission figures here — the client log is shared with every agent
         })),
+        /* The card gated its correction links on "I earn it or I took it", so an ADMIN
+           opening someone else's payment saw no links at all — while the server has
+           always allowed admin on move_client, reassign_commission and now
+           link_balance. The gate and the offer disagreed, which meant the one person
+           who is supposed to be able to fix anything could not reach the controls.
+           Told by the SERVER rather than comparing an email in the browser: the
+           allowlist is server-side and an identity from a browser is a claim. */
+        is_admin: ADMIN_ALLOWLIST.includes(me),
         producer_code: client && client.extras ? (client.extras.producer || null) : null,
         producer_name: client && client.extras ? (AGENT_NAME[PRODUCER_MAP[client.extras.producer]] || null) : null,
         documents: docs.rows || [],

@@ -1122,6 +1122,10 @@ function payHistoryHtml(c){
        returned. Documents stay available — a cash balance may well have a receipt. */
     const isBal = !!p.balance_of;
     const parent = isBal ? pays.find(q => q.id === p.balance_of) : null;
+    /* Is there an EARLIER payment on this client still showing a balance owed, other
+       than this row itself? Same helper the charge sheet uses, so the card and the
+       "Pay this balance" box can never disagree about what is outstanding. */
+    const otherOpenBalance = openBalances(c).some(b => b.id !== p.id);
     const hasCarrier = dl.some(d => docType(d) === 'carrier_receipt');
     return '<div style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:7px">'
       + '<div class="row" style="align-items:flex-start">'
@@ -1148,6 +1152,17 @@ function payHistoryHtml(c){
       + ((mine || iCharged)
           ? ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();reassignPayment(\'' + p.id + '\',\'' + esc(p.commission_to||'') + '\')">change</span>'
             + ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();moveClient(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')">wrong client</span>'
+            /* Offered only when there is something to link TO — an earlier payment on
+               this client still showing a balance owed — and only on a row that is not
+               already a balance payment and not audited. The server re-checks all of
+               it; this just avoids showing a link that can only fail. */
+            + ((!isBal && !complete && otherOpenBalance)
+                ? ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();linkBalance(\'' + p.id + '\',' + Number(p.amount||0) + ')">pays down a balance</span>'
+                : '')
+            /* The way back out, while nothing has been audited. */
+            + (isBal
+                ? ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();unlinkBalance(\'' + p.id + '\',' + Number(p.amount||0) + ')">not a balance payment</span>'
+                : '')
           : '')
       + '</div>'
       /* Says which charge it pays down, so a $34 line beside a $130.50 line is not a
@@ -1329,6 +1344,74 @@ function onCommChange(){
   const note = chgEl('chgProdNote');
   if(v !== EMAIL) note.classList.add('hide');
   else if(CHG_PRODUCER && CHG_PRODUCER !== EMAIL) note.classList.remove('hide');
+}
+
+/* ---- "This pays down an earlier payment" ----
+   The charge sheet handles this going forward with "Pay this balance". Nothing handled
+   it afterwards, so a payment taken as a fresh charge stayed a separate sale — sitting
+   in the audit queue asking for proof it will never have, while the original still
+   showed money outstanding that had arrived. It took a hand-written SQL UPDATE twice in
+   two days. Reuses openBalances(), the same helper the charge sheet uses, rather than a
+   second copy of the same arithmetic. */
+async function linkBalance(paymentId, amount){
+  const c = CLIENT_CACHE[ACTIVE_TAB];
+  if(!c){ alert('Open the client again and retry.'); return; }
+  const bals = openBalances(c).filter(b => b.id !== paymentId);
+  if(!bals.length){ alert('No earlier payment on this client is showing a balance owed.'); return; }
+
+  let pick = bals[0];
+  if(bals.length > 1){
+    const opts = bals.map((b,i) => (i+1) + '. $' + b.owed.toFixed(2) + ' from ' + String(b.ts).slice(0,10)
+      + ' — $' + b.left.toFixed(2) + ' still owed').join('\n');
+    const ans = prompt('Which payment does this $' + Number(amount).toFixed(2) + ' pay down?\n\n'
+      + opts + '\n\nEnter a number:');
+    if(!ans) return;
+    const idx = parseInt(ans, 10) - 1;
+    if(!(idx >= 0 && idx < bals.length)) return;
+    pick = bals[idx];
+  }
+
+  /* Say what it does to the MONEY, not just to the record: linking raises the parent's
+     collected total, which raises the released share of its commission. The server
+     recomputes all of it from the ledger — these numbers are for the human.
+
+     openBalances gives {id, ts, owed, got, left} — the OBLIGATION, what has been
+     collected against it, and what is left. It does not carry the parent's own charge
+     amount, so the balance is named by its date and total, which is the clearer way
+     round anyway: $184.50 is what the client owed, $130.50 was only the first payment
+     against it. */
+  const after = +(pick.got + Number(amount)).toFixed(2);
+  const left  = +(pick.owed - after).toFixed(2);
+  const ok = confirm('Link this $' + Number(amount).toFixed(2) + ' to the balance from '
+    + String(pick.ts).slice(0,10) + '?\n\n'
+    + 'Total owed on it:   $' + pick.owed.toFixed(2) + '\n'
+    + 'Collected so far:   $' + pick.got.toFixed(2) + '\n'
+    + 'After this:         $' + after.toFixed(2) + '\n'
+    + (left > 0.005 ? 'Still owed:         $' + left.toFixed(2) + '\n'
+                    : 'That clears it in full.\n')
+    + '\nThis $' + Number(amount).toFixed(2) + ' will no longer need its own audit, and the '
+    + 'commission on the earlier payment releases further now that the money is in.\n\n'
+    + 'Link them?');
+  if(!ok) return;
+
+  const r = await apiPost({ action: 'link_balance', payment_id: paymentId, parent_id: pick.id });
+  if(r && r.ok){
+    alert('Linked. That payment now reads $' + Number(r.collected).toFixed(2) + ' of $'
+      + Number(r.total_owed).toFixed(2)
+      + (Number(r.still_owed) > 0.005 ? ' — $' + Number(r.still_owed).toFixed(2) + ' still owed.' : ' — paid in full.'));
+    if(ACTIVE_TAB){ delete CLIENT_CACHE[ACTIVE_TAB]; openClient(ACTIVE_TAB); }
+    await loadHome();
+  } else alert((r && r.error) || 'Could not link it.');
+}
+async function unlinkBalance(paymentId, amount){
+  if(!confirm('Undo this?\n\nThe $' + Number(amount).toFixed(2) + ' will stand on its own again, '
+    + 'need its own audit, and the earlier payment will show that money as still owed.\n\nUnlink?')) return;
+  const r = await apiPost({ action: 'unlink_balance', payment_id: paymentId });
+  if(r && r.ok){
+    alert(r.message || 'Unlinked.');
+    if(ACTIVE_TAB){ delete CLIENT_CACHE[ACTIVE_TAB]; openClient(ACTIVE_TAB); }
+    await loadHome();
+  } else alert((r && r.error) || 'Could not unlink it.');
 }
 
 /* Reassigning an existing payment. Giving away is allowed; taking is not —

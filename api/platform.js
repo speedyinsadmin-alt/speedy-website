@@ -1278,7 +1278,11 @@ if (view === 'portal_share_due') {
   }
 
   // Agent-reachable POST actions (each enforces its own scoping below)
-  const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share', 'move_client'];
+  /* link_balance/unlink_balance are agent-reachable for the same reason move_client is:
+     the agent who took the payment is the one who knows it was a balance payment, and
+     every refusal below leaves the row exactly as it stands. */
+  const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share', 'move_client',
+                         'link_balance', 'unlink_balance'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -1415,6 +1419,164 @@ if (view === 'portal_share_due') {
 
       const applied = await applyClientMove(s, row, toClient, me2, reason, false);
       return res.status(200).json({ ok: true, pending: false, ...applied });
+    }
+
+    /* ---------- A payment that pays down an earlier one ----------
+       The charge sheet's "Pay this balance" handles this going forward. Nothing handled
+       it AFTERWARDS, so a payment taken as a fresh charge stayed a separate sale: it sat
+       in the audit queue asking for proof it will never have, and the original kept
+       showing money outstanding that had in fact arrived. It needed a hand-written SQL
+       UPDATE twice in two days — 25420's $34 and 24615's $87 — which is the definition
+       of something that should be an agent action.
+
+       NOT an "edit the charge" screen, deliberately. The amount on a row is a real
+       Clover transaction; a box that lets someone change 130.50 to 164.50 would put our
+       ledger at odds with the card processor. Same principle move_client states: the
+       money is correct, only the record is wrong.
+
+       This MOVES MONEY. Linking raises the parent's collected total, which raises the
+       released share of its commission — 25420 went from $1.41 to $1.78 earned. So the
+       guards are the ownership test move_client uses, plus refusals for every state
+       where a link would destroy or invent something. */
+    if (action === 'link_balance' || action === 'unlink_balance') {
+      const paymentId = String((req.body || {}).payment_id || '');
+      const parentId  = String((req.body || {}).parent_id || '');
+      if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required' });
+
+      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=*`);
+      const row = (cur.rows || [])[0];
+      if (!row) return res.status(404).json({ ok: false, error: 'Payment not found' });
+
+      const me2 = String(email).toLowerCase();
+      const isAdmin = ADMIN_ALLOWLIST.includes(me2);
+      const iCharged = agentEmailOf(row.agent) === me2;
+      const iOwn = (row.commission_to || agentEmailOf(row.agent)) === me2;
+      if (!isAdmin && !iCharged && !iOwn) {
+        return res.status(403).json({ ok: false, error: 'You can only correct a payment you took.' });
+      }
+      /* A completed audit carries its own carrier cost and its own fee. Turning it into
+         a balance payment would strand both — and the Trust tab reads fee_amount with no
+         audit_status filter, so that fee would keep counting as Speedy profit on a row
+         nobody can reach any more. Admin only, and only via a deliberate decision. */
+      if (row.audit_status === 'complete') {
+        return res.status(403).json({ ok: false, error: 'That payment is already audited. Ask Tony — its carrier cost and fee would have to be undone first.' });
+      }
+      if (row.correction_status === 'pending') {
+        return res.status(403).json({ ok: false, error: 'That payment is waiting on Tony for a different correction.' });
+      }
+      /* Declined, voided and refunded rows never moved money. Tested inline: the
+         NON_PAYMENT list lives inside portal_home's own block and is not in scope here. */
+      if (/declin|fail|void|refund/i.test(String(row.kind || ''))
+          || ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'].includes(row.audit_status)) {
+        return res.status(400).json({ ok: false, error: 'That row is not a collected payment.' });
+      }
+
+      const stamp = new Date().toISOString();
+      const amt = Number(row.amount || 0);
+
+      if (action === 'unlink_balance') {
+        if (!row.balance_of) return res.status(400).json({ ok: false, error: 'That payment is not linked to anything.' });
+        const oldParent = row.balance_of;
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ balance_of: null }) });
+        /* The link note is already permanent in HawkSoft, so leaving it unanswered would
+           make the client file lie. Same reason note_wrong_policy writes to both tabs. */
+        let noteOk = false;
+        try {
+          const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
+            method: 'POST',
+            body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+              note: `CORRECTION — the $${amt.toFixed(2)} payment on this record is NO LONGER recorded as paying down an `
+                + `earlier payment. It stands on its own again and will be audited separately. `
+                + `No refund and no re-charge; the card transaction is unchanged. Corrected by ${me2}.` }) });
+          noteOk = (r.status === 200 || r.status === 202);
+        } catch { noteOk = false; }
+        await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ ts: stamp, actor: me2, kind: 'payment.balance_unlinked',
+            client_no: row.client_id, source: 'portal',
+            payload: { payment_id: paymentId, was_balance_of: oldParent, amount: amt, hawksoft_note: noteOk } }) });
+        return res.status(200).json({ ok: true, unlinked: true, hawksoft_note: noteOk,
+          message: 'Unlinked. That payment stands on its own again and will need its own audit.' });
+      }
+
+      /* ---- LINK ---- */
+      if (row.balance_of) return res.status(400).json({ ok: false, error: 'That payment is already linked to an earlier one.' });
+      if (!parentId) return res.status(400).json({ ok: false, error: 'parent_id required' });
+      if (parentId === paymentId) return res.status(400).json({ ok: false, error: 'A payment cannot pay down itself.' });
+      /* Carrier work already recorded on this row. Clearing it silently would throw away
+         a carrier payment somebody entered; refusing leaves the row exactly as it is. */
+      if (row.service_cost != null || row.fee_amount != null) {
+        return res.status(400).json({ ok: false, error: 'That payment already has a carrier cost recorded, so it is being audited as its own sale. Ask Tony.' });
+      }
+
+      const par = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(parentId)}&select=*`);
+      const parent = (par.rows || [])[0];
+      if (!parent) return res.status(404).json({ ok: false, error: 'That earlier payment could not be found.' });
+      if (Number(parent.client_id) !== Number(row.client_id)) {
+        return res.status(400).json({ ok: false, error: 'Both payments have to be on the same client.' });
+      }
+      if (parent.balance_of) {
+        return res.status(400).json({ ok: false, error: 'That earlier payment is itself a balance payment. Link to the original charge instead.' });
+      }
+      if (parent.total_owed == null) {
+        return res.status(400).json({ ok: false, error: 'That earlier payment has no total recorded, so it is not showing a balance owed. It has to be audited with the total first.' });
+      }
+
+      /* What is genuinely still outstanding, computed the way collectedFor/owedFor do
+         (platform.js:95-105) rather than trusting the browser's arithmetic. */
+      const sib = await sbGet(s, `bridge_ledger?balance_of=eq.${encodeURIComponent(parentId)}&select=amount`);
+      const already = (sib.rows || []).reduce((a, r) => a + Number(r.amount || 0), 0);
+      const pAmt = Number(parent.amount || 0);
+      const pOwed = Number(parent.total_owed);
+      const owed = pOwed > pAmt ? pOwed : pAmt;
+      const collected = +(pAmt + already).toFixed(2);
+      const outstanding = +(owed - collected).toFixed(2);
+      if (outstanding <= 0.005) {
+        return res.status(400).json({ ok: false, error: 'That earlier payment is already fully collected — there is no balance left to pay down.' });
+      }
+      /* MORE than is outstanding is not a balance payment. Refusing withholds only the
+         LINK: the row stays exactly as it is, a separate sale, which is a safe place to
+         land. Inventing an over-collection is not. */
+      if (amt > outstanding + 0.005) {
+        return res.status(400).json({ ok: false,
+          error: `This payment is $${amt.toFixed(2)} but only $${outstanding.toFixed(2)} is still owed on that one. Ask Tony — part of this money belongs somewhere else.` });
+      }
+
+      await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ balance_of: parentId }) });
+
+      const nowCollected = +(collected + amt).toFixed(2);
+      const stillOwed = +(owed - nowCollected).toFixed(2);
+
+      /* A log note so an auditor can follow the money — the same reason the retro-linker
+         writes one. It explains why a second payment on this client shows no audit of
+         its own, which is otherwise unexplainable from the HawkSoft side. Fail-soft:
+         a note that does not post must never undo the link. */
+      let noteOk = false;
+      try {
+        const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
+          method: 'POST',
+          body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+            note: `The $${amt.toFixed(2)} payment on this record pays down the $${pAmt.toFixed(2)} payment of `
+              + `${String(parent.ts || '').slice(0, 10)}, which carries the audit for this sale. `
+              + `Total owed $${owed.toFixed(2)} · collected $${nowCollected.toFixed(2)} · `
+              + `${stillOwed > 0.005 ? 'still owed $' + stillOwed.toFixed(2) : 'now paid in full'}. `
+              + `No separate carrier cost or fee applies to this payment. Linked by ${me2}.` }) });
+        noteOk = (r.status === 200 || r.status === 202);
+      } catch { noteOk = false; }
+
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'payment.balance_linked',
+          client_no: row.client_id, source: 'portal',
+          payload: { payment_id: paymentId, parent_id: parentId, amount: amt,
+                     total_owed: owed, collected_before: collected, collected_after: nowCollected,
+                     still_owed: stillOwed, owner: parent.commission_to || agentEmailOf(parent.agent),
+                     hawksoft_note: noteOk } }) });
+
+      return res.status(200).json({ ok: true, linked: true, parent_id: parentId,
+        total_owed: owed, collected: nowCollected, still_owed: stillOwed, hawksoft_note: noteOk });
     }
 
     if (action === 'decide_correction') {

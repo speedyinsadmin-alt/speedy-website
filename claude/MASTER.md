@@ -1519,6 +1519,112 @@ Each needs answers before code, not after:
 **Agreed sequencing (Saif, Sep 10):** refund + partial refund as ONE feature, plan and
 mockup first. Voucher parked.
 
+### ✅ SEP 10 · A NEGATIVE FEE IS NO LONGER GREEN (`533a5a8`)
+**Saif's rule:** red below zero, a warning under $10, a confirm on negative. He was
+right, and it was worse than he thought — **the fee had no colour logic at all.**
+`.fee b` is hardcoded green in `carrier.html`'s stylesheet, so **Esmeralda's −$34.00 was
+displayed to her in GREEN** and nothing asked her about it.
+
+**But the preview was also wrong, and that was mine.** `recalcFee` computed
+`CTX.paid − carrierCost` — the payment from the launch URL — while the server has
+derived the fee from the OBLIGATION since A shipped. They disagreed on every
+part-payment: 24615 showed **−$12.00** on screen while the server wrote **+$75.00**.
+Adding red-on-negative without fixing that would have fired on every *correct*
+part-payment, which is how a warning gets trained away. Fixed first, and the order
+mattered. `carrier_list` now returns `amount`, `total_owed` and `owed_amount` from the
+row it was already fetching — not a new URL param, because a param only works for
+callers that remember to send it.
+
+**Three tiers, measured over 250 completed audits rather than guessed:**
+
+| fee | audits | behaviour |
+|---|---|---|
+| negative | 1 | **RED** + confirm on submit |
+| exactly 0.00 | 3 | amber |
+| 0.01–4.99 | 2 (0.50, 1.00) | amber |
+| 5.00–9.99 | 1 (9.98) | amber |
+| **under $10** | **7 = 2.8%** | rare enough to mean something |
+| 10.00–24.99 | 28, **minimum exactly 10.00** | green |
+| 25.00+ | 215 | green |
+
+**The test is `< 10`, never `<= 10`** — 28 legitimate audits sit at exactly $10.00 and
+would have been nagged. Saif's $10 instinct was well calibrated.
+
+**Nothing is blocked.** A genuine loss must stay recordable, and a gate that refuses a
+legitimate case gets satisfied in the smallest increment that passes — that is where
+0.01 came from. The confirm fires only on **submit**, not on a partial save: mid-flow
+the carrier cost is often not final, which is what *"I have not paid the carrier yet"*
+means for 33 of 160 audits. Same reason B only gates `complete`.
+
+**Also added, from Saif asking "where is the total?" twice in one day:** the fee line now
+says WHICH number it was worked out from when they differ — *"on the $184.50 owed in
+total, not the $130.50 taken on this payment"*. Without it a $20.00 fee beside a $164.50
+carrier cost on a $130.50 charge looks impossible. And a negative renders as
+**−$15.50**, not `$-15.50`.
+
+> **⚠️ TDZ, caught before pushing.** `OWED`/`CHARGE_AMT`/`FEE_LOW` were first declared
+> next to `recalcFee` — which is called from `fillCtx`, which is called from two
+> sign-in callbacks that sit ABOVE the fee code. It would have worked today and become a
+> runtime error the moment anything called `fillCtx` synchronously during load. **That
+> exact shape shipped as v2.7 and `node --check` passes on it.** Moved to the top with
+> the rest of the form state; the harness now calls `fillCtx()` synchronously to prove
+> it. **Placement, not luck.**
+
+### ✅ SEP 10 · AN AGENT CAN LINK A PAYMENT TO THE BALANCE IT PAYS DOWN (`62c0e0a`)
+`link_balance` / `unlink_balance`, agent-reachable, modelled on `move_client`. This is
+the fix for the mistake that needed a hand-written SQL UPDATE **twice in two days** —
+25420's $34 and 24615's $87.
+
+**NOT an "edit the charge" screen, deliberately.** The amount on a row is a real Clover
+transaction; a box that lets someone change 130.50 to 164.50 would put our ledger at
+odds with the card processor. Same principle `move_client` states: *the money is
+correct, only the record is wrong.*
+
+**It MOVES MONEY** — linking raises the parent's collected total, which raises the
+released share of its commission (25420 went $1.41 → $1.78). So the confirm states the
+money effect, not just the record change, and every refusal leaves the row exactly as it
+stands:
+
+| refused | |
+|---|---|
+| not the owner, charger or admin | 403 |
+| child already audited | 403 — its fee would be stranded, and the Trust tab counts `fee_amount` with no `audit_status` filter |
+| correction pending on the child | 403 |
+| already linked · has a carrier cost · declined/void/refunded/link_sent | 400 |
+| parent: different client · no total · itself a balance · fully collected | 400 |
+| **amount MORE than is outstanding** | 400 — refusing withholds only the LINK; the row stays a separate sale, which is safe. Inventing an over-collection is not |
+| paying down itself | 400 |
+
+Exactly the outstanding amount is allowed. **Reversible while nothing is audited**, and
+the unlink writes a *correcting* HawkSoft note because the link note is already
+permanent — the same reason `note_wrong_policy` writes to both tabs. Both write an
+`events` row. The note is **fail-soft**: a note that does not post never undoes the link.
+
+Outstanding is recomputed server-side the way `collectedFor`/`owedFor` do it, never
+trusted from the browser. The card reuses **`openBalances()`** — the same helper the
+charge sheet uses — so the card and the "Pay this balance" box cannot disagree.
+
+**Deliberately NOT copied from `move_client`:** its 15-minute-then-escalate-to-Tony
+window. A wrong client is unverifiable from the data; a balance link IS verifiable (same
+client, an open balance, an amount that fits), so it is allowed any time while the row is
+unaudited. **It does move commission, so if Tony would rather always be asked, that is a
+small change** — open item 83.
+
+### Harness lessons from today, all three worth keeping
+- **`googleClaims` caches claims KEYED ON THE ID TOKEN.** Reusing one literal token for
+  every actor made every call after the first run as the *cached* identity, silently
+  turning the ownership tests into no-ops — it reported a false `200` on "not my
+  payment", which looked exactly like a missing guard. One token per actor.
+- **A slice cannot prove reachability.** `harness76` broke the moment `payHistoryHtml`
+  started calling `openBalances` — *"openBalances is not defined"* — because it sliced
+  one function out. Upgraded to execute the **whole script block**, which is the only
+  thing that proves the name is reachable. Same standard as `carrier.html`.
+- **The brace-depth scanner is BLIND on both big admin pages.** It reports no code at all
+  between js lines 308 and 968 of `carrier.html`, and an EOF depth of 1 rather than 0 on
+  `portal.html` (identical before and after any change, so it is the tool). Scope on
+  those files is proven by **execution**, not by the counter. Where it does work —
+  `carrier.js`, `hawksoft.js` — it stays the gate.
+
 ---
 
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
@@ -1971,6 +2077,8 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 80. **Trust tab counts `balance_of` rows as UNACCOUNTED** — its filter tests `kind` and date only, and a row with no `service_cost` goes to unaccounted (`platform.js:2078`), but a balance row never gets a carrier cost because it carries no audit. **$121.00 across 2 rows** measured Sep 10 (25420's $34, 24615's $87), stuck there permanently. One filter fixes it: treat `balance_of` rows as collected-and-attributed, not unaccounted
 81. **By-agent `earned` ignores `collected_ratio`** — `g.earned += x.commission` (`platform.html:903`) sums the FULL commission, so an agent's total counts money not yet released. The per-payment rows are correct (`releasedNote`, `:185`, prints "$1.78 released" under the $2.00). Only the aggregate overstates
 82. ~~**No total / collected / carrier-cost column on the Console transactions row**~~ **CLOSED Sep 10** — `balanceCell` now prints `$164.50 of $184.50 · 89%` above `$20.00 still owed`. Raised by Saif asking "where is the total?" while checking the corrections
+83. **Should `link_balance` always ask Tony?** It is allowed any time while the row is unaudited, because a balance link is verifiable from the data (same client, open balance, amount fits) unlike a wrong-client move. But it DOES move commission. `move_client`'s 15-minute-then-escalate pattern was deliberately not copied — Tony's call whether to add it
+84. **`portal_client` filters `is_test=is.false`**, so ZZTEST (26081) rows never appear on the client card. Means the balance-link action cannot be exercised end-to-end on the test client through the portal — the only true test is a real client, which costs permanent HawkSoft notes. Consider an admin-only "show test rows" toggle before the next money feature needs floor testing
 59. ~~**`portal_client` leaks money to every agent**~~ **CLOSED Sep 9 — there was no leak.** `portal_client` returns no commission figure; `fee_amount` and `service_cost` are SHARED by decision. Number kept so older references still resolve. Successor: **when roles land, re-check `audit_list`'s unfiltered `agent_commission?select=*` (`platform.js:1633`)** — only the `info@`-only admin gate keeps it private
 60. **Merge the redundant third HawkSoft log row** — each charge posts receipt + attachment + a text-only summary. Mocked up, parked by Saif
 61. **Malcolm's home branch still unknown** — deliberately no `STAFF` entry, so he gets the visible branch picker. Do NOT infer it from `call_log.office_id`; that was wrong for Melisa

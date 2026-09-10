@@ -192,18 +192,29 @@ async function googleClaims(idToken) {
   } catch { return null; }
 }
 
+/* ITEM 70 STEP 3. These two are the only gates that read the roster, and they read it
+   ADDITIVELY: rosterAdmins()/rosterAgents() seed from the code list BEFORE the table is
+   consulted, so the table can only ever add. Aug 30 broke this exact line by REPLACING
+   the code list, which locked the owner out of the tool needed to fix it.
+
+   Three properties, all harness-verified:
+     · a failed read, an empty table or a bad row can only fail to ADD
+     · the roster read cannot hang the gate (2s timeout above -> code floor)
+     · rollback needs NO DEPLOY: set role='agent' in the table and the grant is gone
+       within the 60s cache. The code floor means Saif's access cannot be affected
+       either way, which is the property that was missing in August. */
 async function verifyGoogle(idToken) {
   const c = await googleClaims(idToken);
   if (!c) return null;
-  return ADMIN_ALLOWLIST.includes(c.email) ? c.email : null;
+  return (await rosterAdmins()).has(c.email) ? c.email : null;
 }
 
 // Verify for portal access: returns { email, role } where role is 'admin' or 'agent'.
 async function verifyPortal(idToken) {
   const c = await googleClaims(idToken);
   if (!c) return null;
-  if (ADMIN_ALLOWLIST.includes(c.email)) return { email: c.email, role: 'admin' };
-  if (AGENT_ALLOWLIST.includes(c.email)) return { email: c.email, role: 'agent' };
+  if ((await rosterAdmins()).has(c.email)) return { email: c.email, role: 'admin' };
+  if ((await rosterAgents()).has(c.email)) return { email: c.email, role: 'agent' };
   return null;
 }
 
@@ -278,15 +289,38 @@ const ALL_CAPS = new Set(Object.values(ROLE_CAPS).flat());
 
 let _roster = null, _rosterUntil = 0;
 const ROSTER_TTL_MS = 60 * 1000;
-/* Reads the roster, fail-soft. On ANY failure it returns an empty map, which means
-   "the table adds nobody" - never "the table removes somebody". */
+/* ⚠️ FAILURES ARE CACHED TOO, and that is not a detail. Only caching SUCCESS meant a
+   failing read was retried by every caller: perm_check alone calls may() about 126
+   times (every email x every capability), and each one re-ran the 2s timeout - roughly
+   four minutes of serial retries for one request. The harness stalled, which is how
+   this was found; in production a slow Supabase would stampede identically on any
+   handler that asks may() more than once.
+
+   A short negative TTL so a real recovery is picked up quickly, while one bad read
+   costs one timeout per request instead of dozens. */
+const ROSTER_FAIL_TTL_MS = 10 * 1000;
+const emptyRoster = () => { _roster = new Map(); _rosterUntil = Date.now() + ROSTER_FAIL_TTL_MS; return _roster; };
 async function loadRoster() {
   if (_roster && Date.now() < _rosterUntil) return _roster;
   const s = sb();
-  if (!s) return new Map();
+  if (!s) return emptyRoster();
   try {
-    const r = await sbGet(s, 'agents?select=email,full_name,branch,producer_code,active,is_admin,role,grants&limit=200');
-    if (!r.ok || !Array.isArray(r.rows)) return new Map();
+    /* ⏱ ITS OWN TIMEOUT, not sbGet's — sbGet has none. From step 3 this read sits in
+       the AUTHENTICATION path, where `ADMIN_ALLOWLIST.includes()` used to be instant.
+       The try/catch below handles a FAILURE; it does not handle a HANG, and a stalled
+       Supabase would stall every authenticated request rather than degrading. With
+       this, the worst case is "the table adds nobody for a minute" — the code floor
+       still answers, so nobody is ever locked out by a slow database. */
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 2000);
+    let r;
+    try {
+      const resp = await fetch(`${s.base}/rest/v1/agents`
+        + '?select=email,full_name,branch,producer_code,active,is_admin,role,grants&limit=200',
+        { headers: s.hdrs, signal: ac.signal });
+      r = { ok: resp.ok, rows: await resp.json().catch(() => []) };
+    } finally { clearTimeout(timer); }
+    if (!r.ok || !Array.isArray(r.rows)) return emptyRoster();
     const m = new Map();
     for (const row of r.rows) {
       const email = String(row.email || '').toLowerCase().trim();
@@ -317,7 +351,7 @@ async function loadRoster() {
     }
     _roster = m; _rosterUntil = Date.now() + ROSTER_TTL_MS;
     return m;
-  } catch { return new Map(); }
+  } catch { return emptyRoster(); }
 }
 
 /* Who may sign in. ADDITIVE: code list first, table only adds ACTIVE rows.

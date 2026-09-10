@@ -318,15 +318,34 @@ export default async function handler(req, res) {
        step can prefill instead of asking the agent to retype what we already have.
        Read from the payment rather than the URL so a link saved by "finish later"
        still prefills correctly. */
+    /* THE OBLIGATION, so the page can preview the fee the way the SERVER computes it.
+       `recalcFee` used the payment amount from the launch URL and showed
+       `paid - carrierCost`. Since A, the server derives the fee from what the client
+       OWES IN FULL, so the two disagreed on every part-payment: on client 24615 the
+       page showed -$12.00 while the server correctly wrote +$75.00. Fixing the server
+       and leaving the preview behind is how a warning ends up crying wolf on the exact
+       workflow it was built to protect.
+
+       Read here rather than passed in the URL: this row is already being fetched, and
+       an added query param only works for callers that remember to send it - the
+       "written on one path and not the others" bug this file already carries scars
+       from. amount comes back too, because the launch URL's `paid` is a claim from a
+       browser and the ledger is the record. */
     let suggested = null, program = null, purpose = null;
+    let chargeAmount = null, totalOwed = null, owedAmount = null;
     if (body.payment_id) {
-      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose`);
+      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose,amount,total_owed`);
       const row = p.rows && p.rows[0];
       if (row) {
         const ex = row.extra || {};
         suggested = row.carrier_name || ex.policyCarrier || (ex.hawksoft && ex.hawksoft.policyCarrier) || null;
         program   = ex.policyProgram || (ex.hawksoft && ex.hawksoft.policyProgram) || null;
         purpose   = row.purpose || null;
+        chargeAmount = row.amount != null ? Number(row.amount) : null;
+        totalOwed    = row.total_owed != null ? Number(row.total_owed) : null;
+        /* Mirrors owedFor() in platform.js and the derivation in save_carrier_leg. */
+        owedAmount = (totalOwed != null && chargeAmount != null && totalOwed > chargeAmount)
+          ? totalOwed : chargeAmount;
       }
     }
 
@@ -362,7 +381,9 @@ export default async function handler(req, res) {
       .map(r => ({ name: String(r.name || '').trim(), policies: r.policies }))
       .filter(x => x.name && mine.indexOf(x.name) === -1);
 
-    return res.status(200).json({ ok: true, suggested, program, purpose, existing_receipt: existing, onThisClient: mine, carriers: ranked });
+    return res.status(200).json({ ok: true, suggested, program, purpose, existing_receipt: existing,
+      charge_amount: chargeAmount, total_owed: totalOwed, owed_amount: owedAmount,
+      onThisClient: mine, carriers: ranked });
   }
 
   /* ---------- Storage reachability probe (admin only) ----------

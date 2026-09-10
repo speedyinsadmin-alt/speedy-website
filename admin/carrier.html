@@ -126,6 +126,8 @@
         </label>
       </div>
       <div class="fee"><span class="mute">Speedy keeps (fee)</span><b id="fee">&mdash;</b></div>
+      <div id="feeBase" class="hint hide" style="text-align:right"></div>
+      <div id="feeWarn" class="hide"></div>
       </div>
       <div id="docsOnlyNote" class="hide" style="margin-top:14px;border:1px solid var(--blue);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5">
         <span id="docsOnlyWhy">Adding documents to a payment that is already audited. The carrier cost, the fee and the commission stay exactly as they are.</span>
@@ -212,6 +214,22 @@ let HAS_RECEIPT = null;
 let DOCS = [];
 const $ = s => document.querySelector(s);
 const qp = new URLSearchParams(location.search);
+
+/* Declared HERE, with the rest of the form state, and ABOVE every possible reader.
+   `recalcFee` uses both, and it is called from `fillCtx`, which is itself called from
+   two sign-in callbacks that sit ABOVE this file's fee code. Those callbacks run after
+   module evaluation, so declaring these next to recalcFee would work today — and would
+   be a TDZ error the moment anything called fillCtx synchronously during load. That
+   exact shape shipped as v2.7: a `const` read above its declaration is a runtime
+   error, and `node --check` passes on it. Placement, not luck. */
+let OWED = null, CHARGE_AMT = null;
+/* A fee under this is not impossible, just unusual enough to be worth a second look.
+   Measured over 250 completed audits: 7 came in under $10 (1 negative, 3 exactly zero,
+   two at 0.50/1.00, one at 9.98) — 2.8%, rare enough to mean something. The 10.00–24.99
+   band's minimum is EXACTLY 10.00 across 28 audits, so the test is `< 10`, never
+   `<= 10`, or it would nag on 28 legitimate fees. */
+const FEE_LOW = 10;
+
 const CTX = {
   client_no: qp.get('client') || qp.get('no') || '',
   name: qp.get('name') || '',
@@ -312,16 +330,70 @@ function fillCtx(){
 
 $('#camt').addEventListener('input', recalcFee);
 function recalcFee(){
-  const paid = Number(String(CTX.paid||0).replace(/,/g,''));
+  /* The base is what the client OWES IN FULL, not what this payment took. The server
+     has derived the fee that way since A shipped; this preview used CTX.paid and so
+     disagreed on every part-payment — client 24615 showed -$12.00 on screen while the
+     server wrote +$75.00. A warning that fires on correct work is worse than none. */
+  const urlPaid = Number(String(CTX.paid||0).replace(/,/g,''));
+  const base = (OWED != null && Number.isFinite(OWED) && OWED > 0) ? OWED : urlPaid;
   const raw = String($('#camt').value == null ? '' : $('#camt').value).trim();
   const cAmt = raw === '' ? null : Number(raw.replace(/,/g,''));
   /* A carrier cost of 0.00 is a REAL case (endorsements, cancellations): the whole
      charge is agency fee. The old test was `paid && cAmt`, and 0 is falsy — so the fee
      blanked to em-dash at exactly the moment it equalled the entire charge. That is
      half of why agents typed 0.01 to get a number back. Test for empty, not falsy. */
-  const fee = (paid > 0 && cAmt != null && Number.isFinite(cAmt)) ? paid - cAmt : null;
-  syncZeroAck(cAmt, paid);
-  $('#fee').textContent = fee!=null ? '$'+fee.toFixed(2) : '—';
+  const fee = (base > 0 && cAmt != null && Number.isFinite(cAmt)) ? base - cAmt : null;
+  syncZeroAck(cAmt, base);
+
+  const el = $('#fee'), warn = $('#feeWarn');
+  /* -$15.50, not $-15.50. The minus belongs in front of the money when the entire
+     point of the line is that the reader notices it, and it matches the confirm. */
+  el.textContent = fee==null ? '—'
+    : (fee < 0 ? '-$' + Math.abs(fee).toFixed(2) : '$' + fee.toFixed(2));
+
+  /* THREE TIERS. `.fee b` is hardcoded green in the stylesheet, so a NEGATIVE fee was
+     displayed in green — Esmeralda's -$34.00 read as profit. Inline colour overrides
+     the rule. Nothing is ever BLOCKED here: a genuine loss must stay recordable, and a
+     gate that refuses a legitimate case gets satisfied in the smallest increment that
+     passes. That is where 0.01 came from. */
+  if(fee == null){
+    el.style.color = '';
+    if(warn){ warn.className = 'hide'; warn.innerHTML = ''; }
+  } else if(fee < 0){
+    el.style.color = 'var(--red)';
+    if(warn){
+      warn.className = '';
+      warn.style.cssText = 'margin-top:8px;border:1.5px solid var(--red);background:rgba(224,49,49,.08);'
+        + 'border-radius:9px;padding:9px 11px;font-size:12px;line-height:1.5;color:var(--ink)';
+      warn.innerHTML = '<b style="color:var(--red)">The fee is negative.</b> The carrier cost ($'
+        + cAmt.toFixed(2) + ') is more than the whole obligation ($' + base.toFixed(2)
+        + '). Check the amount on the receipt — the agency would be losing $'
+        + Math.abs(fee).toFixed(2) + ' on this.';
+    }
+  } else if(fee < FEE_LOW){
+    el.style.color = 'var(--amber)';
+    if(warn){
+      warn.className = '';
+      warn.style.cssText = 'margin-top:8px;border:1px solid rgba(245,166,35,.5);background:rgba(245,166,35,.07);'
+        + 'border-radius:9px;padding:8px 11px;font-size:12px;line-height:1.5;color:var(--mute)';
+      warn.innerHTML = '<b style="color:var(--amber)">Under $' + FEE_LOW + '.</b> '
+        + 'Only 7 of 250 audits have been this low. Worth checking the carrier cost before submitting.';
+    }
+  } else {
+    el.style.color = 'var(--green)';
+    if(warn){ warn.className = 'hide'; warn.innerHTML = ''; }
+  }
+  /* Say WHICH number the fee was worked out from whenever they differ. Otherwise a
+     $20.00 fee beside a $164.50 carrier cost on a $130.50 charge looks impossible —
+     the same "where is the total?" question the Console row raised. */
+  const note = $('#feeBase');
+  if(note){
+    const differs = (OWED != null && CHARGE_AMT != null && OWED > CHARGE_AMT + 0.005);
+    note.textContent = differs
+      ? 'on the $' + OWED.toFixed(2) + ' owed in total, not the $' + CHARGE_AMT.toFixed(2) + ' taken on this payment'
+      : '';
+    note.className = differs ? '' : 'hide';
+  }
   updateSubmit();
 }
 
@@ -692,6 +764,13 @@ async function loadCarriers(){
     $('#carrier').placeholder = 'Carrier paid';
     return;
   }
+  /* The obligation, so the fee preview matches what the server will write. Set BEFORE
+     any recalcFee below, then recompute once — the page has already painted an em-dash
+     (or a fee off the launch URL) by the time this response lands. */
+  CHARGE_AMT = (r.charge_amount != null) ? Number(r.charge_amount) : null;
+  OWED = (r.owed_amount != null) ? Number(r.owed_amount) : null;
+  recalcFee();
+
   /* Show what is already on file BEFORE anything else, so the agent is never asked
      for a document that exists. */
   if(r.existing_receipt){
@@ -1108,6 +1187,36 @@ async function submit(complete){
         + 'go straight to audit.';
       const amt = $('#camt'); if(amt){ amt.focus(); amt.scrollIntoView({behavior:'smooth',block:'center'}); }
       return;
+    }
+  }
+
+  /* NEGATIVE FEE — confirm, never block. Saif's rule, Sep 10. The fee had no colour
+     logic at all (`.fee b` is hardcoded green), so Esmeralda's -$34.00 was shown to
+     her in GREEN and nothing asked her about it. A real loss must stay recordable, so
+     this asks once and takes yes for an answer.
+
+     Only on SUBMIT, not on a partial save: mid-flow the carrier cost is often not the
+     final one yet - that is what "I have not paid the carrier yet" means, 33 of 160
+     audits - and confirming there would be noise on the deliberately loose path. The
+     red tier still shows on both. Same reason B only gates `complete`. */
+  if(complete && !feeOnly()){
+    const cAmt = carrierAmt();
+    const urlPaid = Number(String(CTX.paid||0).replace(/,/g,''));
+    const base = (OWED != null && Number.isFinite(OWED) && OWED > 0) ? OWED : urlPaid;
+    if(cAmt != null && base > 0 && (base - cAmt) < 0){
+      const loss = (cAmt - base).toFixed(2);
+      const ok = confirm('The fee on this audit is NEGATIVE.\n\n'
+        + 'Carrier cost:      $' + cAmt.toFixed(2) + '\n'
+        + 'Client owes:       $' + base.toFixed(2) + '\n'
+        + 'Speedy fee:       -$' + loss + '\n\n'
+        + 'That records the agency losing $' + loss + ' on this sale, and the commission '
+        + 'worked out from it will be negative too.\n\n'
+        + 'Submit anyway?');
+      if(!ok){
+        const amt = $('#camt');
+        if(amt){ amt.focus(); amt.scrollIntoView({behavior:'smooth',block:'center'}); }
+        return;
+      }
     }
   }
 

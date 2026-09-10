@@ -189,6 +189,16 @@ function releasedNote(r){
     + money(r.commission * ratio) + ' released</div>';
 }
 
+/* PRINT THE ABSOLUTES, not just the remainder. The big number in this column is the
+   ONE payment on this row - a card swipe of 130.50 - and there is no total column, no
+   collected column and no carrier-cost column in this table. The row said "$20.00
+   still owed \u00b7 89% collected" and expected the reader to reconstruct that the client
+   owed 184.50 and 164.50 has arrived. Saif could not tell where the total was, which
+   is the correct reaction: a remainder and a percentage are not a statement of what
+   was owed. Both numbers were already in hand here and were being discarded after
+   computing the percentage. Follow-up payments are filtered out of this table
+   (audit_list drops balance_of rows), so this line is the only place the rest of the
+   money appears at all. */
 function balanceCell(r){
 
   const owed = r.total_owed != null ? Number(r.total_owed) : null;
@@ -196,8 +206,10 @@ function balanceCell(r){
   if(owed == null || owed <= got + 0.005) return '';
   const left = owed - got;
   const pct = Math.round((got / owed) * 100);
-  return '<div style="font-size:10.5px;color:var(--amber);white-space:nowrap">'
-    + money(left) + ' still owed \u00b7 ' + pct + '% collected</div>';
+  return '<div style="font-size:10.5px;color:var(--mute);white-space:nowrap">'
+      + money(got) + ' of ' + money(owed) + ' \u00b7 ' + pct + '%</div>'
+    + '<div style="font-size:10.5px;color:var(--amber);white-space:nowrap">'
+      + money(left) + ' still owed</div>';
 }
 
 function docsCell(docs, needsProof, rowKey, title){

@@ -1369,6 +1369,122 @@ light-mode** variables. Rewritten against what the file actually defines.
 
 ---
 
+## SEP 10 — A CONFIRMED LIVE ON SIX REAL AUDITS, AND THREE THINGS THE SCREENS DO NOT SAY
+
+### ✅ A IS PROVEN IN PRODUCTION — six audits, five agents, zero regressions
+`b46561e` went READY at **2026-09-09 23:38:28Z**. Every audit completed after that,
+with what A wrote against what the old derivation would have written:
+
+| client | agent | fee written | A expects | old code |
+|---|---|---|---|---|
+| 24615 | Esmeralda | **75.00** | 75.00 | **−12.00** |
+| 24065 | Yasmin | 83.00 | 83.00 | 83.00 |
+| 14525 | Melisa | 50.00 | 50.00 | 50.00 |
+| 26399 | Yolanda | 150.00 | 150.00 | 150.00 |
+| 26400 | Yolanda | 200.00 | 200.00 | 200.00 |
+| 25037 | Alejandra | 33.17 | 33.17 | 33.17 |
+
+**Every fee matches A exactly. Five of six are identical to the old code** — proof that
+A is a no-op wherever `total_owed` is blank, which is the ordinary case. One corrected,
+by 87 dollars of fee.
+
+**B has fired ZERO times.** No agent has hit `service_cost > amount` since the deploy,
+so the prompt is still **unproven in production**. It is the rare path by design; do not
+read the silence as either working or broken.
+
+### 25420 — Esmeralda did not use "Pay this balance", and that is the finding
+Asked to record the $34 she was holding, she took it as a **new charge**
+(`97c27549`, `charge_cash`, "Other: late payment", 23:46:37Z) with `balance_of` NULL.
+Linked by hand Sep 10. `collectedFor` 130.50 → **164.50**, ratio 0.891599, still owed
+**$20.00**, her commission on that row 1.41 → **1.78**.
+
+> **The button was live and on her screen.** The deploy was READY eight minutes before
+> she took that payment, and `openBalances` would have shown *"$54.00 of $184.50 — Pay
+> this balance"*. She charged fresh anyway. **This is direct evidence for item 1: the
+> control exists and nobody has been told.** Ask her what she saw — the same question
+> still open for the duplicate-receipt problem.
+
+**The Audit tab was never wrong here.** `audit_list` already filters `!p.balance_of`
+(`platform.js:1664`) and `renderAgentView` reads those same rows. An unlinked payment
+shows in Audit because it genuinely *is* a separate sale until it is linked. No filter
+needed — the link is the fix.
+
+### 14968 — MY EARLIER DIAGNOSIS WAS WRONG. It is not the 25420 pattern.
+There are **two** rows 98 seconds apart, and they are **different carriers**:
+
+| ts | amount | carrier | cost | fee |
+|---|---|---|---|---|
+| 17:27:57 | 274.10 | **INFINITY** | 285.00 | **−10.90** |
+| 17:29:35 | 273.00 | **ONWARD** | 222.31 | 50.69 |
+
+So these are **two separate sales**, not one obligation paid in parts. I had recorded it
+as the same shape as 25420 without looking at the carrier. **A does not fix it** —
+`total_owed` is NULL, so there is nothing for the new derivation to read. Either the
+client was short by 10.90 on the Infinity policy or the carrier cost is wrong, and only
+**Yasmin** can say which. Still open — item 78.
+
+> **LESSON, the same one as the Tendered 0.00 mistake in a new costume:** I grouped two
+> rows by their SHAPE (a negative fee) and assumed a shared cause. The column that
+> settles it — `carrier_name` — was in the same table the whole time. **Group by the
+> attribute that states the cause, never by the symptom.**
+
+### ⚠️ Three things the screens do not say — found by Saif checking the corrections
+He looked at the Console transactions row for 25420, saw `$130.50 · $20.00 still owed ·
+89% collected`, and asked **"where is the total?"** That is the correct reaction.
+
+1. **Item 82, FIXED today.** The column showed a remainder and a percentage and expected
+   the reader to reconstruct that the client owed **184.50** and **164.50** has arrived.
+   There is no total column, no collected column and no carrier-cost column in that
+   table, and follow-up payments are filtered out of it — so that one line is the only
+   place the rest of the money appears at all. `balanceCell` already held both numbers
+   and discarded them after computing the percentage. Now reads:
+   ```
+   $130.50
+   $164.50 of $184.50 · 89%
+   $20.00 still owed
+   ```
+2. **Item 80, open.** The **Trust tab counts balance rows as UNACCOUNTED.** Its filter
+   tests `kind` and date only, and a row with no `service_cost` goes straight to
+   unaccounted (`platform.js:2078`) — but a balance row never gets a carrier cost,
+   because it carries no audit. Measured Sep 10: **$121.00 across 2 rows** (25420's $34
+   and 24615's $87) of a $10,798.30 unaccounted total, and they will sit there
+   **permanently**. Linking is still correct — the money is attributed to the parent —
+   but Trust does not know that. One filter fixes it.
+3. **Item 81, open.** The **By agent** tab's `earned` sums the FULL commission —
+   `g.earned += x.commission` (`platform.html:903`), no `collected_ratio`. So an agent's
+   total counts commission that has not been released. **The per-payment rows are
+   correct**: `releasedNote` (`:185`) applies the ratio and prints "$1.78 released"
+   under the $2.00. Only the aggregate overstates.
+
+> **I got #3 wrong first and Saif's screenshot corrected me.** I said the Console would
+> show $2.00 and disagree with her portal's $1.78 — it shows both. I had read
+> `renderAgentView`'s summing and generalised it to a view I had not looked at.
+> **Do not describe a screen from an adjacent function.**
+
+### Refund, partial refund and voucher are GREENFIELD — scoped Sep 10
+They exist in the code **only as defensive filters** — `NON_PAYMENT` and the
+`/declin|fail|void|refund/` regexes that *ignore* such rows. There is **no way to create
+one**: no Clover refund call anywhere, no voucher concept at all, and zero rows of those
+kinds. The kinds that exist are `charge_card, charge_cash, charge_create_client,
+charge_live, charge_live_declined, paylink_charge, paylink_charge_declined,
+paylink_create`.
+
+Each needs answers before code, not after:
+- **Refund** — Clover refund API, a new ledger kind, and a HawkSoft note only: a filed
+  receipt **cannot be modified or un-filed**, so a refund can never cancel it. Then the
+  real question: **does commission reverse?** The standing rule is *"nothing is ever
+  reversed"* (`platform.js:93`).
+- **Partial refund** — the same machinery plus an amount, and it collides directly with
+  `total_owed` / `collectedFor` / `collectedRatio`.
+- **Voucher** — genuinely different: money the agency owes a **client**. A liability, not
+  a payment, and nothing in the ledger models one. **Blocked on Tony defining it** —
+  store credit? applied to a future charge? who authorises it?
+
+**Agreed sequencing (Saif, Sep 10):** refund + partial refund as ONE feature, plan and
+mockup first. Voucher parked.
+
+---
+
 ## AGREED, DESIGNED, NOT YET BUILT (Aug 29)
 In this order, after the Blob store exists:
 1. **Upload documents from the policy row** — `add_document` in `carrier.js`
@@ -1816,6 +1932,9 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 77. **`carrier.html`'s `setShare` box uses `.btn` and `.muted`, which have no rule in that file** — cosmetic only, found Sep 9 while writing B's prompt
 78. **Client 14968 still reads `fee_amount` −10.90** (Yasmin, Sep 8, paid 274.10 against a 285.00 carrier cost). Needs her account of what the client actually owed before anything is written. A alone does NOT fix it — `total_owed` is NULL, so there is nothing for the new derivation to read
 79. **The partial-save negative fee is NOT transient** — `complete:false` still writes it, 33 of 160 audits take over 2 days, and the Trust tab counts it as Speedy profit (`platform.js:2088`, no `audit_status` filter, and `service_cost` is written so it never reaches `unaccounted`). Fix is either B's question at partial-save time for the `service_cost > amount` case, or the Trust tab ignoring incomplete audits. **Saif's call**
+80. **Trust tab counts `balance_of` rows as UNACCOUNTED** — its filter tests `kind` and date only, and a row with no `service_cost` goes to unaccounted (`platform.js:2078`), but a balance row never gets a carrier cost because it carries no audit. **$121.00 across 2 rows** measured Sep 10 (25420's $34, 24615's $87), stuck there permanently. One filter fixes it: treat `balance_of` rows as collected-and-attributed, not unaccounted
+81. **By-agent `earned` ignores `collected_ratio`** — `g.earned += x.commission` (`platform.html:903`) sums the FULL commission, so an agent's total counts money not yet released. The per-payment rows are correct (`releasedNote`, `:185`, prints "$1.78 released" under the $2.00). Only the aggregate overstates
+82. ~~**No total / collected / carrier-cost column on the Console transactions row**~~ **CLOSED Sep 10** — `balanceCell` now prints `$164.50 of $184.50 · 89%` above `$20.00 still owed`. Raised by Saif asking "where is the total?" while checking the corrections
 59. ~~**`portal_client` leaks money to every agent**~~ **CLOSED Sep 9 — there was no leak.** `portal_client` returns no commission figure; `fee_amount` and `service_cost` are SHARED by decision. Number kept so older references still resolve. Successor: **when roles land, re-check `audit_list`'s unfiltered `agent_commission?select=*` (`platform.js:1633`)** — only the `info@`-only admin gate keeps it private
 60. **Merge the redundant third HawkSoft log row** — each charge posts receipt + attachment + a text-only summary. Mocked up, parked by Saif
 61. **Malcolm's home branch still unknown** — deliberately no `STAFF` entry, so he gets the visible branch picker. Do NOT infer it from `call_log.office_id`; that was wrong for Melisa

@@ -1610,6 +1610,61 @@ client, an open balance, an amount that fits), so it is allowed any time while t
 unaudited. **It does move commission, so if Tony would rather always be asked, that is a
 small change** — open item 83.
 
+### ✅ SEP 10 · FOUR THINGS SAIF FOUND BY READING THE CARD AS AN AGENT (`8f115de`)
+He opened client 25420, expanded the payments, and found four problems in one screen.
+
+**1. Money owed was hidden behind a toggle.** It rendered only inside a payment row,
+under *"Payments & documents"* — so an agent had to know to expand a collapsed section to
+discover the client still owes money. It is a fact about the **client**, not about one
+payment, so it now sits under the name with the policies:
+
+```
+Owes $20.00
+$164.50 of $184.50 collected · from 2026-09-08
+```
+
+Built from **`openBalances()`**, the same helper the charge sheet and the payment rows
+use, so all three cannot disagree.
+
+**2. The row never showed the total** — `$130.50 · $20.00 still owed`, never the $184.50.
+**This is the same gap he found on the Console row the same morning**, which `balanceCell`
+fixed there. I fixed one reader and left the other.
+
+> **LESSON: when you fix a displayed number, grep for every other place that number is
+> displayed.** Two screens showing one figure will drift apart the moment only one is
+> corrected. The Console and the card now read identically.
+
+**3. The balance chip was blue; it is now grey.** Saif said it should be closer to the
+amber family. Half right, for a better reason than colour family: **amber here means
+"needs your attention"** and a balance payment needs nothing — that is what item 76 was
+for — but **blue is the CLICKABLE colour** on this card (`change`, `wrong client`, every
+document chip), so a blue chip reads as a button. Grey is the honest answer. The
+*"Pays down the…"* line went grey for the same reason.
+
+**4. ⛔ ADMIN COULD NOT REACH THE CONTROLS.** The card gated its correction links on
+*"I earn it or I took it"* (`mine || iCharged`), so signed in as `info@` he saw **no links
+at all** on Esmeralda's payments — which is why he could not find the balance-link action
+I had just told him to test. Meanwhile the **server has always allowed admin** on
+`move_client`, `reassign_commission` and now `link_balance`. `portal_client` now returns
+`is_admin` and the card reads it — told by the server, never by comparing an email in the
+browser, because the allowlist is server-side and an identity from a browser is a claim.
+A cached response with no `is_admin` degrades to non-admin, verified.
+
+> **LESSON, and it has now bitten three times in one file: WHEN THE SERVER GRANTS A
+> PERMISSION, CHECK THAT THE UI OFFERS IT.** A guard and an affordance that disagree
+> produce a feature nobody can reach, and it fails silently — there is no error, just an
+> absent link. This is the mirror image of the Aug 29 bug where the UI offered an action
+> the server then refused *after* the work.
+
+**Found while checking that lesson, NOT fixed — open item 85.** `mayTouchPayment`
+(`carrier.js`) returns `true` for an OPEN audit: *"open: anyone may help finish"*, since
+`e1896c46` on Aug 29, **approved by Tony**. But `portal.html` still offers a non-owner
+only *"Add documents to help"*, with a comment claiming the full audit *"would let
+someone fill in a carrier cost and then be refused after the work."* **That comment is
+stale** — they would not be refused. The card is undercutting the help-finish-an-audit
+feature it was built to support. Fixing it changes who can set a carrier cost, so it is
+Saif's and Tony's call, not a silent correction.
+
 ### Harness lessons from today, all three worth keeping
 - **`googleClaims` caches claims KEYED ON THE ID TOKEN.** Reusing one literal token for
   every actor made every call after the first run as the *cached* identity, silently
@@ -2079,6 +2134,7 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 82. ~~**No total / collected / carrier-cost column on the Console transactions row**~~ **CLOSED Sep 10** — `balanceCell` now prints `$164.50 of $184.50 · 89%` above `$20.00 still owed`. Raised by Saif asking "where is the total?" while checking the corrections
 83. **Should `link_balance` always ask Tony?** It is allowed any time while the row is unaudited, because a balance link is verifiable from the data (same client, open balance, amount fits) unlike a wrong-client move. But it DOES move commission. `move_client`'s 15-minute-then-escalate pattern was deliberately not copied — Tony's call whether to add it
 84. **`portal_client` filters `is_test=is.false`**, so ZZTEST (26081) rows never appear on the client card. Means the balance-link action cannot be exercised end-to-end on the test client through the portal — the only true test is a real client, which costs permanent HawkSoft notes. Consider an admin-only "show test rows" toggle before the next money feature needs floor testing
+85. **The card offers a non-owner documents-only on an OPEN audit, but the server lets anyone finish one.** `mayTouchPayment` returns true for an open audit since `e1896c46` (Tony-approved); `portal.html`'s gate and its comment both predate that and claim they would be refused. The card is undercutting the help-finish feature. Changes who can set a carrier cost — **Saif + Tony's call**
 59. ~~**`portal_client` leaks money to every agent**~~ **CLOSED Sep 9 — there was no leak.** `portal_client` returns no commission figure; `fee_amount` and `service_cost` are SHARED by decision. Number kept so older references still resolve. Successor: **when roles land, re-check `audit_list`'s unfiltered `agent_commission?select=*` (`platform.js:1633`)** — only the `info@`-only admin gate keeps it private
 60. **Merge the redundant third HawkSoft log row** — each charge posts receipt + attachment + a text-only summary. Mocked up, parked by Saif
 61. **Malcolm's home branch still unknown** — deliberately no `STAFF` entry, so he gets the visible branch picker. Do NOT infer it from `call_log.office_id`; that was wrong for Melisa

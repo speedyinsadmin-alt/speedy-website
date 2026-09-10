@@ -1027,10 +1027,54 @@ const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_th
     }
 
     if (view === 'portal_staff') {
-      // agent list for the "commission to" picker — no HawkSoft dependency
+      /* ITEM 22, THE REST OF IT. This list existed FOUR times: portal.html's own STAFF
+         map, charge.html's copy of it, AGENT_NAME here, and the agents table. A branch
+         Tony set on the Staff page reached none of them, so the page he was given to
+         manage offices had no effect on the office an agent signs in under. This view
+         is now the one the portal reads for all three of those things — who I am, what
+         my home branch is, and who can be handed a commission.
+
+         ADDITIVE, exactly like rosterAgents(): AGENT_NAME is the floor and the table
+         only ever ADDS or RENAMES. A failed roster read therefore returns the same
+         list the page got before this change, never an empty commission dropdown.
+         Aug 30's lesson applied to a money control rather than to a gate. */
+      const roster = await loadRoster();
+      const byEmail = new Map();
+      for (const [email, name] of Object.entries(AGENT_NAME)) {
+        byEmail.set(email.toLowerCase(), { email: email.toLowerCase(), name, active: true });
+      }
+      for (const a of roster.values()) {
+        if (a.external) continue;              // the table may only ever add @speedyins.com
+        const prev = byEmail.get(a.email);
+        byEmail.set(a.email, {
+          email: a.email,
+          name: a.name || (prev && prev.name) || a.email.split('@')[0],
+          /* active gates who may be OFFERED a commission. Inactive people are still
+             returned, because a departed agent's name has to render on the payments
+             they already wrote — the same rule loadRoster follows. */
+          active: a.active === true,
+        });
+      }
+      const mine = roster.get(me) || null;
       return res.status(200).json({ ok: true,
-        staff: Object.entries(AGENT_NAME).map(([email, name]) => ({ email, name })),
-        producers: PRODUCER_MAP });
+        staff: [...byEmail.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        producers: PRODUCER_MAP,
+        /* The five offices, from the same constant the Staff page's dropdown uses, so
+           a branch set there is always one this picker can pre-select. */
+        branches: OFFICE_NAMES,
+        /* WHO IS SIGNED IN. `known` says the table has a row for them at all; `branch`
+           is null when it has one with no branch set. The page must treat those the
+           same way — show the picker, pre-select nothing — because guessing a branch
+           stamps a real office onto a real payment. */
+        me: {
+          email: me,
+          known: !!mine,
+          name: (mine && mine.name) || AGENT_NAME[me] || null,
+          branch: (mine && mine.branch) || null,
+          producer_code: (mine && mine.producer_code) || null,
+          role: (mine && mine.role) || (who.role === 'admin' ? 'admin' : 'agent'),
+        },
+      });
     }
 
 if (view === 'portal_share_due') {

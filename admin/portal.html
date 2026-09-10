@@ -117,6 +117,10 @@
       </div>
       <label for="officeSel">Office</label>
       <select id="officeSel"></select>
+      <!-- Shown only when Continue is pressed with nothing chosen, which is now
+           possible: someone with no home branch on their staff record gets a
+           placeholder rather than an assumed Moreno Valley. -->
+      <div id="officeWarn" class="hide" style="color:var(--amber);font-size:12.5px;margin-top:6px"></div>
       <button class="btn btn-blue" onclick="confirmOffice()">Continue →</button>
     </div>
   </div>
@@ -396,17 +400,29 @@ function toggleTheme(){
 </script>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const OFFICES = ['Moreno Valley','Riverside Van Buren','Riverside Magnolia','Lake Elsinore','Colton'];
-const STAFF = {
-  'sammy@speedyins.com':['Samuel Rodriguez','Moreno Valley'],'yolanda@speedyins.com':['Yolanda Hernandez','Lake Elsinore'],
-  'jorge@speedyins.com':['Jorge Ramos','Moreno Valley'],'lfigueroa@speedyins.com':['Laura Figueroa','Moreno Valley'],
-  'chris@speedyins.com':['Christian Aguilar','Colton'],'yasmin@speedyins.com':['Yasmin Alfaro','Riverside Van Buren'],
-  'fernando@speedyins.com':['Fernando Salgado','Riverside Van Buren'],'jesus@speedyins.com':['Jesus Velarde','Riverside Van Buren'],
-  'alejandra@speedyins.com':['Alejandra Salas','Riverside Magnolia'],'esmeralda@speedyins.com':['Esmeralda Ayala Hernandez','Riverside Magnolia'],
-  'irene@speedyins.com':['Irene Ayala Hernandez','Riverside Magnolia'],'melisa@speedyins.com':['Melisa Hernandez','Moreno Valley'],'daisy@speedyins.com':['Daisy Hurtado','Riverside Van Buren'],
-  'tony@speedyins.com':['Tony Dabouqi','Moreno Valley'],
-  'lana@speedyins.com':['Lana D.','Moreno Valley'],'info@speedyins.com':['Tony Dabouqi','Moreno Valley']
-};
+/* THE STAFF LIST IS NO LONGER HERE. Item 22: it used to be a hardcoded map in this
+   file — name and home branch for sixteen people — which meant a branch Tony set on
+   the Staff & permissions page reached nothing. The page he was given to manage
+   offices had no effect on the office an agent actually signs in under.
+
+   It now comes from portal_staff, which builds it from the agents table over
+   AGENT_NAME as a floor, so this file has no opinion about who works here. What
+   changed for real people, checked row by row against the table before moving it:
+   thirteen of eighteen are byte-identical; Malcolm gains his name and Riverside
+   Magnolia (he was not in the map at all, so he was being offered no home branch and
+   was missing from the commission dropdown); Tony, info@ and Lana have no branch in
+   the table, so they now get the picker with NOTHING pre-selected instead of an
+   assumed Moreno Valley. That last one is deliberate — see officeOptions().
+
+   OFFICES stays as a FALLBACK only. The five offices are served alongside the staff
+   list, but if that request fails the picker still has to render, and an agent with no
+   office cannot take a payment at all. */
+const OFFICES_FALLBACK = ['Moreno Valley','Riverside Van Buren','Riverside Magnolia','Lake Elsinore','Colton'];
+let OFFICES = OFFICES_FALLBACK.slice();
+/* Who is signed in, per the server. `known` false or `branch` null both mean the same
+   thing to this page: we do not know their home branch, so never assume one. */
+let ME = { known:false, name:null, branch:null, producer_code:null, role:'agent' };
+let ROSTER = [];
 let TOKEN = null, EMAIL = null, OFFICE = null;
 
 const HL = { client:null, policy:'', last:'', armed:false, opened:false };
@@ -474,33 +490,50 @@ function retryReads(){
   if(box && box.value.trim().length >= 2) runSearch(box.value.trim());
 }
 
-function onCred(resp){
+/* The picker's options. With a known home branch it is pre-selected and labelled, as
+   before. WITHOUT ONE there is no pre-selection at all, just a placeholder the agent
+   has to move off — because the office is stamped on a real payment, and a dropdown
+   that already reads "Moreno Valley" gets confirmed without being read. The old code
+   defaulted to Moreno Valley for anyone missing from the map, which is how an agent
+   with no known branch could charge under the wrong office without ever choosing it. */
+function officeOptions(home){
+  const opts = OFFICES.map(o => '<option value="'+esc(o)+'"'+(o===home?' selected':'')+'>'
+    + esc(o) + (o===home?' — your home branch':'') + '</option>');
+  if(!home) opts.unshift('<option value="" selected disabled>— choose an office —</option>');
+  return opts.join('');
+}
+
+async function onCred(resp){
   // Re-auth mid-charge: refresh the token only, keep the sheet and everything typed
   if(REAUTH){ TOKEN = resp.credential; REAUTH = false; clearAuthWarn(); retryReads(); return; }
   TOKEN = resp.credential; EMAIL = jwtEmail(TOKEN);
-  const staff = STAFF[EMAIL];
-  const home = staff ? staff[1] : 'Moreno Valley';
-  const name = staff ? staff[0] : (EMAIL||'').split('@')[0];
-  // build office dropdowns (home pre-selected)
-  const opts = OFFICES.map(o => '<option value="'+o+'"'+(o===home?' selected':'')+'>'+o+(o===home?' — your home branch':'')+'</option>').join('');
-  $('#officeSel').innerHTML = opts;
+  /* AWAITED, before anything is decided. This is the read that used to be a map in
+     this file; the home branch, the welcome name and the commission dropdown all come
+     out of it. If it fails, ME stays { known:false, branch:null } and every path below
+     falls through to "show the picker and pre-select nothing" — the safe direction. */
+  await loadStaff();
+  const home = ME.branch || null;
+  const name = ME.name || (EMAIL||'').split('@')[0];
+  $('#officeSel').innerHTML = officeOptions(home);
   $('#welcomeName').textContent = 'Welcome, ' + name.split(' ')[0] + ' 👋';
-  $('#homeName').innerHTML = name + ' <span class="beta">BETA</span>';
+  $('#homeName').innerHTML = esc(name) + ' <span class="beta">BETA</span>';
   OFFICE = home;
   $('#gate').classList.add('hide');
-  /* The picker is skipped on a launch ONLY for a known staff member. With no STAFF
-     entry there is no home branch to trust, and skipping would stamp 'Moreno Valley'
-     on a real payment with nothing on screen to say so. Unknown => always pick. */
-  if(HL.armed && HL.client && staff){
+  /* The picker is skipped on a launch ONLY when we actually KNOW the home branch.
+     The test used to be "is there an entry in the STAFF map", which was a proxy for
+     it; now that the branch itself can be null for someone who IS on the roster
+     (Tony's own row, today), the branch is what has to be tested. Skipping without
+     one would stamp an office on a real payment with nothing on screen to say so. */
+  if(HL.armed && HL.client && home){
     applyOffice(home);
     return;
   }
   /* Coming back from the carrier page, the agent already chose an office minutes ago.
      Making them choose again is the same interruption as making them sign in again -
      and the office is not a fresh decision, it is the one they are already working
-     under. Only honoured for a KNOWN staff member and a real office, so it can never
-     silently stamp a branch on a payment for someone with no STAFF entry. */
-  if(HANDOFF_BACK && staff){
+     under. Only honoured for a real office and a known branch, so it can never
+     silently stamp a branch on a payment for someone we know nothing about. */
+  if(HANDOFF_BACK && home){
     let saved = null;
     try { saved = localStorage.getItem('speedy_handoff_office'); } catch(e){}
     if(saved && OFFICES.indexOf(saved) !== -1){
@@ -511,7 +544,18 @@ function onCred(resp){
   $('#officePick').classList.remove('hide');
 }
 
-function confirmOffice(){ applyOffice($('#officeSel').value); }
+/* Refuses an empty office. The placeholder is `disabled`, so a browser will not let it
+   be chosen — but a browser that ignores that, or a stale render, must not be able to
+   put OFFICE=null onto a charge. */
+function confirmOffice(){
+  const v = $('#officeSel').value;
+  if(!v || OFFICES.indexOf(v) === -1){
+    const w = $('#officeWarn');
+    if(w){ w.textContent = 'Pick the office you are working at today.'; w.classList.remove('hide'); }
+    return;
+  }
+  applyOffice(v);
+}
 function applyOffice(office){
   OFFICE = office;
   /* Remembered so a return trip does not ask again. Cleared on sign-out. */
@@ -770,6 +814,13 @@ function signOut(){ clearAuthWarn();
   /* Signing out must forget the office and the handoff, or the next person on a
      shared branch machine inherits both. */
   try { localStorage.removeItem('speedy_handoff_office'); localStorage.removeItem('speedy_handoff_tok'); } catch(e){}
+  /* And it must forget WHO, for the same reason. These four used to be a constant in
+     this file, so there was nothing to clear; now that the name, the home branch and
+     the commission list are fetched per person, leaving them behind would greet the
+     next agent on a shared machine by the last one's name and pre-select the last
+     one's office. */
+  STAFF_LOADED=false; ME={ known:false, name:null, branch:null, producer_code:null, role:'agent' };
+  ROSTER=[]; PRODUCERS={}; OFFICES=OFFICES_FALLBACK.slice();
   TOKEN=null; EMAIL=null; OFFICE=null; OPEN_TABS=[]; ACTIVE_TAB=null; CLIENT_CACHE={}; CHG=null; UNFINISHED=[]; document.getElementById('chargeSheet').classList.add('hide'); document.getElementById('todoSheet').classList.add('hide'); document.body.style.overflow=''; $('#home').classList.add('hide'); $('#officePick').classList.add('hide'); $('#gate').classList.remove('hide'); if(window.google) google.accounts.id.prompt(); }
 
 // ===== STAGE 2: client search, tabs (max 5), compact card =====
@@ -1339,18 +1390,44 @@ function finishAuditFor(paymentId, clientNo, amount){
    historical and were wrong for roughly half the payments we checked. The producer
    itself is read-only and never rewritten by us. */
 let PRODUCERS = {}, CHG_PRODUCER = null;
-const staffList = () => Object.entries(STAFF)
-  .filter(([e]) => e !== 'tony@speedyins.com')          // info@ already represents Tony
-  .map(([email, v]) => ({ email, name: v[0] }))
+/* Who can be OFFERED a commission: active people only, since handing one to somebody
+   who has left is a mistake with money attached. Inactive rows are still kept in
+   ROSTER, because agentLabel has to render a departed agent's name on the payments
+   they already wrote — the server follows the same rule for the same reason. */
+const staffList = () => ROSTER
+  .filter(s => s.active !== false)
+  .filter(s => s.email !== 'tony@speedyins.com')        // info@ already represents Tony
+  .map(s => ({ email: s.email, name: s.name }))
   .sort((a, b) => a.name.localeCompare(b.name));
+
+/* ONE read, cached, and every caller awaits it — onCred for the branch and the name,
+   fillCommission for the dropdown. STAFF_LOADED rather than a check on PRODUCERS,
+   because a response can legitimately carry an empty producer map and would then be
+   re-fetched on every charge. */
+let STAFF_LOADED = false;
 async function loadStaff(){
-  if(Object.keys(PRODUCERS).length) return;
+  if(STAFF_LOADED) return;
   try{
     const r = await api('portal_staff');
-    if(r && r.ok) PRODUCERS = r.producers || {};
+    if(r && r.ok){
+      PRODUCERS = r.producers || {};
+      if(Array.isArray(r.staff) && r.staff.length) ROSTER = r.staff;
+      if(Array.isArray(r.branches) && r.branches.length) OFFICES = r.branches;
+      if(r.me) ME = r.me;
+      STAFF_LOADED = true;
+    }
   }catch(e){}
+  /* A FAILED READ MUST NOT EMPTY THE COMMISSION DROPDOWN. Falling back to just the
+     signed-in agent keeps the one choice that is always correct — you can always earn
+     your own commission — instead of an empty select that silently posts nothing. */
+  if(!ROSTER.length && EMAIL){
+    ROSTER = [{ email: EMAIL, name: (ME.name || EMAIL.split('@')[0]), active: true }];
+  }
 }
-function agentLabel(email){ return (STAFF[email] && STAFF[email][0]) || email; }
+function agentLabel(email){
+  const hit = ROSTER.find(s => s.email === email);
+  return (hit && hit.name) || email;
+}
 function fillCommission(clientCache){
   const sel = chgEl('chgComm');
   const me = EMAIL;

@@ -1155,14 +1155,50 @@ note RENDERS untruncated — read one in CMS to close that off.
 > complete them.** Deleting them on merge, as the old heading said, would have thrown
 > away three unfinished jobs.
 
-1. **📣 TELL THE AGENTS — the most urgent item in this file.** **93 invoices used to
-   close on their own; nothing closes now unless someone picks it.** Measured Sep 9:
-   **14 charges since the promotion, zero invoices applied** — every one reads
-   *no invoice picked*. Agents were never told the picker exists, so nobody is picking.
-   Nothing breaks loudly; invoices simply stay open and whoever reconciles finds out in
-   a fortnight. One message: the picker now defaults to *"No invoice — just take the
-   payment"*, and an invoice only closes if you pick it AND the amount matches it
-   exactly.
+1. **📣 TELL THE AGENTS.** **93 invoices used to close on their own; nothing closes now
+   unless someone picks it.** Agents were never told the picker exists.
+
+   **⚠️ RE-MEASURED SEP 10, AND THE OLD FIGURE HERE WAS ALARMIST.** This said *"14
+   charges, zero invoices applied"*, which reads as fourteen failures. It was not. That
+   count came from the COLLAPSED `no invoice picked` string, which could not tell
+   *nothing was owed* from *the agent walked past it*. Since the split shipped
+   (`57ab9da`, live 2026-09-09 21:16):
+
+   | `invoice_status` | charges | $ |
+   |---|---|---|
+   | **no open invoices on this client** | **13** | 12,393.64 |
+   | 1 open invoice, none picked | 1 | 299.81 |
+   | 2 open invoices, none picked | 1 | 34.00 |
+
+   **15 charges, 2 real misses, $333.81.** Thirteen clients had nothing open to close.
+   The cost is running at roughly **2 a day, not 15** — worth a message to the floor,
+   not worth an emergency fix. The 20 charges between Sep 9 00:52 and 20:27 carry the
+   collapsed string and are **permanently unknowable**.
+
+   For contrast, the OLD auto-matcher applied **5 invoices on Sep 8 alone**
+   (`applied — exact amount match (INV…)`), and **0 have closed since** the pick-only
+   rule went in — but only 2 of those could have.
+
+   **The two misses:**
+   - **25246** — Sammy, $299.81 `charge_live`, Sep 9 21:36, ref 625200737920, still
+     unaudited. Purpose is **"Down payment"**, and per Sep 2–3 every unlinked charge we
+     have ever seen was a down payment: new business, charged BEFORE the policy exists.
+     So the open invoice on that client probably belongs to an OLDER policy, and picking
+     it would have **misapplied the money**. **A miss is not automatically a mistake** —
+     check before closing anything by hand.
+   - **25420** — Esmeralda, $34.00 cash, Sep 9 23:46. The same payment she took as a new
+     charge instead of "Pay this balance"; now linked as a `balance_of` row, so it pays
+     down our own ledger balance rather than a HawkSoft invoice.
+
+   **Invoices are NEVER stored** — they are read live from HawkSoft on each call
+   (`include=…,invoices`). `invoice_status` on the ledger row is the only lasting record
+   that a pick was or was not made, which is why the split mattered.
+
+   **The message to the floor** is therefore narrower than first thought: not *"pick an
+   invoice on every charge"* but **"when the charge sheet shows an open invoice, pick it
+   or it stays open — and it only closes if the amount matches exactly."** Most charges
+   genuinely have nothing to pick, and the picker still defaults to *"No invoice — just
+   take the payment"*.
 2. **🔑 ROTATE THE ADMIN KEY.** Open since Sep 3, when it appeared in a chat
    screenshot, and it reaches every HawkSoft write endpoint. It no longer has to
    survive a curl against a public preview URL, but it is still the key to every write

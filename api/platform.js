@@ -125,6 +125,10 @@ const TEST_CLIENT = 26081; // ZZTEST — the only client sync/HawkSoft-read will
 const HS_BASE = 'https://integration.hawksoft.app';
 // HawkSoft office ids (NOT RingCentral office groups — see the calls view).
 const OFFICE_MAP = { '1': 'Moreno Valley', '2': 'Riverside Van Buren', '3': 'Riverside Magnolia', '4': 'Lake Elsinore', '5': 'Colton' };
+/* The five office NAMES, in office order — served to the Staff page so its branch
+   dropdown and this map can never drift apart. Written as a name list because the
+   agents table stores the name, not the id. */
+const OFFICE_NAMES = Object.keys(OFFICE_MAP).sort().map(k => OFFICE_MAP[k]);
 
 // Carrier name normalization (misspellings / variants -> canonical). Grow as needed.
 const CARRIER_NORMALIZE = {
@@ -1791,10 +1795,21 @@ if (view === 'portal_share_due') {
         }
       }
 
+      /* The branch has to be one of the five HawkSoft offices or the pre-selection at
+         sign-in matches nothing and the agent silently gets the picker with no default.
+         The page sends a value from the same list, so anything else is a bad client. */
+      const branchIn = b2.branch !== undefined ? (String(b2.branch).trim() || null) : undefined;
+      if (branchIn && !OFFICE_NAMES.includes(branchIn)) {
+        return res.status(400).json({ ok: false, error: `Unknown branch: ${branchIn}` });
+      }
+
       const patch = {
         full_name: b2.full_name !== undefined ? String(b2.full_name).slice(0, 80) : (before ? before.full_name : target),
-        branch: b2.branch !== undefined ? (String(b2.branch).slice(0, 40) || null) : (before ? before.branch : null),
+        branch: branchIn !== undefined ? branchIn : (before ? before.branch : null),
         producer_code: b2.producer_code !== undefined ? (String(b2.producer_code).toUpperCase().slice(0, 8) || null) : (before ? before.producer_code : null),
+        /* Editable from the page, at Saif's request: the note is where the reason a
+           record looks odd gets written down, and it was read-only before. */
+        notes: b2.notes !== undefined ? (String(b2.notes).slice(0, 400) || null) : (before ? before.notes : null),
         role, grants, active,
         updated_by: me2, updated_at: new Date().toISOString(),
       };
@@ -1811,7 +1826,7 @@ if (view === 'portal_share_due') {
       /* WHAT ACTUALLY MOVED, field by field, so the activity view can answer "why does
          Yasmin have refund?" without anyone reconstructing it from memory. */
       const changed = {};
-      for (const k of ['full_name', 'branch', 'producer_code', 'role', 'active']) {
+      for (const k of ['full_name', 'branch', 'producer_code', 'notes', 'role', 'active']) {
         const was = before ? before[k] : null;
         if (String(was) !== String(patch[k])) changed[k] = { from: was, to: patch[k] };
       }
@@ -2055,11 +2070,17 @@ if (view === 'portal_share_due') {
       /* Flagged so a row the table can grant nothing to is visible on the page. */
       external: !/@speedyins\.com$/.test(String(a.email || '')),
       notes: a.notes || null,
+      created_at: a.created_at || null,
       updated_by: a.updated_by || null, updated_at: a.updated_at || null,
     }));
     return res.status(200).json({ ok: true, email,
       me: String(email).toLowerCase(),
       roles: Object.keys(ROLE_CAPS),
+      /* The branch dropdown's options come from HERE, not from a list retyped in the
+         page. OFFICE_MAP is the same five offices HawkSoft has, and portal.html's
+         sign-in picker uses the same names — the whole point of item 22 is that the
+         two stop disagreeing. */
+      branches: OFFICE_NAMES,
       /* What each role already includes, so the page can show that a tick-box is
          redundant for an owner rather than letting someone "grant" what they have. */
       role_caps: ROLE_CAPS,

@@ -36,9 +36,18 @@
   .schip.on{background:rgba(77,124,254,.16);border-color:rgba(77,124,254,.55);
     color:var(--blue-l);font-weight:600}
   .schip .n{opacity:.65;font-size:11px;margin-left:3px}
+  /* Its own rule because class="go" HAS NO RULE in this file — .go only exists as
+     `.abtn.go`, so the Add button rendered as a browser-default white slab, the
+     brightest thing on a navy page and next to the quietest action on it. Sixth time
+     today that CSS from a sibling file was assumed to be here; found by looking at the
+     screenshot, which is the only reason it was found at all. */
+  .sadd{background:rgba(77,124,254,.14);border:1px solid rgba(77,124,254,.5);
+    color:var(--blue-l);border-radius:10px;padding:9px 15px;font-size:13px;
+    font-weight:600;cursor:pointer;white-space:nowrap;width:auto}
+  .sadd:hover{background:rgba(77,124,254,.22)}
   .sgrp{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;
     margin:18px 0 7px;padding-left:2px}
-  .srow{display:grid;grid-template-columns:1fr 180px 88px 1fr 20px;gap:12px;align-items:center;
+  .srow{display:grid;grid-template-columns:1fr 170px 84px 1fr 18px;gap:12px;align-items:center;
     padding:11px 13px;border:1px solid transparent;border-radius:11px;cursor:pointer;transition:.11s}
   .srow:hover{background:rgba(255,255,255,.03);border-color:var(--line)}
   .srow.open{background:rgba(255,255,255,.045);border-color:rgba(77,124,254,.42);
@@ -64,29 +73,126 @@
   .scar{color:var(--dim);font-size:12px;text-align:center}
   .stag{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
   .sedit{background:rgba(255,255,255,.045);border:1px solid rgba(77,124,254,.42);
-    border-top:0;border-radius:0 0 11px 11px;padding:2px 15px 15px;margin-bottom:8px}
-  .selab{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin:13px 0 8px}
-  .sboxes{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:9px 16px}
-  .sbx{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer}
-  .sbx input{width:15px;height:15px;accent-color:var(--blue);cursor:pointer}
-  .sbx.via{color:var(--mute);cursor:default}
-  .sctl{display:flex;gap:10px;align-items:center;margin-top:13px;flex-wrap:wrap}
-  .sctl select{background:var(--navy);border:1px solid var(--line);border-radius:9px;
-    color:var(--ink);padding:7px 10px;font-size:12.5px;width:auto}
-  .ssw{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mute);cursor:pointer}
-  .ssw input{width:15px;height:15px;accent-color:var(--blue)}
+    border-top:0;border-radius:0 0 11px 11px;padding:0 15px 15px;margin-bottom:8px}
+  /* Section headers match the list's group headings, with a hairline, so the editor
+     reads as part of the page rather than a form dropped into it. */
+  .selab{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;
+    margin:15px 0 10px;display:flex;align-items:center;gap:9px}
+  .selab::after{content:"";flex:1;height:1px;background:var(--line)}
+  .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:12px 16px}
+  .f{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .f label{font-size:11px;color:var(--mute)}
+  .f input,.f select{width:100%;background:var(--navy);border:1px solid var(--line);
+    border-radius:9px;color:var(--ink);padding:9px 11px;font-size:13px}
+  .f input:focus,.f select:focus{outline:none;border-color:var(--blue)}
+  .f input:disabled,.f select:disabled{opacity:.55;cursor:not-allowed}
+  .f .pcin{font-family:var(--mono);text-transform:uppercase}
+  .fhint{font-size:10.5px;color:var(--dim);line-height:1.45}
+  /* A REAL switch, not a checkbox. A disabled checkbox at low opacity reads as
+     unchecked - which is what made "can sign in" look like "never signs in" on Saif's
+     screenshot. On and off are now a shape and a colour, not a tick. */
+  .ssw{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;
+    background:var(--navy);border:1px solid var(--line);border-radius:9px;padding:8px 11px;cursor:pointer}
+  .ssw input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+  .ssw.dis{opacity:.55;cursor:not-allowed}
+  .tog{width:38px;height:21px;border-radius:999px;background:rgba(255,255,255,.14);
+    position:relative;flex:0 0 auto;transition:.15s}
+  .tog::after{content:"";position:absolute;top:3px;left:3px;width:15px;height:15px;
+    border-radius:50%;background:#fff;transition:.15s}
+  .ssw.on .tog{background:var(--green)}
+  .ssw.on .tog::after{left:20px}
+  /* The note carried real context and my first redesign DROPPED it entirely - the exact
+     "update the design, update its details" failure. Editable now, at Saif's request. */
+  .note{background:rgba(245,166,35,.07);border-left:2px solid var(--amber);
+    border-radius:0 8px 8px 0;padding:10px 12px;margin-top:12px}
+  .note label{font-size:10.5px;color:var(--amber);text-transform:uppercase;letter-spacing:.06em}
+  /* The note is the one field whose whole job is to be READ, and the right height
+     depends on the width: 38px clipped Malcolm's third line on a phone, while a fixed
+     62px left dead space on a 1280 desktop where the same note is one line. field-sizing
+     grows the box to its content, so neither happens; min-height is the fallback for a
+     browser without it, and rows="2" in the markup is the last resort. */
+  .note textarea{width:100%;background:transparent;border:0;color:var(--mute);
+    font-family:inherit;font-size:12.5px;line-height:1.55;resize:vertical;padding:4px 0 0;
+    field-sizing:content;min-height:40px}
+  .note textarea:focus{outline:none;color:var(--ink)}
+  /* PERMISSION PILLS. Three states that cannot be confused: off is outlined and empty,
+     on is green with a tick, inherited is amber and not clickable. */
+  /* position:relative lives on the ROW, not the pill — see the tooltip rule below. */
+  .pills{position:relative;display:flex;flex-wrap:wrap;gap:8px}
+  .pill2{display:inline-flex;align-items:center;gap:7px;
+    border:1px solid var(--line);background:var(--navy);color:var(--mute);border-radius:999px;
+    padding:8px 14px 8px 11px;font-size:12.5px;cursor:pointer;transition:.12s;user-select:none}
+  .pill2 input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+  .pill2:hover{border-color:rgba(255,255,255,.22)}
+  .pill2 .tick{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--dim);
+    display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+    color:transparent;flex:0 0 auto;transition:.12s}
+  .pill2.on{background:rgba(47,191,113,.16);border-color:rgba(47,191,113,.55);color:#a9edc4;font-weight:600}
+  .pill2.on .tick{background:var(--green);border-color:var(--green);color:#04220f}
+  .pill2.via{background:rgba(245,166,35,.1);border-color:rgba(245,166,35,.35);
+    color:var(--amber);cursor:not-allowed}
+  .pill2.via .tick{background:var(--amber);border-color:var(--amber);color:#2a1a00}
+  .pill2 small{color:var(--dim);font-size:10.5px}
+  /* HOVER EXPLANATION, Saif's ask: "when hover on the refund, explain what is this
+     for?". Read from data-tip so the same sentence serves the tooltip, the title
+     attribute and the tap-friendly list below - one string, three places.
+
+     ANCHORED TO THE ROW (left:0;right:0 against .pills), NOT TO THE PILL. Anchored to
+     the pill at a fixed 264px it ran off the screen on every width between 768 and
+     1100 - a laptop, or a half-screen window - by up to 93px. I had assumed it fit
+     because it fit at 1280. Measured at thirteen widths instead: pinned to the row it
+     cannot clip at any of them. It carries its own label (data-lab) so it still says
+     which pill it belongs to, and sits BELOW the row, where the reader is already
+     looking for the explanation. */
+  .pill2[data-tip]:hover::after{content:attr(data-lab) " — " attr(data-tip);
+    position:absolute;left:0;right:0;top:calc(100% + 9px);
+    background:#060b20;border:1px solid rgba(255,255,255,.16);
+    border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.55;color:var(--ink);
+    font-weight:400;letter-spacing:0;z-index:40;white-space:normal;text-align:left;
+    box-shadow:0 10px 26px rgba(0,0,0,.55);pointer-events:none}
+  /* Hover does not exist on a phone, so the same sentences are also a tappable list.
+     <details> is native: no state to hold and no handler to wire wrong. */
+  .capdefs{margin-top:11px;font-size:12px}
+  .capdefs summary{color:var(--blue-l);cursor:pointer;font-size:12px;width:fit-content;
+    padding:3px 0;list-style:none}
+  .capdefs summary::-webkit-details-marker{display:none}
+  .capdefs summary::before{content:"? ";opacity:.7}
+  .capdefs dl{margin:9px 0 0;display:grid;gap:8px}
+  .capdefs dt{font-size:12px;font-weight:600;color:var(--ink)}
+  .capdefs dd{margin:1px 0 0;font-size:11.5px;color:var(--mute);line-height:1.5}
+  .sfoot{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--dim);
+    margin-top:15px;padding-top:11px;border-top:1px solid var(--line)}
   .sdiff{margin-top:13px;background:rgba(245,166,35,.09);border:1px solid rgba(245,166,35,.4);
     border-radius:9px;padding:9px 12px;font-size:12.5px}
   .sdiff b{color:var(--amber)}
-  .ssave{display:flex;gap:9px;align-items:center;margin-top:10px}
-  .ssave input{flex:1;background:var(--navy);border:1px solid var(--line);border-radius:9px;
-    padding:9px 11px;color:var(--ink);font-size:13px}
+  .ssave{display:flex;gap:9px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .ssave input{flex:1;min-width:180px;background:var(--navy);border:1px solid var(--line);
+    border-radius:9px;padding:9px 11px;color:var(--ink);font-size:13px}
   .ssave button{background:var(--green);color:#04220f;border:0;border-radius:9px;
-    padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;width:auto}
+    padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;width:auto;white-space:nowrap}
   .shint{font-size:11.5px;color:var(--dim);line-height:1.5}
-  @media(max-width:820px){
-    .srow{grid-template-columns:1fr 78px 20px}
-    .srow .smeta,.srow .sperms{display:none}
+  .smob{display:none}
+  /* MOBILE: STACK, NEVER HIDE. The old breakpoint display:none'd the branch and the
+     permissions columns, so a phone LOST information instead of reflowing it. Here the
+     row grows a second line and the same facts move onto it. */
+  @media(max-width:760px){
+    .srow{grid-template-columns:1fr auto;grid-template-areas:"who car" "mob mob";
+      gap:8px 10px;padding:12px}
+    .swho{grid-area:who}
+    .scar{grid-area:car;align-self:start}
+    .srow > .smeta,.srow > .sperms,.srow > .srole{display:none}
+    .smob{grid-area:mob;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+    .smob .srole{display:inline-block}
+    .smob .smeta{display:inline-block;font-size:11.5px}
+    .fields{grid-template-columns:1fr}
+    .pill2{padding:10px 15px 10px 12px;font-size:13px}
+    /* A tap counts as a hover on touch, so the tooltip would stick over the pill after
+       toggling it. The <details> list is the phone's answer instead. */
+    .pill2[data-tip]:hover::after{display:none}
+    .ssave button{width:100%}
+    .sedit{padding:0 12px 13px}
+    .sfoot{flex-direction:column;gap:3px}
+    .sfoot .sep{display:none}
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--navy);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
@@ -1794,10 +1900,46 @@ async function decideCorrection(id, approve){
    harness asserting on the POST body. Same name, two files, two meanings: item 22. */
 let STAFF_DATA = null, STAFF_OPEN = null, STAFF_Q = '', STAFF_FILTER = 'all';
 
+/* ELEMENT IDS ARE ROW INDICES, NOT EMAILS, AND ARE LOOKED UP WITH getElementById.
+   The version that shipped built ids out of the address and read them back with
+   querySelector: '#srole_tony@speedyins.com' is not a valid CSS selector - '@' is not
+   an identifier character and '.' starts a class - so querySelector THREW on every
+   edit. The row opened, and then changing the role, a tick or the switch did nothing
+   at all. Proved in jsdom, not assumed:
+     querySelector('#srole_tony@speedyins.com') -> SyntaxError: Invalid selector
+     getElementById('srole_tony@speedyins.com') -> found
+   My harness passed 39/39 through it because its stub $ was a plain map lookup that
+   cannot throw. An index is an integer: safe inside an attribute, safe in a selector,
+   and unique where a slug of the address would collide (a.b@ and a_b@ slug the same). */
+const byId = i => document.getElementById(i);
+const staffAt = i => (STAFF_DATA && STAFF_DATA.rows) ? STAFF_DATA.rows[Number(i)] : null;
+
 const CAP_LABEL = { refund:'Refunds', approve_month:'Approve the month',
   audit_approve:'Approve audits', correct:'Corrections', manage_agents:'Manage staff',
   commission_override:'Override commission', console:'Console access' };
 const capLabel = c => CAP_LABEL[c] || c;
+
+/* ONE SENTENCE PER PERMISSION, in the language of what it lets someone DO to money or
+   to paperwork - not the name of the flag. Saif, Sep 10: "when hover on the refund for
+   example explain what is this for?". The same string feeds the hover tooltip, the
+   title attribute and the tap-friendly list, so there is one place to correct it. */
+const CAP_HELP = {
+  refund: 'Sends money back to a client on a payment Speedy already took. The money '
+    + 'leaves the account, so a reason is recorded every time.',
+  audit_approve: 'Confirms the carrier paperwork on a charge is right. This is the step '
+    + 'that releases the agent’s commission, so it decides who gets paid.',
+  correct: 'Fixes a wrong amount, client or carrier on a payment that has already been '
+    + 'taken. The original stays visible — nothing is overwritten.',
+  approve_month: 'Finalises what every agent is paid for that month. Once a month is '
+    + 'closed it can never move, so this is the last word on a payroll figure.',
+  commission_override: 'Changes what one agent earns on one payment, away from the '
+    + 'normal split. Always needs a reason.',
+  manage_agents: 'This page. Add people, change roles, switch sign-in off, and hand out '
+    + 'any of the permissions on this list.',
+  console: 'Opens this admin console at all. Without it they only see the agent portal '
+    + 'where charges are taken.',
+};
+const capHelp = c => CAP_HELP[c] || 'No description recorded for this permission yet.';
 
 async function renderStaff(el) {
   el.innerHTML = '<h2>Staff &amp; permissions</h2><div class="load">Loading…</div>';
@@ -1807,8 +1949,8 @@ async function renderStaff(el) {
   if (!r.ok) { el.innerHTML = '<h2>Staff &amp; permissions</h2><div class="err">' + esc(r.error || 'Not permitted') + '</div>'; return; }
   STAFF_DATA = r;
   /* A fresh load is a fresh list. Without this, leaving the tab with a row open and
-     coming back showed that row still expanded, with half-edited tick-boxes that no
-     longer matched the reloaded data — and a diff computed against the OLD row. */
+     coming back showed that row still expanded, with half-edited fields that no longer
+     matched the reloaded data — and a diff computed against the OLD row. */
   STAFF_OPEN = null;
   el.innerHTML = staffHtml();
 }
@@ -1816,23 +1958,34 @@ async function renderStaff(el) {
 /* What this person would BECOME if Save were pressed now, and what that changes from the
    loaded state. The diff is what the reason is for: "why does Yasmin have refunds" is
    only answerable if the change was named at the time it was made. */
-function staffPending(a) {
-  const r = STAFF_DATA;
-  const roleSel = $('#srole_' + a.email), actBox = $('#sact_' + a.email);
-  const role = roleSel ? roleSel.value : a.role;
+function staffPending(i) {
+  const a = staffAt(i), r = STAFF_DATA;
+  if (!a) return { changed: [] };
+  const val = (k, dflt) => { const e = byId(k + '_' + i); return e ? e.value : dflt; };
+  const role = val('srole', a.role);
+  const actBox = byId('sact_' + i);
   const active = actBox ? !!actBox.checked : a.active;
+  const full_name = String(val('snm', a.full_name || '')).trim();
+  const branch = String(val('sbr', a.branch || '')).trim();
+  const producer_code = String(val('spc', a.producer_code || '')).trim().toUpperCase();
+  const notes = String(val('snote', a.notes || '')).trim();
   const roleCaps = (r.role_caps && r.role_caps[role]) || [];
   const grants = (r.grantable || []).filter(c => {
     if (roleCaps.includes(c)) return false;        // implied by the role, not a grant
-    const b = $('#sg_' + a.email + '_' + c);
+    const b = byId('sg_' + i + '_' + c);
     return b ? b.checked : a.grants.includes(c);
   });
   const changed = [];
+  const was = (k, v) => String(a[k] || '') !== String(v);
+  if (was('full_name', full_name)) changed.push('name → ' + (full_name || '(blank)'));
+  if (was('branch', branch)) changed.push('branch → ' + (branch || 'no branch'));
+  if (was('producer_code', producer_code)) changed.push('producer code → ' + (producer_code || '(blank)'));
   if (role !== a.role) changed.push('role → ' + role);
   if (active !== a.active) changed.push(active ? 'can sign in' : 'cannot sign in');
+  if (was('notes', notes)) changed.push('note edited');
   for (const c of grants) if (!a.grants.includes(c)) changed.push('+ ' + capLabel(c));
   for (const c of a.grants) if (!grants.includes(c)) changed.push('− ' + capLabel(c));
-  return { role, active, grants, changed };
+  return { role, active, grants, full_name, branch, producer_code, notes, changed };
 }
 
 function staffMatches(a) {
@@ -1848,7 +2001,7 @@ function staffMatches(a) {
 }
 
 function staffRowHtml(a) {
-  const r = STAFF_DATA, open = STAFF_OPEN === a.email, isMe = a.email === r.me;
+  const r = STAFF_DATA, i = a._i, open = STAFF_OPEN === i, isMe = a.email === r.me;
   const roleCaps = (r.role_caps && r.role_caps[a.role]) || [];
   /* The SUMMARY is the point of the redesign: "everything" when the role has it all,
      the actual grant names when there are some, a quiet "no extras" otherwise — instead
@@ -1857,14 +2010,16 @@ function staffRowHtml(a) {
     ? '<span class="sp all">everything</span>'
     : (a.grants.length ? a.grants.map(c => '<span class="sp">' + esc(capLabel(c)) + '</span>').join('')
                        : '<span class="sp none">no extras</span>');
+  const roleChip = '<div class="srole ' + esc(a.role) + '">' + esc(a.role) + '</div>';
+  const branchCell = '<div class="smeta">' + esc(a.branch || 'no branch') + '</div>';
 
   let h = '<div class="srow' + (open ? ' open' : '') + (a.active ? '' : ' off')
-    /* SINGLE quotes inside the double-quoted attribute. JSON.stringify emits DOUBLE
-       quotes, which terminate the attribute: onclick="staffToggle("a@b.com")" leaves
-       the handler as `staffToggle(` and the whole page becomes unclickable. Saif found
-       it in thirty seconds; my harness missed it entirely because it called
-       staffToggle() directly and never went through the markup. */
-    + '" onclick="staffToggle(\'' + esc(a.email) + '\')">'
+    /* SINGLE quotes inside the double-quoted attribute, and an integer rather than an
+       address. JSON.stringify emits DOUBLE quotes, which terminate the attribute:
+       onclick="staffToggle("a@b.com")" leaves the handler as `staffToggle(` and the
+       whole page becomes unclickable. Saif found that in thirty seconds; the harness
+       missed it because it called staffToggle() directly, never through the markup. */
+    + '" onclick="staffToggle(' + i + ')">'
     + '<div class="swho"><span class="sdot' + (a.active ? '' : ' no') + '"></span>'
     + '<div style="min-width:0"><div class="snm">' + esc(a.full_name || a.email)
     + (isMe ? ' <span class="stag">you</span>' : '')
@@ -1872,52 +2027,112 @@ function staffRowHtml(a) {
     + (a.active ? '' : ' <span class="stag">cannot sign in</span>') + '</div>'
     + '<div class="sem">' + esc(a.email)
     + (a.producer_code ? ' · <span class="spc">' + esc(a.producer_code) + '</span>' : '') + '</div></div></div>'
-    + '<div class="smeta">' + esc(a.branch || '—') + '</div>'
-    + '<div class="srole ' + esc(a.role) + '">' + esc(a.role) + '</div>'
+    + branchCell + roleChip
     + '<div class="sperms">' + summary + '</div>'
     + '<div class="scar">' + (open ? '&#9662;' : '&#8250;') + '</div>'
+    /* The phone's second line. Same three facts, moved rather than hidden. */
+    + '<div class="smob">' + roleChip + branchCell + '<div class="sperms">' + summary + '</div></div>'
     + '</div>';
   if (!open) return h;
 
+  const dis = isMe ? ' disabled' : '';
+  const branches = r.branches || [];
   h += '<div class="sedit" onclick="event.stopPropagation()">'
-    + '<div class="sctl">'
-    + '<select id="srole_' + esc(a.email) + '"' + (isMe ? ' disabled title="you cannot change your own role"' : '')
-    + ' onchange="staffChanged(\'' + esc(a.email) + '\')">'
+
+    + '<div class="selab">Details</div>'
+    + '<div class="fields">'
+    + '<div class="f"><label>Full name</label>'
+    + '<input id="snm_' + i + '" value="' + esc(a.full_name || '') + '" oninput="staffChanged(' + i + ')">'
+    + '<div class="fhint">Shown on receipts and in the audit log.</div></div>'
+    /* A DROPDOWN, Saif's choice — the branch has to be one of the five HawkSoft offices
+       or the pre-selection at sign-in matches nothing. Free text let a typo through. */
+    /* A DROPDOWN of the five real offices, Saif's choice — free text let a typo through
+       and a typo means the sign-in pre-selection matches nothing. All 18 live rows
+       already hold exactly one of these five names or null, checked against the table.
+       A value from OUTSIDE the list (only reachable by direct SQL) is kept as its own
+       selected option rather than falling back to "no branch": without that, opening
+       the row and saving anything at all would silently WIPE the branch. */
+    + '<div class="f"><label>Home branch</label>'
+    + '<select id="sbr_' + i + '" onchange="staffChanged(' + i + ')">'
+    + '<option value=""' + (a.branch ? '' : ' selected') + '>— no branch —</option>'
+    + branches.map(b => '<option value="' + esc(b) + '"' + (a.branch === b ? ' selected' : '') + '>' + esc(b) + '</option>').join('')
+    + ((a.branch && !branches.includes(a.branch))
+        ? '<option value="' + esc(a.branch) + '" selected>' + esc(a.branch) + ' — not one of the five offices</option>'
+        : '')
+    + '</select>'
+    + '<div class="fhint">Pre-selects their office at sign-in. They can still pick another one.</div></div>'
+    + '<div class="f"><label>Producer code</label>'
+    + '<input class="pcin" id="spc_' + i + '" maxlength="8" value="' + esc(a.producer_code || '') + '" oninput="staffChanged(' + i + ')">'
+    + '<div class="fhint">From HawkSoft. Stamped on every payment they write.</div></div>'
+    + '<div class="f"><label>Role</label>'
+    + '<select id="srole_' + i + '"' + dis + (isMe ? ' title="you cannot change your own role"' : '')
+    + ' onchange="staffChanged(' + i + ')">'
     + (r.roles || []).map(x => '<option value="' + esc(x) + '"' + (x === a.role ? ' selected' : '') + '>' + esc(x) + '</option>').join('')
     + '</select>'
-    + '<label class="ssw"' + (isMe ? ' style="opacity:.5"' : '') + '>'
-    + '<input type="checkbox" id="sact_' + esc(a.email) + '"' + (a.active ? ' checked' : '')
-    + (isMe ? ' disabled' : '') + ' onchange="staffChanged(\'' + esc(a.email) + '\')"> can sign in</label>'
-    + '<div style="flex:1"></div>'
-    + '<div class="shint">' + (a.updated_by
-        ? 'last changed by ' + esc(String(a.updated_by).split('@')[0])
-          + (a.updated_at ? ' · ' + esc(String(a.updated_at).slice(0, 10)) : '')
-        : 'never changed here') + '</div>'
-    + '</div>';
+    + '<div class="fhint">Sets the permissions below before anything extra is added.</div></div>'
+    + '<div class="f"><label>Sign-in</label>'
+    + '<label class="ssw' + (a.active ? ' on' : '') + (isMe ? ' dis' : '') + '" id="sswl_' + i + '">'
+    + '<span>' + (a.active ? 'can sign in' : 'cannot sign in') + '</span>'
+    + '<input type="checkbox" id="sact_' + i + '"' + (a.active ? ' checked' : '') + dis
+    + ' onchange="staffSw(' + i + ')"><span class="tog"></span></label>'
+    + '<div class="fhint">Switching this off never removes their name from past work.</div></div>'
+    + '</div>'
 
-  h += '<div class="selab">Extra permissions, on top of the ' + esc(a.role) + ' role</div>'
-    + '<div class="sboxes">'
+    /* EDITABLE, at Saif's request — and present at all only because dropping it was the
+       exact "update the design, update its details" failure he called out. */
+    + '<div class="note"><label>Note on this record — you can edit this</label>'
+    + '<textarea id="snote_' + i + '" rows="2" placeholder="Anything the next person needs to know about this record."'
+    + ' oninput="staffChanged(' + i + ')">' + esc(a.notes || '') + '</textarea></div>'
+
+    + '<div class="selab">Extra permissions, on top of the ' + esc(a.role) + ' role</div>'
+    + '<div class="pills">'
     + (r.grantable || []).map(c => {
         const via = roleCaps.includes(c);
-        return '<label class="sbx' + (via ? ' via' : '') + '" title="'
-          + (via ? 'always included in the ' + esc(a.role) + ' role' : 'give this to one person') + '">'
-          + '<input type="checkbox" id="sg_' + esc(a.email) + '_' + esc(c) + '"'
-          + ((via || a.grants.includes(c)) ? ' checked' : '') + (via ? ' disabled' : '')
-          + ' onchange="staffChanged(\'' + esc(a.email) + '\')">'
+        const tip = capHelp(c) + (via ? ' Already included in the ' + a.role + ' role.' : '');
+        /* data-lab makes the tooltip name its own pill, which is what lets it be pinned
+           to the row rather than to the pill and still be unambiguous. */
+        return '<label class="pill2' + (via ? ' via' : (a.grants.includes(c) ? ' on' : ''))
+          + '" data-lab="' + esc(capLabel(c)) + '" data-tip="' + esc(tip) + '"'
+          + ' title="' + esc(tip) + '" id="sgl_' + i + '_' + esc(c) + '">'
+          + '<span class="tick">&#10003;</span>'
+          + (via ? '' : '<input type="checkbox" id="sg_' + i + '_' + esc(c) + '"'
+              + (a.grants.includes(c) ? ' checked' : '') + ' onchange="staffPill(' + i + ',\'' + esc(c) + '\')">')
           + esc(capLabel(c))
-          + (via ? ' <small style="color:var(--dim)">· via ' + esc(a.role) + '</small>' : '')
+          + (via ? ' <small>· via ' + esc(a.role) + '</small>' : '')
           + '</label>';
       }).join('')
     + '</div>'
+    /* Hover is not available on a phone and it is not discoverable on a desktop either,
+       so the same sentences are one tap away. Native <details>: no state, no handler. */
+    + '<details class="capdefs"><summary>What does each permission actually let them do?</summary><dl>'
+    + (r.grantable || []).map(c => '<dt>' + esc(capLabel(c)) + '</dt><dd>' + esc(capHelp(c)) + '</dd>').join('')
+    + '</dl></details>'
+
+    + '<div class="sfoot">'
+    + '<span>Added ' + esc(a.created_at ? String(a.created_at).slice(0, 10) : 'before this page existed') + '</span>'
+    /* The separator is hidden on a phone, where the two facts wrap onto separate lines
+       and the dot was left stranded at the end of the first one. */
+    + '<span class="sep">·</span>'
+    /* "never changed here" read as "never used", which is what made Saif ask how a
+       working agent could show "never charge". It means only that nobody has edited
+       this record from THIS page — say that. */
+    + '<span>' + (a.updated_by
+        ? 'last changed from this page by ' + esc(String(a.updated_by).split('@')[0])
+          + (a.updated_at ? ' on ' + esc(String(a.updated_at).slice(0, 10)) : '')
+        : 'no changes made from this page yet') + '</span>'
+    + '</div>'
     /* Filled in by staffChanged() ONLY when something differs, so an untouched row has
        no reason box and no Save button to press by accident. */
-    + '<div id="sfoot_' + esc(a.email) + '"></div>'
+    + '<div id="sfoot_' + i + '"></div>'
     + '</div>';
   return h;
 }
 
 function staffHtml() {
   const r = STAFF_DATA, rows = r.rows || [];
+  /* Stamped once, here, so a handler in the markup can carry an integer instead of an
+     address and every lookup lands on the row the page actually rendered. */
+  rows.forEach((a, n) => { a._i = n; });
   const counts = { all: rows.length, owners: rows.filter(a => a.role !== 'agent').length,
                    extras: rows.filter(a => a.grants.length).length,
                    off: rows.filter(a => !a.active).length };
@@ -1927,8 +2142,9 @@ function staffHtml() {
 
   let h = '<h2>Staff &amp; permissions</h2>'
     + '<div class="muted" style="font-size:12.5px;margin-bottom:14px;line-height:1.5">'
-    + 'A role sets the defaults. Tick a box to give <b style="color:var(--ink)">one person</b> something extra. '
-    + 'Switching someone off only stops them signing in — their name and producer code stay on every payment '
+    + 'A role sets the defaults. Open someone and turn on a pill to give '
+    + '<b style="color:var(--ink)">that one person</b> something extra — hover a pill to read what it does. '
+    + 'Switching someone off only stops them signing in; their name and producer code stay on every payment '
     + 'they have ever written.</div>';
 
   if (rows.some(a => a.external)) {
@@ -1944,7 +2160,7 @@ function staffHtml() {
     + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
     + chip('all', 'All') + chip('owners', 'Owners &amp; admins') + chip('extras', 'Has extras') + chip('off', 'Off')
     + '</div>'
-    + '<button class="go" style="width:auto;padding:9px 15px" onclick="staffShowAdd()">+ Add someone</button>'
+    + '<button class="sadd" onclick="staffShowAdd()">+ Add someone</button>'
     + '</div><div id="saddbox"></div>';
 
   /* GROUPED BY ROLE — Saif's choice. Owners and admins first because those are the rows
@@ -1970,8 +2186,8 @@ function staffHtml() {
   return h;
 }
 
-function staffToggle(email) {
-  STAFF_OPEN = (STAFF_OPEN === email) ? null : email;
+function staffToggle(i) {
+  STAFF_OPEN = (STAFF_OPEN === Number(i)) ? null : Number(i);
   $('#view').innerHTML = staffHtml();
 }
 function staffFilter(k) { STAFF_FILTER = k; STAFF_OPEN = null; $('#view').innerHTML = staffHtml(); }
@@ -1985,32 +2201,55 @@ function staffSearch(v) {
   if (nb) { nb.focus(); if (pos != null && nb.setSelectionRange) nb.setSelectionRange(pos, pos); }
 }
 
-/* Runs on every input in an open editor. Writes the diff and the reason box only when
-   something actually differs from what was loaded. */
-function staffChanged(email) {
-  const a = (STAFF_DATA.rows || []).find(x => x.email === email);
-  const foot = $('#sfoot_' + email);
-  if (!a || !foot) return;
-  const p = staffPending(a);
-  if (!p.changed.length) { foot.innerHTML = ''; return; }
-  foot.innerHTML = '<div class="sdiff">Changing: <b>' + p.changed.map(esc).join('</b>, <b>') + '</b></div>'
-    + '<div class="ssave"><input id="swhy_' + esc(email) + '" placeholder="Why is this changing? (required)">'
-    + '<button onclick="saveAgent(\'' + esc(email) + '\')">Save change</button></div>'
-    + '<div id="smsg_' + esc(email) + '" class="shint" style="margin-top:7px"></div>';
-  const w = $('#swhy_' + email); if (w) w.focus();
+/* The switch and the pills carry their state in a hidden checkbox — the real value
+   staffPending reads — and their LOOK in a class. Syncing the class here rather than
+   with :has() means the on state renders the same on an older browser as a new one. */
+function staffSw(i) {
+  const box = byId('sact_' + i), lab = byId('sswl_' + i);
+  if (!box || !lab) return;
+  lab.classList.toggle('on', box.checked);
+  const t = lab.querySelector('span');
+  if (t) t.textContent = box.checked ? 'can sign in' : 'cannot sign in';
+  staffChanged(i);
+}
+function staffPill(i, cap) {
+  const box = byId('sg_' + i + '_' + cap), lab = byId('sgl_' + i + '_' + cap);
+  if (!box || !lab) return;
+  lab.classList.toggle('on', box.checked);
+  staffChanged(i);
 }
 
-async function saveAgent(email) {
-  const a = (STAFF_DATA.rows || []).find(x => x.email === email); if (!a) return;
-  const p = staffPending(a);
-  const msg = $('#smsg_' + email);
+/* Runs on every input in an open editor. Writes the diff and the reason box only when
+   something actually differs from what was loaded. */
+function staffChanged(i) {
+  const a = staffAt(i), foot = byId('sfoot_' + i);
+  if (!a || !foot) return;
+  const p = staffPending(i);
+  /* Keeps what is already typed. Rewriting this block on every keystroke used to
+     replace the reason input mid-sentence and lose the caret. */
+  const had = byId('swhy_' + i);
+  const kept = had ? had.value : '';
+  if (!p.changed.length) { foot.innerHTML = ''; return; }
+  foot.innerHTML = '<div class="sdiff">Changing: <b>' + p.changed.map(esc).join('</b>, <b>') + '</b></div>'
+    + '<div class="ssave"><input id="swhy_' + i + '" placeholder="Why is this changing? (required)"'
+    + ' value="' + esc(kept) + '">'
+    + '<button onclick="saveAgent(' + i + ')">Save change</button></div>'
+    + '<div id="smsg_' + i + '" class="shint" style="margin-top:7px"></div>';
+  if (!had) { const w = byId('swhy_' + i); if (w) w.focus(); }
+}
+
+async function saveAgent(i) {
+  const a = staffAt(i); if (!a) return;
+  const p = staffPending(i);
+  const msg = byId('smsg_' + i);
   const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
-  const why = (($('#swhy_' + email) || {}).value || '').trim();
+  const why = ((byId('swhy_' + i) || {}).value || '').trim();
   if (!p.changed.length) return say('Nothing has changed.', true);
   if (!why) return say('A reason is required — it is what makes this explainable later.', true);
   say('Saving…');
-  const res = await apiPostBody({ action: 'save_agent', email, reason: why,
-    role: p.role, active: p.active, grants: p.grants });
+  const res = await apiPostBody({ action: 'save_agent', email: a.email, reason: why,
+    role: p.role, active: p.active, grants: p.grants, full_name: p.full_name,
+    branch: p.branch, producer_code: p.producer_code, notes: p.notes });
   if (res && res.ok) { STAFF_OPEN = null; await renderStaff($('#view')); }
   else say((res && res.error) || 'Could not save.', true);
 }
@@ -2020,15 +2259,17 @@ async function saveAgent(email) {
 function staffShowAdd() {
   const box = $('#saddbox'); if (!box) return;
   if (box.innerHTML) { box.innerHTML = ''; return; }
+  const branches = (STAFF_DATA && STAFF_DATA.branches) || [];
   box.innerHTML = '<div class="sedit" style="border-radius:11px;border-top:1px solid rgba(77,124,254,.42);margin-top:12px">'
-    + '<div class="selab" style="margin-top:11px">Add someone</div>'
-    + '<div class="shint" style="margin-bottom:10px">The Workspace mailbox has to exist already — this only grants '
+    + '<div class="selab" style="margin-top:13px">Add someone</div>'
+    + '<div class="shint" style="margin-bottom:11px">The Workspace mailbox has to exist already — this only grants '
     + 'access to it. They start as an agent with no extra permissions.</div>'
-    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:9px">'
-    + '<input id="snew_email" placeholder="name@speedyins.com">'
-    + '<input id="snew_name" placeholder="Full name">'
-    + '<input id="snew_branch" placeholder="Branch (optional)">'
-    + '<input id="snew_pc" placeholder="Producer code (optional)">'
+    + '<div class="fields">'
+    + '<div class="f"><label>Email</label><input id="snew_email" placeholder="name@speedyins.com"></div>'
+    + '<div class="f"><label>Full name</label><input id="snew_name" placeholder="First Last"></div>'
+    + '<div class="f"><label>Home branch</label><select id="snew_branch"><option value="">— no branch —</option>'
+    + branches.map(b => '<option value="' + esc(b) + '">' + esc(b) + '</option>').join('') + '</select></div>'
+    + '<div class="f"><label>Producer code</label><input class="pcin" id="snew_pc" maxlength="8" placeholder="ABC"></div>'
     + '</div>'
     + '<div class="ssave"><input id="snew_why" placeholder="Why? (required)">'
     + '<button onclick="addAgent()">Add</button></div>'
@@ -2036,8 +2277,8 @@ function staffShowAdd() {
   const e = $('#snew_email'); if (e) e.focus();
 }
 async function addAgent() {
-  const g = id => (($('#' + id) || {}).value || '').trim();
-  const msg = $('#snew_msg');
+  const g = id => ((byId(id) || {}).value || '').trim();
+  const msg = byId('snew_msg');
   const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
   const email = g('snew_email').toLowerCase();
   if (!email) return say('An email is required.', true);
@@ -2045,7 +2286,7 @@ async function addAgent() {
   say('Adding…');
   const res = await apiPostBody({ action: 'add_agent', email, reason: g('snew_why'),
     full_name: g('snew_name') || email, branch: g('snew_branch'), producer_code: g('snew_pc'),
-    role: 'agent', grants: [], active: true });
+    role: 'agent', grants: [], active: true, notes: '' });
   if (res && res.ok) { STAFF_OPEN = null; await renderStaff($('#view')); }
   else say((res && res.error) || 'Could not add them.', true);
 }

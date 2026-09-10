@@ -248,6 +248,118 @@ async function sbInsert(s, table, rows) {
   return { ok: r.ok, status: r.status };
 }
 
+/* ================= ITEM 70 · ROLES AND PERMISSIONS, STEP 2 =================
+   `public.agents` has been seeded and verified since Aug 30 and NOTHING reads it. This
+   is the read, and it is the second attempt: the first one took the Console down.
+
+   ⛔ WHAT WENT WRONG LAST TIME (Aug 30). `syncRoster` REPLACED `ADMIN_ALLOWLIST` with
+   whatever the table returned, and locked Tony out of the tool needed to fix it. So:
+
+     THE CODE LIST IS THE FLOOR. THE TABLE ONLY EVER ADDS.
+
+   A failed read, an empty result, a truncated response, a bad row - none of them can
+   remove anyone's access, because the code list is unioned in unconditionally and the
+   table is only ever a source of additions.
+
+   CAPABILITY BUNDLES LIVE HERE, NOT IN THE TABLE. The table stores a role name and a
+   list of grant names; what those MEAN is defined in code, so a bad row can never
+   invent a permission that the code does not already understand. An unknown role or an
+   unrecognised grant string resolves to nothing.
+
+   Placed here, below sbGet/sb, so there is no question about declaration order - the
+   v2.7 lesson, and again today with OWED/FEE_LOW in carrier.html. */
+const ROLE_CAPS = {
+  owner: ['console', 'audit_approve', 'correct', 'refund', 'approve_month', 'manage_agents', 'commission_override'],
+  admin: ['console', 'audit_approve', 'correct'],
+  agent: [],
+};
+/* Every capability the system understands. A grant string not in here is ignored. */
+const ALL_CAPS = new Set(Object.values(ROLE_CAPS).flat());
+
+let _roster = null, _rosterUntil = 0;
+const ROSTER_TTL_MS = 60 * 1000;
+/* Reads the roster, fail-soft. On ANY failure it returns an empty map, which means
+   "the table adds nobody" - never "the table removes somebody". */
+async function loadRoster() {
+  if (_roster && Date.now() < _rosterUntil) return _roster;
+  const s = sb();
+  if (!s) return new Map();
+  try {
+    const r = await sbGet(s, 'agents?select=email,full_name,branch,producer_code,active,is_admin,role,grants&limit=200');
+    if (!r.ok || !Array.isArray(r.rows)) return new Map();
+    const m = new Map();
+    for (const row of r.rows) {
+      const email = String(row.email || '').toLowerCase().trim();
+      if (!email) continue;
+      /* ⛔ THE TABLE MAY ONLY EVER ADD @speedyins.com. Caught by the harness before this
+         shipped: ONE row with role='owner' on any address granted the whole Console
+         plus approve_month, manage_agents and commission_override - and Google sign-in
+         cannot stop it, because verifyGoogle only checks `aud` and `email_verified`,
+         which ANY Google account passes. The allowlist is the only thing restricting
+         who gets in, so a table that can add arbitrary addresses is the allowlist.
+
+         The row is KEPT and flagged rather than dropped, so a stray one is visible in
+         perm_check instead of silently ignored - it should be noticed and removed, not
+         quietly tolerated. This narrows what the table can do; it does not replace the
+         explicit allowlist with a domain gate, which was rejected for a different
+         reason (a departed agent keeps access until Google disables the account). */
+      const external = !/@speedyins\.com$/.test(email);
+      m.set(email, {
+        email,
+        external,
+        name: row.full_name || null,
+        branch: row.branch || null,
+        producer_code: row.producer_code || null,
+        active: row.active === true,
+        role: ROLE_CAPS[row.role] ? row.role : 'agent',   // unknown role => no powers
+        grants: Array.isArray(row.grants) ? row.grants.filter(g => ALL_CAPS.has(g)) : [],
+      });
+    }
+    _roster = m; _rosterUntil = Date.now() + ROSTER_TTL_MS;
+    return m;
+  } catch { return new Map(); }
+}
+
+/* Who may sign in. ADDITIVE: code list first, table only adds ACTIVE rows.
+   `active` gates SIGN-IN ONLY - a departed agent's name and producer code must still
+   render on the payments they wrote, which is why inactive rows are read but never
+   granted access. */
+async function rosterAdmins() {
+  const m = await loadRoster();
+  const out = new Set(ADMIN_ALLOWLIST.map(e => e.toLowerCase()));
+  for (const a of m.values()) {
+    if (a.external) continue;   // the table may only ever ADD @speedyins.com
+    if (a.active && (a.role === 'admin' || a.role === 'owner')) out.add(a.email);
+  }
+  return out;
+}
+async function rosterAgents() {
+  const m = await loadRoster();
+  const out = new Set(AGENT_ALLOWLIST.map(e => e.toLowerCase()));
+  for (const a of m.values()) if (a.active && !a.external) out.add(a.email);
+  return out;
+}
+
+/* THE ONE FUNCTION EVERY GUARD CALLS. Refunds, month approval and the agents page all
+   ask this instead of comparing an email, so a permission change happens in one place.
+
+   The floor: anyone in the code ADMIN_ALLOWLIST keeps the `admin` bundle no matter what
+   the table says, so a table problem can never take away what they can do today. */
+async function may(email, cap) {
+  const me = String(email || '').toLowerCase().trim();
+  if (!me || !ALL_CAPS.has(cap)) return false;
+  const caps = new Set();
+  if (ADMIN_ALLOWLIST.map(e => e.toLowerCase()).includes(me)) {
+    for (const c of ROLE_CAPS.admin) caps.add(c);
+  }
+  const a = (await loadRoster()).get(me);
+  if (a && a.active && !a.external) {
+    for (const c of (ROLE_CAPS[a.role] || [])) caps.add(c);
+    for (const c of a.grants) caps.add(c);
+  }
+  return caps.has(cap);
+}
+
 function hsAuth() {
   const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
   if (!ID || !SECRET) return null;
@@ -1784,6 +1896,67 @@ if (view === 'portal_share_due') {
   }
 
   /* ---- Resync job status ---- */
+  /* ---------- Item 70 step 2: prove the resolution BEFORE it gates anything ----------
+     Read-only. Gates nothing, changes nothing. It exists so the additive read and may()
+     can be checked against a REAL request while every existing gate is still the old
+     code path - which is the rule earned on Aug 30, when this work went straight into
+     `verifyGoogle` and locked the owner out of the Console.
+
+     Delete this view once the agents page is live and shows the same thing. */
+  if (view === 'perm_check') {
+    const roster = await loadRoster();
+    const admins = await rosterAdmins();
+    const agentsSet = await rosterAgents();
+    const codeAdmins = ADMIN_ALLOWLIST.map(e => e.toLowerCase());
+    const codeAgents = AGENT_ALLOWLIST.map(e => e.toLowerCase());
+    const everyone = [...new Set([...codeAdmins, ...codeAgents, ...roster.keys()])].sort();
+    const caps = [...ALL_CAPS].sort();
+
+    const rows = [];
+    for (const e of everyone) {
+      const a = roster.get(e) || null;
+      const granted = {};
+      for (const c of caps) granted[c] = await may(e, c);
+      rows.push({
+        email: e,
+        in_code_admin: codeAdmins.includes(e),
+        in_code_agent: codeAgents.includes(e),
+        in_table: !!a,
+        active: a ? a.active : null,
+        /* Flagged, not hidden: a row the table may not grant anything to should be
+           NOTICED here and removed, not silently tolerated. */
+        external: a ? a.external : null,
+        role: a ? a.role : null,
+        grants: a ? a.grants : null,
+        can_sign_in_console: admins.has(e),
+        can_sign_in_portal: agentsSet.has(e),
+        caps: caps.filter(c => granted[c]),
+      });
+    }
+    /* The two assertions that matter. If either fails, do NOT wire this to a gate. */
+    const lostConsole = codeAdmins.filter(e => !admins.has(e));
+    const lostPortal = codeAgents.filter(e => !agentsSet.has(e));
+    const inactiveWithAccess = rows.filter(r => r.in_table && r.active === false
+      && (r.can_sign_in_console || r.can_sign_in_portal) && !r.in_code_admin && !r.in_code_agent)
+      .map(r => r.email);
+
+    return res.status(200).json({
+      ok: true, email,
+      roster_rows: roster.size,
+      code_floor: { admins: codeAdmins, agents: codeAgents.length },
+      capabilities_understood: caps,
+      /* MUST all be empty. Anything here means the read is subtractive somewhere. */
+      REGRESSIONS: { lost_console: lostConsole, lost_portal: lostPortal,
+                     inactive_granted_access: inactiveWithAccess,
+                     /* Any of these means somebody put a non-Speedy address in the
+                        roster. It is granted nothing, but it should not be there. */
+                     external_rows: rows.filter(r => r.external).map(r => r.email) },
+      would_gain_console: [...admins].filter(e => !codeAdmins.includes(e)).sort(),
+      would_gain_portal: [...agentsSet].filter(e => !codeAgents.includes(e) && !codeAdmins.includes(e)).sort(),
+      rows,
+    });
+  }
+
   if (view === 'job_status') {
     const job = await getActiveJob(s);
     const last = await sbGet(s, "sync_jobs?order=created_at.desc&limit=1");

@@ -1806,6 +1806,10 @@ async function renderStaff(el) {
   if (!r) { el.innerHTML = '<h2>Staff &amp; permissions</h2><div class="err">No response from the server.</div>'; return; }
   if (!r.ok) { el.innerHTML = '<h2>Staff &amp; permissions</h2><div class="err">' + esc(r.error || 'Not permitted') + '</div>'; return; }
   STAFF_DATA = r;
+  /* A fresh load is a fresh list. Without this, leaving the tab with a row open and
+     coming back showed that row still expanded, with half-edited tick-boxes that no
+     longer matched the reloaded data — and a diff computed against the OLD row. */
+  STAFF_OPEN = null;
   el.innerHTML = staffHtml();
 }
 
@@ -1855,7 +1859,12 @@ function staffRowHtml(a) {
                        : '<span class="sp none">no extras</span>');
 
   let h = '<div class="srow' + (open ? ' open' : '') + (a.active ? '' : ' off')
-    + '" onclick="staffToggle(' + JSON.stringify(a.email) + ')">'
+    /* SINGLE quotes inside the double-quoted attribute. JSON.stringify emits DOUBLE
+       quotes, which terminate the attribute: onclick="staffToggle("a@b.com")" leaves
+       the handler as `staffToggle(` and the whole page becomes unclickable. Saif found
+       it in thirty seconds; my harness missed it entirely because it called
+       staffToggle() directly and never went through the markup. */
+    + '" onclick="staffToggle(\'' + esc(a.email) + '\')">'
     + '<div class="swho"><span class="sdot' + (a.active ? '' : ' no') + '"></span>'
     + '<div style="min-width:0"><div class="snm">' + esc(a.full_name || a.email)
     + (isMe ? ' <span class="stag">you</span>' : '')
@@ -1873,12 +1882,12 @@ function staffRowHtml(a) {
   h += '<div class="sedit" onclick="event.stopPropagation()">'
     + '<div class="sctl">'
     + '<select id="srole_' + esc(a.email) + '"' + (isMe ? ' disabled title="you cannot change your own role"' : '')
-    + ' onchange="staffChanged(' + JSON.stringify(a.email) + ')">'
+    + ' onchange="staffChanged(\'' + esc(a.email) + '\')">'
     + (r.roles || []).map(x => '<option value="' + esc(x) + '"' + (x === a.role ? ' selected' : '') + '>' + esc(x) + '</option>').join('')
     + '</select>'
     + '<label class="ssw"' + (isMe ? ' style="opacity:.5"' : '') + '>'
     + '<input type="checkbox" id="sact_' + esc(a.email) + '"' + (a.active ? ' checked' : '')
-    + (isMe ? ' disabled' : '') + ' onchange="staffChanged(' + JSON.stringify(a.email) + ')"> can sign in</label>'
+    + (isMe ? ' disabled' : '') + ' onchange="staffChanged(\'' + esc(a.email) + '\')"> can sign in</label>'
     + '<div style="flex:1"></div>'
     + '<div class="shint">' + (a.updated_by
         ? 'last changed by ' + esc(String(a.updated_by).split('@')[0])
@@ -1894,7 +1903,7 @@ function staffRowHtml(a) {
           + (via ? 'always included in the ' + esc(a.role) + ' role' : 'give this to one person') + '">'
           + '<input type="checkbox" id="sg_' + esc(a.email) + '_' + esc(c) + '"'
           + ((via || a.grants.includes(c)) ? ' checked' : '') + (via ? ' disabled' : '')
-          + ' onchange="staffChanged(' + JSON.stringify(a.email) + ')">'
+          + ' onchange="staffChanged(\'' + esc(a.email) + '\')">'
           + esc(capLabel(c))
           + (via ? ' <small style="color:var(--dim)">· via ' + esc(a.role) + '</small>' : '')
           + '</label>';
@@ -1913,7 +1922,7 @@ function staffHtml() {
                    extras: rows.filter(a => a.grants.length).length,
                    off: rows.filter(a => !a.active).length };
   const chip = (k, label) => '<button class="schip' + (STAFF_FILTER === k ? ' on' : '')
-    + '" onclick="staffFilter(' + JSON.stringify(k) + ')">' + label
+    + '" onclick="staffFilter(\'' + esc(k) + '\')">' + label
     + ' <span class="n">' + counts[k] + '</span></button>';
 
   let h = '<h2>Staff &amp; permissions</h2>'
@@ -1986,7 +1995,7 @@ function staffChanged(email) {
   if (!p.changed.length) { foot.innerHTML = ''; return; }
   foot.innerHTML = '<div class="sdiff">Changing: <b>' + p.changed.map(esc).join('</b>, <b>') + '</b></div>'
     + '<div class="ssave"><input id="swhy_' + esc(email) + '" placeholder="Why is this changing? (required)">'
-    + '<button onclick="saveAgent(' + JSON.stringify(email) + ')">Save change</button></div>'
+    + '<button onclick="saveAgent(\'' + esc(email) + '\')">Save change</button></div>'
     + '<div id="smsg_' + esc(email) + '" class="shint" style="margin-top:7px"></div>';
   const w = $('#swhy_' + email); if (w) w.focus();
 }

@@ -171,6 +171,23 @@
   .ssave button{background:var(--green);color:#04220f;border:0;border-radius:9px;
     padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;width:auto;white-space:nowrap}
   .shint{font-size:11.5px;color:var(--dim);line-height:1.5}
+  /* ---------- Refunds tab. .will, .lbl AND .row exist in portal.html, NOT here. The
+     first two I checked by hand; .row I did not, and the harness caught it before it
+     shipped as an unstyled div. */
+  .row{display:flex;justify-content:space-between;align-items:center}
+  .rq{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:9px}
+  .rqnote{font-size:12.5px;color:var(--mute);margin-top:7px;padding-left:9px;border-left:2px solid rgba(255,255,255,.14)}
+  .rqacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .rqok{background:var(--green);color:#04220f;border:0;border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700;cursor:pointer;width:auto;flex:1;min-width:150px}
+  .rqno{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:600;cursor:pointer;width:auto;flex:1;min-width:110px}
+  .lbl{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
+  .lbl.amber{background:rgba(245,166,35,.15);color:var(--amber)}
+  .lbl.green{background:rgba(47,191,113,.15);color:var(--green)}
+  .lbl.red{background:rgba(224,49,49,.15);color:#ff7b7b}
+  .will{margin:8px 0 0;padding:0;list-style:none;font-size:12px;line-height:1.55}
+  .will li{padding:4px 0 4px 18px;position:relative;border-bottom:1px solid var(--line)}
+  .will li:last-child{border-bottom:0}
+  .will li::before{content:"\2192";position:absolute;left:0;color:var(--dim)}
   .smob{display:none}
   /* MOBILE: STACK, NEVER HIDE. The old breakpoint display:none'd the branch and the
      permissions columns, so a phone LOST information instead of reflowing it. Here the
@@ -313,6 +330,7 @@
       <button data-tab="audit">Audit</button>
       <button data-tab="trust">Trust</button>
       <button data-tab="tables">Tables</button>
+      <button data-tab="refunds">Refunds</button>
       <button data-tab="staff">Staff</button>
       <button data-tab="health">Health</button>
     </nav>
@@ -467,6 +485,7 @@ async function render() {
   if (TAB === 'trust') return renderTrust(el);
   if (TAB === 'health') return renderHealth(el);
   if (TAB === 'tables') return renderTables(el);
+  if (TAB === 'refunds') return renderRefunds(el);
   if (TAB === 'staff') return renderStaff(el);
 }
 function openClient(no) {
@@ -2289,6 +2308,155 @@ async function addAgent() {
     role: 'agent', grants: [], active: true, notes: '' });
   if (res && res.ok) { STAFF_OPEN = null; await renderStaff($('#view')); }
   else say((res && res.error) || 'Could not add them.', true);
+}
+
+/* ================= REFUNDS TAB — Tony's half, and stage 5 =================
+   Two queues and a history. "Waiting for you" is agents' refund requests; Approve
+   issues the refund through the same server path an owner uses, with the agent's
+   answers. "Carrier still owes us" is every refund the carrier has not answered on —
+   the figure Trust already reports as carrier_to_recover, as a list with names on it,
+   because a number nobody can act on is how the $141.00 gap sat unnoticed. */
+let RQ_DATA = null;
+
+async function renderRefunds(el) {
+  el.innerHTML = '<h2>Refunds</h2><div class="load">Loading…</div>';
+  let r = null;
+  try { r = await api('refund_requests'); } catch (e) { r = null; }
+  if (!r) { el.innerHTML = '<h2>Refunds</h2><div class="err">No response from the server.</div>'; return; }
+  if (!r.ok) { el.innerHTML = '<h2>Refunds</h2><div class="err">' + esc(r.error || 'Not permitted') + '</div>'; return; }
+  RQ_DATA = r;
+  el.innerHTML = refundsHtml();
+}
+
+const rqReason = c => ({ charged_twice: 'charged twice', wrong_amount: 'wrong amount taken',
+  policy_cancelled: 'policy cancelled', never_bound: 'never bound', other: 'other' })[c] || c;
+const rqOwes = c => (c === 'policy_cancelled' || c === 'never_bound') ? 'closes the obligation' : 'the client still owes it';
+const rqAgo = ts => {
+  const m = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+  return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago';
+};
+
+function refundsHtml() {
+  const r = RQ_DATA, pend = r.pending || [], carr = r.carrier_pending || [], done = r.decided || [];
+  let h = '<h2>Refunds</h2>'
+    + '<div class="muted" style="font-size:12.5px;margin-bottom:14px;line-height:1.5">'
+    + 'Requests from agents wait here for you. Approving one issues the refund straight away with the agent’s answers '
+    + '— the same thing as doing it yourself from the client card. Declining needs a reason; the agent reads it.</div>';
+
+  /* ---- waiting for you ---- */
+  h += '<div class="sgrp">Waiting for you · ' + pend.length + '</div>';
+  if (!pend.length) h += '<div class="muted" style="font-size:13px;padding:6px 2px 14px">Nothing waiting.</div>';
+  for (const q of pend) {
+    const p = q.payment || {};
+    const nz = q.notify || {};
+    h += '<div class="rq" id="rq_' + esc(q.id) + '">'
+      + '<div class="row" style="align-items:flex-start;gap:10px">'
+      + '<div><b style="font-size:15px">' + money(q.amount) + '</b>'
+      + ' <span class="muted" style="font-size:12px">of ' + money(p.amount) + ' · client ' + esc(String(q.client_no || ''))
+      + (q.client_name ? ' ' + esc(q.client_name) : '') + '</span></div>'
+      + '<span class="lbl amber">needs you</span></div>'
+      + '<div class="muted" style="font-size:12px;margin-top:3px">Asked by <b style="color:var(--ink)">' + esc(q.requested_by_name || q.requested_by) + '</b>'
+      + ' · ' + rqAgo(q.requested_at) + ' · ' + esc(rqReason(q.reason)) + ' — ' + rqOwes(q.reason)
+      + ' · carrier money ' + (q.carrier === 'yes' ? 'returned' : q.carrier === 'no' ? '<b style="color:var(--red)">not returned — a loss</b>' : 'not back yet') + '</div>'
+      + '<div class="muted" style="font-size:11.5px;margin-top:3px">Payment: ' + esc(String(p.ts || '').slice(0, 10))
+      + ' · ' + esc(p.purpose || '') + (p.ref ? ' · ' + esc(p.ref) : '')
+      + (p.carrier_name ? ' · ' + esc(p.carrier_name) + (p.service_cost != null ? ' ' + money(p.service_cost) : '') : '')
+      + (p.fee_amount != null ? ' · Speedy kept ' + money(p.fee_amount) : '')
+      + ' · commission to ' + esc(p.commission_to_name || '—') + '</div>'
+      + '<div class="rqnote">“' + esc(q.note) + '”</div>'
+      + '<ul class="will">'
+      + '<li>' + (nz.channel === 'email' ? 'Client emailed at <b>' + esc(nz.to) + '</b>' + (nz.source === 'typed' ? ' <span style="color:var(--amber)">(typed by the agent, not from the record)</span>' : '')
+                 : '<span style="color:var(--red)">Client NOT told</span> — ' + esc(nz.skip_reason || '')) + '</li>'
+      + (p.fee_amount != null ? '<li>' + esc(String(p.commission_to_name || 'the agent').split(' ')[0]) + '’s commission on this reverses, this month</li>' : '<li>Never audited — no commission to reverse</li>')
+      + (p.service_cost != null && q.carrier !== 'yes' ? '<li>' + money(p.service_cost) + ' carrier cost ' + (q.carrier === 'no' ? '<span style="color:var(--red)">is a loss</span>' : 'held for recovery') + '</li>' : '')
+      + '<li>A note goes on the HawkSoft file; the receipt stays</li>'
+      + '</ul>'
+      + '<div id="rqmsg_' + esc(q.id) + '" class="shint" style="margin-top:6px;min-height:0"></div>'
+      + '<div class="rqacts">'
+      + '<button class="rqok" onclick="decideRefund(\'' + esc(q.id) + '\', true)">Approve &amp; refund ' + money(q.amount) + '</button>'
+      + '<button class="rqno" onclick="declineRefund(\'' + esc(q.id) + '\')">Decline…</button>'
+      + '</div></div>';
+  }
+
+  /* ---- carrier recovery ---- */
+  h += '<div class="sgrp" style="margin-top:22px">Carrier still owes us · ' + carr.length + ' · ' + money(r.carrier_pending_total || 0) + '</div>';
+  if (!carr.length) h += '<div class="muted" style="font-size:13px;padding:6px 2px 14px">Nothing outstanding.</div>';
+  else h += '<div class="muted" style="font-size:12px;margin-bottom:8px;line-height:1.5">Refunds where the carrier has not answered on their share. '
+    + 'Nothing chases these on their own. When you know — a remittance, a call, a statement — settle each one.</div>';
+  for (const c of carr) {
+    h += '<div class="rq" id="cr_' + esc(c.refund_id) + '">'
+      + '<div class="row" style="align-items:flex-start;gap:10px">'
+      + '<div><b>' + esc(c.carrier_name || 'carrier not named') + '</b> <span class="muted" style="font-size:12px">· client '
+      + esc(String(c.client_no)) + (c.client_name ? ' ' + esc(c.client_name) : '') + ' · refunded ' + esc(String(c.refunded_at || '').slice(0, 10)) + '</span></div>'
+      + '<b>' + money(c.carrier_cost) + '</b></div>'
+      + '<div class="muted" style="font-size:11.5px;margin-top:3px">' + money(c.amount) + ' went back to the client · ' + esc(rqReason(c.reason))
+      + (c.refunded_by ? ' · by ' + esc(c.refunded_by) : '') + '</div>'
+      + (c.note ? '<div class="rqnote">“' + esc(c.note) + '”</div>' : '')
+      + '<div id="crmsg_' + esc(c.refund_id) + '" class="shint" style="margin-top:6px;min-height:0"></div>'
+      + '<div class="rqacts">'
+      + '<button class="rqok" onclick="settleCarrier(\'' + esc(c.refund_id) + '\', \'yes\')">They paid us back</button>'
+      + '<button class="rqno" onclick="settleCarrier(\'' + esc(c.refund_id) + '\', \'no\')">It’s a loss</button>'
+      + '</div></div>';
+  }
+
+  /* ---- history ---- */
+  if (done.length) {
+    h += '<div class="sgrp" style="margin-top:22px">Decided · last ' + done.length + '</div>';
+    for (const q of done) {
+      h += '<div class="rq" style="opacity:.8">'
+        + '<div class="row"><div>' + money(q.amount) + ' <span class="muted" style="font-size:12px">· client ' + esc(String(q.client_no || ''))
+        + (q.client_name ? ' ' + esc(q.client_name) : '') + ' · asked by ' + esc(q.requested_by_name || q.requested_by) + '</span></div>'
+        + '<span class="lbl ' + (q.status === 'approved' ? 'green' : 'red') + '">' + esc(q.status) + '</span></div>'
+        + '<div class="muted" style="font-size:11.5px;margin-top:3px">' + esc(q.status) + ' by ' + esc(q.decided_by_name || q.decided_by || '')
+        + ' on ' + esc(String(q.decided_at || '').slice(0, 10)) + (q.decision_note ? ' — “' + esc(q.decision_note) + '”' : '') + '</div>'
+        + '</div>';
+    }
+  }
+  return h;
+}
+
+/* Every outcome — approved, declined, or the refund failing at Clover — is said on the
+   card itself. A request whose approval FAILED stays in the queue, because the money
+   did not move, and the message says so. */
+async function decideRefund(id, approve, note) {
+  const msg = $('#rqmsg_' + id);
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const q = (RQ_DATA.pending || []).find(x => x.id === id); if (!q) return;
+  if (approve && !confirm('Refund ' + money(q.amount) + ' to client ' + q.client_no + ' now, as ' + (q.requested_by_name || q.requested_by) + ' asked?\n\nThis cannot be undone from here.')) return;
+  say(approve ? 'Refunding…' : 'Declining…');
+  const r = await apiPostBody({ action: 'decide_refund', request_id: id, approve: !!approve, note: note || '' });
+  if (r && r.ok) {
+    if (approve) {
+      const cn = r.client_notice || {};
+      const told = cn.result === 'sent' ? 'Client emailed at ' + cn.to + '.'
+        : cn.result === 'failed' ? 'EMAIL FAILED to ' + cn.to + ' (' + (cn.detail || '') + ') — the client has NOT been told.'
+        : 'The client was not emailed' + (cn.skip_reason ? ' — ' + cn.skip_reason : '') + '.';
+      alert('Refunded. ' + (r.tell_the_client || '') + '\n\n' + told + (r.hawksoft_note ? '' : '\n\nNote: the HawkSoft note did not file. Tell Saif.'));
+    }
+    await renderRefunds($('#view'));
+    return;
+  }
+  say((r && (r.message || r.error)) || 'Could not decide that request.'
+    + (r && r.request_still_pending ? ' It is still waiting.' : ''), true);
+}
+function declineRefund(id) {
+  const why = prompt('Why is this declined? The agent will read this.');
+  if (why == null) return;
+  if (!why.trim()) { const m = $('#rqmsg_' + id); if (m) { m.textContent = 'A reason is required.'; m.style.color = 'var(--red)'; } return; }
+  decideRefund(id, false, why.trim());
+}
+async function settleCarrier(refundId, answer) {
+  const msg = $('#crmsg_' + refundId);
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const why = prompt(answer === 'yes'
+    ? 'How do you know the carrier paid us back? (remittance, call, statement — this is recorded)'
+    : 'How do you know it is a loss? (this is recorded, and it moves to Trust’s loss line)');
+  if (why == null) return;
+  if (!why.trim()) return say('A reason is required.', true);
+  say('Saving…');
+  const r = await apiPostBody({ action: 'settle_carrier', refund_id: refundId, carrier: answer, note: why.trim() });
+  if (r && r.ok) { await renderRefunds($('#view')); return; }
+  say((r && r.error) || 'Could not settle that one.', true);
 }
 
 async function renderHealth(el) {

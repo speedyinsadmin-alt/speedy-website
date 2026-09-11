@@ -828,6 +828,360 @@ async function getActiveJob(s) {
   return (r.rows || [])[0] || null;
 }
 
+/* THE REFUND, AS A FUNCTION. Two callers: refund_payment (an owner acting directly)
+   and decide_refund (an owner approving an agent's request). One code path, so an
+   approved request is issued exactly as if Tony had opened the sheet himself, with
+   the agent's answers. Returns { status, body } — the `res` here is a shim whose
+   .status(n).json(b) yields that object, so the body below is the shipped handler
+   verbatim and did not have to be re-read line by line for a refactor. */
+async function issueRefund(s, me2, b3, opts = {}) {
+  const res = { status: c => ({ json: b => ({ status: c, body: b }) }) };
+      const paymentId = String(b3.payment_id || '').trim();
+      const reason = String(b3.reason || '').trim();
+      const carrier = String(b3.carrier || '').trim();
+      const note = String(b3.note || '').trim().slice(0, 400);
+      const wantAmount = b3.amount != null ? Number(b3.amount) : null;
+
+      /* THE CLOSED SET, and what each answer MEANS for what the client owes. Saif,
+         Sep 10, asked and answered: the first two mean we took money we should not
+         have, so the client still owes what they owed; the second two mean the
+         obligation itself is gone. The database enforces the same list — a handler is
+         not the only way a row can be created. */
+      const REASONS = {
+        charged_twice:    { owes: true,  label: 'charged twice' },
+        wrong_amount:     { owes: true,  label: 'wrong amount taken' },
+        policy_cancelled: { owes: false, label: 'policy cancelled' },
+        never_bound:      { owes: false, label: 'never bound' },
+        /* The conservative default. Leaving the obligation standing errs towards the
+           client still owing, which is recoverable; writing it off is not. */
+        other:            { owes: true,  label: 'other' },
+      };
+      if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required' });
+      if (!REASONS[reason]) return res.status(400).json({ ok: false, error: 'Pick why this is being refunded.' });
+      if (!['yes', 'no', 'pending'].includes(carrier)) {
+        return res.status(400).json({ ok: false, error: 'Say whether the carrier is giving their money back: yes, no, or not yet.' });
+      }
+      if (!note) return res.status(400).json({ ok: false, error: 'A reason in words is required — Tony and the next person will read it.' });
+
+      /* ---- TELL THE CLIENT. Validated BEFORE any money moves, so a malformed notice
+         cannot leave a refund half-recorded. Email only for now (Saif, Sep 11): the
+         one SMS-capable number is a 747 area code and the branches are 951/909.
+           channel 'email' + to + source ('on_file' | 'typed')
+           channel 'none'  + skip_reason
+         'typed' is allowed — a client whose record has no email still has to be told
+         somehow — but it is stored and displayed as typed by the agent, because a
+         mistyped address is how a refund notice with the client's name and amount
+         reaches a stranger. 'on_file' is checked against the record, not trusted. */
+      const nz = (b3.notify && typeof b3.notify === 'object') ? b3.notify : null;
+      if (!nz) return res.status(400).json({ ok: false, error: 'Say whether to tell the client — an email address, or why not.' });
+      const nzChannel = String(nz.channel || '').trim();
+      const nzTo = String(nz.to || '').trim().toLowerCase();
+      const nzSource = String(nz.source || '').trim();
+      const nzSkip = String(nz.skip_reason || '').trim().slice(0, 200);
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (nzChannel === 'email') {
+        if (!EMAIL_RE.test(nzTo)) return res.status(400).json({ ok: false, error: 'That is not an email address.' });
+        if (nzSource !== 'on_file' && nzSource !== 'typed') {
+          return res.status(400).json({ ok: false, error: 'Say whether the address is from the client record or typed.' });
+        }
+      } else if (nzChannel === 'none') {
+        if (!nzSkip) return res.status(400).json({ ok: false, error: 'If the client is not being told, say why — it is recorded.' });
+      } else {
+        return res.status(400).json({ ok: false, error: "notify.channel must be 'email' or 'none'." });
+      }
+
+      /* The payment AND everything already pointing at it, in one read: the balance
+         payments that added to it, and any refunds already taken off. */
+      const pr = await sbGet(s, 'bridge_ledger?or=(id.eq.' + encodeURIComponent(paymentId)
+        + ',balance_of.eq.' + encodeURIComponent(paymentId)
+        + ',refund_of.eq.' + encodeURIComponent(paymentId) + ')&select=*');
+      const all = pr.rows || [];
+      const row = all.find(r => r.id === paymentId);
+      if (!row) return res.status(404).json({ ok: false, error: 'No such payment.' });
+
+      /* 'on_file' is a claim until it is checked. The synced client record holds one
+         email; HawkSoft may hold a second, which portal_client also returns. Either
+         counts. Anything else claimed as on-file is refused rather than relabelled. */
+      let onFile = [];
+      if (nzChannel === 'email') {
+        const cr = await sbGet(s, `clients?client_no=eq.${encodeURIComponent(row.client_id)}&select=email,extras`);
+        const crow = (cr.rows || [])[0] || {};
+        onFile = [crow.email, ...(((crow.extras || {}).emails) || [])]
+          .filter(Boolean).map(e => String(e).trim().toLowerCase());
+        if (nzSource === 'on_file' && !onFile.includes(nzTo)) {
+          return res.status(400).json({ ok: false,
+            error: 'That address is not on the client record. Pick one that is, or mark it as typed.' });
+        }
+      }
+
+      /* ---- GUARDS. Every one is a way to send real money somewhere wrong. ---- */
+      if (row.kind === 'charge_refund') {
+        return res.status(400).json({ ok: false, error: 'That row is itself a refund.' });
+      }
+      /* A balance payment carries no obligation of its own — the original holds it, and
+         the single fee. Refunding the child would leave the parent's total_owed untouched
+         and the client apparently still owing money they had been given back. Item 76. */
+      if (row.balance_of) {
+        return res.status(400).json({ ok: false,
+          error: 'That payment pays down an earlier charge. Refund the original — it carries the obligation and the fee.' });
+      }
+      /* NOT /link/. That matched paylink_CHARGE — a paid pay link, which IS collected
+         money — and refused to refund the very $1 Saif paid through a link to test this.
+         The same mistake as /refund/ matching charge_refund, a day after writing it
+         down. Name the one kind that is a link that was only SENT; test the rest by
+         audit_status, which is what actually says whether money arrived. */
+      if (/declin|fail|void/i.test(String(row.kind || '')) || row.kind === 'paylink_create'
+          || ['declined', 'link_sent', 'not_a_payment', 'void'].includes(row.audit_status)) {
+        return res.status(400).json({ ok: false, error: 'That row never collected any money.' });
+      }
+      if (row.correction_status === 'pending') {
+        return res.status(400).json({ ok: false, error: 'That payment is waiting on Tony for a different correction. Settle that one first.' });
+      }
+
+      /* WHAT IS ACTUALLY REFUNDABLE — not row.amount. The obligation may have been paid
+         in two parts, and some of it may already have been refunded. */
+      const kids = all.filter(r => r.id !== paymentId);
+      const balances = kids.filter(r => r.balance_of === paymentId && r.kind !== 'charge_refund');
+      const priorRefunds = kids.filter(r => r.refund_of === paymentId);
+      const collected = +(Number(row.amount || 0)
+        + balances.reduce((a, r) => a + Number(r.amount || 0), 0)).toFixed(2);
+      /* Refund amounts are stored NEGATIVE, so Math.abs once here rather than sign
+         juggling at four call sites. */
+      const alreadyRefunded = +Math.abs(priorRefunds.reduce((a, r) => a + Number(r.amount || 0), 0)).toFixed(2);
+      const refundable = +(collected - alreadyRefunded).toFixed(2);
+      if (!(refundable > 0)) {
+        return res.status(400).json({ ok: false,
+          error: alreadyRefunded > 0
+            ? 'That payment has already been refunded in full.'
+            : 'There is nothing collected on that payment to refund.' });
+      }
+      /* Fully collected only — see the header. Compared with a cent of tolerance
+         because these are numeric strings out of PostgREST. */
+      const owedTotal = (row.total_owed != null && Number(row.total_owed) > Number(row.amount || 0))
+        ? Number(row.total_owed) : Number(row.amount || 0);
+      if (collected + 0.004 < owedTotal) {
+        return res.status(400).json({ ok: false, error: 'partly_paid_not_supported_yet',
+          message: `That obligation is only part paid — $${collected.toFixed(2)} of $${owedTotal.toFixed(2)}. `
+            + 'Refunding a part-paid obligation changes the commission arithmetic and is stage 4. '
+            + 'Ask Saif rather than working around it.' });
+      }
+      if (wantAmount != null && Math.abs(wantAmount - refundable) > 0.004) {
+        return res.status(400).json({ ok: false, error: 'partial_not_supported_yet',
+          message: `Only a full refund of $${refundable.toFixed(2)} can be issued today. `
+            + 'Whether Clover accepts a partial amount is still unverified, and getting it wrong '
+            + 'refunds more than intended.' });
+      }
+      const amount = refundable;
+
+      const isCard = /^(charge_live|charge_card|paylink_charge|terminal_charge)$/.test(String(row.kind))
+        && !!row.txn_id;
+      /* DRY RUN — request_refund's whole point. Every guard above has passed, nothing
+         has been touched, and this says what WOULD happen. A request is only accepted
+         if it would succeed right now; a request that would be refused later is
+         refused now, to the person who can fix it. */
+      if (opts.dryRun) {
+        return res.status(200).json({ ok: true, dry_run: true, amount, method: isCard ? 'card' : 'cash',
+          client_id: row.client_id, is_test: row.is_test === true,
+          obligation: REASONS[reason].owes ? 'still_owed' : 'closed',
+          fee_to_reverse: row.fee_amount != null ? Number(row.fee_amount)
+            : (row.service_cost != null ? +(Number(row.amount || 0) - Number(row.service_cost)).toFixed(2) : null),
+          notify: { channel: nzChannel, to: nzChannel === 'email' ? nzTo : null,
+            source: nzChannel === 'email' ? nzSource : null, skip_reason: nzChannel === 'none' ? nzSkip : null } });
+      }
+
+      /* ---- THE CARD. NOTHING IS WRITTEN UNTIL THIS SUCCEEDS. ---- */
+      let clover = null, cloverStatus = null;
+      if (isCard) {
+        const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
+        if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
+        /* POST /v1/refunds { charge } — the creation route, PROVEN by the stage 0 probe
+           rather than assumed: an empty body drew a real validation error ("Either
+           charge id or reversal id has to be present"), and a route that cannot exist
+           answers differently, so a 404 here means "no such charge". */
+        try {
+          const cr = await fetch('https://scl.clover.com/v1/refunds', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
+              /* Keyed on the PAYMENT, not on the request, so a double-tap from a slow
+                 phone cannot refund the same charge twice. */
+              'idempotency-key': 'refund-' + paymentId },
+            body: JSON.stringify({ charge: row.txn_id }),
+          });
+          cloverStatus = cr.status;
+          const ctext = await cr.text();
+          try { clover = ctext ? JSON.parse(ctext) : null; } catch { clover = ctext; }
+        } catch (e) {
+          return res.status(502).json({ ok: false,
+            error: 'Could not reach Clover. Nothing was refunded and nothing was recorded — try again.' });
+        }
+        const succeeded = cloverStatus === 200 && clover
+          && (String(clover.status || '').toLowerCase() === 'succeeded' || !!clover.id);
+        if (!succeeded) {
+          const msg = (clover && clover.error && clover.error.message)
+            || (clover && clover.message) || `Clover returned HTTP ${cloverStatus}`;
+          /* Recorded, so a refused refund is not invisible — but NO ledger row: the
+             money did not move, so the ledger must not say it did. */
+          await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify({ ts: new Date().toISOString(), actor: me2, kind: 'refund.failed',
+              client_no: row.client_id, source: 'portal',
+              payload: { payment_id: paymentId, amount, reason, carrier,
+                clover_status: cloverStatus, clover_error: msg } }) });
+          return res.status(402).json({ ok: false, error: `Clover refused the refund: ${msg}` });
+        }
+      }
+
+      /* ---- THE LEDGER ROW. Negative, pointing at its parent, carrying the reversal. ---- */
+      const stamp = new Date().toISOString();
+      const refundId = randomUUID();
+      /* The fee that was actually recognised on the parent. Null when the parent was
+           never audited — then there is no commission to take back, and the commission
+           loop skips a row with no fee, which is the correct outcome rather than a zero. */
+      const parentFee = row.fee_amount != null ? Number(row.fee_amount)
+        : (row.service_cost != null ? +(Number(row.amount || 0) - Number(row.service_cost)).toFixed(2) : null);
+      const refundRow = {
+        id: refundId,
+        ts: stamp,
+        kind: 'charge_refund',
+        client_id: row.client_id,
+        amount: -amount,
+        purpose: 'Refund — ' + REASONS[reason].label,
+        agent: me2,
+        /* WHOSE COMMISSION MOVES: the person who earned the original, not whoever
+           pressed the button. "A refund reduces commission in the month of the refund"
+           says nothing about moving it to a different agent. */
+        commission_to: row.commission_to || agentEmailOf(row.agent) || null,
+        txn_id: isCard ? (String((clover && clover.id) || '') || null) : null,
+        ref: isCard ? 'Clover refund' : 'Cash returned',
+        /* 'complete' and a NEGATIVE fee are what make the existing commission engine
+           put a negative line in THIS month. See the header. */
+        audit_status: 'complete',
+        audit_completed_at: stamp,
+        audit_completed_by: me2,
+        fee_amount: parentFee != null ? -parentFee : null,
+        is_test: row.is_test === true,
+        refund_of: paymentId,
+        refund_reason: reason,
+        refund_carrier: carrier,
+        refund_note: note,
+        /* Written with the row, result 'pending', and patched once the send has been
+           attempted — so even a crash between the two leaves a record that says what
+           was DECIDED, which is never silent. */
+        extra: { client_notice: { channel: nzChannel, to: nzChannel === 'email' ? nzTo : null,
+          source: nzChannel === 'email' ? nzSource : null, chosen_by: me2, at: stamp,
+          skip_reason: nzChannel === 'none' ? nzSkip : null,
+          result: nzChannel === 'email' ? 'pending' : 'skipped',
+          detail: nzChannel === 'none' ? nzSkip : null } },
+      };
+      const ins = await sbInsert(s, 'bridge_ledger', [refundRow]);
+      if (!ins.ok) {
+        /* THE WORST CASE, SAID OUT LOUD. The card is refunded and we could not record
+           it. Staying quiet here is how a client gets refunded twice. */
+        return res.status(500).json({ ok: false,
+          error: 'The card WAS refunded but the ledger write failed (' + ins.status + '). '
+            + 'Do NOT try again — tell Saif. The Clover refund id is below and the row must be added by hand.',
+          clover_refund_id: (clover && clover.id) || null });
+      }
+
+      /* ---- DOES THE CLIENT STILL OWE IT? Saif's split, applied. ---- */
+      const owedBefore = row.total_owed != null ? Number(row.total_owed) : null;
+      let owedAfter = owedBefore;
+      if (!REASONS[reason].owes && owedBefore != null) {
+        /* The obligation is gone, so what is owed drops to what is still held. Only
+           touched when a total_owed was set in the first place — writing one onto a
+           charge that never had one would invent an obligation. */
+        owedAfter = +(collected - alreadyRefunded - amount).toFixed(2);
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ total_owed: owedAfter }) });
+      }
+
+      /* ---- TELL THE CLIENT — after the money has moved AND been recorded, never before.
+         The result is patched onto the row and goes into the HawkSoft note and the
+         event below, so there is no outcome that is not written down. ---- */
+      const notice = refundRow.extra.client_notice;
+      if (nzChannel === 'email') {
+        const crn = await sbGet(s, `clients?client_no=eq.${encodeURIComponent(row.client_id)}&select=first_name,business_name`);
+        const cn = (crn.rows || [])[0] || {};
+        const ageMin = Math.round((Date.now() - new Date(row.ts).getTime()) / 60000);
+        const r = await sendRefundEmail({
+          to: nzTo, name: cn.business_name || cn.first_name || '',
+          amount, method: isCard ? 'card' : 'cash', voided: isCard && ageMin < 25,
+          original: `$${Number(row.amount || 0).toFixed(2)} on ${String(row.ts || '').slice(0, 10)}${row.ref ? ' · ' + row.ref : ''}`,
+          reason: REASONS[reason].label, confirmation: (clover && clover.id) || null,
+          stamp: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) });
+        notice.result = r.startsWith('sent to') ? 'sent' : 'failed';
+        notice.detail = r.startsWith('sent to') ? null : r;
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(refundId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ extra: { client_notice: notice } }) });
+      }
+      const noticeLine = notice.result === 'sent'
+        ? `Client notified by email at ${notice.to}${notice.source === 'typed' ? ' (address typed by the agent, not from the record)' : ''}.`
+        : notice.result === 'failed'
+          ? `Client email to ${notice.to} FAILED (${notice.detail}) — the agent was shown this.`
+          : `Client NOT notified — ${notice.skip_reason}.`;
+
+      /* ---- HAWKSOFT. A filed receipt cannot be un-filed or modified, so the refund goes
+         on as a NOTE and the original receipt stays exactly where it is. Saying so on the
+         client's file is the only way the record does not quietly lie. ---- */
+      let noteOk = false;
+      try {
+        const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
+          method: 'POST',
+          body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+            note: `REFUND — $${amount.toFixed(2)} returned to the client `
+              + (isCard
+                  ? `on the card used for the original payment (Clover refund ${(clover && clover.id) || 'n/a'}).`
+                  : `in cash by the agent.`)
+              + ` The original payment of $${Number(row.amount || 0).toFixed(2)} on `
+              + `${String(row.ts || '').slice(0, 10)}${row.txn_id ? ' (' + row.txn_id + ')' : ''} REMAINS ON FILE `
+              + `and is unchanged — a filed receipt cannot be withdrawn. `
+              + `Reason: ${REASONS[reason].label}. `
+              + (REASONS[reason].owes
+                  ? `The client still owes what they owed; this does not write the balance off. `
+                  : `This closes the obligation — nothing further is owed on it. `)
+              + `Carrier money: ${carrier === 'yes' ? 'returned by the carrier'
+                  : carrier === 'no' ? 'NOT returned — absorbed by Speedy' : 'not returned yet'}. `
+              + noticeLine + ` `
+              + `Refunded by ${me2}. Note: ${note}` }) });
+        noteOk = (hr.status === 200 || hr.status === 202);
+      } catch { noteOk = false; }
+
+      /* ---- THE AUDIT TRAIL. Everything that moved, so "why did this money go back?" is
+         answerable later without anyone reconstructing it from memory. ---- */
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'payment.refunded',
+          client_no: row.client_id, source: 'portal',
+          payload: {
+            payment_id: paymentId, refund_id: refundId,
+            amount, method: isCard ? 'card' : 'cash',
+            clover_refund_id: (clover && clover.id) || null,
+            reason, reason_label: REASONS[reason].label,
+            obligation: REASONS[reason].owes ? 'still owed' : 'closed',
+            total_owed: { from: owedBefore, to: owedAfter },
+            carrier, carrier_cost: row.service_cost != null ? Number(row.service_cost) : null,
+            fee_reversed: parentFee,
+            commission_to: refundRow.commission_to,
+            hawksoft_note: noteOk, note,
+            client_notice: notice,
+          } }) });
+
+      return res.status(200).json({ ok: true,
+        refund_id: refundId,
+        client_notice: notice,
+        amount, method: isCard ? 'card' : 'cash',
+        clover_refund_id: (clover && clover.id) || null,
+        obligation: REASONS[reason].owes ? 'still_owed' : 'closed',
+        total_owed_now: owedAfter,
+        fee_reversed: parentFee,
+        hawksoft_note: noteOk,
+        /* The one thing the agent will be asked, in the words to use. */
+        tell_the_client: isCard
+          ? `$${amount.toFixed(2)} is on its way back to the card — usually 2 to 5 business days.`
+          : `Hand back $${amount.toFixed(2)} in cash.`,
+      });
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -1181,7 +1535,7 @@ if (view === 'portal_share_due') {
       // in.(), so each value must be double-quoted or the filter matches nothing.
       const since = new Date(Date.now() - 30 * 86400000).toISOString();
       const ev = await sbGet(s, `events?ts=gte.${since}`
-        + `&kind=in.("commission.reassigned","commission.shared","audit.repaired","client.corrected","client.correction_rejected","audit.completed_by_other")`
+        + `&kind=in.("commission.reassigned","commission.shared","audit.repaired","client.corrected","client.correction_rejected","audit.completed_by_other","refund.decided")`
         + `&select=id,ts,actor,kind,client_no,payload&order=ts.desc&limit=100`);
 
       const seenRow = await sbGet(s, `agent_prefs?agent_email=eq.${encodeURIComponent(me)}&select=news_seen_at`);
@@ -1228,6 +1582,12 @@ if (view === 'portal_share_due') {
               title: 'Your wrong-client correction was not approved',
               detail: 'The payment stays on client #' + e.client_no });
           }
+        } else if (e.kind === 'refund.decided' && p.requested_by === me) {
+          items.push({ id: e.id, ts: e.ts, tone: p.approved ? 'green' : 'amber', client_no: e.client_no,
+            title: p.approved ? 'Your refund request was approved' : 'Your refund request was not approved',
+            detail: '$' + Number(p.amount || 0).toFixed(2) + ' on client #' + e.client_no
+              + (p.note ? ' — ' + p.note : ''),
+            action: p.approved ? 'The refund has been issued and the client told.' : 'The payment stands as it was.' });
         } else if (e.kind === 'audit.repaired' && p.entered_by === me) {
           items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
             title: 'An audit was repaired for you',
@@ -1295,6 +1655,10 @@ if (view === 'portal_share_due') {
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
+      /* Open refund requests on this client, so the card can say "waiting for Tony"
+         instead of offering the button again. */
+      const rqs = await sbGet(s, `refund_requests?client_id=eq.${no}&status=eq.pending&select=id,payment_id,requested_by,requested_at,amount,reason`);
+      const rqBy = Object.fromEntries((rqs.rows || []).map(r => [r.payment_id, r]));
       return res.status(200).json({
         ok: true, client, policies: po.rows || [],
         recent: (pay.rows || []).slice(0, 6),
@@ -1341,6 +1705,9 @@ if (view === 'portal_share_due') {
              says so rather than showing a blank. */
           client_notice: clientNoticeOf(r),
           is_test: r.is_test === true,
+          refund_request: rqBy[r.id] ? { id: rqBy[r.id].id, requested_by: rqBy[r.id].requested_by,
+            requested_by_name: AGENT_NAME[rqBy[r.id].requested_by] || rqBy[r.id].requested_by,
+            requested_at: rqBy[r.id].requested_at, amount: Number(rqBy[r.id].amount), reason: rqBy[r.id].reason } : null,
           // NOTE: no commission figures here — the client log is shared with every agent
         })),
         /* The card gated its correction links on "I earn it or I took it", so an ADMIN
@@ -1602,7 +1969,7 @@ if (view === 'portal_share_due') {
      can, and he can give you the permission on the Staff page" — instead of a bare
      401 that reads like a bug. may(email,'refund') is the gate, not this list. */
   const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share', 'move_client',
-                         'link_balance', 'unlink_balance', 'refund_payment'];
+                         'link_balance', 'unlink_balance', 'refund_payment', 'request_refund'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -2056,337 +2423,125 @@ if (view === 'portal_share_due') {
         return res.status(403).json({ ok: false, error: 'not_permitted',
           message: 'You cannot issue a refund. Tony can, and he can also give you the permission on the Staff page.' });
       }
+      const out = await issueRefund(s, me2, req.body || {});
+      return res.status(out.status).json(out.body);
+    }
+
+    /* ================= REFUND REQUESTS — the agent's half =================
+       Saif, Sep 10: "agent self-serve inside a window, then it becomes a request for
+       Tony — move_client's shape." The window needs a number from Tony and is not
+       built; this is the request. An agent fills in the SAME sheet — why, carrier,
+       tell the client, reason — and nothing moves. Tony approves from the Console and
+       the refund is issued through issueRefund() with the agent's answers, exactly as
+       if he had opened the sheet himself. */
+    if (action === 'request_refund') {
+      const me2 = String(email).toLowerCase();
       const b3 = req.body || {};
+      /* Everything is validated by the real refund code in dry-run mode, so a request
+         that would be refused at approval time is refused NOW, to the agent, with the
+         same message Tony would have seen. */
+      const dry = await issueRefund(s, me2, b3, { dryRun: true });
+      if (dry.status !== 200) return res.status(dry.status).json(dry.body);
+      const d = dry.body;
       const paymentId = String(b3.payment_id || '').trim();
-      const reason = String(b3.reason || '').trim();
-      const carrier = String(b3.carrier || '').trim();
-      const note = String(b3.note || '').trim().slice(0, 400);
-      const wantAmount = b3.amount != null ? Number(b3.amount) : null;
-
-      /* THE CLOSED SET, and what each answer MEANS for what the client owes. Saif,
-         Sep 10, asked and answered: the first two mean we took money we should not
-         have, so the client still owes what they owed; the second two mean the
-         obligation itself is gone. The database enforces the same list — a handler is
-         not the only way a row can be created. */
-      const REASONS = {
-        charged_twice:    { owes: true,  label: 'charged twice' },
-        wrong_amount:     { owes: true,  label: 'wrong amount taken' },
-        policy_cancelled: { owes: false, label: 'policy cancelled' },
-        never_bound:      { owes: false, label: 'never bound' },
-        /* The conservative default. Leaving the obligation standing errs towards the
-           client still owing, which is recoverable; writing it off is not. */
-        other:            { owes: true,  label: 'other' },
-      };
-      if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required' });
-      if (!REASONS[reason]) return res.status(400).json({ ok: false, error: 'Pick why this is being refunded.' });
-      if (!['yes', 'no', 'pending'].includes(carrier)) {
-        return res.status(400).json({ ok: false, error: 'Say whether the carrier is giving their money back: yes, no, or not yet.' });
+      /* One open request per payment — enforced by a partial unique index too. */
+      const open = await sbGet(s, `refund_requests?payment_id=eq.${encodeURIComponent(paymentId)}&status=eq.pending&select=id,requested_by,requested_at`);
+      if ((open.rows || []).length) {
+        const o = open.rows[0];
+        return res.status(409).json({ ok: false, error: 'already_requested',
+          message: `A refund of this payment is already waiting for Tony — asked by ${AGENT_NAME[o.requested_by] || o.requested_by} on ${String(o.requested_at).slice(0, 10)}.` });
       }
-      if (!note) return res.status(400).json({ ok: false, error: 'A reason in words is required — Tony and the next person will read it.' });
-
-      /* ---- TELL THE CLIENT. Validated BEFORE any money moves, so a malformed notice
-         cannot leave a refund half-recorded. Email only for now (Saif, Sep 11): the
-         one SMS-capable number is a 747 area code and the branches are 951/909.
-           channel 'email' + to + source ('on_file' | 'typed')
-           channel 'none'  + skip_reason
-         'typed' is allowed — a client whose record has no email still has to be told
-         somehow — but it is stored and displayed as typed by the agent, because a
-         mistyped address is how a refund notice with the client's name and amount
-         reaches a stranger. 'on_file' is checked against the record, not trusted. */
-      const nz = (b3.notify && typeof b3.notify === 'object') ? b3.notify : null;
-      if (!nz) return res.status(400).json({ ok: false, error: 'Say whether to tell the client — an email address, or why not.' });
-      const nzChannel = String(nz.channel || '').trim();
-      const nzTo = String(nz.to || '').trim().toLowerCase();
-      const nzSource = String(nz.source || '').trim();
-      const nzSkip = String(nz.skip_reason || '').trim().slice(0, 200);
-      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (nzChannel === 'email') {
-        if (!EMAIL_RE.test(nzTo)) return res.status(400).json({ ok: false, error: 'That is not an email address.' });
-        if (nzSource !== 'on_file' && nzSource !== 'typed') {
-          return res.status(400).json({ ok: false, error: 'Say whether the address is from the client record or typed.' });
-        }
-      } else if (nzChannel === 'none') {
-        if (!nzSkip) return res.status(400).json({ ok: false, error: 'If the client is not being told, say why — it is recorded.' });
-      } else {
-        return res.status(400).json({ ok: false, error: "notify.channel must be 'email' or 'none'." });
-      }
-
-      /* The payment AND everything already pointing at it, in one read: the balance
-         payments that added to it, and any refunds already taken off. */
-      const pr = await sbGet(s, 'bridge_ledger?or=(id.eq.' + encodeURIComponent(paymentId)
-        + ',balance_of.eq.' + encodeURIComponent(paymentId)
-        + ',refund_of.eq.' + encodeURIComponent(paymentId) + ')&select=*');
-      const all = pr.rows || [];
-      const row = all.find(r => r.id === paymentId);
-      if (!row) return res.status(404).json({ ok: false, error: 'No such payment.' });
-
-      /* 'on_file' is a claim until it is checked. The synced client record holds one
-         email; HawkSoft may hold a second, which portal_client also returns. Either
-         counts. Anything else claimed as on-file is refused rather than relabelled. */
-      let onFile = [];
-      if (nzChannel === 'email') {
-        const cr = await sbGet(s, `clients?client_no=eq.${encodeURIComponent(row.client_id)}&select=email,extras`);
-        const crow = (cr.rows || [])[0] || {};
-        onFile = [crow.email, ...(((crow.extras || {}).emails) || [])]
-          .filter(Boolean).map(e => String(e).trim().toLowerCase());
-        if (nzSource === 'on_file' && !onFile.includes(nzTo)) {
-          return res.status(400).json({ ok: false,
-            error: 'That address is not on the client record. Pick one that is, or mark it as typed.' });
-        }
-      }
-
-      /* ---- GUARDS. Every one is a way to send real money somewhere wrong. ---- */
-      if (row.kind === 'charge_refund') {
-        return res.status(400).json({ ok: false, error: 'That row is itself a refund.' });
-      }
-      /* A balance payment carries no obligation of its own — the original holds it, and
-         the single fee. Refunding the child would leave the parent's total_owed untouched
-         and the client apparently still owing money they had been given back. Item 76. */
-      if (row.balance_of) {
-        return res.status(400).json({ ok: false,
-          error: 'That payment pays down an earlier charge. Refund the original — it carries the obligation and the fee.' });
-      }
-      /* NOT /link/. That matched paylink_CHARGE — a paid pay link, which IS collected
-         money — and refused to refund the very $1 Saif paid through a link to test this.
-         The same mistake as /refund/ matching charge_refund, a day after writing it
-         down. Name the one kind that is a link that was only SENT; test the rest by
-         audit_status, which is what actually says whether money arrived. */
-      if (/declin|fail|void/i.test(String(row.kind || '')) || row.kind === 'paylink_create'
-          || ['declined', 'link_sent', 'not_a_payment', 'void'].includes(row.audit_status)) {
-        return res.status(400).json({ ok: false, error: 'That row never collected any money.' });
-      }
-      if (row.correction_status === 'pending') {
-        return res.status(400).json({ ok: false, error: 'That payment is waiting on Tony for a different correction. Settle that one first.' });
-      }
-
-      /* WHAT IS ACTUALLY REFUNDABLE — not row.amount. The obligation may have been paid
-         in two parts, and some of it may already have been refunded. */
-      const kids = all.filter(r => r.id !== paymentId);
-      const balances = kids.filter(r => r.balance_of === paymentId && r.kind !== 'charge_refund');
-      const priorRefunds = kids.filter(r => r.refund_of === paymentId);
-      const collected = +(Number(row.amount || 0)
-        + balances.reduce((a, r) => a + Number(r.amount || 0), 0)).toFixed(2);
-      /* Refund amounts are stored NEGATIVE, so Math.abs once here rather than sign
-         juggling at four call sites. */
-      const alreadyRefunded = +Math.abs(priorRefunds.reduce((a, r) => a + Number(r.amount || 0), 0)).toFixed(2);
-      const refundable = +(collected - alreadyRefunded).toFixed(2);
-      if (!(refundable > 0)) {
-        return res.status(400).json({ ok: false,
-          error: alreadyRefunded > 0
-            ? 'That payment has already been refunded in full.'
-            : 'There is nothing collected on that payment to refund.' });
-      }
-      /* Fully collected only — see the header. Compared with a cent of tolerance
-         because these are numeric strings out of PostgREST. */
-      const owedTotal = (row.total_owed != null && Number(row.total_owed) > Number(row.amount || 0))
-        ? Number(row.total_owed) : Number(row.amount || 0);
-      if (collected + 0.004 < owedTotal) {
-        return res.status(400).json({ ok: false, error: 'partly_paid_not_supported_yet',
-          message: `That obligation is only part paid — $${collected.toFixed(2)} of $${owedTotal.toFixed(2)}. `
-            + 'Refunding a part-paid obligation changes the commission arithmetic and is stage 4. '
-            + 'Ask Saif rather than working around it.' });
-      }
-      if (wantAmount != null && Math.abs(wantAmount - refundable) > 0.004) {
-        return res.status(400).json({ ok: false, error: 'partial_not_supported_yet',
-          message: `Only a full refund of $${refundable.toFixed(2)} can be issued today. `
-            + 'Whether Clover accepts a partial amount is still unverified, and getting it wrong '
-            + 'refunds more than intended.' });
-      }
-      const amount = refundable;
-
-      /* ---- THE CARD. NOTHING IS WRITTEN UNTIL THIS SUCCEEDS. ---- */
-      const isCard = /^(charge_live|charge_card|paylink_charge|terminal_charge)$/.test(String(row.kind))
-        && !!row.txn_id;
-      let clover = null, cloverStatus = null;
-      if (isCard) {
-        const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
-        if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
-        /* POST /v1/refunds { charge } — the creation route, PROVEN by the stage 0 probe
-           rather than assumed: an empty body drew a real validation error ("Either
-           charge id or reversal id has to be present"), and a route that cannot exist
-           answers differently, so a 404 here means "no such charge". */
-        try {
-          const cr = await fetch('https://scl.clover.com/v1/refunds', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
-              /* Keyed on the PAYMENT, not on the request, so a double-tap from a slow
-                 phone cannot refund the same charge twice. */
-              'idempotency-key': 'refund-' + paymentId },
-            body: JSON.stringify({ charge: row.txn_id }),
-          });
-          cloverStatus = cr.status;
-          const ctext = await cr.text();
-          try { clover = ctext ? JSON.parse(ctext) : null; } catch { clover = ctext; }
-        } catch (e) {
-          return res.status(502).json({ ok: false,
-            error: 'Could not reach Clover. Nothing was refunded and nothing was recorded — try again.' });
-        }
-        const succeeded = cloverStatus === 200 && clover
-          && (String(clover.status || '').toLowerCase() === 'succeeded' || !!clover.id);
-        if (!succeeded) {
-          const msg = (clover && clover.error && clover.error.message)
-            || (clover && clover.message) || `Clover returned HTTP ${cloverStatus}`;
-          /* Recorded, so a refused refund is not invisible — but NO ledger row: the
-             money did not move, so the ledger must not say it did. */
-          await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-            body: JSON.stringify({ ts: new Date().toISOString(), actor: me2, kind: 'refund.failed',
-              client_no: row.client_id, source: 'portal',
-              payload: { payment_id: paymentId, amount, reason, carrier,
-                clover_status: cloverStatus, clover_error: msg } }) });
-          return res.status(402).json({ ok: false, error: `Clover refused the refund: ${msg}` });
-        }
-      }
-
-      /* ---- THE LEDGER ROW. Negative, pointing at its parent, carrying the reversal. ---- */
+      const reqId = randomUUID();
       const stamp = new Date().toISOString();
-      const refundId = randomUUID();
-      /* The fee that was actually recognised on the parent. Null when the parent was
-           never audited — then there is no commission to take back, and the commission
-           loop skips a row with no fee, which is the correct outcome rather than a zero. */
-      const parentFee = row.fee_amount != null ? Number(row.fee_amount)
-        : (row.service_cost != null ? +(Number(row.amount || 0) - Number(row.service_cost)).toFixed(2) : null);
-      const refundRow = {
-        id: refundId,
-        ts: stamp,
-        kind: 'charge_refund',
-        client_id: row.client_id,
-        amount: -amount,
-        purpose: 'Refund — ' + REASONS[reason].label,
-        agent: me2,
-        /* WHOSE COMMISSION MOVES: the person who earned the original, not whoever
-           pressed the button. "A refund reduces commission in the month of the refund"
-           says nothing about moving it to a different agent. */
-        commission_to: row.commission_to || agentEmailOf(row.agent) || null,
-        txn_id: isCard ? (String((clover && clover.id) || '') || null) : null,
-        ref: isCard ? 'Clover refund' : 'Cash returned',
-        /* 'complete' and a NEGATIVE fee are what make the existing commission engine
-           put a negative line in THIS month. See the header. */
-        audit_status: 'complete',
-        audit_completed_at: stamp,
-        audit_completed_by: me2,
-        fee_amount: parentFee != null ? -parentFee : null,
-        is_test: row.is_test === true,
-        refund_of: paymentId,
-        refund_reason: reason,
-        refund_carrier: carrier,
-        refund_note: note,
-        /* Written with the row, result 'pending', and patched once the send has been
-           attempted — so even a crash between the two leaves a record that says what
-           was DECIDED, which is never silent. */
-        extra: { client_notice: { channel: nzChannel, to: nzChannel === 'email' ? nzTo : null,
-          source: nzChannel === 'email' ? nzSource : null, chosen_by: me2, at: stamp,
-          skip_reason: nzChannel === 'none' ? nzSkip : null,
-          result: nzChannel === 'email' ? 'pending' : 'skipped',
-          detail: nzChannel === 'none' ? nzSkip : null } },
-      };
-      const ins = await sbInsert(s, 'bridge_ledger', [refundRow]);
-      if (!ins.ok) {
-        /* THE WORST CASE, SAID OUT LOUD. The card is refunded and we could not record
-           it. Staying quiet here is how a client gets refunded twice. */
-        return res.status(500).json({ ok: false,
-          error: 'The card WAS refunded but the ledger write failed (' + ins.status + '). '
-            + 'Do NOT try again — tell Saif. The Clover refund id is below and the row must be added by hand.',
-          clover_refund_id: (clover && clover.id) || null });
-      }
-
-      /* ---- DOES THE CLIENT STILL OWE IT? Saif's split, applied. ---- */
-      const owedBefore = row.total_owed != null ? Number(row.total_owed) : null;
-      let owedAfter = owedBefore;
-      if (!REASONS[reason].owes && owedBefore != null) {
-        /* The obligation is gone, so what is owed drops to what is still held. Only
-           touched when a total_owed was set in the first place — writing one onto a
-           charge that never had one would invent an obligation. */
-        owedAfter = +(collected - alreadyRefunded - amount).toFixed(2);
-        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
-          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-          body: JSON.stringify({ total_owed: owedAfter }) });
-      }
-
-      /* ---- TELL THE CLIENT — after the money has moved AND been recorded, never before.
-         The result is patched onto the row and goes into the HawkSoft note and the
-         event below, so there is no outcome that is not written down. ---- */
-      const notice = refundRow.extra.client_notice;
-      if (nzChannel === 'email') {
-        const crn = await sbGet(s, `clients?client_no=eq.${encodeURIComponent(row.client_id)}&select=first_name,business_name`);
-        const cn = (crn.rows || [])[0] || {};
-        const ageMin = Math.round((Date.now() - new Date(row.ts).getTime()) / 60000);
-        const r = await sendRefundEmail({
-          to: nzTo, name: cn.business_name || cn.first_name || '',
-          amount, method: isCard ? 'card' : 'cash', voided: isCard && ageMin < 25,
-          original: `$${Number(row.amount || 0).toFixed(2)} on ${String(row.ts || '').slice(0, 10)}${row.ref ? ' · ' + row.ref : ''}`,
-          reason: REASONS[reason].label, confirmation: (clover && clover.id) || null,
-          stamp: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) });
-        notice.result = r.startsWith('sent to') ? 'sent' : 'failed';
-        notice.detail = r.startsWith('sent to') ? null : r;
-        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(refundId)}`, {
-          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-          body: JSON.stringify({ extra: { client_notice: notice } }) });
-      }
-      const noticeLine = notice.result === 'sent'
-        ? `Client notified by email at ${notice.to}${notice.source === 'typed' ? ' (address typed by the agent, not from the record)' : ''}.`
-        : notice.result === 'failed'
-          ? `Client email to ${notice.to} FAILED (${notice.detail}) — the agent was shown this.`
-          : `Client NOT notified — ${notice.skip_reason}.`;
-
-      /* ---- HAWKSOFT. A filed receipt cannot be un-filed or modified, so the refund goes
-         on as a NOTE and the original receipt stays exactly where it is. Saying so on the
-         client's file is the only way the record does not quietly lie. ---- */
-      let noteOk = false;
-      try {
-        const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
-          method: 'POST',
-          body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
-            note: `REFUND — $${amount.toFixed(2)} returned to the client `
-              + (isCard
-                  ? `on the card used for the original payment (Clover refund ${(clover && clover.id) || 'n/a'}).`
-                  : `in cash by the agent.`)
-              + ` The original payment of $${Number(row.amount || 0).toFixed(2)} on `
-              + `${String(row.ts || '').slice(0, 10)}${row.txn_id ? ' (' + row.txn_id + ')' : ''} REMAINS ON FILE `
-              + `and is unchanged — a filed receipt cannot be withdrawn. `
-              + `Reason: ${REASONS[reason].label}. `
-              + (REASONS[reason].owes
-                  ? `The client still owes what they owed; this does not write the balance off. `
-                  : `This closes the obligation — nothing further is owed on it. `)
-              + `Carrier money: ${carrier === 'yes' ? 'returned by the carrier'
-                  : carrier === 'no' ? 'NOT returned — absorbed by Speedy' : 'not returned yet'}. `
-              + noticeLine + ` `
-              + `Refunded by ${me2}. Note: ${note}` }) });
-        noteOk = (hr.status === 200 || hr.status === 202);
-      } catch { noteOk = false; }
-
-      /* ---- THE AUDIT TRAIL. Everything that moved, so "why did this money go back?" is
-         answerable later without anyone reconstructing it from memory. ---- */
+      const row = { id: reqId, payment_id: paymentId, client_id: d.client_id, requested_by: me2,
+        requested_at: stamp, amount: d.amount, reason: String(b3.reason), carrier: String(b3.carrier),
+        notify: d.notify, note: String(b3.note || '').trim().slice(0, 400), status: 'pending', is_test: d.is_test };
+      const ins = await sbInsert(s, 'refund_requests', [row]);
+      if (!ins.ok) return res.status(500).json({ ok: false, error: 'Could not save the request (' + ins.status + ').' });
       await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'payment.refunded',
-          client_no: row.client_id, source: 'portal',
-          payload: {
-            payment_id: paymentId, refund_id: refundId,
-            amount, method: isCard ? 'card' : 'cash',
-            clover_refund_id: (clover && clover.id) || null,
-            reason, reason_label: REASONS[reason].label,
-            obligation: REASONS[reason].owes ? 'still owed' : 'closed',
-            total_owed: { from: owedBefore, to: owedAfter },
-            carrier, carrier_cost: row.service_cost != null ? Number(row.service_cost) : null,
-            fee_reversed: parentFee,
-            commission_to: refundRow.commission_to,
-            hawksoft_note: noteOk, note,
-            client_notice: notice,
-          } }) });
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'refund.requested', client_no: d.client_id,
+          source: 'portal', payload: { request_id: reqId, payment_id: paymentId, amount: d.amount,
+            method: d.method, reason: row.reason, carrier: row.carrier, notify: d.notify, note: row.note } }) });
+      return res.status(200).json({ ok: true, request_id: reqId, amount: d.amount,
+        message: `Sent to Tony. Nothing has been refunded yet — you will be told when he decides.` });
+    }
 
-      return res.status(200).json({ ok: true,
-        refund_id: refundId,
-        client_notice: notice,
-        amount, method: isCard ? 'card' : 'cash',
-        clover_refund_id: (clover && clover.id) || null,
-        obligation: REASONS[reason].owes ? 'still_owed' : 'closed',
-        total_owed_now: owedAfter,
-        fee_reversed: parentFee,
-        hawksoft_note: noteOk,
-        /* The one thing the agent will be asked, in the words to use. */
-        tell_the_client: isCard
-          ? `$${amount.toFixed(2)} is on its way back to the card — usually 2 to 5 business days.`
-          : `Hand back $${amount.toFixed(2)} in cash.`,
-      });
+    /* Tony's half. Approve issues the refund NOW, through the same path, as Tony, with
+       the agent's answers. Decline needs a reason — the agent asked, and "no" with
+       nothing behind it is the silence Saif does not want. */
+    if (action === 'decide_refund') {
+      const me2 = String(email).toLowerCase();
+      if (!(await may(me2, 'refund'))) {
+        return res.status(403).json({ ok: false, error: 'You do not have permission to decide refunds.' });
+      }
+      const b3 = req.body || {};
+      const reqId = String(b3.request_id || '').trim();
+      const approve = b3.approve === true;
+      const decisionNote = String(b3.note || '').trim().slice(0, 300);
+      if (!reqId) return res.status(400).json({ ok: false, error: 'request_id required' });
+      if (!approve && !decisionNote) return res.status(400).json({ ok: false, error: 'Say why it is declined — the agent will read it.' });
+      const rr = await sbGet(s, `refund_requests?id=eq.${encodeURIComponent(reqId)}&select=*`);
+      const rq = (rr.rows || [])[0];
+      if (!rq) return res.status(404).json({ ok: false, error: 'No such request.' });
+      if (rq.status !== 'pending') return res.status(409).json({ ok: false, error: `That request was already ${rq.status}.` });
+      const stamp = new Date().toISOString();
+      let refundOut = null;
+      if (approve) {
+        /* The agent's answers, verbatim, plus who asked — so the ledger row, the
+           HawkSoft note and the event all say this was Sammy's request that Tony
+           approved, not something Tony did on his own. */
+        refundOut = await issueRefund(s, me2, {
+          payment_id: rq.payment_id, reason: rq.reason, carrier: rq.carrier, notify: rq.notify,
+          note: rq.note + ` (requested by ${rq.requested_by}, approved by ${me2}` + (decisionNote ? ': ' + decisionNote : '') + ')',
+          amount: Number(rq.amount) });
+        if (refundOut.status !== 200) {
+          /* The request STAYS PENDING: the refund did not happen, so the queue must
+             still show it. The error goes back to Tony as-is. */
+          return res.status(refundOut.status).json({ ...refundOut.body, request_still_pending: true });
+        }
+      }
+      await fetch(`${s.base}/rest/v1/refund_requests?id=eq.${encodeURIComponent(reqId)}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: approve ? 'approved' : 'declined', decided_by: me2, decided_at: stamp,
+          decision_note: decisionNote || null, refund_id: approve ? refundOut.body.refund_id : null }) });
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'refund.decided', client_no: rq.client_id,
+          source: 'console', payload: { request_id: reqId, payment_id: rq.payment_id, requested_by: rq.requested_by,
+            amount: Number(rq.amount), approved: approve, note: decisionNote || null,
+            refund_id: approve ? refundOut.body.refund_id : null } }) });
+      return res.status(200).json({ ok: true, approved: approve, request_id: reqId,
+        ...(approve ? refundOut.body : {}) });
+    }
+
+    /* ================= STAGE 5 — settle the carrier's share =================
+       A refund with carrier 'pending' sits in Trust's carrier_to_recover with nothing
+       chasing it. This is the transition out: 'yes' (the carrier paid us back — the
+       cost reverses) or 'no' (it is a loss). Money decision, so: permission, reason,
+       event. The Trust arithmetic for both answers already exists and is tested; only
+       the transition is new. */
+    if (action === 'settle_carrier') {
+      const me2 = String(email).toLowerCase();
+      if (!(await may(me2, 'refund'))) return res.status(403).json({ ok: false, error: 'You do not have permission to settle refunds.' });
+      const b3 = req.body || {};
+      const refundId = String(b3.refund_id || '').trim();
+      const answer = String(b3.carrier || '').trim();
+      const why = String(b3.note || '').trim().slice(0, 300);
+      if (!refundId) return res.status(400).json({ ok: false, error: 'refund_id required' });
+      if (answer !== 'yes' && answer !== 'no') return res.status(400).json({ ok: false, error: "carrier must be 'yes' (they paid us back) or 'no' (it is a loss)." });
+      if (!why) return res.status(400).json({ ok: false, error: 'Say how you know — a remittance, a call, a statement.' });
+      const rr = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(refundId)}&select=id,kind,client_id,amount,refund_of,refund_carrier`);
+      const rf = (rr.rows || [])[0];
+      if (!rf || rf.kind !== 'charge_refund') return res.status(404).json({ ok: false, error: 'No such refund.' });
+      if (rf.refund_carrier !== 'pending') return res.status(409).json({ ok: false, error: `That one is already settled as "${rf.refund_carrier}".` });
+      const stamp = new Date().toISOString();
+      await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(refundId)}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ refund_carrier: answer }) });
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'refund.carrier_settled', client_no: rf.client_id,
+          source: 'console', payload: { refund_id: refundId, payment_id: rf.refund_of,
+            amount: Math.abs(Number(rf.amount || 0)), was: 'pending', now: answer, note: why } }) });
+      return res.status(200).json({ ok: true, refund_id: refundId, carrier: answer });
     }
 
     if (action === 'decide_correction') {
@@ -2598,6 +2753,57 @@ if (view === 'portal_share_due') {
      same question every other guard asks. Returns the roster plus the capability list,
      so the page renders the tick-boxes from what the SERVER understands - a page with a
      hardcoded list of permissions drifts the moment a capability is added. */
+  /* THE REFUNDS TAB. Two queues and a history. Owner-gated by the same permission
+     that decides them, so the list and the buttons cannot disagree. */
+  if (view === 'refund_requests') {
+    if (!(await may(email, 'refund'))) {
+      return res.status(403).json({ ok: false, error: 'You do not have permission to see refund requests.' });
+    }
+    const [pend, done, carr] = await Promise.all([
+      sbGet(s, 'refund_requests?status=eq.pending&is_test=is.false&select=*&order=requested_at.asc&limit=100'),
+      sbGet(s, 'refund_requests?status=neq.pending&is_test=is.false&select=*&order=decided_at.desc&limit=30'),
+      sbGet(s, 'bridge_ledger?kind=eq.charge_refund&refund_carrier=eq.pending&is_test=is.false'
+        + '&select=id,ts,client_id,amount,refund_of,refund_reason,refund_note,agent,commission_to&order=ts.asc&limit=200'),
+    ]);
+    /* Each pending request needs its payment's context — carrier, cost, fee — and each
+       pending carrier recovery needs its PARENT's carrier and cost. One read for all. */
+    const ids = [...new Set([
+      ...(pend.rows || []).map(r => r.payment_id),
+      ...(carr.rows || []).map(r => r.refund_of)].filter(Boolean))];
+    const pays = ids.length
+      ? await sbGet(s, `bridge_ledger?id=in.(${ids.map(encodeURIComponent).join(',')})&select=id,ts,client_id,amount,purpose,kind,ref,carrier_name,service_cost,fee_amount,commission_to,agent,audit_status`)
+      : { rows: [] };
+    const pay = Object.fromEntries((pays.rows || []).map(p => [p.id, p]));
+    const cids = [...new Set([...(pend.rows || []), ...(carr.rows || []), ...(done.rows || [])].map(r => r.client_id).filter(Boolean))];
+    const cls = cids.length ? await sbGet(s, `clients?client_no=in.(${cids.join(',')})&select=client_no,first_name,last_name,business_name`) : { rows: [] };
+    const cname = Object.fromEntries((cls.rows || []).map(c => [c.client_no, c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ')]));
+    const nameOf = e => AGENT_NAME[e] || (e ? String(e).split('@')[0] : null);
+    const shape = r => { const p = pay[r.payment_id] || {}; return {
+      id: r.id, payment_id: r.payment_id, client_no: r.client_id, client_name: cname[r.client_id] || null,
+      requested_by: r.requested_by, requested_by_name: nameOf(r.requested_by), requested_at: r.requested_at,
+      amount: Number(r.amount), reason: r.reason, carrier: r.carrier, notify: r.notify, note: r.note,
+      status: r.status, decided_by: r.decided_by, decided_by_name: nameOf(r.decided_by), decided_at: r.decided_at,
+      decision_note: r.decision_note, refund_id: r.refund_id,
+      payment: { ts: p.ts, amount: p.amount != null ? Number(p.amount) : null, purpose: p.purpose, kind: p.kind, ref: p.ref,
+        carrier_name: p.carrier_name, service_cost: p.service_cost != null ? Number(p.service_cost) : null,
+        fee_amount: p.fee_amount != null ? Number(p.fee_amount) : null, audit_status: p.audit_status,
+        commission_to: p.commission_to || agentEmailOf(p.agent) || null,
+        commission_to_name: nameOf(p.commission_to || agentEmailOf(p.agent)) },
+    }; };
+    return res.status(200).json({ ok: true,
+      pending: (pend.rows || []).map(shape),
+      decided: (done.rows || []).map(shape),
+      /* Refunds the carrier has not answered on. The figure Trust already carries as
+         carrier_to_recover, as a list with names on it. */
+      carrier_pending: (carr.rows || []).map(r => { const p = pay[r.refund_of] || {}; return {
+        refund_id: r.id, payment_id: r.refund_of, client_no: r.client_id, client_name: cname[r.client_id] || null,
+        refunded_at: r.ts, amount: Math.abs(Number(r.amount || 0)), reason: r.refund_reason, note: r.refund_note,
+        carrier_name: p.carrier_name || null, carrier_cost: p.service_cost != null ? Number(p.service_cost) : 0,
+        refunded_by: nameOf(agentEmailOf(r.agent) || r.agent), commission_to_name: nameOf(r.commission_to) }; }),
+      carrier_pending_total: +((carr.rows || []).reduce((a, r) => a + ((pay[r.refund_of] || {}).service_cost != null ? Number(pay[r.refund_of].service_cost) : 0), 0)).toFixed(2),
+    });
+  }
+
   if (view === 'agents_list') {
     if (!(await may(email, 'manage_agents'))) {
       return res.status(403).json({ ok: false, error: 'You do not have permission to manage staff.' });

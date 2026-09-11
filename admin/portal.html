@@ -1318,12 +1318,14 @@ function payHistoryHtml(c){
          what makes the commission engine reverse it — so without this it would wear an
          "audited" chip, which is true of the audit and badly misleading about the row. */
       + (isRefund ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
+        : p.refund_request ? 'background:rgba(245,166,35,.15);color:var(--amber-ink)'
         : refundedOff > 0 ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
         : isLink ? 'background:rgba(143,154,196,.14);color:var(--mute)'
         : isBal ? 'background:rgba(143,154,196,.14);color:var(--mute)'
                : complete ? 'background:rgba(47,191,113,.15);color:var(--green)'
                           : 'background:rgba(245,166,35,.15);color:var(--amber-ink)')
       + '">' + (isRefund ? 'refund'
+        : p.refund_request ? 'refund requested'
         : refundedOff > 0 ? (refundedOff + 0.004 >= Number(p.collected != null ? p.collected : p.amount) ? 'refunded' : 'part refunded')
         : isLink ? 'link sent · not paid'
         : isBal ? 'balance payment' : complete ? 'audited' : 'needs proof') + '</span></div>'
@@ -1384,6 +1386,14 @@ function payHistoryHtml(c){
          "no client email on file" behind a green success screen. A row with no record
          at all says so, because "nothing recorded" is different from "not sent". */
       + (isLink ? '' : noticeLineHtml(p.client_notice))
+      /* A REFUND REQUEST WAITING ON TONY. Shown on the payment, with who asked and when,
+         and the Refund button is withheld for everyone until he decides. */
+      + (p.refund_request
+          ? '<div style="font-size:11px;margin-top:3px;color:var(--amber-ink)">Refund of ' + money(p.refund_request.amount)
+            + ' requested by ' + esc(String(p.refund_request.requested_by_name || p.refund_request.requested_by).split(' ')[0])
+            + ' on ' + esc(String(p.refund_request.requested_at || '').slice(0, 10))
+            + ' — <b>waiting for Tony</b></div>'
+          : '')
       /* And on the payment itself: how much of it has gone back. */
       + (!isRefund && refundedOff > 0
           ? '<div style="font-size:11px;margin-top:3px;color:var(--red-ink)">'
@@ -1439,7 +1449,8 @@ function payHistoryHtml(c){
                   + (isBal ? '+ Add documents' : '+ Add more documents') + '</div>'
                 : '')
             + (canRefundRow(c, p)
-                ? '<div class="actrefund" onclick="event.stopPropagation();openRefund(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ')">Refund&hellip;</div>'
+                ? '<div class="actrefund" onclick="event.stopPropagation();openRefund(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ')">'
+                  + (c.can_refund ? 'Refund&hellip;' : 'Ask for a refund&hellip;') + '</div>'
                 : '')
             + '</div>'
           : '')
@@ -1567,7 +1578,11 @@ function refundable(p){
    offered where it can only fail — but the server re-checks every one of them, because
    a browser is not a gate. */
 function canRefundRow(c, p){
-  if(!c || !c.can_refund) return false;
+  if(!c) return false;
+  /* An agent may always ASK — the sheet is the same, the button says "Send to Tony"
+     and nothing moves. c.can_refund only decides whether the button refunds or
+     requests. A payment already waiting on Tony offers neither. */
+  if(p.refund_request) return false;
   if(p.refund_of) return false;                       // a refund is not refundable
   if(p.balance_of) return false;                      // the original carries the obligation
   /* NOT /link/ — it matched paylink_charge, a PAID link, and hid the button on the $1
@@ -1626,6 +1641,9 @@ function drawRefund(){
   const fee = p.fee_amount != null ? Number(p.fee_amount) : null;
   const cost = p.service_cost != null ? Number(p.service_cost) : null;
   const reason = RF_REASONS.find(r => r[0] === RF.reason) || null;
+  /* REQUEST MODE: no permission to issue, so this becomes a request for Tony. Same
+     four questions, because he decides on the agent's answers. */
+  const isReq = !c.can_refund;
 
   /* Under 25 minutes Clover VOIDS instead of refunding. Different operations, different
      settlement — the client sees the charge disappear rather than a refund arrive, so
@@ -1634,7 +1652,7 @@ function drawRefund(){
   const isVoid = isCard && isFinite(ageMin) && ageMin < 25;
 
   let h = '<div class="row" style="margin-bottom:2px">'
-    + '<b style="font-size:16px">' + (isVoid ? 'Void a payment' : 'Refund a payment') + '</b>'
+    + '<b style="font-size:16px">' + (isReq ? 'Ask Tony to refund' : isVoid ? 'Void a payment' : 'Refund a payment') + '</b>'
     + '<span class="dim" style="font-size:12px">Client ' + esc(String(RF.clientNo)) + ' · ' + esc(name) + '</span></div>';
 
   /* "Void a payment" in the header and "what you are refunding" underneath it is the
@@ -1728,7 +1746,12 @@ function drawRefund(){
     h += '<div class="note">Pick one — it is recorded either way.</div>';
   }
 
-  h += '<div class="sec">What this will do</div><ul class="will">'
+  if(isReq){
+    h += '<div class="warn">You can ask for this refund but not issue it. <b>Tony</b> approves refunds — '
+      + 'he can also give you the permission on the Staff page. Nothing below happens until he says yes; '
+      + 'you will be told either way.</div>';
+  }
+  h += '<div class="sec">' + (isReq ? 'What this will do once Tony approves' : 'What this will do') + '</div><ul class="will">'
     + '<li><b>' + esc(first) + ' gets ' + money(amt) + ' back</b> '
       + (isCard ? (isVoid ? '— the charge is cancelled before it settles.'
                           : 'on the card used for the original payment, usually 2 to 5 business days.')
@@ -1769,9 +1792,9 @@ function drawRefund(){
     || (nz.channel === 'none' && String(nz.skip_reason || '').trim())));
   const ready = !!(RF.reason && RF.carrier && nzReady);
   h += '<div id="rfMsg" class="note" style="min-height:0"></div>'
-    + '<button class="btn btn-red" ' + (ready ? '' : 'disabled style="opacity:.45;cursor:not-allowed" ')
+    + '<button class="btn ' + (isReq ? 'btn-blue' : 'btn-red') + '" ' + (ready ? '' : 'disabled style="opacity:.45;cursor:not-allowed" ')
       + 'onclick="submitRefund()">'
-      + (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '') + '</button>'
+      + (isReq ? 'Send to Tony for approval' : (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '')) + '</button>'
     + (ready ? '' : '<div class="note" style="text-align:center">Answer why, the carrier, and whether to tell the client first.</div>')
     + '<button class="btn btn-ghost" onclick="closeRefund()">Cancel</button>';
 
@@ -1793,14 +1816,23 @@ async function submitRefund(){
      is the last chance to notice the wrong row was opened. */
   const first = String((RF.c.client && (RF.c.client.business_name
     || [RF.c.client.first_name, RF.c.client.last_name].filter(Boolean).join(' '))) || 'the client').split(' ')[0];
-  if(!confirm('Send ' + money(RF.amount) + ' back to ' + first + '?\n\nThis cannot be undone from here.')) return;
+  const isReq = !RF.c.can_refund;
+  if(!isReq && !confirm('Send ' + money(RF.amount) + ' back to ' + first + '?\n\nThis cannot be undone from here.')) return;
 
-  say('Refunding…');
-  const btn = document.querySelector('#refundSheet .btn-red');
+  say(isReq ? 'Sending to Tony…' : 'Refunding…');
+  const btn = document.querySelector('#refundSheet .btn-red, #refundSheet .btn-blue');
   if(btn){ btn.disabled = true; btn.style.opacity = '.45'; }
   if(!RF.notify) return say('Say whether to tell the client.', true);
-  const r = await apiPost({ action:'refund_payment', payment_id: RF.id,
+  const r = await apiPost({ action: isReq ? 'request_refund' : 'refund_payment', payment_id: RF.id,
     reason: RF.reason, carrier: RF.carrier, note: note, notify: RF.notify });
+  if(r && r.ok && isReq){
+    const done = RF.clientNo;
+    closeRefund();
+    delete CLIENT_CACHE[done];
+    await openClient(done);
+    alert(r.message || 'Sent to Tony.');
+    return;
+  }
   if(r && r.ok){
     const done = RF.clientNo;
     closeRefund();

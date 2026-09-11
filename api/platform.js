@@ -1281,7 +1281,17 @@ if (view === 'portal_share_due') {
       const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
       // Full payment history + document METADATA. Deliberately no file_b64 and no
       // thumb_b64 here: bytes are fetched only when a document is opened.
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
+      /* ITEM 84. Test rows are hidden from every real client card, as they should be —
+         but that made ZZTEST itself unreachable: its payments are all is_test, so the
+         one client that exists for trying things on showed an empty card, and the new
+         Refund button could never be exercised end to end before it met a real client.
+         ON ZZTEST ONLY, and only for an admin, the filter is dropped. A real client's
+         card never shows a test row. */
+      /* rosterAdmins(), not the code list: Tony is an owner via the TABLE and is not in
+         ADMIN_ALLOWLIST, so the code list said he was not an admin. Item 70's rule. */
+      const isAdminHere = (await rosterAdmins()).has(me);
+      const showTest = (Number(no) === TEST_CLIENT && isAdminHere);
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
@@ -1330,6 +1340,7 @@ if (view === 'portal_share_due') {
              client got nothing. null means the row predates any record, and the card
              says so rather than showing a blank. */
           client_notice: clientNoticeOf(r),
+          is_test: r.is_test === true,
           // NOTE: no commission figures here — the client log is shared with every agent
         })),
         /* The card gated its correction links on "I earn it or I took it", so an ADMIN
@@ -1339,7 +1350,10 @@ if (view === 'portal_share_due') {
            who is supposed to be able to fix anything could not reach the controls.
            Told by the SERVER rather than comparing an email in the browser: the
            allowlist is server-side and an identity from a browser is a claim. */
-        is_admin: ADMIN_ALLOWLIST.includes(me),
+        /* Was ADMIN_ALLOWLIST.includes(me) — the CODE list — which told the card that
+           Tony, an owner via the table, was not an admin, so he saw no correction links
+           on anyone's payment. Found by the refund harness signing in as tony@. */
+        is_admin: isAdminHere,
         /* Told by the SERVER, from may(), for the same reason is_admin is: an identity
            compared in the browser is a claim, and the Refund button must appear only
            for someone the server would actually let refund. This is the permission

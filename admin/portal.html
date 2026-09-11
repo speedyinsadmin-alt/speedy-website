@@ -1293,6 +1293,9 @@ function payHistoryHtml(c){
       + ';border-radius:10px;padding:10px 11px;margin-bottom:7px">'
       + '<div class="row" style="align-items:flex-start">'
       + '<div><b style="font-size:14px' + (isRefund ? ';color:var(--red-ink)' : '') + '">' + money(p.amount) + '</b>'
+      /* Only ever true on ZZTEST for an admin (item 84). Said in amber on the row so a
+         test dollar is never read as a real one. */
+      + (p.is_test ? ' <span class="beta" style="background:var(--amber)">TEST</span>' : '')
       /* PRINT THE ABSOLUTES. This said "$130.50 · $20.00 still owed" and never mentioned
          the $184.50 the client actually owed — the same gap Saif found on the Console
          row the same morning, which balanceCell now fixes there. Fixing one reader and

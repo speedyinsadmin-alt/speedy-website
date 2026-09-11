@@ -1607,6 +1607,81 @@ queue of its own. Trust treatment differs per answer:
 **Sequence:** probe → full card refund → cash refund → partial → the carrier-recovery
 queue. Each with a mockup before code.
 
+### ✅ SEP 10 · REFUND STAGES 1-3 BUILT — full card refund, cash refund, and the reads
+**Saif confirmed the split the design was blocked on:** `charged_twice` and
+`wrong_amount` mean we took money we should not have, so the client **still owes** it;
+`policy_cancelled` and `never_bound` mean the **obligation is gone**. `other` leaves it
+standing, which is the recoverable direction. Enforced in three places: the database
+constraint, the handler's REASONS table, and the sheet's chips.
+
+**A REFUND IS A NEW ROW.** `kind:'charge_refund'`, negative `amount`, `refund_of` at its
+parent — the same shape as `balance_of`. Three reasons and none of them taste: "nothing
+is ever reversed" is the standing rule; the refund needs its own date or "the month of
+the REFUND" cannot be built; and mutating an audited row is what the partial-save
+negative-fee bug taught us not to do. The parent's amount, fee and audit_status are
+never touched. `total_owed` is the one exception, only when the reason closes the
+obligation, and the before/after is in the event.
+
+**⚠️ HOW THE COMMISSION REVERSAL WORKS — not obvious, and load-bearing.** `portal_home`
+pays `fee × pct × collectedRatio` in the period containing `audit_completed_at || ts`.
+So the refund row carries a **negative fee**, `audit_status:'complete'` and
+`audit_completed_at` = the refund's own time. The existing engine then writes a negative
+commission line in the month of the refund and the original month does not move. No new
+commission code, and Tony's "a closed month never moves" holds by construction.
+This is also **why `collectedFor` was deliberately NOT changed to net refunds** — that
+would reduce the ORIGINAL month too, counting the reversal twice.
+
+**THE `/refund/` TRAP WAS REAL.** `/declin|fail|void|refund/i` matches `charge_refund`,
+so the commission loop would have skipped the reversal and **no refund would ever have
+reduced anybody's commission** — the feature would have looked finished and done
+nothing. Removed from that ONE site; kept in the four where excluding refunds is right
+(the help list, `audit_list`, `link_balance`, Trust's collected filter). The harness
+counts both forms so it cannot silently drift back.
+
+**TRUST GAINED THE LINE IT NEVER HAD.** A carrier that keeps its share on a refunded
+sale is money Speedy has **lost**, and Trust could show money in, money to carriers and
+money kept but not money simply gone. New totals: `refunded`, `net_collected`,
+`carrier_lost`, `carrier_to_recover`. `collected` stays GROSS — netting it would have
+silently changed the meaning of a number Saif reads daily. The invariant is asserted by
+the harness for all three carrier answers, not left as a comment:
+`collected - refunded + not_yet_collected + carrier_lost + carrier_to_recover = carriers + kept + unaccounted`
+
+**IT LIVES IN `platform.js`, NOT `hawksoft.js`.** Refunds are gated by
+`may(email,'refund')` — the permission Tony grants on the Staff page — and may() is
+there. hawksoft.js authorises with a raw admin key, which is what made Saif ask "why do
+I need the key when I am already signed in". A money action from a signed-in session
+must not need a secret in a shell. Granting an agent `refund` works with no deploy.
+
+**TWO THINGS IT REFUSES RATHER THAN GUESSES**, both with named errors:
+- `partial_not_supported_yet` — stage 4, blocked on the ZZTEST probe. A partial Clover
+  silently treats as FULL hands the client more than intended.
+- `partly_paid_not_supported_yet` — closing a part-paid obligation moves `owedFor`'s
+  fallback and would silently INCREASE the original month's commission. Five rows in 427
+  carry a `total_owed` and all five are hand corrections, so this costs almost nothing.
+
+**NOTHING IS WRITTEN UNLESS CLOVER REFUNDED.** A refusal writes a `refund.failed` event
+and no ledger row. The one unrecoverable case — card refunded, ledger write failed — is
+said out loud in the response with the Clover refund id and "do NOT try again".
+
+**HawkSoft:** a filed receipt cannot be un-filed, so the refund is a NOTE saying the
+original receipt REMAINS ON FILE, what the reason was, whether the client still owes it,
+and what the carrier did. A HawkSoft failure does not undo the refund; it is reported.
+
+**179 harness checks, nine deliberate regressions all caught** — a ledger row written on
+a Clover refusal, no permission check, refunding twice, the reversal dated by the charge,
+Trust blind to refunds, a partial attempted, `charged_twice` writing off the balance, the
+fee not reversed, and a balance row made refundable.
+
+**Three bugs found by PHOTOGRAPHING the built screens, which no test would have caught:**
+`portal.html` styles `select,input` but **not `textarea`**, so the reason box rendered as
+a tiny monospace slab (seventh missing-CSS case this week); the consequence line printed
+the same sentence twice; and the refund row read **"Speedy kept $-75.00"** — the eighth
+place formatting money by hand instead of through `money()`.
+
+**Still open:** stage 4 (partial) needs tomorrow's $1 ZZTEST test. Stage 5 (the carrier
+recovery queue) has its figure in Trust but no screen. The agent self-serve window and
+the "becomes a request for Tony" flow are not built — refunds are owner-only today.
+
 ### ✅ SEP 10 · STAGE 0 — THE REFUND PROBE RAN. `c55238c`, `69a8523`
 `probe_refund` in `hawksoft.js`, admin key only, deliberately outside the staff action
 list. Two free modes and one that spends a dollar. **Cost so far: $0.00.**

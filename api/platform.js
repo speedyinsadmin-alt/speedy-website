@@ -1215,7 +1215,7 @@ if (view === 'portal_share_due') {
       const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
       // Full payment history + document METADATA. Deliberately no file_b64 and no
       // thumb_b64 here: bytes are fetched only when a document is opened.
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
@@ -1245,6 +1245,19 @@ if (view === 'portal_share_due') {
              no audit_status filter (:2088), so that fee lands straight in "Speedy kept".
              portal_home has always skipped these rows (:1152); the card never could. */
           balance_of: r.balance_of || null,
+          /* WHAT THE CARD NEEDS TO TELL THE TRUTH ABOUT A REFUND.
+             `refund_of` marks the row itself as a refund; `refunded` says how much has
+             come off a PAYMENT. Without the second one the card would show a payment
+             at its original amount with a refund sitting somewhere below it and no
+             connection between them — which is how the balance payments read before
+             item 76, and Saif had to ask what the $34 line was. */
+          refund_of: r.refund_of || null,
+          refund_reason: r.refund_reason || null,
+          refund_carrier: r.refund_carrier || null,
+          refund_note: r.refund_note || null,
+          refunded: +Math.abs((pay.rows || [])
+            .filter(x => x.refund_of === r.id)
+            .reduce((a, x) => a + Number(x.amount || 0), 0)).toFixed(2),
           // NOTE: no commission figures here — the client log is shared with every agent
         })),
         /* The card gated its correction links on "I earn it or I took it", so an ADMIN
@@ -1255,6 +1268,12 @@ if (view === 'portal_share_due') {
            Told by the SERVER rather than comparing an email in the browser: the
            allowlist is server-side and an identity from a browser is a claim. */
         is_admin: ADMIN_ALLOWLIST.includes(me),
+        /* Told by the SERVER, from may(), for the same reason is_admin is: an identity
+           compared in the browser is a claim, and the Refund button must appear only
+           for someone the server would actually let refund. This is the permission
+           Tony grants on the Staff page, not a hardcoded address — hardcoding info@
+           here would have been the fifth place to change later. */
+        can_refund: await may(me, 'refund'),
         producer_code: client && client.extras ? (client.extras.producer || null) : null,
         producer_name: client && client.extras ? (AGENT_NAME[PRODUCER_MAP[client.extras.producer]] || null) : null,
         documents: docs.rows || [],
@@ -1359,7 +1378,12 @@ if (view === 'portal_share_due') {
         if (NON_PAYMENT.includes(r.audit_status)) continue;
         if (r.correction_status === 'pending') continue;  // waiting on Tony — nobody should work it
         if (r.balance_of) continue;   // pays down an earlier charge; that one carries the audit
-        if (/declin|fail|void|refund/i.test(String(r.kind || ''))) continue;
+        /* ⚠️ NOT /refund/ ANY MORE, and this is the whole reason a refund reduces
+           commission at all. The old regex matched `charge_refund`, so the refund row's
+           NEGATIVE fee was skipped and the reversal never happened — the exact trap
+           MASTER.md recorded as "must be designed, not inherited". A declined or voided
+           attempt still never moved money and is still skipped. */
+        if (/declin|fail|void/i.test(String(r.kind || ''))) continue;
         const fee = r.fee_amount != null ? Number(r.fee_amount)
           : (r.service_cost != null ? Number(r.amount) - Number(r.service_cost) : null);
         const isOwner = owns(r, me);
@@ -1483,8 +1507,11 @@ if (view === 'portal_share_due') {
   /* link_balance/unlink_balance are agent-reachable for the same reason move_client is:
      the agent who took the payment is the one who knows it was a balance payment, and
      every refusal below leaves the row exactly as it stands. */
+  /* refund_payment is reachable so an agent gets the handler's explanation — "Tony
+     can, and he can give you the permission on the Staff page" — instead of a bare
+     401 that reads like a bug. may(email,'refund') is the gate, not this list. */
   const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share', 'move_client',
-                         'link_balance', 'unlink_balance'];
+                         'link_balance', 'unlink_balance', 'refund_payment'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -1892,6 +1919,301 @@ if (view === 'portal_share_due') {
       return res.status(200).json({ ok: true, email: target, changed, reason });
     }
 
+    /* ================= REFUNDS · STAGES 1-3 =================
+       A refund is a NEW ROW pointing at the payment it reverses, never a change to that
+       payment. Three reasons, none of them taste:
+         · "nothing is ever reversed" is the standing rule;
+         · the refund needs its OWN date, or "commission reduces in the month of the
+           REFUND" cannot be built;
+         · mutating an audited row is exactly what the partial-save negative-fee bug
+           taught us not to do.
+       Same shape as balance_of, which already points a later row at an earlier one.
+
+       IT LIVES HERE, NOT IN hawksoft.js, on purpose. Refunds must be gated by
+       may(email,'refund') — the permission Tony grants on the Staff page — and may() is
+       here. hawksoft.js authorises with a raw admin key, which is why Saif hit "why do I
+       need the key when I am already signed in". A money action an owner performs from a
+       signed-in session must not require a secret in a shell. platform.js already reads
+       the Clover env key's siblings and writes HawkSoft log notes (the correction flow
+       does both), so nothing had to move.
+
+       ⚠️ HOW THE COMMISSION REDUCTION ACTUALLY HAPPENS, because it is not obvious.
+       portal_home pays commission as `fee * pct * collectedRatio`, counted in the period
+       containing `audit_completed_at || ts`. So the refund row carries a NEGATIVE
+       fee_amount, audit_status 'complete', and audit_completed_at set to the refund's own
+       timestamp — and the existing engine then puts a negative commission line in the
+       month of the refund, leaving the original month untouched. No new commission code,
+       and Tony's "a closed month never moves" holds by construction.
+       This is also why `collectedFor` is deliberately NOT changed to net refunds: that
+       would reduce the ORIGINAL month's commission as well, counting the reversal twice.
+
+       TWO THINGS ARE REFUSED HERE RATHER THAN GUESSED:
+       1. A PARTIAL amount. Clover's docs contradict each other on whether /v1/refunds
+          accepts one, and both stage-0 probe POSTs died on a non-existent charge before
+          the field was ever validated. Attempting a partial that Clover silently treats
+          as FULL hands the client more than intended, and we would learn it from a
+          statement. Stage 4, after tomorrow's test.
+       2. A payment on an obligation that is NOT yet fully collected. The commission
+          arithmetic above is exact only when the parent's collected ratio is unchanged by
+          the refund; on a part-paid obligation, closing it moves `owedFor`'s fallback and
+          would silently INCREASE the original month. Five rows in 427 carry a total_owed
+          at all, and all five are hand corrections, so this costs almost nothing today
+          and avoids a wrong number. */
+    if (action === 'refund_payment') {
+      const me2 = String(email).toLowerCase();
+      if (!(await may(me2, 'refund'))) {
+        return res.status(403).json({ ok: false, error: 'not_permitted',
+          message: 'You cannot issue a refund. Tony can, and he can also give you the permission on the Staff page.' });
+      }
+      const b3 = req.body || {};
+      const paymentId = String(b3.payment_id || '').trim();
+      const reason = String(b3.reason || '').trim();
+      const carrier = String(b3.carrier || '').trim();
+      const note = String(b3.note || '').trim().slice(0, 400);
+      const wantAmount = b3.amount != null ? Number(b3.amount) : null;
+
+      /* THE CLOSED SET, and what each answer MEANS for what the client owes. Saif,
+         Sep 10, asked and answered: the first two mean we took money we should not
+         have, so the client still owes what they owed; the second two mean the
+         obligation itself is gone. The database enforces the same list — a handler is
+         not the only way a row can be created. */
+      const REASONS = {
+        charged_twice:    { owes: true,  label: 'charged twice' },
+        wrong_amount:     { owes: true,  label: 'wrong amount taken' },
+        policy_cancelled: { owes: false, label: 'policy cancelled' },
+        never_bound:      { owes: false, label: 'never bound' },
+        /* The conservative default. Leaving the obligation standing errs towards the
+           client still owing, which is recoverable; writing it off is not. */
+        other:            { owes: true,  label: 'other' },
+      };
+      if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required' });
+      if (!REASONS[reason]) return res.status(400).json({ ok: false, error: 'Pick why this is being refunded.' });
+      if (!['yes', 'no', 'pending'].includes(carrier)) {
+        return res.status(400).json({ ok: false, error: 'Say whether the carrier is giving their money back: yes, no, or not yet.' });
+      }
+      if (!note) return res.status(400).json({ ok: false, error: 'A reason in words is required — Tony and the next person will read it.' });
+
+      /* The payment AND everything already pointing at it, in one read: the balance
+         payments that added to it, and any refunds already taken off. */
+      const pr = await sbGet(s, 'bridge_ledger?or=(id.eq.' + encodeURIComponent(paymentId)
+        + ',balance_of.eq.' + encodeURIComponent(paymentId)
+        + ',refund_of.eq.' + encodeURIComponent(paymentId) + ')&select=*');
+      const all = pr.rows || [];
+      const row = all.find(r => r.id === paymentId);
+      if (!row) return res.status(404).json({ ok: false, error: 'No such payment.' });
+
+      /* ---- GUARDS. Every one is a way to send real money somewhere wrong. ---- */
+      if (row.kind === 'charge_refund') {
+        return res.status(400).json({ ok: false, error: 'That row is itself a refund.' });
+      }
+      /* A balance payment carries no obligation of its own — the original holds it, and
+         the single fee. Refunding the child would leave the parent's total_owed untouched
+         and the client apparently still owing money they had been given back. Item 76. */
+      if (row.balance_of) {
+        return res.status(400).json({ ok: false,
+          error: 'That payment pays down an earlier charge. Refund the original — it carries the obligation and the fee.' });
+      }
+      if (/declin|fail|void|link/i.test(String(row.kind || ''))
+          || ['declined', 'link_sent', 'not_a_payment', 'void'].includes(row.audit_status)) {
+        return res.status(400).json({ ok: false, error: 'That row never collected any money.' });
+      }
+      if (row.correction_status === 'pending') {
+        return res.status(400).json({ ok: false, error: 'That payment is waiting on Tony for a different correction. Settle that one first.' });
+      }
+
+      /* WHAT IS ACTUALLY REFUNDABLE — not row.amount. The obligation may have been paid
+         in two parts, and some of it may already have been refunded. */
+      const kids = all.filter(r => r.id !== paymentId);
+      const balances = kids.filter(r => r.balance_of === paymentId && r.kind !== 'charge_refund');
+      const priorRefunds = kids.filter(r => r.refund_of === paymentId);
+      const collected = +(Number(row.amount || 0)
+        + balances.reduce((a, r) => a + Number(r.amount || 0), 0)).toFixed(2);
+      /* Refund amounts are stored NEGATIVE, so Math.abs once here rather than sign
+         juggling at four call sites. */
+      const alreadyRefunded = +Math.abs(priorRefunds.reduce((a, r) => a + Number(r.amount || 0), 0)).toFixed(2);
+      const refundable = +(collected - alreadyRefunded).toFixed(2);
+      if (!(refundable > 0)) {
+        return res.status(400).json({ ok: false,
+          error: alreadyRefunded > 0
+            ? 'That payment has already been refunded in full.'
+            : 'There is nothing collected on that payment to refund.' });
+      }
+      /* Fully collected only — see the header. Compared with a cent of tolerance
+         because these are numeric strings out of PostgREST. */
+      const owedTotal = (row.total_owed != null && Number(row.total_owed) > Number(row.amount || 0))
+        ? Number(row.total_owed) : Number(row.amount || 0);
+      if (collected + 0.004 < owedTotal) {
+        return res.status(400).json({ ok: false, error: 'partly_paid_not_supported_yet',
+          message: `That obligation is only part paid — $${collected.toFixed(2)} of $${owedTotal.toFixed(2)}. `
+            + 'Refunding a part-paid obligation changes the commission arithmetic and is stage 4. '
+            + 'Ask Saif rather than working around it.' });
+      }
+      if (wantAmount != null && Math.abs(wantAmount - refundable) > 0.004) {
+        return res.status(400).json({ ok: false, error: 'partial_not_supported_yet',
+          message: `Only a full refund of $${refundable.toFixed(2)} can be issued today. `
+            + 'Whether Clover accepts a partial amount is still unverified, and getting it wrong '
+            + 'refunds more than intended.' });
+      }
+      const amount = refundable;
+
+      /* ---- THE CARD. NOTHING IS WRITTEN UNTIL THIS SUCCEEDS. ---- */
+      const isCard = /^(charge_live|charge_card|paylink_charge|terminal_charge)$/.test(String(row.kind))
+        && !!row.txn_id;
+      let clover = null, cloverStatus = null;
+      if (isCard) {
+        const PRIV = process.env.CLOVER_ECOMM_PRIVATE;
+        if (!PRIV) return res.status(500).json({ ok: false, error: 'CLOVER_ECOMM_PRIVATE env var not set in Vercel' });
+        /* POST /v1/refunds { charge } — the creation route, PROVEN by the stage 0 probe
+           rather than assumed: an empty body drew a real validation error ("Either
+           charge id or reversal id has to be present"), and a route that cannot exist
+           answers differently, so a 404 here means "no such charge". */
+        try {
+          const cr = await fetch('https://scl.clover.com/v1/refunds', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
+              /* Keyed on the PAYMENT, not on the request, so a double-tap from a slow
+                 phone cannot refund the same charge twice. */
+              'idempotency-key': 'refund-' + paymentId },
+            body: JSON.stringify({ charge: row.txn_id }),
+          });
+          cloverStatus = cr.status;
+          const ctext = await cr.text();
+          try { clover = ctext ? JSON.parse(ctext) : null; } catch { clover = ctext; }
+        } catch (e) {
+          return res.status(502).json({ ok: false,
+            error: 'Could not reach Clover. Nothing was refunded and nothing was recorded — try again.' });
+        }
+        const succeeded = cloverStatus === 200 && clover
+          && (String(clover.status || '').toLowerCase() === 'succeeded' || !!clover.id);
+        if (!succeeded) {
+          const msg = (clover && clover.error && clover.error.message)
+            || (clover && clover.message) || `Clover returned HTTP ${cloverStatus}`;
+          /* Recorded, so a refused refund is not invisible — but NO ledger row: the
+             money did not move, so the ledger must not say it did. */
+          await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify({ ts: new Date().toISOString(), actor: me2, kind: 'refund.failed',
+              client_no: row.client_id, source: 'portal',
+              payload: { payment_id: paymentId, amount, reason, carrier,
+                clover_status: cloverStatus, clover_error: msg } }) });
+          return res.status(402).json({ ok: false, error: `Clover refused the refund: ${msg}` });
+        }
+      }
+
+      /* ---- THE LEDGER ROW. Negative, pointing at its parent, carrying the reversal. ---- */
+      const stamp = new Date().toISOString();
+      const refundId = randomUUID();
+      /* The fee that was actually recognised on the parent. Null when the parent was
+           never audited — then there is no commission to take back, and the commission
+           loop skips a row with no fee, which is the correct outcome rather than a zero. */
+      const parentFee = row.fee_amount != null ? Number(row.fee_amount)
+        : (row.service_cost != null ? +(Number(row.amount || 0) - Number(row.service_cost)).toFixed(2) : null);
+      const refundRow = {
+        id: refundId,
+        ts: stamp,
+        kind: 'charge_refund',
+        client_id: row.client_id,
+        amount: -amount,
+        purpose: 'Refund — ' + REASONS[reason].label,
+        agent: me2,
+        /* WHOSE COMMISSION MOVES: the person who earned the original, not whoever
+           pressed the button. "A refund reduces commission in the month of the refund"
+           says nothing about moving it to a different agent. */
+        commission_to: row.commission_to || agentEmailOf(row.agent) || null,
+        txn_id: isCard ? (String((clover && clover.id) || '') || null) : null,
+        ref: isCard ? 'Clover refund' : 'Cash returned',
+        /* 'complete' and a NEGATIVE fee are what make the existing commission engine
+           put a negative line in THIS month. See the header. */
+        audit_status: 'complete',
+        audit_completed_at: stamp,
+        audit_completed_by: me2,
+        fee_amount: parentFee != null ? -parentFee : null,
+        is_test: row.is_test === true,
+        refund_of: paymentId,
+        refund_reason: reason,
+        refund_carrier: carrier,
+        refund_note: note,
+      };
+      const ins = await sbInsert(s, 'bridge_ledger', [refundRow]);
+      if (!ins.ok) {
+        /* THE WORST CASE, SAID OUT LOUD. The card is refunded and we could not record
+           it. Staying quiet here is how a client gets refunded twice. */
+        return res.status(500).json({ ok: false,
+          error: 'The card WAS refunded but the ledger write failed (' + ins.status + '). '
+            + 'Do NOT try again — tell Saif. The Clover refund id is below and the row must be added by hand.',
+          clover_refund_id: (clover && clover.id) || null });
+      }
+
+      /* ---- DOES THE CLIENT STILL OWE IT? Saif's split, applied. ---- */
+      const owedBefore = row.total_owed != null ? Number(row.total_owed) : null;
+      let owedAfter = owedBefore;
+      if (!REASONS[reason].owes && owedBefore != null) {
+        /* The obligation is gone, so what is owed drops to what is still held. Only
+           touched when a total_owed was set in the first place — writing one onto a
+           charge that never had one would invent an obligation. */
+        owedAfter = +(collected - alreadyRefunded - amount).toFixed(2);
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ total_owed: owedAfter }) });
+      }
+
+      /* ---- HAWKSOFT. A filed receipt cannot be un-filed or modified, so the refund goes
+         on as a NOTE and the original receipt stays exactly where it is. Saying so on the
+         client's file is the only way the record does not quietly lie. ---- */
+      let noteOk = false;
+      try {
+        const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
+          method: 'POST',
+          body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+            note: `REFUND — $${amount.toFixed(2)} returned to the client `
+              + (isCard
+                  ? `on the card used for the original payment (Clover refund ${(clover && clover.id) || 'n/a'}).`
+                  : `in cash by the agent.`)
+              + ` The original payment of $${Number(row.amount || 0).toFixed(2)} on `
+              + `${String(row.ts || '').slice(0, 10)}${row.txn_id ? ' (' + row.txn_id + ')' : ''} REMAINS ON FILE `
+              + `and is unchanged — a filed receipt cannot be withdrawn. `
+              + `Reason: ${REASONS[reason].label}. `
+              + (REASONS[reason].owes
+                  ? `The client still owes what they owed; this does not write the balance off. `
+                  : `This closes the obligation — nothing further is owed on it. `)
+              + `Carrier money: ${carrier === 'yes' ? 'returned by the carrier'
+                  : carrier === 'no' ? 'NOT returned — absorbed by Speedy' : 'not returned yet'}. `
+              + `Refunded by ${me2}. Note: ${note}` }) });
+        noteOk = (hr.status === 200 || hr.status === 202);
+      } catch { noteOk = false; }
+
+      /* ---- THE AUDIT TRAIL. Everything that moved, so "why did this money go back?" is
+         answerable later without anyone reconstructing it from memory. ---- */
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'payment.refunded',
+          client_no: row.client_id, source: 'portal',
+          payload: {
+            payment_id: paymentId, refund_id: refundId,
+            amount, method: isCard ? 'card' : 'cash',
+            clover_refund_id: (clover && clover.id) || null,
+            reason, reason_label: REASONS[reason].label,
+            obligation: REASONS[reason].owes ? 'still owed' : 'closed',
+            total_owed: { from: owedBefore, to: owedAfter },
+            carrier, carrier_cost: row.service_cost != null ? Number(row.service_cost) : null,
+            fee_reversed: parentFee,
+            commission_to: refundRow.commission_to,
+            hawksoft_note: noteOk, note,
+          } }) });
+
+      return res.status(200).json({ ok: true,
+        refund_id: refundId,
+        amount, method: isCard ? 'card' : 'cash',
+        clover_refund_id: (clover && clover.id) || null,
+        obligation: REASONS[reason].owes ? 'still_owed' : 'closed',
+        total_owed_now: owedAfter,
+        fee_reversed: parentFee,
+        hawksoft_note: noteOk,
+        /* The one thing the agent will be asked, in the words to use. */
+        tell_the_client: isCard
+          ? `$${amount.toFixed(2)} is on its way back to the card — usually 2 to 5 business days.`
+          : `Hand back $${amount.toFixed(2)} in cash.`,
+      });
+    }
+
     if (action === 'decide_correction') {
       if (!ADMIN_ALLOWLIST.includes(String(email).toLowerCase())) {
         return res.status(403).json({ ok: false, error: 'Owner only' });
@@ -2234,6 +2556,16 @@ if (view === 'portal_share_due') {
     const commMap = {}; for (const c of (comm.rows || [])) commMap[c.agent_email] = Number(c.percentage);
 
     const NON_PAYMENT_STATUS = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
+    /* How much has been refunded off each payment. A refund row is NOT a work item —
+       there is no carrier receipt to file for one, so it stays out of this queue — but
+       the payment it came off must say what happened to it, or the Audit tab shows a
+       $187.00 line that no longer exists as money. */
+    const refundedOff = {};
+    for (const p of (pays.rows || [])) {
+      if (p.kind === 'charge_refund' && p.refund_of) {
+        refundedOff[p.refund_of] = +((refundedOff[p.refund_of] || 0) + Math.abs(Number(p.amount || 0))).toFixed(2);
+      }
+    }
     let rows = (pays.rows || [])
       .filter(p => p.correction_status !== 'pending')
       .filter(p => !p.balance_of)   // rolled into the original charge, not a separate sale
@@ -2268,6 +2600,10 @@ if (view === 'portal_share_due') {
       const commission = (fee != null && auditStatus === 'complete') ? +(fee * pct / 100).toFixed(2) : null;
       return {
         id: p.id, ts: p.ts, client_no: p.client_id,
+        /* HOW MUCH OF THIS PAYMENT HAS GONE BACK. Zero for almost every row. Without it
+           the Audit tab lists a $187.00 payment that is no longer $187.00 of money, and
+           a refunded sale looks identical to one that stands. */
+        refunded: refundedOff[p.id] || 0,
         client_name: nameMap[p.client_id] || (p.extra && p.extra.clientName) || null,
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
         agent: agentEmail, agent_raw: p.agent, is_admin: isAdmin, secure_link: isSecureLink,
@@ -2652,9 +2988,34 @@ if (view === 'portal_share_due') {
       && !/declin|fail|void|refund/i.test(String(r.kind || ''))
       && String(r.ts) >= period.from && (!period.to || String(r.ts) < period.to));
 
+    /* ---- REFUNDS. The `collected` filter above is a closed list of four kinds, so a
+       charge_refund row is invisible to it — which is exactly the trap recorded in
+       MASTER.md: left alone, a refund would never reduce anything here and Trust would
+       keep reporting money that has gone back to the client as profit.
+
+       The arithmetic, and it balances:
+         · the money returned comes off what Speedy holds;
+         · the fee recognised on the parent is reversed — nothing is kept on a sale that
+           was given back;
+         · the carrier's share depends on the answer the agent gave.
+             yes     -> the carrier returns it, so the cost reverses too and the payment
+                        nets to nothing.
+             no      -> the carrier keeps its premium and the client got everything back,
+                        so the difference is money SPEEDY HAS LOST. Trust had no line for
+                        that: it could show money in, money to carriers and money kept,
+                        but not money simply gone.
+             pending -> the same arithmetic as `no` today, because the money is not back
+                        yet, but tracked separately so it can be chased.
+       The invariant, which the harness asserts rather than trusting this comment:
+         collected - refunded + not_yet_collected + carrier_loss = carriers + kept + unaccounted */
+    const refunds = rows.filter(r => r.kind === 'charge_refund'
+      && String(r.ts) >= period.from && (!period.to || String(r.ts) < period.to));
+    const byId = new Map(rows.map(r => [r.id, r]));
+
     const money = v => Math.round(Number(v || 0) * 100) / 100;
     let inTotal = 0, toCarriers = 0, kept = 0, unaccounted = 0, notYetCollected = 0;
-    const byCarrier = {}, openItems = [];
+    let refunded = 0, carrierLost = 0, carrierToRecover = 0;
+    const byCarrier = {}, openItems = [], refundItems = [];
 
     for (const r of collected) {
       const amt = Number(r.amount) || 0;
@@ -2704,6 +3065,30 @@ if (view === 'portal_share_due') {
     for (const r of collected) if (r.balance_of) notYetCollected -= (Number(r.amount) || 0);
     if (notYetCollected < 0) notYetCollected = 0;
 
+    for (const r of refunds) {
+      const back = Math.abs(Number(r.amount) || 0);
+      refunded += back;
+      const parent = byId.get(r.refund_of) || null;
+      /* The fee is reversed whatever the carrier says: Speedy keeps nothing on a sale
+         it gave back. Read off the REFUND row, which carries -parentFee, so this and
+         the commission reversal can never disagree. */
+      const feeBack = r.fee_amount != null ? Math.abs(Number(r.fee_amount)) : 0;
+      kept -= feeBack;
+      const cost = parent && parent.service_cost != null ? Number(parent.service_cost) : 0;
+      if (r.refund_carrier === 'yes') {
+        toCarriers -= cost;                 // the carrier gave its share back too
+      } else if (r.refund_carrier === 'no') {
+        carrierLost += cost;                // gone. the line Trust never had
+      } else {
+        carrierToRecover += cost;           // not back yet, and nothing chases it alone
+      }
+      refundItems.push({ id: r.id, payment_id: r.refund_of, client_no: r.client_id,
+        amount: money(back), ts: r.ts, reason: r.refund_reason || null,
+        carrier: r.refund_carrier || null, carrier_name: parent ? (parent.carrier_name || null) : null,
+        carrier_cost: money(cost), fee_reversed: money(feeBack),
+        agent: r.commission_to || r.agent || null, note: r.refund_note || null });
+    }
+
     return res.status(200).json({
       ok: true,
       period: period.label, period_from: period.from, period_to: period.to,
@@ -2715,6 +3100,18 @@ if (view === 'portal_share_due') {
         speedy_kept: money(kept),
         unaccounted: money(unaccounted),
         unaccounted_count: openItems.length,
+        /* Gross in, and what went back out, kept as SEPARATE lines. Netting them into
+           `collected` would silently change the meaning of a number Saif already
+           reads every day. */
+        refunded: money(refunded),
+        refunds_count: refunds.length,
+        net_collected: money(inTotal - refunded),
+        /* Money the carrier kept on a sale that was refunded in full. NOT recoverable. */
+        carrier_lost: money(carrierLost),
+        /* The same shape, but the carrier has not answered yet. This is a queue, and
+           nothing chases it on its own — the same failure mode as a carrier_pending
+           audit, which is how a $141.00 gap sat unnoticed here. */
+        carrier_to_recover: money(carrierToRecover),
         /* Recognised but not in the till yet: the part of an obligation still owed on
            charges whose full carrier cost and fee have already been counted above.
            This is what makes the three buckets exceed `collected`. */

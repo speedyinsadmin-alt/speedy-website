@@ -24,6 +24,11 @@
        light page. */
     --amber-ink:#f5a623; --hair:rgba(255,255,255,.06); --scrim:rgba(6,9,24,.9);
     --shadow:none;
+    /* --red has the same double life --amber does, and for the same reason gets its own
+       text token. Measured, not eyeballed: white on --red passes as a BUTTON (4.5:1),
+       but #e03131 as TEXT on the navy card is only 3.5:1 — under the 4.5 that 12px
+       needs. Refunds are the first feature to need red text in quantity. */
+    --red-ink:#ff7b7b;
   }
   /* Light. Every value is a deliberate substitution, not a lightening: #7fa8ff,
      #2fbf71 and #f5a623 all fail as text on white. */
@@ -33,6 +38,8 @@
     --amber:#f5a623; --amber-ink:#a35c00; --red:#d32f2f; --field:#eef1f8;
     --hair:rgba(16,22,50,.08); --scrim:rgba(16,22,50,.45);
     --shadow:0 1px 2px rgba(16,22,50,.06);
+    /* Darker than --red on white, for the same reason --amber-ink is. */
+    --red-ink:#b3221f;
   }
   [data-theme="light"] .card{box-shadow:var(--shadow)}
   [data-theme="light"] input,[data-theme="light"] select,[data-theme="light"] textarea{
@@ -45,8 +52,16 @@
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:12px}
   .muted{color:var(--mute)} .dim{color:var(--dim)}
   label{font-size:12px;color:var(--mute);display:block;margin-bottom:5px}
-  select,input{width:100%;background:var(--field);border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--ink);font-size:14px;outline:none}
-  select:focus,input:focus{border-color:var(--blue)}
+  /* TEXTAREA WAS NOT IN THIS LIST. It had never been needed — the refund note is the
+     first one in this file — so it rendered at the browser default: monospace, sized in
+     cols, a fraction of the width, with the text clipped. Found by photographing the
+     real sheet, which is the only reason it was found. Seventh time this week markup
+     went in against styling that was not actually there. */
+  select,input,textarea{width:100%;background:var(--field);border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--ink);font-size:14px;outline:none;font-family:inherit}
+  /* Grows to its content, so a three-line note is not read through a two-line slot.
+     min-height is the fallback where field-sizing is unsupported. */
+  textarea{field-sizing:content;min-height:62px;resize:vertical;line-height:1.5}
+  select:focus,input:focus,textarea:focus{border-color:var(--blue)}
   .btn{display:block;width:100%;text-align:center;border:0;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
   .btn-blue{background:var(--blue);color:#fff}
   .btn-red{background:var(--red);color:#fff}
@@ -67,9 +82,9 @@
      not enough in practice, so the CARD itself is capped to the viewport and scrolls.
      100dvh, not 100vh: on mobile 100vh is the height WITHOUT the browser chrome, so
      the last rows sit under the address bar and cannot be reached. */
-  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet{position:fixed;inset:0;background:var(--scrim);overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:50;padding:16px}
-  #chargeSheet > div,#todoSheet > div,#newsSheet > div,#shareSheet > div,#helpSheet > div,#earnSheet > div{max-height:calc(100dvh - 32px)}
-  #chargeSheet > div > .card,#todoSheet > div > .card,#newsSheet > div > .card,#shareSheet > div > .card,#helpSheet > div > .card,#earnSheet > div > .card{
+  #chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet,#refundSheet{position:fixed;inset:0;background:var(--scrim);overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:50;padding:16px}
+  #chargeSheet > div,#todoSheet > div,#newsSheet > div,#shareSheet > div,#helpSheet > div,#earnSheet > div,#refundSheet > div{max-height:calc(100dvh - 32px)}
+  #chargeSheet > div > .card,#todoSheet > div > .card,#newsSheet > div > .card,#shareSheet > div > .card,#helpSheet > div > .card,#earnSheet > div > .card,#refundSheet > div > .card{
     max-height:calc(100dvh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch}
   .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
@@ -78,6 +93,46 @@
   .res.good{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.45)}
   .res.bad{background:rgba(224,49,49,.12);border:1px solid rgba(224,49,49,.45)}
   .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid var(--hair)}
+  /* ---------- REFUNDS · stages 1-3 ----------
+     Every class here is NEW to this file. Checked before writing rather than assumed:
+     .sec, .conseq, .warn, .loss, .will, .rowacts, .actghost, .actrefund, .note and
+     .lbl had no rule in portal.html, and --red-ink did not exist. Six times this week
+     markup went in against CSS living in a sibling file — class="go" rendered as a
+     browser-default white slab on the Staff page for exactly that reason. */
+  .sec{font-size:10.5px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;
+    margin:18px 0 9px;display:flex;align-items:center;gap:9px}
+  .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+  .sec:first-child{margin-top:0}
+  /* The consequence of the choice just made, shown BEFORE the button and never after. */
+  .conseq{background:var(--field);border:1px solid var(--line);border-left:2px solid var(--blue);
+    border-radius:0 10px 10px 0;padding:10px 12px;font-size:12.5px;line-height:1.55;margin-top:8px}
+  .conseq b{color:var(--ink)}
+  .conseq.good{border-left-color:var(--green)}
+  .warn{background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.45);border-radius:10px;
+    padding:11px 13px;font-size:12.5px;line-height:1.55;color:var(--amber-ink);margin-top:10px}
+  /* A carrier that keeps its share on a refunded sale is money Speedy has LOST. */
+  .loss{background:rgba(224,49,49,.10);border:1px solid rgba(224,49,49,.42);border-radius:10px;
+    padding:11px 13px;font-size:12.5px;line-height:1.55;margin-top:8px}
+  .loss b{color:var(--red-ink)}
+  /* The last thing read before money leaves: a list of facts, deliberately unstyled. */
+  .will{margin:8px 0 0;padding:0;list-style:none;font-size:12.5px;line-height:1.6}
+  .will li{padding:6px 0 6px 20px;position:relative;border-bottom:1px solid var(--hair)}
+  .will li:last-child{border-bottom:0}
+  .will li::before{content:"\2192";position:absolute;left:0;color:var(--dim)}
+  .will b{color:var(--ink)}
+  .will .neg{color:var(--red-ink);font-weight:700}
+  .rowacts{display:flex;gap:7px;margin-top:8px}
+  .rowacts > *{flex:1}
+  .actghost{text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);
+    border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer}
+  /* Findable, not fat-fingerable: outlined rather than filled, and it opens a sheet
+     that asks four questions before anything moves. */
+  .actrefund{text-align:center;background:transparent;border:1px solid rgba(224,49,49,.45);
+    color:var(--red-ink);border-radius:9px;padding:7px;font-size:12px;font-weight:700;cursor:pointer}
+  .note{font-size:11.5px;color:var(--mute);margin-top:5px;line-height:1.5}
+  .lbl{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
+  .lbl.red{background:rgba(224,49,49,.15);color:var(--red-ink)}
+  @media(max-width:420px){ .rowacts{flex-direction:column} }
 </style>
 </head>
 <body>
@@ -124,6 +179,9 @@
       <button class="btn btn-blue" onclick="confirmOffice()">Continue →</button>
     </div>
   </div>
+
+  <!-- ===== REFUND SHEET ===== -->
+  <div id="refundSheet" class="hide"><div><div class="card" id="rfBody"></div></div></div>
 
   <!-- ===== HOME ===== -->
   <div id="home" class="hide">
@@ -455,7 +513,9 @@ const OPEN_ONLY = (function(){
   }catch(e){ HL.armed = false; }
 })();
 const $ = s => document.querySelector(s);
-const money = n => '$' + Number(n||0).toFixed(2);
+/* -$187.00, not $-187.00. Refund rows are negative and this is the third file to
+   need the fix — platform.html and carrier.html were corrected the same week. */
+const money = n => { const v = Number(n||0); return (v < 0 ? '-$' : '$') + Math.abs(v).toFixed(2); };
 function jwtEmail(t){ try{ return JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email.toLowerCase(); }catch{ return null; } }
 
 async function api(view){
@@ -1204,9 +1264,18 @@ function payHistoryHtml(c){
        "Pay this balance" box can never disagree about what is outstanding. */
     const otherOpenBalance = openBalances(c).some(b => b.id !== p.id);
     const hasCarrier = dl.some(d => docType(d) === 'carrier_receipt');
-    return '<div style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:7px">'
+    /* A REFUND ROW, and a row that has BEEN refunded, are two different things and both
+       have to be legible. Without the second one the card would show a $187.00 payment
+       at full value with a −$187.00 line somewhere below it and nothing joining them —
+       exactly how the balance payments read before item 76, when Saif had to ask what
+       the $34 line was. */
+    const isRefund = !!p.refund_of;
+    const refundedOff = Number(p.refunded) || 0;
+    const refParent = isRefund ? pays.find(q => q.id === p.refund_of) : null;
+    return '<div style="background:var(--field);border:1px solid ' + (isRefund ? 'rgba(224,49,49,.35)' : 'var(--line)')
+      + ';border-radius:10px;padding:10px 11px;margin-bottom:7px">'
       + '<div class="row" style="align-items:flex-start">'
-      + '<div><b style="font-size:14px">$' + Number(p.amount||0).toFixed(2) + '</b>'
+      + '<div><b style="font-size:14px' + (isRefund ? ';color:var(--red-ink)' : '') + '">' + money(p.amount) + '</b>'
       /* PRINT THE ABSOLUTES. This said "$130.50 · $20.00 still owed" and never mentioned
          the $184.50 the client actually owed — the same gap Saif found on the Console
          row the same morning, which balanceCell now fixes there. Fixing one reader and
@@ -1221,17 +1290,31 @@ function payHistoryHtml(c){
          done, and BLUE = clickable (change, wrong client, every document chip). A blue
          chip reads as a button, and a balance payment needs nothing done to it — which
          is the whole point of item 76. Neutral is the honest colour. */
-      + (isBal ? 'background:rgba(143,154,196,.14);color:var(--mute)'
+      /* Refund states come FIRST. A refund row carries audit_status 'complete' — that is
+         what makes the commission engine reverse it — so without this it would wear an
+         "audited" chip, which is true of the audit and badly misleading about the row. */
+      + (isRefund ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
+        : refundedOff > 0 ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
+        : isBal ? 'background:rgba(143,154,196,.14);color:var(--mute)'
                : complete ? 'background:rgba(47,191,113,.15);color:var(--green)'
                           : 'background:rgba(245,166,35,.15);color:var(--amber-ink)')
-      + '">' + (isBal ? 'balance payment' : complete ? 'audited' : 'needs proof') + '</span></div>'
+      + '">' + (isRefund ? 'refund'
+        : refundedOff > 0 ? (refundedOff + 0.004 >= Number(p.collected != null ? p.collected : p.amount) ? 'refunded' : 'part refunded')
+        : isBal ? 'balance payment' : complete ? 'audited' : 'needs proof') + '</span></div>'
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
       + (p.ref ? ' · ' + esc(p.ref) : '')
       + (p.charged_by ? ' · charged by ' + esc(p.charged_by.split(' ')[0]) : '')
       + (p.carrier_name ? ' · carrier ' + esc(p.carrier_name)
-          + (p.service_cost != null ? ' $' + Number(p.service_cost).toFixed(2) : '') : '')
-      + (p.fee_amount != null ? ' · Speedy kept $' + Number(p.fee_amount).toFixed(2) : '')
+          + (p.service_cost != null ? ' ' + money(p.service_cost) : '') : '')
+      /* money(), not an inline '$' + toFixed — which printed "Speedy kept $-75.00" on a
+         refund row. The eighth place this week that formatted a figure by hand instead
+         of through the one function that knows where the minus sign goes.
+         And "kept" is wrong for a refund: nothing was kept, it was given back. */
+      + (p.fee_amount != null
+          ? (isRefund ? ' · Speedy’s ' + money(Math.abs(Number(p.fee_amount))) + ' reversed'
+                      : ' · Speedy kept ' + money(p.fee_amount))
+          : '')
       + '</div>'
       + '<div class="dim" style="font-size:11px;margin-top:3px">Commission to <b style="color:var(--ink)">'
       + esc(p.commission_to_name || 'unassigned') + '</b>'
@@ -1254,10 +1337,31 @@ function payHistoryHtml(c){
       /* Says which charge it pays down, so a $34 line beside a $130.50 line is not a
          mystery second sale. The original may be outside this client's 50-row window,
          in which case the id alone would mean nothing — so say only what is known. */
+      /* WHAT THIS REFUND UNDID, and what it meant. The reason is not decoration: it is
+         what decided whether the client still owes the money, so it belongs on the row
+         and not only in an event nobody opens. */
+      + (isRefund
+          ? '<div style="font-size:11px;margin-top:3px;color:var(--mute)">Refunds the '
+            + (refParent ? money(refParent.amount) + ' payment from ' + esc(String(refParent.ts||'').slice(0,10))
+                         : 'earlier payment on this client')
+            + (p.refund_reason ? ' · ' + esc(String(p.refund_reason).replace(/_/g, ' ')) : '')
+            + (p.refund_carrier ? ' · carrier money '
+                + (p.refund_carrier === 'yes' ? 'returned'
+                   : p.refund_carrier === 'no' ? '<b style="color:var(--red-ink)">not returned — Speedy absorbed it</b>'
+                   : 'not back yet') : '')
+            + '</div>'
+            + (p.refund_note ? '<div style="font-size:11.5px;color:var(--mute);margin-top:5px;padding-left:9px;'
+                + 'border-left:2px solid var(--line)">' + esc(p.refund_note) + '</div>' : '')
+          : '')
+      /* And on the payment itself: how much of it has gone back. */
+      + (!isRefund && refundedOff > 0
+          ? '<div style="font-size:11px;margin-top:3px;color:var(--red-ink)">'
+            + money(-refundedOff) + ' refunded — the original charge stays on file, it cannot be withdrawn.</div>'
+          : '')
       + (isBal
           ? '<div class="dim" style="font-size:11px;margin-top:3px;color:var(--mute)">'
             + 'Pays down the '
-            + (parent ? '$' + Number(parent.amount || 0).toFixed(2) + ' payment from '
+            + (parent ? money(parent.amount) + ' payment from '
                         + esc(String(parent.ts || '').slice(0, 10))
                       : 'earlier charge on this client')
             + ' · that one carries the audit</div>'
@@ -1291,10 +1395,22 @@ function payHistoryHtml(c){
       /* Balance rows get this too, and ONLY this. addDocsFor is the documents-only
          screen — it never reaches the carrier audit, so a cash balance can still carry
          its receipt without anyone being able to write a fee onto the row. */
-      + (complete || isBal
-          ? '<div onclick="addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
-            + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">'
-            + (isBal ? '+ Add documents' : '+ Add more documents') + '</div>'
+      /* The documents button and the Refund action share a row, so Refund is beside
+         something familiar rather than buried in the four-link correction line above.
+         Outlined and red: findable, not fat-fingerable, and it opens a sheet that asks
+         four questions and shows every consequence before anything moves. Offered only
+         when the SERVER said this person may refund (c.can_refund, from may()) and only
+         where it can actually succeed — the server re-checks all of it regardless. */
+      + ((complete || isBal || canRefundRow(c, p))
+          ? '<div class="rowacts">'
+            + ((complete || isBal)
+                ? '<div class="actghost" onclick="event.stopPropagation();addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')">'
+                  + (isBal ? '+ Add documents' : '+ Add more documents') + '</div>'
+                : '')
+            + (canRefundRow(c, p)
+                ? '<div class="actrefund" onclick="event.stopPropagation();openRefund(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ')">Refund&hellip;</div>'
+                : '')
+            + '</div>'
           : '')
       + '</div>';
   }).join('');
@@ -1384,6 +1500,234 @@ function finishAuditFor(paymentId, clientNo, amount){
 
 /* Earnings visibility. Remembered per browser so it stays hidden once chosen —
    an agent who hides it should not have it reappear next morning. */
+/* ================= REFUNDS · stages 1-3 =================
+   Full refunds only. Partial is stage 4 and is blocked on the ZZTEST probe: Clover's own
+   documentation contradicts itself on whether /v1/refunds takes an `amount`, and a
+   partial that Clover silently treats as FULL hands the client more than intended. The
+   server refuses one; this screen does not offer one.
+
+   The sheet asks four things and shows the consequence of each BEFORE the button, because
+   the consequences are not guessable: which month the commission moves in, whether the
+   client still owes the money, whether Speedy has lost the carrier's share, and that
+   HawkSoft keeps the original receipt whatever we do. */
+let RF = null;
+
+/* WHAT EACH REASON MEANS FOR WHAT THE CLIENT OWES — Saif's split, Sep 10. The first two
+   mean we took money we should not have, so the obligation stands. The last three close
+   it or leave it standing conservatively. Mirrored from the server, which enforces it,
+   and from the database, which constrains it. */
+const RF_REASONS = [
+  /* The fourth column completes the bold clause rather than repeating it: the rendered
+     line is "<label> — <bold clause> <this>", and the first draft read "Policy cancelled
+     — this closes the obligation. This closes the obligation. Nothing further is owed."
+     Seen in the screenshot, not in the source. */
+  ['charged_twice',    'Charged twice',      true,  'We took money we should not have, so the balance is not written off.'],
+  ['wrong_amount',     'Wrong amount taken', true,  'We took money we should not have, so the balance is not written off.'],
+  ['policy_cancelled', 'Policy cancelled',   false, 'Nothing further is owed on it.'],
+  ['never_bound',      'Never bound',        false, 'Nothing further is owed on it.'],
+  ['other',            'Other',              true,  'The safer default — say why below.'],
+];
+
+function refundable(p){
+  const collected = Number(p.collected != null ? p.collected : p.amount) || 0;
+  return +(collected - (Number(p.refunded) || 0)).toFixed(2);
+}
+/* Can this row be refunded AT ALL? Mirrors the server's guards so the button is not
+   offered where it can only fail — but the server re-checks every one of them, because
+   a browser is not a gate. */
+function canRefundRow(c, p){
+  if(!c || !c.can_refund) return false;
+  if(p.refund_of) return false;                       // a refund is not refundable
+  if(p.balance_of) return false;                      // the original carries the obligation
+  if(/declin|fail|void|link/i.test(String(p.kind||''))) return false;
+  if(['declined','link_sent','not_a_payment','void'].includes(p.audit_status)) return false;
+  if(refundable(p) <= 0) return false;                // already fully refunded
+  const owed = (p.total_owed != null && Number(p.total_owed) > Number(p.amount||0))
+    ? Number(p.total_owed) : Number(p.amount||0);
+  const collected = Number(p.collected != null ? p.collected : p.amount) || 0;
+  if(collected + 0.004 < owed) return false;          // part paid: stage 4
+  return true;
+}
+
+function openRefund(paymentId, clientNo){
+  const c = CLIENT_CACHE[clientNo] || CLIENT_CACHE[ACTIVE_TAB];
+  const p = c && (c.payments||[]).find(x => x.id === paymentId);
+  if(!c || !p) return;
+  RF = { id: paymentId, clientNo: clientNo, p: p, c: c, reason: null, carrier: null,
+         amount: refundable(p) };
+  document.getElementById('refundSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+  drawRefund();
+}
+function closeRefund(){
+  RF = null;
+  document.getElementById('refundSheet').classList.add('hide');
+  document.body.style.overflow = '';
+}
+function rfPick(what, value){
+  if(!RF) return;
+  RF[what] = value;
+  drawRefund();
+}
+
+function drawRefund(){
+  if(!RF) return;
+  const p = RF.p, c = RF.c;
+  const isCard = /^(charge_live|charge_card|paylink_charge|terminal_charge)$/.test(String(p.kind||''));
+  const name = (c.client && (c.client.business_name
+    || [c.client.first_name, c.client.last_name].filter(Boolean).join(' '))) || ('Client ' + RF.clientNo);
+  const first = String(name).split(' ')[0] || 'the client';
+  const amt = RF.amount;
+  const fee = p.fee_amount != null ? Number(p.fee_amount) : null;
+  const cost = p.service_cost != null ? Number(p.service_cost) : null;
+  const reason = RF_REASONS.find(r => r[0] === RF.reason) || null;
+
+  /* Under 25 minutes Clover VOIDS instead of refunding. Different operations, different
+     settlement — the client sees the charge disappear rather than a refund arrive, so
+     the agent has to be told which one they are about to do. Confirmed while probing. */
+  const ageMin = Math.round((Date.now() - new Date(p.ts).getTime()) / 60000);
+  const isVoid = isCard && isFinite(ageMin) && ageMin < 25;
+
+  let h = '<div class="row" style="margin-bottom:2px">'
+    + '<b style="font-size:16px">' + (isVoid ? 'Void a payment' : 'Refund a payment') + '</b>'
+    + '<span class="dim" style="font-size:12px">Client ' + esc(String(RF.clientNo)) + ' · ' + esc(name) + '</span></div>';
+
+  /* "Void a payment" in the header and "what you are refunding" underneath it is the
+     kind of half-updated wording that makes an agent doubt the whole screen. */
+  h += '<div class="sec">What you are ' + (isVoid ? 'voiding' : 'refunding') + '</div>'
+    + '<div class="kv"><span class="muted">Payment</span><span>' + money(p.amount)
+      + ' · ' + esc(p.purpose || '') + ' · ' + esc(String(p.ts||'').slice(0,10)) + '</span></div>'
+    + '<div class="kv"><span class="muted">Paid by</span><span>'
+      + (isCard ? (esc(p.ref || 'Card') + (p.txn_id ? '' : '')) : 'Cash') + '</span></div>'
+    + (p.carrier_name ? '<div class="kv"><span class="muted">Carrier</span><span>'
+        + esc(p.carrier_name) + (cost != null ? ' · ' + money(cost) : '') + '</span></div>' : '')
+    + (fee != null ? '<div class="kv" style="border-bottom:0"><span class="muted">Speedy kept</span><span>'
+        + money(fee) + '</span></div>' : '');
+
+  h += '<div class="sec">How much</div>'
+    + '<div class="kv" style="border-bottom:0"><span class="muted">' + (isVoid ? 'Voiding' : 'Refunding') + '</span>'
+      + '<b style="font-size:15px">' + money(amt) + '</b></div>'
+    /* Said, not offered. A disabled "Part of it" chip would invite a click that can
+       only be refused; the reason it is missing is more useful than the control. */
+    + '<div class="note">The whole payment. A partial refund is not available yet — whether '
+      + 'Clover accepts one is still unverified, and getting it wrong refunds more than intended.</div>';
+
+  h += '<div class="sec">Why</div><div class="chips">'
+    + RF_REASONS.map(r => '<button class="' + (RF.reason === r[0] ? 'sel' : '')
+        + '" onclick="rfPick(\'reason\',\'' + r[0] + '\')">' + esc(r[1]) + '</button>').join('')
+    + '</div>'
+    + (reason
+        ? '<div class="conseq' + (reason[2] ? '' : ' good') + '">' + esc(reason[1]) + ' — <b>'
+          + (reason[2] ? 'the client still owes it.' : 'this closes the obligation.') + '</b> '
+          + esc(reason[3]) + '</div>'
+        : '<div class="note">Pick one — it decides whether the client still owes the money.</div>');
+
+  h += '<div class="sec">Did the carrier give their money back?</div><div class="chips">'
+    + [['yes','Yes'],['no','No'],['pending','Not yet']].map(x =>
+        '<button class="' + (RF.carrier === x[0] ? 'sel' : '')
+        + '" onclick="rfPick(\'carrier\',\'' + x[0] + '\')">' + esc(x[1]) + '</button>').join('')
+    + '</div>';
+  if(RF.carrier === 'yes'){
+    h += '<div class="conseq good"><b>The carrier returns ' + money(cost || 0) + '.</b> '
+      + 'The carrier cost and Speedy’s share both reverse and this payment nets to nothing.</div>';
+  } else if(RF.carrier === 'no'){
+    h += '<div class="loss"><b>' + money(cost || 0) + ' is money Speedy has lost.</b> '
+      + first + ' is refunded in full, the carrier keeps its premium, and the difference comes '
+      + 'out of Speedy. It shows on the Trust tab as a loss, not as profit.</div>';
+  } else if(RF.carrier === 'pending'){
+    h += '<div class="conseq">' + money(cost || 0) + ' stays attributed to '
+      + esc(p.carrier_name || 'the carrier') + ' and this goes on the <b>carrier recovery</b> list '
+      + 'until somebody confirms it. Nothing chases it on its own.</div>';
+  } else {
+    h += '<div class="note">Pick one — it decides whether the carrier’s share is a loss.</div>';
+  }
+
+  if(isVoid){
+    h += '<div class="warn">This payment was taken <b>' + ageMin + ' minute'
+      + (ageMin === 1 ? '' : 's') + ' ago</b>, so Clover will <b>void</b> it rather than refund it. '
+      + 'The charge is cancelled before it settles — tell ' + esc(first)
+      + ' the charge will <b>disappear</b>, not that a refund is coming.</div>';
+  }
+
+  h += '<div class="sec">What this will do</div><ul class="will">'
+    + '<li><b>' + esc(first) + ' gets ' + money(amt) + ' back</b> '
+      + (isCard ? (isVoid ? '— the charge is cancelled before it settles.'
+                          : 'on the card used for the original payment, usually 2 to 5 business days.')
+                : '— hand back the cash.') + '</li>'
+    /* THE FEE, WHICH IS KNOWN — not the commission, which is NOT. The rate is per agent
+       in agent_commission and this page never reads it, so an earlier draft printed
+       "−$7.50" from a hardcoded 10%. A number that is wrong for anyone on a different
+       rate is worse than no number: say what reverses and where, and let the agent's
+       own Earnings screen show their figure. */
+    + (fee != null
+        ? '<li>Speedy’s <b>' + money(fee) + '</b> on this payment is <span class="neg">reversed</span>, '
+          + 'and the commission released on it comes back off <b>'
+          + esc(p.commission_to_name || 'whoever earned it') + '</b>’s total for <b>this month</b> '
+          + '— the month of the refund, not the month of the charge. A closed month never moves.</li>'
+        : '<li>This payment has never been audited, so no commission has been released on it and '
+          + 'there is none to reverse.</li>')
+    + (cost != null && RF.carrier
+        ? '<li>The ' + money(cost) + ' carrier cost is <b>'
+          + (RF.carrier === 'yes' ? 'reversed' : RF.carrier === 'no' ? 'a loss to Speedy' : 'held open for recovery')
+          + '</b>.</li>' : '')
+    + '<li><b>HawkSoft keeps the original receipt.</b> A filed receipt cannot be withdrawn or '
+      + 'changed, so a note is added to the client’s file instead. The original payment stays '
+      + 'visible — nothing is erased.</li>'
+    + '</ul>';
+
+  h += '<div class="sec">Reason — required</div>'
+    + '<textarea id="rfNote" rows="2" placeholder="Why is this being refunded? Tony and the next person will read this.">'
+    + esc(RF.note || '') + '</textarea>'
+    + '<div class="note">Stored with your name and the time, and shown wherever this refund appears.</div>';
+
+  const ready = !!(RF.reason && RF.carrier);
+  h += '<div id="rfMsg" class="note" style="min-height:0"></div>'
+    + '<button class="btn btn-red" ' + (ready ? '' : 'disabled style="opacity:.45;cursor:not-allowed" ')
+      + 'onclick="submitRefund()">'
+      + (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '') + '</button>'
+    + (ready ? '' : '<div class="note" style="text-align:center">Answer both questions above first.</div>')
+    + '<button class="btn btn-ghost" onclick="closeRefund()">Cancel</button>';
+
+  document.getElementById('rfBody').innerHTML = h;
+  /* The typed note survives a redraw — every chip click rebuilds this markup, and losing
+     a half-typed sentence on the fourth click is the same fault the Staff editor had. */
+  const t = document.getElementById('rfNote');
+  if(t) t.oninput = () => { if(RF) RF.note = t.value; };
+}
+
+async function submitRefund(){
+  if(!RF) return;
+  const msg = document.getElementById('rfMsg');
+  const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
+  const note = ((document.getElementById('rfNote')||{}).value || '').trim();
+  if(!RF.reason || !RF.carrier) return say('Answer why, and whether the carrier is returning their share.', true);
+  if(!note) return say('A reason in words is required.', true);
+  /* One confirm, naming the amount and the person. Everything else was shown above; this
+     is the last chance to notice the wrong row was opened. */
+  const first = String((RF.c.client && (RF.c.client.business_name
+    || [RF.c.client.first_name, RF.c.client.last_name].filter(Boolean).join(' '))) || 'the client').split(' ')[0];
+  if(!confirm('Send ' + money(RF.amount) + ' back to ' + first + '?\n\nThis cannot be undone from here.')) return;
+
+  say('Refunding…');
+  const btn = document.querySelector('#refundSheet .btn-red');
+  if(btn){ btn.disabled = true; btn.style.opacity = '.45'; }
+  const r = await apiPost({ action:'refund_payment', payment_id: RF.id,
+    reason: RF.reason, carrier: RF.carrier, note: note });
+  if(r && r.ok){
+    const done = RF.clientNo;
+    closeRefund();
+    /* Re-read rather than patching the card in place: the refund row, the parent's
+       refunded total and total_owed all changed server-side, and a card assembled from
+       three guesses is how two screens end up disagreeing about one number. */
+    delete CLIENT_CACHE[done];
+    await openClient(done);
+    alert(r.tell_the_client + (r.hawksoft_note ? '' : '\n\nNote: the HawkSoft note did not file. Tell Saif.'));
+    return;
+  }
+  if(btn){ btn.disabled = false; btn.style.opacity = ''; }
+  say((r && (r.message || r.error)) || 'Could not refund that payment.', true);
+}
+
 /* ---------- Commission ownership ----------
    Whoever does the job earns it, so this defaults to the agent charging. The client's
    producer is shown as a PROMPT, never as a silent default: producer codes are

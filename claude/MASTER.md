@@ -81,6 +81,120 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ---
 
+---
+
+## 🔜 TOMORROW — SEP 11. START HERE.
+Written at the end of Sep 10. Everything below is pushed and live unless it says
+otherwise. Nothing here is half-finished in the working tree — `git status` is clean at
+`a26cbb0`.
+
+### 1. THE $1 ZZTEST RUN — do this first, it gates stage 4
+The refund path has never moved real money. This is the first end-to-end exercise of
+Clover call → ledger row → HawkSoft note, and it answers the one question stage 0 could
+not: **does Clover accept a partial `amount`?**
+
+**Why it costs a dollar and cannot be avoided:** all 13 test rows on ZZTEST (#26081) are
+`charge_cash` with no `txn_id`, so there is nothing refundable there, and there is no
+Clover sandbox configured — production keys, merchant `1K7NR5V6K1ER1`. A real card has
+to be charged and refunded. The money comes back.
+
+**Steps, in order:**
+1. In the portal, charge **$1.00** on client **26081 (ZZTEST)** with a real card.
+2. **Wait past 25 minutes.** Inside 25 minutes Clover VOIDS instead of refunding — a
+   different operation with different settlement, so a run before then tests the wrong
+   thing. The refund sheet says which one it is about to do; check it says REFUND.
+3. Refund it from the client card with the new **Refund…** button. This exercises the
+   shipped path, not the probe.
+4. Then run the probe's `live` mode on a second $1 charge to answer partial-vs-full:
+   it tries $0.40, then $0.60, then $0.01 — **the third must be rejected**. If Clover
+   allows a refund beyond the charge amount, the feature needs its own cap and the probe
+   says so loudly. If partials are refused, it falls back to a full refund so the dollar
+   still comes back.
+
+**What to read in the result:** `verdict.partial_refund_supported`,
+`verdict.over_refund_rejected`, `verdict.money_returned`, and `operation_tested`.
+
+### 2. STAGE 4 — partial refunds. Blocked on step 1.
+Two refusals come out of the server once the answer is known
+(`partial_not_supported_yet` and, separately, `partly_paid_not_supported_yet`).
+**The part-paid case is the harder one and is NOT just "allow a smaller amount":**
+closing a part-paid obligation moves `owedFor`'s fallback and would silently INCREASE
+the original month's commission. It needs the fee reversal to be proportional
+(`-(parentFee x collectedRatio)`) and `collectedFor`/`owedFor` re-examined together.
+Do not start it before the probe answers — building on an unverified Clover capability
+is the `pickInvoices` mistake.
+
+### 3. STAGE 5 — the carrier recovery queue. Agreed Sep 10, not started.
+**Why it matters:** `carrier_to_recover` is already a real figure in Trust with **no
+screen and nothing chasing it**. That is precisely the shape of the `carrier_pending`
+audit problem — an unfinished thing nobody sees — which is how a $141.00 gap sat
+unnoticed in Trust until it was measured.
+
+**What exists already (do not rebuild):**
+- `bridge_ledger.refund_carrier` is a closed set `yes | no | pending`, constrained by
+  the database, with a partial index on `pending`.
+- Trust already computes and returns `carrier_to_recover` and `carrier_lost`, and the
+  invariant covering them is asserted by `harnessRefund.mjs`.
+- Every refund row carries `refund_of`, so the parent's `carrier_name` and
+  `service_cost` are one lookup away.
+
+**What stage 5 has to add:**
+- A **Refunds** tab in `admin/platform.html` beside Staff, with two lists: refunds
+  waiting on a carrier, and (later) refunds waiting on Tony.
+- A way to **settle** one: `pending -> yes` (the carrier paid us back) or
+  `pending -> no` (it is a loss). That is a money decision, so it needs `may()`, a
+  reason, and an `events` row — the same shape as `save_agent`.
+- Moving `pending -> yes` must move the figure out of `carrier_to_recover` and reverse
+  the carrier cost in Trust; `pending -> no` must move it into `carrier_lost`. The
+  arithmetic is already written and tested; only the transition is new.
+- The mockup for it exists — the Console block in `refund_mockup.html`.
+
+**Design question still open:** should a refund sitting at `pending` for more than N days
+raise something the way the audit queue does? Nobody has asked for it; do not invent it.
+
+### 4. ALSO QUEUED, smaller
+- **The agent self-serve window and the "request for Tony" flow.** Refunds are
+  **owner-only** today. `may(email,'refund')` is the gate, so granting an agent `refund`
+  on the Staff page works with no deploy — but the mockup's "Send to Tony for approval"
+  path is not built.
+- **Item 70 step 5** — the cross-cutting activity view over `events`, filterable by
+  kind/actor/client/date. The last piece of "everything must show so Tony can understand
+  why". Then delete the temporary `perm_check` view.
+- **Item 86** — month approval, the frozen per-agent snapshot, and locking
+  `audit_completed_at` from being rewritten.
+- **The rest of item 22** — `charge.html` still holds its own copy of the staff map, and
+  `AGENT_NAME` in `platform.js` disagrees with the `agents` table for three people
+  (Sammy/Samuel, and both Ayala Hernandez surnames). Those names render on audit rows,
+  so changing them is its own change with its own check.
+- **Tony, `info@` and Lana have no branch** in the `agents` table, so they get the office
+  picker with nothing pre-selected. One click each on the Staff page fixes it.
+- **Pre-existing, found while measuring, not changed:** the green "audited" chip in
+  `portal.html` is 3.6:1 in light mode — below the 4.5 it needs.
+- **Re-run the frozen floor-message baseline** (`total_owed` at charge time = 2,
+  `balance_of` = 2, agent-made balance links = 0, all four of them my hand corrections).
+  Anything above zero means the message worked.
+
+### 5. HOW TO VERIFY ANYTHING TOUCHED TODAY
+Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
+`puppeteer-core` (`npm i` in that folder) and Chrome at
+`C:/Program Files/Google/Chrome/Application/chrome.exe`.
+
+| harness | covers |
+|---|---|
+| `harnessRefund.mjs` | 179 checks — refunds, the guards, the month rule, the Trust invariant |
+| `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
+| `harnessStaff2.mjs` | 136 — the Staff page, on real jsdom, through the markup |
+| `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |
+| `harnessPortalStaff.mjs` | 42 — `portal_staff`, additively |
+| `portalscan.mjs` | orphaned identifiers and TDZ reads in `portal.html` |
+| `renderRefund.mjs` / `renderCard.mjs` / `shoot.mjs` | render the REAL screens and photograph them |
+| `shoot_light.mjs` | WCAG contrast, both themes, with alpha blended properly |
+
+**Three bugs today were found ONLY by photographing the built screen** — an unstyled
+`textarea`, a sentence printed twice, and `"Speedy kept $-75.00"`. Run the renderers.
+
+---
+
 ## ⛔ DO FIRST
 
 ### 1. ~~Apply the phone-search fix~~ **DONE Aug 29** (`dbacd6e9`) — both sites

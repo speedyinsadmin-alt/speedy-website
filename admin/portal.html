@@ -1288,6 +1288,10 @@ function payHistoryHtml(c){
        the $34 line was. */
     const isRefund = !!p.refund_of;
     const refundedOff = Number(p.refunded) || 0;
+    /* A pay link that was only SENT is not a payment. It showed as "needs proof" with
+       "Add documents to help" and "Sammy still confirms the carrier cost" — three
+       things that are only true of money that arrived. Seen on ZZTEST, Sep 11. */
+    const isLink = p.kind === 'paylink_create' || p.audit_status === 'link_sent';
     const refParent = isRefund ? pays.find(q => q.id === p.refund_of) : null;
     return '<div style="background:var(--field);border:1px solid ' + (isRefund ? 'rgba(224,49,49,.35)' : 'var(--line)')
       + ';border-radius:10px;padding:10px 11px;margin-bottom:7px">'
@@ -1315,11 +1319,13 @@ function payHistoryHtml(c){
          "audited" chip, which is true of the audit and badly misleading about the row. */
       + (isRefund ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
         : refundedOff > 0 ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
+        : isLink ? 'background:rgba(143,154,196,.14);color:var(--mute)'
         : isBal ? 'background:rgba(143,154,196,.14);color:var(--mute)'
                : complete ? 'background:rgba(47,191,113,.15);color:var(--green)'
                           : 'background:rgba(245,166,35,.15);color:var(--amber-ink)')
       + '">' + (isRefund ? 'refund'
         : refundedOff > 0 ? (refundedOff + 0.004 >= Number(p.collected != null ? p.collected : p.amount) ? 'refunded' : 'part refunded')
+        : isLink ? 'link sent · not paid'
         : isBal ? 'balance payment' : complete ? 'audited' : 'needs proof') + '</span></div>'
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
@@ -1377,7 +1383,7 @@ function payHistoryHtml(c){
          have recorded this since July and shown it nowhere: 19 of the last 60 said
          "no client email on file" behind a green success screen. A row with no record
          at all says so, because "nothing recorded" is different from "not sent". */
-      + noticeLineHtml(p.client_notice)
+      + (isLink ? '' : noticeLineHtml(p.client_notice))
       /* And on the payment itself: how much of it has gone back. */
       + (!isRefund && refundedOff > 0
           ? '<div style="font-size:11px;margin-top:3px;color:var(--red-ink)">'
@@ -1397,8 +1403,8 @@ function payHistoryHtml(c){
                 + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '')
                 + (d.uploaded_by ? ' · ' + esc(uploaderShort(d.uploaded_by)) : '') + '</span>').join('')
             + '</div>'
-          : (!complete && !isBal ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
-      + (!complete && !isBal && mine
+          : (!complete && !isBal && !isLink ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
+      + (!complete && !isBal && !isLink && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
           : '')
@@ -1407,7 +1413,7 @@ function payHistoryHtml(c){
          carrier cost and then be refused after the work. The owner still confirms
          the cost, and the line below says so - otherwise the amber badge staying put
          afterwards reads as broken. */
-      + (!complete && !isBal && !mine
+      + (!complete && !isBal && !isLink && !mine
           ? '<div onclick="addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">Add documents to help</div>'
             + '<div class="dim" style="font-size:11px;text-align:center;margin-top:4px">'
@@ -1564,7 +1570,10 @@ function canRefundRow(c, p){
   if(!c || !c.can_refund) return false;
   if(p.refund_of) return false;                       // a refund is not refundable
   if(p.balance_of) return false;                      // the original carries the obligation
-  if(/declin|fail|void|link/i.test(String(p.kind||''))) return false;
+  /* NOT /link/ — it matched paylink_charge, a PAID link, and hid the button on the $1
+     Saif paid through a link to test this. paylink_create is the only link kind that
+     never collected money; the rest is audit_status. */
+  if(/declin|fail|void/i.test(String(p.kind||'')) || p.kind === 'paylink_create') return false;
   if(['declined','link_sent','not_a_payment','void'].includes(p.audit_status)) return false;
   if(refundable(p) <= 0) return false;                // already fully refunded
   const owed = (p.total_owed != null && Number(p.total_owed) > Number(p.amount||0))

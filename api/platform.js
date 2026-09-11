@@ -2146,7 +2146,12 @@ if (view === 'portal_share_due') {
         return res.status(400).json({ ok: false,
           error: 'That payment pays down an earlier charge. Refund the original — it carries the obligation and the fee.' });
       }
-      if (/declin|fail|void|link/i.test(String(row.kind || ''))
+      /* NOT /link/. That matched paylink_CHARGE — a paid pay link, which IS collected
+         money — and refused to refund the very $1 Saif paid through a link to test this.
+         The same mistake as /refund/ matching charge_refund, a day after writing it
+         down. Name the one kind that is a link that was only SENT; test the rest by
+         audit_status, which is what actually says whether money arrived. */
+      if (/declin|fail|void/i.test(String(row.kind || '')) || row.kind === 'paylink_create'
           || ['declined', 'link_sent', 'not_a_payment', 'void'].includes(row.audit_status)) {
         return res.status(400).json({ ok: false, error: 'That row never collected any money.' });
       }

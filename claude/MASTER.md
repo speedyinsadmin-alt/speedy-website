@@ -88,6 +88,88 @@ Written at the end of Sep 10. Everything below is pushed and live unless it says
 otherwise. Nothing here is half-finished in the working tree — `git status` is clean at
 `a26cbb0`.
 
+### ✅ SEP 11 · "NO SILENT INFO" — every refund and charge now says whether the client was told
+Saif, Sep 11: *"I don't want any silent info while we do that — if it did not continue
+or it confirms, everything."* Checked against the code and the data before answering:
+
+**Refunds sent the client NOTHING** — no email, no text — and recorded nothing about
+it. Silent by omission; built that way on Sep 10.
+
+**Charges had been silent for months in a different way.** A confirmation email IS sent
+on every charge, but to `c.emails[0]` — whatever is first on the HawkSoft record, with
+no way for the agent to see or pick it — and the result (`sent to …` / `failed: …` /
+`no client email on file`) was written to `extra.confirmationEmail` and **displayed
+nowhere**. Measured: **of the last 60 real charges, 19 had no client email on file.**
+One in three clients got no confirmation, behind a green success screen.
+
+**Texting:** `api/sms.js` works (proven Sep 5, every send logged) but is **wired to
+nothing**, and the only SMS-capable number is a 747 area code. **Email only for now** —
+Saif's decision.
+
+**Built:**
+1. **"Tell the client" on the refund sheet**, required before the button enables. The
+   emails on the client's record as chips (`clients.email` + `extras.emails`), or **a
+   typed address** — allowed, because a client with no email on file still has to be
+   told somehow, but stored and displayed as *typed by the agent, not from the record*,
+   with a warning that a typo sends the client's name and amount to a stranger — or
+   **Don't notify**, which requires a reason. `on_file` is a claim the server re-checks
+   against the record; an address claimed as on-file that is not is refused.
+2. **Recorded everywhere, never blank.** `extra.client_notice` on the refund row —
+   channel, address, source, who chose it, result, reason — written WITH the row as
+   `pending`/`skipped` and patched to `sent`/`failed` after the attempt, so a crash
+   between the two still leaves the decision on record. Also in the HawkSoft note
+   (*"Client notified by email at …"* / *"Client NOT notified — …"* / *"FAILED (…) —
+   the agent was shown this"*), the `payment.refunded` event, and the response.
+3. **Every row on the client card and every row in Audit** carries one line:
+   ✓ green *"Client emailed at …"* (amber flag if typed), red ✗ *"Client NOT told — no
+   email on file"*, red ✗ *"Client email FAILED — reason. The client has not been told."*,
+   or grey *"No record of a client confirmation on this row"* for rows that predate any
+   record — because "nothing recorded" is different from "not sent". One reader,
+   `clientNoticeOf(row)`, normalises the charge string and the refund object into one
+   shape.
+4. **The charge sheet says where the confirmation will go BEFORE the charge** — or, in
+   red, that there is no email on file and the client will get nothing. The 19 were
+   preventable; the agent just had no way to know.
+
+**Order is enforced:** the notice is validated before Clover is called (a malformed one
+never reaches the card), and the email is sent only after the money moved AND was
+recorded — never about a refund that did not happen. **A failed email does not undo the
+refund**; the money has moved, so the failure is reported loudly instead.
+
+**256 harness checks (was 179).** The "sent" path runs for real against a loader-hook
+stub of `nodemailer` (`node --import ./mock_mail.mjs harnessRefund.mjs`), so what is
+asserted is the actual mail handed to the transport — address, subject, body — not a
+flag. Six regressions all caught: email sent before the money moved, `on_file` trusted
+rather than checked, a failure recorded as sent, a silent skip with no reason, the
+HawkSoft note dropping the outcome, and the reader calling "no client email on file" a
+success.
+
+**Not done, deliberately:** the agent still cannot PICK the email on a charge — it is
+still `emails[0]`. The sheet now says which one it will be and shouts if there is none;
+choosing between two on file is the natural next step and reuses the refund component.
+
+### ⚠️ SEP 11 · "ATTACHED BUT NOT LOGGED" — answered from the data
+Saif reported that a Clover charge shows in HawkSoft as an attachment but is "not
+logged". Every real card charge this week: **log note HTTP 200 on all 89, attachment OK
+on all 89, accounting receipt posted on 0 of 89.** Since Aug 25: 103 charges "no
+invoices on file", 57 "no open invoice / none picked / no match", ~18 applied.
+
+So it depends what "logged" means:
+- **The activity LOG note is written every time** (channel 32, HTTP 200). It is filed
+  **against the policy** (`policyId: policyGuid`) — "Pol 1+ = scoped to the policy" — so
+  it appears under the policy's log, **not the client-level Log tab.** If Saif is looking
+  at the client tab, that is why it seems missing. Check one: client 24152, $342.56 on
+  Sep 11, policy SCA0114500.
+- **The accounting RECEIPT is posted only when there is an open HawkSoft invoice** the
+  agent picked and it matches to the cent. That is `verifyInvoicePick`'s abstain rule,
+  deliberate: HawkSoft has no receipt-modify or delete, so a wrong receipt is permanent,
+  and a partial application could close an invoice and erase receivable. Most clients
+  have no open invoice in HawkSoft, so most charges get a note and an attachment and no
+  receipt. **This is by design and recorded on every row** (`extra.receipt.reason`).
+
+**Pending Saif confirming which one he meant.** If it is the receipt, the honest fix is
+upstream — invoices have to exist in HawkSoft — not a code change here.
+
 ### 1. THE $1 ZZTEST RUN — do this first, it gates stage 4
 The refund path has never moved real money. This is the first end-to-end exercise of
 Clover call → ledger row → HawkSoft note, and it answers the one question stage 0 could

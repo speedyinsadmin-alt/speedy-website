@@ -859,8 +859,14 @@ function finishAudit(id){
 }
 
 function chgSubHtml(no){
+  /* Where the confirmation WILL go, said before the charge — or that it will go
+     nowhere. 19 of the last 60 charges had no email on file and the agent found out
+     never: the result was recorded on the row and shown on no screen. */
+  const em = (CHG && CHG.confirmed && CHG.confirmed.emails && CHG.confirmed.emails[0]) || '';
   return '#' + esc(String(no)) + ' \u00b7 ' + esc(OFFICE)
-    + (HL.armed ? ' \u00b7 <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="hlChangeOffice()">change office</span>' : '');
+    + (HL.armed ? ' \u00b7 <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="hlChangeOffice()">change office</span>' : '')
+    + (em ? '<div style="font-size:11.5px;color:var(--mute);margin-top:3px">Confirmation will be emailed to <b style="color:var(--ink)">' + esc(em) + '</b></div>'
+          : '<div style="font-size:11.5px;color:var(--red-ink);margin-top:3px;font-weight:600">&#9888; No email on this client’s record — they will get no confirmation. Add one in HawkSoft first if they should.</div>');
 }
 function hlChangeOffice(){
   var pick = prompt('Charging as ' + OFFICE + '.\n\nType the office to charge under:\n\n' + OFFICES.join('\n'), OFFICE);
@@ -1224,6 +1230,17 @@ function bytesLabel(b){
   if(!b) return '';
   return b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b/1024) + ' KB' : (b/1048576).toFixed(1) + ' MB';
 }
+/* One renderer for "was the client told", for charges and refunds alike. */
+function noticeLineHtml(n){
+  const st = 'font-size:11px;margin-top:3px;';
+  if(!n) return '<div style="' + st + 'color:var(--dim)">No record of a client confirmation on this row.</div>';
+  if(n.result === 'sent') return '<div style="' + st + 'color:var(--green)">&#10003; Client emailed at ' + esc(n.to || '')
+    + (n.source === 'typed' ? ' <span style="color:var(--amber-ink)">(typed by ' + esc(String(n.chosen_by||'agent').split('@')[0]) + ', not from the record)</span>' : '') + '</div>';
+  if(n.result === 'pending') return '<div style="' + st + 'color:var(--amber-ink)">Client email to ' + esc(n.to || '') + ' — result not recorded. Check with Saif.</div>';
+  if(n.result === 'failed') return '<div style="' + st + 'color:var(--red-ink)">&#10007; Client email ' + (n.to ? 'to ' + esc(n.to) + ' ' : '') + 'FAILED' + (n.detail ? ' — ' + esc(n.detail) : '') + '. The client has not been told.</div>';
+  if(n.result === 'skipped') return '<div style="' + st + 'color:var(--red-ink)">&#10007; Client NOT told' + (n.detail || n.skip_reason ? ' — ' + esc(n.detail || n.skip_reason) : '') + '</div>';
+  return '<div style="' + st + 'color:var(--mute)">Client confirmation: ' + esc(n.detail || n.result || '') + '</div>';
+}
 function payHistoryHtml(c){
   const pays = c.payments || [];
   const docs = c.documents || [];
@@ -1353,6 +1370,11 @@ function payHistoryHtml(c){
             + (p.refund_note ? '<div style="font-size:11.5px;color:var(--mute);margin-top:5px;padding-left:9px;'
                 + 'border-left:2px solid var(--line)">' + esc(p.refund_note) + '</div>' : '')
           : '')
+      /* WAS THE CLIENT TOLD — on every payment and every refund, never blank. Charges
+         have recorded this since July and shown it nowhere: 19 of the last 60 said
+         "no client email on file" behind a green success screen. A row with no record
+         at all says so, because "nothing recorded" is different from "not sent". */
+      + noticeLineHtml(p.client_notice)
       /* And on the payment itself: how much of it has gone back. */
       + (!isRefund && refundedOff > 0
           ? '<div style="font-size:11px;margin-top:3px;color:var(--red-ink)">'
@@ -1553,8 +1575,10 @@ function openRefund(paymentId, clientNo){
   const c = CLIENT_CACHE[clientNo] || CLIENT_CACHE[ACTIVE_TAB];
   const p = c && (c.payments||[]).find(x => x.id === paymentId);
   if(!c || !p) return;
+  /* notify: null until chosen. { channel:'email', to, source } or { channel:'none',
+     skip_reason }. The button does not enable without it — "no silent info". */
   RF = { id: paymentId, clientNo: clientNo, p: p, c: c, reason: null, carrier: null,
-         amount: refundable(p) };
+         amount: refundable(p), notify: null, typed: '', skip: '' };
   document.getElementById('refundSheet').classList.remove('hide');
   document.body.style.overflow = 'hidden';
   drawRefund();
@@ -1568,6 +1592,15 @@ function rfPick(what, value){
   if(!RF) return;
   RF[what] = value;
   drawRefund();
+}
+function rfNotify(kind, addr){
+  if(!RF) return;
+  if(kind === 'on_file') RF.notify = { channel:'email', to: String(addr||'').trim().toLowerCase(), source:'on_file' };
+  else if(kind === 'typed') RF.notify = { channel:'email', to: String(RF.typed||'').trim().toLowerCase(), source:'typed' };
+  else RF.notify = { channel:'none', skip_reason: String(RF.skip||'').trim() };
+  drawRefund();
+  const f = document.getElementById('rfTyped') || document.getElementById('rfSkip');
+  if(f) f.focus();
 }
 
 function drawRefund(){
@@ -1649,6 +1682,40 @@ function drawRefund(){
       + ' the charge will <b>disappear</b>, not that a refund is coming.</div>';
   }
 
+  /* ---- TELL THE CLIENT. Saif, Sep 11: "I don't want any silent info while we do
+     that — if it did not continue or it confirms, everything." Every choice here is
+     recorded on the row: which address, from the record or typed, who chose it, and
+     what happened. Choosing NOT to tell them is allowed and is recorded with a reason.
+     Email only for now — the one SMS-capable number is a 747 area code. */
+  const onFile = ((c.contact && c.contact.emails) || []);
+  const nz = RF.notify;
+  h += '<div class="sec">Tell the client</div><div class="chips">'
+    + onFile.map(e => '<button class="' + (nz && nz.channel === 'email' && nz.source === 'on_file' && nz.to === e ? 'sel' : '')
+        + '" onclick="rfNotify(\'on_file\',' + JSON.stringify(e).replace(/"/g, '&quot;') + ')">'
+        + esc(e) + '</button>').join('')
+    + '<button class="' + (nz && nz.channel === 'email' && nz.source === 'typed' ? 'sel' : '')
+        + '" onclick="rfNotify(\'typed\')">' + (onFile.length ? 'A different address…' : 'Type an address…') + '</button>'
+    + '<button class="' + (nz && nz.channel === 'none' ? 'sel' : '') + '" onclick="rfNotify(\'none\')">Don’t notify</button>'
+    + '</div>';
+  if(!onFile.length && !(nz && nz.channel)){
+    h += '<div class="warn">No email on this client’s record. Type one, or say why they are not being told.</div>';
+  }
+  if(nz && nz.channel === 'email' && nz.source === 'typed'){
+    h += '<div style="margin-top:8px"><input id="rfTyped" type="email" placeholder="name@example.com" value="' + esc(RF.typed || '') + '"'
+      + ' oninput="RF.typed=this.value;RF.notify.to=this.value.trim().toLowerCase()" onchange="drawRefund()"></div>'
+      + '<div class="warn">This address is <b>not on the client’s record</b>. It will be sent, and the refund will say it was typed by you. '
+      + 'A mistyped address sends the client’s name and the amount to a stranger — check it.</div>';
+  } else if(nz && nz.channel === 'email'){
+    h += '<div class="conseq good">An email goes to <b>' + esc(nz.to) + '</b> — from the client’s record — the moment the refund goes through. '
+      + 'If it fails to send, you will be told and it is recorded.</div>';
+  } else if(nz && nz.channel === 'none'){
+    h += '<div style="margin-top:8px"><input id="rfSkip" placeholder="Why not? (required — this is recorded)" value="' + esc(RF.skip || '') + '"'
+      + ' oninput="RF.skip=this.value;RF.notify.skip_reason=this.value.trim()" onchange="drawRefund()"></div>'
+      + '<div class="conseq">The client will <b>not</b> be told by us. The refund will record that, and why.</div>';
+  } else {
+    h += '<div class="note">Pick one — it is recorded either way.</div>';
+  }
+
   h += '<div class="sec">What this will do</div><ul class="will">'
     + '<li><b>' + esc(first) + ' gets ' + money(amt) + ' back</b> '
       + (isCard ? (isVoid ? '— the charge is cancelled before it settles.'
@@ -1670,6 +1737,11 @@ function drawRefund(){
         ? '<li>The ' + money(cost) + ' carrier cost is <b>'
           + (RF.carrier === 'yes' ? 'reversed' : RF.carrier === 'no' ? 'a loss to Speedy' : 'held open for recovery')
           + '</b>.</li>' : '')
+    + (nz && nz.channel === 'email'
+        ? '<li><b>' + esc(first) + ' gets an email</b> at ' + esc(nz.to || '(type it above)') + (nz.source === 'typed' ? ' — <span class="neg">typed, not from the record</span>' : '') + '.</li>'
+        : nz && nz.channel === 'none'
+          ? '<li><span class="neg">' + esc(first) + ' is NOT told by us</span>' + (RF.skip ? ' — ' + esc(RF.skip) : '') + '.</li>'
+          : '')
     + '<li><b>HawkSoft keeps the original receipt.</b> A filed receipt cannot be withdrawn or '
       + 'changed, so a note is added to the client’s file instead. The original payment stays '
       + 'visible — nothing is erased.</li>'
@@ -1680,12 +1752,15 @@ function drawRefund(){
     + esc(RF.note || '') + '</textarea>'
     + '<div class="note">Stored with your name and the time, and shown wherever this refund appears.</div>';
 
-  const ready = !!(RF.reason && RF.carrier);
+  const nzReady = !!(nz && (
+    (nz.channel === 'email' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(nz.to || '')))
+    || (nz.channel === 'none' && String(nz.skip_reason || '').trim())));
+  const ready = !!(RF.reason && RF.carrier && nzReady);
   h += '<div id="rfMsg" class="note" style="min-height:0"></div>'
     + '<button class="btn btn-red" ' + (ready ? '' : 'disabled style="opacity:.45;cursor:not-allowed" ')
       + 'onclick="submitRefund()">'
       + (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '') + '</button>'
-    + (ready ? '' : '<div class="note" style="text-align:center">Answer both questions above first.</div>')
+    + (ready ? '' : '<div class="note" style="text-align:center">Answer why, the carrier, and whether to tell the client first.</div>')
     + '<button class="btn btn-ghost" onclick="closeRefund()">Cancel</button>';
 
   document.getElementById('rfBody').innerHTML = h;
@@ -1711,8 +1786,9 @@ async function submitRefund(){
   say('Refunding…');
   const btn = document.querySelector('#refundSheet .btn-red');
   if(btn){ btn.disabled = true; btn.style.opacity = '.45'; }
+  if(!RF.notify) return say('Say whether to tell the client.', true);
   const r = await apiPost({ action:'refund_payment', payment_id: RF.id,
-    reason: RF.reason, carrier: RF.carrier, note: note });
+    reason: RF.reason, carrier: RF.carrier, note: note, notify: RF.notify });
   if(r && r.ok){
     const done = RF.clientNo;
     closeRefund();
@@ -1721,7 +1797,13 @@ async function submitRefund(){
        three guesses is how two screens end up disagreeing about one number. */
     delete CLIENT_CACHE[done];
     await openClient(done);
-    alert(r.tell_the_client + (r.hawksoft_note ? '' : '\n\nNote: the HawkSoft note did not file. Tell Saif.'));
+    /* The outcome, in words, every time — including the two that used to be silent. */
+    const cn = r.client_notice || {};
+    const told = cn.result === 'sent' ? 'Email sent to ' + cn.to + '.'
+      : cn.result === 'failed' ? 'EMAIL FAILED to ' + cn.to + ' (' + (cn.detail || 'unknown') + '). The client has NOT been told — call them.'
+      : 'The client was not emailed' + (cn.skip_reason ? ' — ' + cn.skip_reason : '') + '.';
+    alert(r.tell_the_client + '\n\n' + told
+      + (r.hawksoft_note ? '' : '\n\nNote: the HawkSoft note did not file. Tell Saif.'));
     return;
   }
   if(btn){ btn.disabled = false; btn.style.opacity = ''; }

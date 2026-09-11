@@ -86,6 +86,72 @@ async function applyClientMove(s, row, toClient, actor, reason, wasApproved) {
   return { from: fromClient, to: toClient, hawksoft_notes: !!notes.ok };
 }
 
+/* ---------- Client notice on a refund ----------
+   Saif, Sep 11: "I don't want any silent info" — every attempt to tell the client is
+   recorded, whether it was sent, failed, or deliberately skipped, and the record says
+   which address and who chose it. The same nodemailer/Gmail transport hawksoft.js has
+   used for every charge confirmation since July; not a second mail path.
+   Returns a plain result string in the SAME vocabulary the charge confirmation uses
+   ("sent to …" / "failed: …" / "not configured"), so one reader can render both. */
+async function sendRefundEmail(o) {
+  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass) return 'not configured';
+  if (!o.to) return 'no address';
+  try {
+    const nodemailer = (await import('nodemailer')).default;
+    const t = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } });
+    const amt = `$${Number(o.amount).toFixed(2)}`;
+    const how = o.method === 'card'
+      ? (o.voided ? 'The original charge has been cancelled before it settled, so it will simply drop off your statement rather than show as a separate refund.'
+                  : 'It will show on the card used for the original payment, usually within 2 to 5 business days.')
+      : 'This was returned to you in cash.';
+    const html = `<table width="560" cellpadding="0" cellspacing="0" align="center" style="background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#222;max-width:560px;width:100%">
+      <tr><td style="padding:22px 28px 12px;text-align:center"><img src="https://www.speedyins.com/assets/logo.png" alt="Speedy Insurance Agency" width="160" style="max-width:160px;height:auto"></td></tr>
+      <tr><td style="background:#0B1829;padding:12px 28px;text-align:center"><span style="color:#fff;font-size:18px;font-weight:bold">${o.voided ? 'Payment Cancelled' : 'Refund Issued'}</span></td></tr>
+      <tr><td style="padding:22px 28px 6px">
+        <p style="margin:0 0 14px;line-height:1.7;font-size:15px">Hi ${o.name || 'there'},</p>
+        <p style="margin:0 0 16px;line-height:1.7;font-size:15px">We have ${o.voided ? 'cancelled' : 'refunded'} a payment on your account. ${how}</p>
+        <table width="100%" cellpadding="9" cellspacing="0" style="border:1px solid #e0e0e0;font-size:14px;margin:0 0 18px">
+          <tr style="background:#0B1829"><td colspan="2" style="color:#fff;font-weight:bold">${o.voided ? 'Cancellation' : 'Refund'} Details</td></tr>
+          <tr><td style="color:#555;font-weight:bold;width:45%;border-bottom:1px solid #eee">Amount</td><td style="border-bottom:1px solid #eee"><b>${amt}</b></td></tr>
+          <tr style="background:#f7f7f7"><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">Original payment</td><td style="border-bottom:1px solid #eee">${o.original || ''}</td></tr>
+          <tr><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">Reason</td><td style="border-bottom:1px solid #eee">${o.reason || ''}</td></tr>
+          ${o.confirmation ? `<tr style="background:#f7f7f7"><td style="color:#555;font-weight:bold;border-bottom:1px solid #eee">Reference</td><td style="border-bottom:1px solid #eee">${o.confirmation}</td></tr>` : ''}
+          <tr><td style="color:#555;font-weight:bold">Date</td><td>${o.stamp || ''} PT</td></tr>
+        </table>
+        <p style="margin:0 0 14px;line-height:1.6;font-size:12px;color:#888;font-style:italic">If you have a question about this, call us at (951) 472-0927 and mention the reference above.</p>
+      </td></tr>
+      <tr><td style="padding:0 28px 24px"><table width="100%" cellpadding="0" cellspacing="0" style="border-top:2px solid #D42B2B"><tr><td style="padding-top:12px;font-size:13px;line-height:1.8;color:#444"><strong>Speedy Insurance Agency</strong><br>(951) 472-0927 · speedyins.com</td></tr></table></td></tr></table>`;
+    await t.sendMail({
+      from: `"Speedy Insurance Agency" <${user}>`, to: o.to,
+      subject: `${o.voided ? 'Payment cancelled' : 'Refund issued'} — ${amt} — Speedy Insurance Agency`,
+      html,
+      text: `${o.voided ? 'Payment cancelled' : 'Refund issued'}: ${amt}. ${how} Reason: ${o.reason || ''}. Speedy Insurance Agency, (951) 472-0927.`,
+    });
+    return `sent to ${o.to}`;
+  } catch (e) { return `failed: ${String(e).slice(0, 80)}`; }
+}
+
+/* ONE shape for "was the client told", read off either a charge or a refund, so the
+   card and the Audit tab render both the same way and neither can be blank.
+     charge rows:  extra.confirmationEmail is a string from sendConfirmEmail
+     refund rows:  extra.client_notice is the object written by refund_payment
+   Returns { channel, to, source, result, detail, chosen_by, skip_reason } or null when
+   the row predates any record at all — and null is rendered as "no record", which is
+   itself information. */
+function clientNoticeOf(row) {
+  const x = row && row.extra;
+  if (!x || typeof x !== 'object') return null;
+  if (x.client_notice && typeof x.client_notice === 'object') return x.client_notice;
+  const c = x.confirmationEmail;
+  if (typeof c !== 'string') return null;
+  if (c.startsWith('sent to ')) return { channel: 'email', to: c.slice(8), source: 'on_file', result: 'sent', detail: null };
+  if (c === 'no client email on file') return { channel: 'none', to: null, source: null, result: 'skipped', detail: 'no email on file' };
+  if (c === 'not configured') return { channel: 'email', to: null, source: null, result: 'failed', detail: 'email not configured' };
+  if (c.startsWith('failed:')) return { channel: 'email', to: null, source: 'on_file', result: 'failed', detail: c.slice(7).trim() };
+  return { channel: 'email', to: null, source: null, result: 'unknown', detail: c };
+}
+
 /* ---------- Partial payments (Tony's rule, Aug 2026) ----------
    Commission accrues in proportion to what the agency has actually COLLECTED, not to
    what the client owes. The carrier is paid in full at binding, so there is ONE audit
@@ -1215,7 +1281,7 @@ if (view === 'portal_share_due') {
       const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
       // Full payment history + document METADATA. Deliberately no file_b64 and no
       // thumb_b64 here: bytes are fetched only when a document is opened.
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}&is_test=is.false&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
@@ -1258,6 +1324,12 @@ if (view === 'portal_share_due') {
           refunded: +Math.abs((pay.rows || [])
             .filter(x => x.refund_of === r.id)
             .reduce((a, x) => a + Number(x.amount || 0), 0)).toFixed(2),
+          /* WAS THE CLIENT TOLD. One shape for charges and refunds. Measured before this
+             existed: of the last 60 real charges, 19 had "no client email on file" —
+             recorded on the row, shown nowhere, so the agent saw a green screen and the
+             client got nothing. null means the row predates any record, and the card
+             says so rather than showing a blank. */
+          client_notice: clientNoticeOf(r),
           // NOTE: no commission figures here — the client log is shared with every agent
         })),
         /* The card gated its correction links on "I earn it or I took it", so an ADMIN
@@ -1274,6 +1346,11 @@ if (view === 'portal_share_due') {
            Tony grants on the Staff page, not a hardcoded address — hardcoding info@
            here would have been the fifth place to change later. */
         can_refund: await may(me, 'refund'),
+        /* What the refund sheet offers as "on the record". The synced email plus any
+           extras HawkSoft carried. The server re-checks an on_file claim against the
+           same list, so the sheet cannot offer an address the server would refuse. */
+        contact: { emails: [client.email, ...(((client.extras || {}).emails) || [])]
+          .filter(Boolean).map(e => String(e).trim()).filter((e, i, a) => a.indexOf(e) === i) },
         producer_code: client && client.extras ? (client.extras.producer || null) : null,
         producer_name: client && client.extras ? (AGENT_NAME[PRODUCER_MAP[client.extras.producer]] || null) : null,
         documents: docs.rows || [],
@@ -1993,6 +2070,33 @@ if (view === 'portal_share_due') {
       }
       if (!note) return res.status(400).json({ ok: false, error: 'A reason in words is required — Tony and the next person will read it.' });
 
+      /* ---- TELL THE CLIENT. Validated BEFORE any money moves, so a malformed notice
+         cannot leave a refund half-recorded. Email only for now (Saif, Sep 11): the
+         one SMS-capable number is a 747 area code and the branches are 951/909.
+           channel 'email' + to + source ('on_file' | 'typed')
+           channel 'none'  + skip_reason
+         'typed' is allowed — a client whose record has no email still has to be told
+         somehow — but it is stored and displayed as typed by the agent, because a
+         mistyped address is how a refund notice with the client's name and amount
+         reaches a stranger. 'on_file' is checked against the record, not trusted. */
+      const nz = (b3.notify && typeof b3.notify === 'object') ? b3.notify : null;
+      if (!nz) return res.status(400).json({ ok: false, error: 'Say whether to tell the client — an email address, or why not.' });
+      const nzChannel = String(nz.channel || '').trim();
+      const nzTo = String(nz.to || '').trim().toLowerCase();
+      const nzSource = String(nz.source || '').trim();
+      const nzSkip = String(nz.skip_reason || '').trim().slice(0, 200);
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (nzChannel === 'email') {
+        if (!EMAIL_RE.test(nzTo)) return res.status(400).json({ ok: false, error: 'That is not an email address.' });
+        if (nzSource !== 'on_file' && nzSource !== 'typed') {
+          return res.status(400).json({ ok: false, error: 'Say whether the address is from the client record or typed.' });
+        }
+      } else if (nzChannel === 'none') {
+        if (!nzSkip) return res.status(400).json({ ok: false, error: 'If the client is not being told, say why — it is recorded.' });
+      } else {
+        return res.status(400).json({ ok: false, error: "notify.channel must be 'email' or 'none'." });
+      }
+
       /* The payment AND everything already pointing at it, in one read: the balance
          payments that added to it, and any refunds already taken off. */
       const pr = await sbGet(s, 'bridge_ledger?or=(id.eq.' + encodeURIComponent(paymentId)
@@ -2001,6 +2105,21 @@ if (view === 'portal_share_due') {
       const all = pr.rows || [];
       const row = all.find(r => r.id === paymentId);
       if (!row) return res.status(404).json({ ok: false, error: 'No such payment.' });
+
+      /* 'on_file' is a claim until it is checked. The synced client record holds one
+         email; HawkSoft may hold a second, which portal_client also returns. Either
+         counts. Anything else claimed as on-file is refused rather than relabelled. */
+      let onFile = [];
+      if (nzChannel === 'email') {
+        const cr = await sbGet(s, `clients?client_no=eq.${encodeURIComponent(row.client_id)}&select=email,extras`);
+        const crow = (cr.rows || [])[0] || {};
+        onFile = [crow.email, ...(((crow.extras || {}).emails) || [])]
+          .filter(Boolean).map(e => String(e).trim().toLowerCase());
+        if (nzSource === 'on_file' && !onFile.includes(nzTo)) {
+          return res.status(400).json({ ok: false,
+            error: 'That address is not on the client record. Pick one that is, or mark it as typed.' });
+        }
+      }
 
       /* ---- GUARDS. Every one is a way to send real money somewhere wrong. ---- */
       if (row.kind === 'charge_refund') {
@@ -2132,6 +2251,14 @@ if (view === 'portal_share_due') {
         refund_reason: reason,
         refund_carrier: carrier,
         refund_note: note,
+        /* Written with the row, result 'pending', and patched once the send has been
+           attempted — so even a crash between the two leaves a record that says what
+           was DECIDED, which is never silent. */
+        extra: { client_notice: { channel: nzChannel, to: nzChannel === 'email' ? nzTo : null,
+          source: nzChannel === 'email' ? nzSource : null, chosen_by: me2, at: stamp,
+          skip_reason: nzChannel === 'none' ? nzSkip : null,
+          result: nzChannel === 'email' ? 'pending' : 'skipped',
+          detail: nzChannel === 'none' ? nzSkip : null } },
       };
       const ins = await sbInsert(s, 'bridge_ledger', [refundRow]);
       if (!ins.ok) {
@@ -2156,6 +2283,32 @@ if (view === 'portal_share_due') {
           body: JSON.stringify({ total_owed: owedAfter }) });
       }
 
+      /* ---- TELL THE CLIENT — after the money has moved AND been recorded, never before.
+         The result is patched onto the row and goes into the HawkSoft note and the
+         event below, so there is no outcome that is not written down. ---- */
+      const notice = refundRow.extra.client_notice;
+      if (nzChannel === 'email') {
+        const crn = await sbGet(s, `clients?client_no=eq.${encodeURIComponent(row.client_id)}&select=first_name,business_name`);
+        const cn = (crn.rows || [])[0] || {};
+        const ageMin = Math.round((Date.now() - new Date(row.ts).getTime()) / 60000);
+        const r = await sendRefundEmail({
+          to: nzTo, name: cn.business_name || cn.first_name || '',
+          amount, method: isCard ? 'card' : 'cash', voided: isCard && ageMin < 25,
+          original: `$${Number(row.amount || 0).toFixed(2)} on ${String(row.ts || '').slice(0, 10)}${row.ref ? ' · ' + row.ref : ''}`,
+          reason: REASONS[reason].label, confirmation: (clover && clover.id) || null,
+          stamp: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) });
+        notice.result = r.startsWith('sent to') ? 'sent' : 'failed';
+        notice.detail = r.startsWith('sent to') ? null : r;
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(refundId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ extra: { client_notice: notice } }) });
+      }
+      const noticeLine = notice.result === 'sent'
+        ? `Client notified by email at ${notice.to}${notice.source === 'typed' ? ' (address typed by the agent, not from the record)' : ''}.`
+        : notice.result === 'failed'
+          ? `Client email to ${notice.to} FAILED (${notice.detail}) — the agent was shown this.`
+          : `Client NOT notified — ${notice.skip_reason}.`;
+
       /* ---- HAWKSOFT. A filed receipt cannot be un-filed or modified, so the refund goes
          on as a NOTE and the original receipt stays exactly where it is. Saying so on the
          client's file is the only way the record does not quietly lie. ---- */
@@ -2177,6 +2330,7 @@ if (view === 'portal_share_due') {
                   : `This closes the obligation — nothing further is owed on it. `)
               + `Carrier money: ${carrier === 'yes' ? 'returned by the carrier'
                   : carrier === 'no' ? 'NOT returned — absorbed by Speedy' : 'not returned yet'}. `
+              + noticeLine + ` `
               + `Refunded by ${me2}. Note: ${note}` }) });
         noteOk = (hr.status === 200 || hr.status === 202);
       } catch { noteOk = false; }
@@ -2197,10 +2351,12 @@ if (view === 'portal_share_due') {
             fee_reversed: parentFee,
             commission_to: refundRow.commission_to,
             hawksoft_note: noteOk, note,
+            client_notice: notice,
           } }) });
 
       return res.status(200).json({ ok: true,
         refund_id: refundId,
+        client_notice: notice,
         amount, method: isCard ? 'card' : 'cash',
         clover_refund_id: (clover && clover.id) || null,
         obligation: REASONS[reason].owes ? 'still_owed' : 'closed',
@@ -2604,6 +2760,7 @@ if (view === 'portal_share_due') {
            the Audit tab lists a $187.00 payment that is no longer $187.00 of money, and
            a refunded sale looks identical to one that stands. */
         refunded: refundedOff[p.id] || 0,
+        client_notice: clientNoticeOf(p),
         client_name: nameMap[p.client_id] || (p.extra && p.extra.clientName) || null,
         amount: Number(p.amount), kind: p.kind, purpose: p.purpose, ref: p.ref,
         agent: agentEmail, agent_raw: p.agent, is_admin: isAdmin, secure_link: isSecureLink,

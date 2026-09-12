@@ -87,6 +87,28 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 Last written Sep 12 evening. Everything below is pushed and live unless it says
 otherwise; `git status` is clean at `fb70f08`.
 
+### ✅ SEP 12 NIGHT · BACK GOES TO THE PREVIOUS PLACE, NOT THE MAIN ONE
+Saif: *"all back clicks should go to the previous page not to the main one, study them on
+all platforms and the console, it is confusing."* Found: the portal and the Console are
+single pages that never told the browser a navigation happened, so the browser/phone Back
+button LEFT THE APP and landed on the sign-in screen (the token lives in a JS variable —
+by design). In the Console, a client opened from Audit closed to "← All clients" — the
+main list, not Audit. The carrier page's Back always went to the client card, even when
+the agent came from the home to-do list or Tony opened it from the Console.
+
+**Built:** `history.pushState` + `popstate` in both pages. **Portal:** every card opened or
+switched to is an entry; Back walks card → previous card → home; tabs stay open; an
+explicit ✕ replaces (not an entry); Back with a sheet open closes the sheet and stays
+put; a charge mid-flight is never closed by Back; before sign-in popstate is ignored.
+**Console:** `OPEN_FROM` remembers the origin tab, the link reads **"← Back to Audit"**,
+browser Back walks tab/drill-in entries, and closes the send-back sheet or document
+viewer first. **Carrier page:** `from=home|card|console` (portal and Console pass it;
+referrer fallback for old links): home → the to-do list, card → the card, console →
+closes the tab it was opened in (`window.close()` when script-opened) else the Console.
+The post-submit Back link goes through the same `goBack`.
+`harnessBack.mjs` — 40 checks through the real markup, history driven the way a browser
+does; two planted breaks caught (close to main list; card not a history entry).
+
 ### ✅ SEP 12 EVENING · THE AUDIT HAS AN APPROVER — agents submit, Tony approves or sends back
 Saif: *"on audit page it should show Audit click and reject with reason if needed, lets
 say Tony needs more documents or pictures, and this should notify the agent so he can

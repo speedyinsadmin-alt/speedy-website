@@ -417,7 +417,7 @@ function showAuthExpired() {
 
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); TAB = b.dataset.tab; render();
+  b.classList.add('on'); TAB = b.dataset.tab; OPEN_CLIENT = null; OPEN_FROM = null; render(); navPush();
 });
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -511,13 +511,46 @@ async function render() {
   if (TAB === 'refunds') return renderRefunds(el);
   if (TAB === 'staff') return renderStaff(el);
 }
+/* ---------- IN-APP HISTORY (Sep 12) ----------
+   A client opened from the Audit tab used to close to "All clients" - the main list,
+   not where Tony came from - and the browser's Back left the Console for the sign-in
+   screen. Now the drill-in remembers its origin tab, the link reads "Back to Audit",
+   and every tab change and drill-in is a history entry the browser's Back walks. */
+let OPEN_FROM = null;   // the tab a client was opened FROM, when not 'clients'
+const TAB_LABEL = t => { const b = document.querySelector('nav button[data-tab="' + t + '"]'); return b ? b.textContent.trim() : t; };
+function syncNav(){ document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x.dataset.tab === TAB)); }
+function navState(){ return { v: 'console', tab: TAB, client: OPEN_CLIENT, from: OPEN_FROM }; }
+function navPush(){
+  try {
+    const cur = history.state, st = navState();
+    if(cur && cur.v === 'console' && cur.tab === st.tab && cur.client === st.client) return;
+    history.pushState(st, '');
+  } catch(e){}
+}
+function navReplace(){ try { history.replaceState(navState(), ''); } catch(e){} }
+window.addEventListener('popstate', e => {
+  if(!TOKEN) return;
+  const sb = document.getElementById('sbSheet'); if(sb){ closeSendBack(); navPush(); return; }
+  const dm = document.getElementById('docModal'); if(dm && dm.innerHTML){ dm.innerHTML = ''; navPush(); return; }
+  const st = e.state;
+  if(!st || st.v !== 'console'){ navReplace(); return; }
+  TAB = st.tab || 'clients'; OPEN_CLIENT = st.client || null; OPEN_FROM = st.from || null;
+  syncNav(); render();
+});
 function openClient(no) {
   OPEN_CLIENT = no;
+  if(TAB !== 'clients') OPEN_FROM = TAB;
   TAB = 'clients';
-  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x.dataset.tab === 'clients'));
+  syncNav();
   render();
+  navPush();
 }
-function closeClient() { OPEN_CLIENT = null; render(); }
+function closeClient() {
+  OPEN_CLIENT = null;
+  if(OPEN_FROM){ TAB = OPEN_FROM; OPEN_FROM = null; syncNav(); }
+  render();
+  navPush();
+}
 
 async function apiPost(action) {
   try {
@@ -901,7 +934,7 @@ async function renderOurClient(el, no, _bg) {
   const inforce = insurance.filter(p => { const st=String(p.status||'').toLowerCase(); return p.expiration_date && p.expiration_date>=today && !['cancelled','canceled','expired'].includes(st); }).length;
 
   // ---- Summary bar (always visible) ----
-  let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← All clients</span>'
+  let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← ' + (OPEN_FROM ? 'Back to ' + esc(TAB_LABEL(OPEN_FROM)) : 'All clients') + '</span>'
     + (r.live ? '<span class="pill g" style="float:right">● live from HawkSoft</span>' : '<span class="pill b" style="float:right;cursor:pointer" onclick="refreshClient(' + no + ')">↻ refresh from HawkSoft</span>');
   h += '<h2 style="margin:0 0 2px">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
   const clientActive = String(c.status||'').toLowerCase()==='active';
@@ -1680,7 +1713,7 @@ function completeAudit(id){
   if(!row){ alert('Transaction not found'); return; }
   const params = new URLSearchParams({
     client: row.client_no, name: row.client_name||'', paid: row.amount||'',
-    payment_id: id||'', method: 'client paid', svc: row.path||''
+    payment_id: id||'', method: 'client paid', svc: row.path||'', from: 'console'
   });
   // Pass token via localStorage (same origin, reliable across tabs) + hash as fallback
   try { if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); } catch(e){}

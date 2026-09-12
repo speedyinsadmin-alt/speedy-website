@@ -624,6 +624,7 @@ function applyOffice(office){
   var wa=$('#workingAt'); if(wa) wa.textContent = OFFICE;
   $('#officePick').classList.add('hide');
   $('#home').classList.remove('hide');
+  navReplace();
   loadHome();
   initSearch();
   startUpdateWatch();
@@ -858,6 +859,7 @@ function finishAudit(id){
     client: u.client_no || '', name: u.client_name || '', paid: Number(u.amount || 0).toFixed(2),
     method: 'client paid', payment_id: u.id,
     policy: u.policy_number || '', policy_guid: u.policy_guid || '',
+    from: 'home',   // Back on the carrier page returns to this list, not to a card
   });
   location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
@@ -1066,6 +1068,52 @@ async function refreshClients(q){
 }
 
 // --- tabs ---
+/* ---------- IN-APP HISTORY (Sep 12) ----------
+   Saif: "all back clicks should go to the previous page, not the main one." The portal
+   is one page with client tabs, and the browser's Back button - the only Back a phone
+   has - used to leave the page entirely and land on the sign-in screen, because
+   nothing here ever told the browser a navigation had happened. Now every card
+   opened or switched to is a history entry, and Back walks them: card -> the card
+   before it -> home. A sheet (charge, refund, notifications, to-do...) is closed by
+   Back first, staying where you are, because that is what a person means by it. */
+const PORTAL_SHEETS = ['chargeSheet', 'refundSheet', 'newsSheet', 'todoSheet', 'earnSheet', 'helpSheet', 'shareSheet'];
+function navState(){ return { v: 'portal', tab: ACTIVE_TAB == null ? null : Number(ACTIVE_TAB) }; }
+function navPush(force){
+  try {
+    const cur = history.state;
+    if(!force && cur && cur.v === 'portal' && cur.tab === navState().tab) return;
+    history.pushState(navState(), '');
+  } catch(e){}
+}
+function navReplace(){ try { history.replaceState(navState(), ''); } catch(e){} }
+/* Closes whichever sheet is open and says so. A charge that is mid-flight is never
+   closed from under the agent - the sheet stays and Back does nothing. */
+function closeOpenSheet(){
+  for(const id of PORTAL_SHEETS){
+    const el = document.getElementById(id);
+    if(!el || el.classList.contains('hide')) continue;
+    if(id === 'chargeSheet'){ const go = document.getElementById('chgGo'); if(go && go.disabled) return 'busy'; closeCharge(); return true; }
+    if(id === 'refundSheet'){ closeRefund(); return true; }
+    if(id === 'newsSheet'){ closeNews(); return true; }
+    if(id === 'todoSheet'){ closeTodo(); return true; }
+    if(id === 'earnSheet'){ closeEarnings(); return true; }
+    if(id === 'helpSheet'){ closeHelp(); return true; }
+    el.classList.add('hide'); document.body.style.overflow = ''; return true;
+  }
+  return false;
+}
+window.addEventListener('popstate', e => {
+  if(!TOKEN) return;                                   // not signed in: not ours
+  const closed = closeOpenSheet();
+  if(closed){ navPush(true); return; }                 // Back closed a sheet; stay put
+  const st = e.state;
+  if(!st || st.v !== 'portal'){ navReplace(); return; }
+  const t = st.tab;
+  ACTIVE_TAB = (t != null && OPEN_TABS.find(x => Number(x.client_no) === Number(t))) ? Number(t) : null;
+  renderTabs(); renderPanel();
+  if(ACTIVE_TAB == null) window.scrollTo(0, 0);
+});
+
 function openClient(no, name){
   /* ALWAYS a number. HL.client is a String, every other caller passes a number, and
      closeTab compares with !== - so a client opened from a launch URL could never be
@@ -1074,11 +1122,11 @@ function openClient(no, name){
   no = Number(no);
   document.getElementById('searchResults').innerHTML='';
   document.getElementById('searchBox').value='';
-  if(OPEN_TABS.find(t => t.client_no === no)){ ACTIVE_TAB = no; renderTabs(); renderPanel(); return; }
+  if(OPEN_TABS.find(t => t.client_no === no)){ ACTIVE_TAB = no; renderTabs(); renderPanel(); navPush(); return; }
   if(OPEN_TABS.length >= MAX_TABS){ alert('You have 5 clients open — close one first.'); return; }
   OPEN_TABS.push({ client_no: no, name: name || ('#'+no) });
   ACTIVE_TAB = no;
-  renderTabs(); renderPanel();
+  renderTabs(); renderPanel(); navPush();
   loadClient(no);
 }
 function closeTab(no, ev){
@@ -1086,9 +1134,9 @@ function closeTab(no, ev){
   no = Number(no);                      // defence in depth: never compare across types
   OPEN_TABS = OPEN_TABS.filter(t => Number(t.client_no) !== no);
   if(ACTIVE_TAB === no) ACTIVE_TAB = OPEN_TABS.length ? OPEN_TABS[OPEN_TABS.length-1].client_no : null;
-  renderTabs(); renderPanel();
+  renderTabs(); renderPanel(); navReplace();   // an explicit close is not a place to go back to
 }
-function switchTab(no){ ACTIVE_TAB = no; renderTabs(); renderPanel(); }
+function switchTab(no){ ACTIVE_TAB = no; renderTabs(); renderPanel(); navPush(); }
 function renderTabs(){
   const bar = document.getElementById('tabbar');
   if(!OPEN_TABS.length){ bar.innerHTML = '<div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>'; return; }
@@ -1583,6 +1631,7 @@ function finishAuditFor(paymentId, clientNo, amount){
     client: clientNo || '', name: (tab && tab.name) || '', paid: Number(amount||0).toFixed(2),
     method: 'client paid', payment_id: paymentId,
     policy: pay.policy_number || '', policy_guid: pay.policy_guid || '',
+    from: 'card',
   });
   location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }

@@ -42,6 +42,11 @@
   .drop .ic{font-size:26px;color:var(--amber)}
   .drop.has .ic{color:var(--green)}
   .btns{display:flex;gap:10px;margin-top:16px}
+  .review{border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:13px;line-height:1.45}
+  .review.back{background:rgba(224,49,49,.12);border:1px solid rgba(224,49,49,.45);color:var(--ink,#eef2ff)}
+  .review.wait{background:rgba(143,154,196,.12);border:1px solid var(--line,#2a3558);color:var(--mute,#9aa6cc)}
+  .review.done{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.4);color:var(--ink,#eef2ff)}
+  .review b{font-weight:700}
   .btns button{flex:1;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:0}
   .save{background:var(--navy2);border:1.5px solid var(--line)!important;color:var(--mute)}
   .submit{background:var(--green);color:#04220f;flex:1.4}
@@ -74,6 +79,10 @@
       <a id="topBack" href="#" onclick="return goBack(event)"
          style="margin-left:auto;color:var(--blue);font-size:13px;text-decoration:none;white-space:nowrap">&#8592; Back</a>
     </header>
+    <!-- The review state, filled by carrier_list: a send-back reason (the instruction),
+         or "already submitted", or "already approved". At the TOP, before the form -
+         the reason is what the agent came to read. Empty and hidden otherwise. -->
+    <div id="reviewBanner" class="review hide"></div>
 
     <div class="card">
       <div class="clientbar">
@@ -192,7 +201,7 @@
 
     <div class="btns" id="auditBtns">
       <button class="save" onclick="submit(false)">Save &amp; finish later</button>
-      <button class="submit" id="submitBtn" onclick="submit(true)" disabled>Submit to audit</button>
+      <button class="submit" id="submitBtn" onclick="submit(true)" disabled>Submit for approval</button>
     </div>
     <div class="btns hide" id="docsOnlyBtns">
       <button class="submit" id="docsOnlyBtn" onclick="submitDocsOnly()" disabled>Upload documents</button>
@@ -770,6 +779,7 @@ async function loadCarriers(){
   CHARGE_AMT = (r.charge_amount != null) ? Number(r.charge_amount) : null;
   OWED = (r.owed_amount != null) ? Number(r.owed_amount) : null;
   recalcFee();
+  showReviewState(r);
 
   /* Show what is already on file BEFORE anything else, so the agent is never asked
      for a document that exists. */
@@ -1097,7 +1107,7 @@ function pendingMsg(){
   const list = missing.length === 1 ? missing[0]
     : missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1];
   return 'NOT FINISHED — this audit still needs ' + list + '. ' + kept
-    + ' Come back and press Submit to audit, or your commission stays unpaid.';
+    + ' Come back and press Submit for approval, or your commission stays unpaid.';
 }
 
 function friendlyError(status, complete){
@@ -1166,6 +1176,44 @@ function askTotalOwed(j, complete){
   });
   inp.focus();
 }
+/* WHERE THIS AUDIT IS IN THE REVIEW. A send-back reason is the instruction - it goes
+   at the top in red, verbatim, and the button reads "Resubmit for approval". A row
+   already waiting says so and lets the agent edit. An approved row is closed here:
+   the server refuses (409 already_approved) and the page says why before they try. */
+const SENDBACK_LABELS = { receipt_missing: 'Receipt missing', receipt_unreadable: 'Receipt unreadable', wrong_amount: 'Wrong amount',
+  wrong_carrier: 'Wrong carrier', need_photos: 'Need photos of documents', other: 'Needs a fix' };
+let REVIEW_STATE = null;
+function showReviewState(r){
+  const el = $('#reviewBanner'), btn = $('#submitBtn');
+  if(!el) return;
+  REVIEW_STATE = r.audit_status || null;
+  const sb = r.audit_sendback;
+  const when = ts => { try { return new Date(ts).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch(e){ return String(ts || '').slice(0, 16); } };
+  const who = e => { const n = String(e || '').split('@')[0] || 'tony'; return escAttr(n.charAt(0).toUpperCase() + n.slice(1)); };
+  el.className = 'review hide'; el.innerHTML = '';
+  if(r.audit_status === 'complete'){
+    el.className = 'review done';
+    el.innerHTML = '<b>Already approved.</b> The carrier cost on this audit is final. To change it, ask for a correction from the client card. You can still add documents.';
+    if(btn){ btn.disabled = true; btn.textContent = 'Approved — closed'; }
+    return;
+  }
+  if(r.audit_status === 'ready_for_audit'){
+    el.className = 'review wait';
+    el.innerHTML = '<b>Submitted' + (r.audit_submitted_at ? ' ' + escAttr(when(r.audit_submitted_at)) : '') + ' — waiting for Tony.</b> '
+      + 'You can still change it; submitting again replaces what he will see. Nothing is earned until he approves.';
+    if(btn) btn.textContent = 'Submit again';
+    return;
+  }
+  if(sb){
+    el.className = 'review back';
+    el.innerHTML = '<b>Sent back by ' + who(sb.by) + (sb.at ? ' · ' + escAttr(when(sb.at)) : '') + ' — '
+      + escAttr(SENDBACK_LABELS[sb.code] || 'Needs a fix') + '.</b>'
+      + (sb.reason ? '<div style="margin-top:4px">“' + escAttr(sb.reason) + '”</div>' : '')
+      + '<div style="margin-top:4px;opacity:.85">Fix that, then resubmit. He will see it again.</div>';
+    if(btn) btn.textContent = 'Resubmit for approval';
+  }
+}
+
 async function submit(complete){
   const msg = $('#msg');
 
@@ -1260,7 +1308,7 @@ async function submit(complete){
       mainOk = true;
       TOTAL_OWED_ANSWER = null;   // answered and written; never carry it to another audit
       mainMsg = complete
-        ? '✓ Audit complete — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')
+        ? '✓ Submitted for approval — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')+'. Tony approves it next; your commission is earned when he does.'
         /* NOT a tick. Melisa saved three audits on Sep 3 and pressed save three times
            in seven seconds on one of them - Submit was disabled because the carrier
            cost was missing, so the only button available was this one, and it replied
@@ -1271,7 +1319,7 @@ async function submit(complete){
     } else if(r.ok && !j){
       // saved but response didn't parse — treat as success (data landed)
       mainOk = true;
-      mainMsg = complete ? '✓ Audit complete — receipt stored' : pendingMsg();
+      mainMsg = complete ? '✓ Submitted for approval — receipt stored. Tony approves it next.' : pendingMsg();
     } else if(j && (j.error === 'total_owed_required' || j.error === 'total_owed_too_low')){
       /* Not a failure — the server abstained and asked a question. Nothing was written
          and nothing reached HawkSoft, so re-submitting after the answer files the
@@ -1280,6 +1328,8 @@ async function submit(complete){
       if(btn) btn.disabled = false; if(saveBtn) saveBtn.disabled = false;
       askTotalOwed(j, complete);
       return;
+    } else if(j && j.error === 'already_approved'){
+      mainMsg = j.message || 'This audit has already been approved, so the carrier cost is final.';
     } else {
       mainMsg = (j && j.error) ? j.error : friendlyError(r.status, complete);
     }

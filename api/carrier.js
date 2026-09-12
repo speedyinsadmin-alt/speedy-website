@@ -333,11 +333,15 @@ export default async function handler(req, res) {
        browser and the ledger is the record. */
     let suggested = null, program = null, purpose = null;
     let chargeAmount = null, totalOwed = null, owedAmount = null;
+    /* The review state, so the page can show a send-back reason at the top and say
+       "resubmit" rather than "submit", and refuse up front on an approved row. */
+    let auditStatus = null, sendback = null, submittedAt = null;
     if (body.payment_id) {
-      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose,amount,total_owed`);
+      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose,amount,total_owed,audit_status,audit_sendback,audit_submitted_at`);
       const row = p.rows && p.rows[0];
       if (row) {
         const ex = row.extra || {};
+        auditStatus = row.audit_status || null; sendback = row.audit_sendback || null; submittedAt = row.audit_submitted_at || null;
         suggested = row.carrier_name || ex.policyCarrier || (ex.hawksoft && ex.hawksoft.policyCarrier) || null;
         program   = ex.policyProgram || (ex.hawksoft && ex.hawksoft.policyProgram) || null;
         purpose   = row.purpose || null;
@@ -383,6 +387,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, suggested, program, purpose, existing_receipt: existing,
       charge_amount: chargeAmount, total_owed: totalOwed, owed_amount: owedAmount,
+      audit_status: auditStatus, audit_sendback: sendback, audit_submitted_at: submittedAt,
       onThisClient: mine, carriers: ranked });
   }
 
@@ -510,7 +515,7 @@ export default async function handler(req, res) {
     if (body.no_payment === true) payment_id = null;
     else if (!payment_id && client_no) {
       const open = await sbGet(s, `bridge_ledger?client_id=eq.${client_no}`
-        + `&audit_status=in.(client_paid,carrier_pending)&is_test=is.false`
+        + `&audit_status=in.(client_paid,carrier_pending,ready_for_audit)&is_test=is.false`
         + `&select=id&order=ts.desc&limit=2`);
       if ((open.rows || []).length === 1) payment_id = open.rows[0].id;
     }
@@ -607,7 +612,7 @@ export default async function handler(req, res) {
        instead of relying on the link being passed. */
     if (!payment_id) {
       const open = await sbGet(s, `bridge_ledger?client_id=eq.${client_no}`
-        + `&audit_status=in.(client_paid,carrier_pending)&is_test=is.false`
+        + `&audit_status=in.(client_paid,carrier_pending,ready_for_audit)&is_test=is.false`
         + `&select=id,ts,amount,agent,commission_to&order=ts.desc&limit=5`);
       const cands = open.rows || [];
       if (cands.length === 1) payment_id = cands[0].id;
@@ -621,6 +626,23 @@ export default async function handler(req, res) {
 
     if (!(await mayTouchPayment(s, email, payment_id))) {
       return res.status(403).json({ ok: false, error: 'This audit is already complete. Only the agent who earns it can change the carrier cost.' });
+    }
+    /* APPROVED IS FINAL. Until Sep 12 an owner could re-submit an approved audit and
+       silently overwrite the carrier cost the commission was computed from - no trail,
+       and the month it was earned in could move. Now an approved row is closed to this
+       path for everyone; changing it is a correction, which has its own approval. The
+       read is a second small fetch rather than widening mayTouchPayment, whose answer
+       ("may this person touch it") is a different question from "is it closed". */
+    let priorRow = null;
+    if (payment_id) {
+      try {
+        const pr = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(payment_id)}&select=audit_status,audit_sendback,commission_to`);
+        priorRow = (pr.rows || [])[0] || null;
+      } catch { priorRow = null; }
+    }
+    if (complete && priorRow && priorRow.audit_status === 'complete') {
+      return res.status(409).json({ ok: false, error: 'already_approved',
+        message: 'This audit has already been approved, so the carrier cost is final. To change it, ask for a correction from the client card.' });
     }
 
     /* Audit-complete requires the carrier receipt - UNLESS nothing was paid to a
@@ -769,8 +791,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // Update ledger lifecycle if we have a payment_id
-    const status = complete ? 'complete' : 'carrier_pending';
+    /* SUBMIT, NOT COMPLETE. 'ready_for_audit' is "waiting for an approver". Nothing is
+       earned at this status: the commission engine counts only audit_status=complete,
+       and complete is now written by approve_audit in platform.js, by someone holding
+       audit_approve, with THEIR name and time on audit_completed_by/at. Until Sep 12
+       this line wrote 'complete' and the agent was their own approver. */
+    const status = complete ? 'ready_for_audit' : 'carrier_pending';
+    const nowIso = new Date().toISOString();
     let chargeAmtSeen = null;
     if (payment_id) {
       /* svcCost and the ledger row are read ABOVE the gate — one fetch, not two.
@@ -808,22 +835,35 @@ export default async function handler(req, res) {
              lands in - Tony's rule, Sep 1: a month, once closed, can never move.
              Written only on completion; a save-and-finish-later is not approval, so
              audit_completed_at stays null and the work is not yet earned. */
-          ...(complete ? { audit_completed_by: email, audit_completed_at: new Date().toISOString() } : {}),
+          /* Who submitted, and when - the approver reads this. audit_completed_by/at
+             are NOT written here any more; see approve_audit. */
+          ...(complete ? { audit_submitted_by: email, audit_submitted_at: nowIso } : {}),
         }),
       });
+      /* The trail. A resubmission after a send-back says so, so the approver can tell a
+         second look from a first one. */
+      if (complete) {
+        try {
+          await fetch(`${s.base}/rest/v1/audit_reviews`, {
+            method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify([{ payment_id, action: 'submitted', actor: email,
+              reason: (priorRow && priorRow.audit_sendback) ? 'resubmitted after send-back' : null, at: nowIso }]),
+          });
+        } catch { /* the trail must never block the submission it records */ }
+      }
     }
 
     // Audit event
     await fetch(`${s.base}/rest/v1/events`, {
       method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
       body: JSON.stringify([{
-        actor: email, kind: complete ? 'carrier_leg.completed' : 'carrier_leg.saved',
+        actor: email, kind: complete ? 'audit.submitted' : 'carrier_leg.saved',
         client_no, policy_id: policy_id || null, source: 'carrier_capture',
         payload: { carrier, carrier_amount, carrier_card, status, hawksoft_filed: hsFiled, attachment_id: attachment && attachment.id },
       }]),
     });
 
-    /* Somebody finished an audit that pays somebody else. The owner has to hear it:
+    /* Somebody submitted an audit that pays somebody else. The owner has to hear it:
        the carrier cost just set here is what their commission is calculated from,
        and without this the payment simply vanishes off their to-do list with no
        explanation. Own work makes no noise. */
@@ -837,7 +877,7 @@ export default async function handler(req, res) {
           await fetch(`${s.base}/rest/v1/events`, {
             method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
             body: JSON.stringify([{
-              actor: email, kind: 'audit.completed_by_other', client_no,
+              actor: email, kind: 'audit.submitted_by_other', client_no,
               policy_id: policy_id || null, source: 'carrier_capture',
               payload: { owner, payment_id, amount: row.amount,
                          carrier: carrier || null, carrier_amount: carrier_amount != null ? Number(carrier_amount) : null },

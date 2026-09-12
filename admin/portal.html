@@ -696,10 +696,12 @@ function openTodo(){
     return d === today ? 'today' : d === y ? 'yesterday' : d;
   };
   document.getElementById('todoBody').innerHTML =
-    '<div class="dim" style="font-size:12px;margin-bottom:10px">Each one needs the carrier cost and a receipt. '
-    + 'Commission is earned once the audit is complete.</div>'
+    '<div class="dim" style="font-size:12px;margin-bottom:10px">Each one needs the carrier cost and a receipt, then Tony approves it. '
+    + 'Commission is earned when he does. A row marked <span style="color:var(--red-ink)">sent back</span> has his reason on the client card.</div>'
     + UNFINISHED.map(u => {
-        const started = u.audit_status === 'carrier_pending';
+        const started = u.audit_status === 'carrier_pending' && !u.audit_sendback;
+        const waiting = u.audit_status === 'ready_for_audit';
+        const back = !waiting && !!u.audit_sendback;
         // This list is where an agent notices "this isn't mine" — so the change
         // control belongs here, not only buried on the client card.
         return '<div class="todoitem">'
@@ -710,6 +712,8 @@ function openTodo(){
           + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
           + esc(u.purpose || 'Payment') + ' · ' + when(u.ts) + ' · #' + u.client_no
           + (started ? ' · <span style="color:var(--amber-ink)">started, not finished</span>' : '')
+          + (waiting ? ' · <span style="color:var(--mute)">submitted · waiting for Tony</span>' : '')
+          + (back ? ' · <span style="color:var(--red-ink)">sent back — ' + esc(sendbackLabel(u.audit_sendback.code)) + '</span>' : '')
           + '</div></div>'
           + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)">'
           + '<span class="dim" style="font-size:11px">'
@@ -1292,6 +1296,11 @@ function payHistoryHtml(c){
        "Add documents to help" and "Sammy still confirms the carrier cost" — three
        things that are only true of money that arrived. Seen on ZZTEST, Sep 11. */
     const isLink = p.kind === 'paylink_create' || p.audit_status === 'link_sent';
+    /* THE REVIEW (Sep 12). "waiting for Tony" is submitted and not yet approved: the
+       agent may still edit it, but nothing is earned. "sent back" is the one state the
+       agent MUST act on, and it carries the approver's reason on the row for good. */
+    const waiting = p.audit_status === 'ready_for_audit';
+    const sentBack = !complete && !waiting && !!p.audit_sendback;
     const refParent = isRefund ? pays.find(q => q.id === p.refund_of) : null;
     return '<div style="background:var(--field);border:1px solid ' + (isRefund ? 'rgba(224,49,49,.35)' : 'var(--line)')
       + ';border-radius:10px;padding:10px 11px;margin-bottom:7px">'
@@ -1323,12 +1332,14 @@ function payHistoryHtml(c){
         : isLink ? 'background:rgba(143,154,196,.14);color:var(--mute)'
         : isBal ? 'background:rgba(143,154,196,.14);color:var(--mute)'
                : complete ? 'background:rgba(47,191,113,.15);color:var(--green)'
+               : sentBack ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
+               : waiting ? 'background:rgba(143,154,196,.14);color:var(--mute)'
                           : 'background:rgba(245,166,35,.15);color:var(--amber-ink)')
       + '">' + (isRefund ? 'refund'
         : p.refund_request ? 'refund requested'
         : refundedOff > 0 ? (refundedOff + 0.004 >= Number(p.collected != null ? p.collected : p.amount) ? 'refunded' : 'part refunded')
         : isLink ? 'link sent · not paid'
-        : isBal ? 'balance payment' : complete ? 'audited' : 'needs proof') + '</span></div>'
+        : isBal ? 'balance payment' : complete ? 'audited' : sentBack ? 'sent back' : waiting ? 'waiting for Tony' : 'needs proof') + '</span></div>'
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
       + (p.ref ? ' · ' + esc(p.ref) : '')
@@ -1386,6 +1397,7 @@ function payHistoryHtml(c){
          "no client email on file" behind a green success screen. A row with no record
          at all says so, because "nothing recorded" is different from "not sent". */
       + (isLink ? '' : noticeLineHtml(p.client_notice))
+      + (isLink || isBal || isRefund ? '' : auditLineHtml(p))
       /* A REFUND REQUEST WAITING ON TONY. Shown on the payment, with who asked and when,
          and the Refund button is withheld for everyone until he decides. */
       + (p.refund_request
@@ -1416,7 +1428,8 @@ function payHistoryHtml(c){
           : (!complete && !isBal && !isLink ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
       + (!complete && !isBal && !isLink && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || ACTIVE_TAB || 0) + ',' + Number(p.amount||0) + ')" '
-            + 'style="margin-top:8px;text-align:center;background:var(--amber);color:#2a1a00;border-radius:9px;padding:8px;font-size:12.5px;font-weight:700;cursor:pointer">Add proof of payment</div>'
+            + 'style="margin-top:8px;text-align:center;background:' + (waiting ? 'transparent;border:1px solid var(--line);color:var(--blue-l)' : 'var(--amber);color:#2a1a00') + ';border-radius:9px;padding:8px;font-size:12.5px;font-weight:' + (waiting ? '600' : '700') + ';cursor:pointer">'
+            + (sentBack ? 'Fix and resubmit' : waiting ? 'Edit before Tony reviews' : 'Add proof of payment') + '</div>'
           : '')
       /* Not the owner: documents only. save_carrier_leg is guarded server-side by
          mayTouchPayment, so offering the full audit here would let someone fill in a
@@ -1526,6 +1539,40 @@ function addDocsFor(paymentId, clientNo, amount){
   });
   location.href = '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
+
+/* ONE LINE FOR THE REVIEW STATE, on every payment row that can carry an audit.
+   Sent back: red, the approver's reason verbatim - it is the instruction. Waiting:
+   who submitted and that nothing is earned yet. Approved: who, when - "audited" alone
+   used to mean the agent pressed the button themselves. Older rows approved before
+   Sep 12 have no submitter and were completed by the agent; say nothing extra. */
+function auditLineHtml(p){
+  /* Pacific, like every other stamp the agents read - the ISO slice printed UTC next to a "6 hr ago". */
+  const t = ts => { try { return new Date(ts).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch(e){ return String(ts || '').slice(0, 16); } };
+  const first = n => esc(String(n || '').split(' ')[0] || 'Tony');
+  const sb = p.audit_sendback;
+  if(p.audit_status === 'complete'){
+    if(!p.audit_submitted_at) return '';
+    return '<div style="font-size:11px;margin-top:3px;color:var(--green)">✓ Approved by ' + first(p.audit_completed_by_name)
+      + (p.audit_completed_at ? ' · ' + esc(t(p.audit_completed_at)) : '')
+      + (sb ? ' <span class="dim">(after a send-back)</span>' : '') + '</div>';
+  }
+  if(p.audit_status === 'ready_for_audit'){
+    return '<div style="font-size:11px;margin-top:3px;color:var(--mute)">Submitted'
+      + (p.audit_submitted_by_name ? ' by ' + first(p.audit_submitted_by_name) : '')
+      + (p.audit_submitted_at ? ' · ' + esc(t(p.audit_submitted_at)) : '')
+      + (sb ? ' · <b style="color:var(--amber-ink)">resubmitted after a send-back</b>' : '')
+      + ' · nothing is earned until Tony approves</div>';
+  }
+  if(sb){
+    return '<div style="font-size:11.5px;margin-top:5px;color:var(--red-ink);padding-left:9px;border-left:2px solid var(--red-ink)">✗ Sent back by '
+      + first(sb.by_name) + (sb.at ? ' · ' + esc(t(sb.at)) : '') + ' — <b>' + esc(sendbackLabel(sb.code)) + '</b>'
+      + (sb.reason ? ': “' + esc(sb.reason) + '”' : '') + '</div>';
+  }
+  return '';
+}
+const SENDBACK_LABELS = { receipt_missing: 'Receipt missing', receipt_unreadable: 'Receipt unreadable', wrong_amount: 'Wrong amount',
+  wrong_carrier: 'Wrong carrier', need_photos: 'Need photos of documents', other: 'Needs a fix' };
+function sendbackLabel(code){ return SENDBACK_LABELS[code] || 'Needs a fix'; }
 
 function finishAuditFor(paymentId, clientNo, amount){
   stashHandoff();
@@ -2046,7 +2093,7 @@ async function loadNews(){
   }catch(e){}
 }
 function openNews(){
-  const tone = t => t === 'amber' ? 'var(--amber)' : t === 'green' ? 'var(--green)' : 'var(--mute)';
+  const tone = t => t === 'amber' ? 'var(--amber)' : t === 'green' ? 'var(--green)' : t === 'red' ? 'var(--red-ink)' : 'var(--mute)';
   const ago = ts => {
     const m = Math.round((Date.now() - new Date(ts)) / 60000);
     return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m/60) + ' hr ago' : Math.round(m/1440) + ' days ago';

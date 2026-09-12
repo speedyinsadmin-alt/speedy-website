@@ -87,6 +87,73 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 Last written Sep 12 evening. Everything below is pushed and live unless it says
 otherwise; `git status` is clean at `fb70f08`.
 
+### ✅ SEP 12 EVENING · THE AUDIT HAS AN APPROVER — agents submit, Tony approves or sends back
+Saif: *"on audit page it should show Audit click and reject with reason if needed, lets
+say Tony needs more documents or pictures, and this should notify the agent so he can
+submit again, so no full automated audit for now."* Until tonight there was NO reviewer:
+"Submit to audit" on the carrier page wrote `audit_status=complete` with
+`audit_completed_by` = the agent — self-audit. Tony could look, not act. 25–50 submissions
+per business day, 7–11 agents.
+
+**Decisions (Saif, Sep 12):** approval date earns the commission (b), with a "waiting for
+you" counter on the Console and Ops so it cannot sit · approvers = owner + admins holding
+the `audit_approve` grant (removed from the admin default; hand out by name on Staff) ·
+six send-back reasons + free text · everything already `complete` stays complete · bulk
+approve by tick, send-back one at a time.
+
+**Statuses:** `client_paid` → `carrier_pending` (saved partial, or SENT BACK) →
+`ready_for_audit` (submitted) → `complete` (approved). New columns on bridge_ledger:
+`audit_submitted_by/at`, `audit_sendback` jsonb {by,at,code,reason} — kept on the row
+for good (status says whether it is still waiting on the agent, resubmitted, or approved
+after a send-back). Trail table `audit_reviews` (submitted | approved | sent_back, actor,
+reason_code, reason, bulk). `ready_for_audit` needs no constraint change.
+
+**carrier.js `save_carrier_leg`:** complete → `ready_for_audit`, stamps submitted_by/at,
+writes `audit.submitted` (was `carrier_leg.completed`) and `audit.submitted_by_other`
+(was `audit.completed_by_other`), inserts the trail row ("resubmitted after send-back"
+when `audit_sendback` was already there). **An approved row is closed to this path: 409
+`already_approved`** — before tonight an owner could re-submit and silently overwrite the
+carrier cost the commission was computed from. `carrier_list` returns the review state.
+Open-payment filters include `ready_for_audit`.
+
+**platform.js:** `approve_audit` / `approve_audits` (≤50) / `reject_audit`, all behind
+`may(email,'audit_approve')`; never your own row (owner or submitter); only a waiting
+row; PATCH is conditional on `audit_status=eq.ready_for_audit` so two approvers cannot
+both win; approve needs a carrier cost (else "send it back"); reject needs a code from
+`AUDIT_SENDBACK_CODES` + text. Events `audit.approved` / `audit.sent_back` carry owner,
+submitted_by, fee, after_sendback. `portal_news` shows the send-back in RED with the
+reason verbatim to owner and submitter, and the approval in green. `audit_list` returns
+the review fields + `can_approve` + `names` + `sendback_codes`. `ops_summary.live.audits_waiting`.
+Issues view: a waiting row is not "proof on file, audit still open".
+
+**Console Audit tab:** order chip **"Waiting for you · N"** (default while N>0 for an
+approver), tick column, **Approve / Send back…** per row, bulk bar ("3 selected · $612.21
+in fees · Daisy ×2, Esmeralda ×1 → Approve 3 selected"), send-back sheet (`#sbSheet`,
+six picks seed the text, the seed alone is refused), sub-line under every pill: submitted
+by / resubmitted after send-back / sent back by + reason + "not resubmitted yet" /
+approved by. Own rows: "yours — someone else approves it". Non-approvers see "waiting
+for approval" and no controls. **Portal card:** chips `sent back` (red, reason on the row,
+button "Fix and resubmit") · `waiting for Tony` ("Edit before Tony reviews") · `audited`
+now says "Approved by Tony · time" (pre-Sep-12 self-audits say nothing extra). Home list
+marks both. **Carrier page:** red banner AT THE TOP with the reason, button "Submit for
+approval" / "Resubmit for approval" / disabled "Approved — closed". **Ops:** "WAITING FOR
+TONY" cell.
+
+**Verification:** `harnessAuditReview.mjs` — 145 checks through the real carrier.js +
+platform.js on a PostgREST stub, and the three pages on jsdom through their real markup
+(handlers real, classes styled, tokens defined). **13 of 13 regressions caught**: self-audit
+back, submit stamping approver, approved row re-submittable, no `may()`, own-row approve,
+approving a non-waiting row, submitter stamped as approver, send-back without reason,
+send-back not moving the row, send-back not told, Approve on own row, seed-only reason,
+portal hiding the reason. The whole suite unchanged (342/32/137/59/42/122/28 + 6 ALL PASS).
+Two things the suite caught before push: `var(--card)` in the new sheet (platform.html has
+`--navy2`), and a harness that crashed instead of tallying — a crash is now a counted
+failure. Screens photographed in Chrome; the carrier banner was first drawn at the bottom
+of the page and moved to the top — the reason is what the agent came to read.
+
+**Not done, by design:** no auto-approval of anything; no reminder when a row waits >N
+days (nobody asked); the month approval / frozen snapshot (item 86) is separate.
+
 ### ✅ SEP 12 · GOOGLE BUSINESS IS AUTOMATED AND ON SPEEDY OPS
 The missed "scheduled task" was publishing: the Sep 11 Cowork run had replied to 15
 reviews and drafted the SR-22 set but could not attach images (native picker). Published

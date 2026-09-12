@@ -180,6 +180,29 @@
   .rqacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   .rqok{background:var(--green);color:#04220f;border:0;border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700;cursor:pointer;width:auto;flex:1;min-width:150px}
   .rqno{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:600;cursor:pointer;width:auto;flex:1;min-width:110px}
+  /* AUDIT REVIEW (Sep 12). Row actions are small and never stretch; the bulk bar is
+     the one loud element and appears only once something is ticked. */
+  tr.waitrow td{background:rgba(77,124,254,.06)}
+  .selcell{width:26px;padding-right:0}
+  .selcell input{width:16px;height:16px;cursor:pointer;accent-color:var(--blue)}
+  .rvacts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .aok{background:var(--green);color:#04220f;border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .ano{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .aok:disabled,.ano:disabled{opacity:.5;cursor:default}
+  .rvsub{font-size:11px;color:var(--mute);margin-top:3px;max-width:240px;line-height:1.35}
+  .rvsub i{color:var(--ink);font-style:italic}
+  .rvsub .re{color:var(--amber);font-weight:700}
+  .rvmsg{font-size:11.5px;margin-top:4px}
+  .bulkbar{border:1px solid var(--blue);background:rgba(77,124,254,.10);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .bulkbar b{color:#7fa8ff}
+  .bulkbar .hint{color:var(--mute);font-size:12px}
+  /* the send-back sheet: a card over the page, same shape as the refund sheet on the portal */
+  #sbSheet{position:fixed;inset:0;background:rgba(6,10,26,.72);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+  #sbSheet .sbcard{background:var(--navy2);border:1px solid var(--line);border-radius:14px;padding:16px 18px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  #sbSheet textarea{width:100%;min-height:72px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:13px;font-family:inherit;margin-top:8px;resize:vertical}
+  #sbSheet .sbwhy{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .sbgo{background:var(--red);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;flex:1}
+  .sbgo:disabled{opacity:.5;cursor:default}
   .lbl{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
   .lbl.amber{background:rgba(245,166,35,.15);color:var(--amber)}
   .lbl.green{background:rgba(47,191,113,.15);color:var(--green)}
@@ -1288,7 +1311,14 @@ let AUDIT_PERIOD = 'month';   // default: this month — the number an owner act
 /* 'action' = what still needs doing first. The default, because the reason to open
    this page is almost always to find what is unfinished, not to read history. */
 let AUDIT_SORT = 'action';
-function setAuditSort(s){ AUDIT_SORT = s; render(); }
+function setAuditSort(s){ AUDIT_SORT = s; AUDIT_SORT_CHOSEN = true; render(); }
+/* Review state: which waiting rows are ticked, and what the send-back sheet is about.
+   Ticks survive a re-render (the set is keyed on payment id) but not a tab change. */
+let AUDIT_SEL = new Set();
+let AUDIT_SORT_CHOSEN = false;   // once the approver picks an order, stop defaulting to "waiting"
+let SB = null;                   // { id, code, reason } while the send-back sheet is open
+const SENDBACK_CODES = { receipt_missing: 'Receipt missing', receipt_unreadable: 'Receipt unreadable', wrong_amount: 'Wrong amount',
+  wrong_carrier: 'Wrong carrier', need_photos: 'Need photos of documents', other: 'Other' };
 let AUDIT_FROM = '', AUDIT_TO = '';
 function periodLabel(){
   return AUDIT_PERIOD==='today' ? 'today'
@@ -1319,15 +1349,54 @@ async function renderAudit(el){
   const rows = r.rows || [];
   const atts = r.attachments || [];
   window.AUDIT_ROWS = {}; rows.forEach(x => window.AUDIT_ROWS[x.id] = x);
+  const canApprove = !!r.can_approve;
+  /* Ticks on rows that are no longer waiting (approved meanwhile, or sent back) drop out. */
+  for(const id of [...AUDIT_SEL]) if(!(AUDIT_ROWS[id] && AUDIT_ROWS[id].audit_status === 'ready_for_audit')) AUDIT_SEL.delete(id);
 
   const pathLabel = p => p==='dmv_service' ? 'DMV service' : p==='insurance' ? 'Insurance' : p==='pre_audit' ? 'Pre-audit' : (p||'—');
   const statusPill = row => {
     if(row.pre_audit) return '<span class="muted" title="Charged before the proof-of-payment process">—</span>';
     const s = row.audit_status;
     if(s==='complete') return '<span class="pill g">complete</span>';
-    if(s==='ready_for_audit') return '<span class="pill b">ready for review</span>';
+    /* "waiting for YOU" only if this signed-in person can approve; otherwise it is
+       waiting for someone else and the pill must not read as a to-do. */
+    if(s==='ready_for_audit') return '<span class="pill b">' + (canApprove ? 'waiting for you' : 'waiting for approval') + '</span>';
+    if(row.audit_sendback) return '<span class="pill r">sent back</span>';
     if(s==='carrier_pending') return '<span class="pill a">docs pending</span>';
     return '<span class="pill a">needs audit</span>';
+  };
+  /* THE LINE UNDER THE PILL: who did what, when, and the reason. Read from the row,
+     never inferred - a "complete" with no submitter was approved by the agent
+     themselves before Sep 12 and the line says nothing rather than something false. */
+  const nameOf = e => (r.names && r.names[e]) || (e ? String(e).split('@')[0] : '');
+  const first = e => String(nameOf(e)).split(' ')[0];
+  const agoOf = ts => { const m = Math.round((Date.now() - new Date(ts)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m/60) + ' h ago' : Math.round(m/1440) + ' d ago'; };
+  const reviewSub = row => {
+    const sb = row.audit_sendback;
+    if(row.audit_status === 'ready_for_audit'){
+      return '<div class="rvsub">submitted' + (row.audit_submitted_by ? ' by ' + esc(first(row.audit_submitted_by)) : '')
+        + (row.audit_submitted_at ? ' · ' + esc(agoOf(row.audit_submitted_at)) : '')
+        + (sb ? ' · <span class="re">resubmitted after send-back</span>' : '') + '</div>';
+    }
+    if(row.audit_status === 'complete'){
+      if(!row.audit_submitted_at) return '';
+      return '<div class="rvsub">approved by ' + esc(first(row.audit_completed_by)) + (row.audit_completed_at ? ' · ' + esc(PT_STAMP(row.audit_completed_at)) : '')
+        + (sb ? ' · after a send-back' : '') + '</div>';
+    }
+    if(sb){
+      return '<div class="rvsub">sent back by ' + esc(first(sb.by)) + (sb.at ? ' · ' + esc(PT_STAMP(sb.at)) : '')
+        + ' · <i>' + esc(SENDBACK_CODES[sb.code] || 'needs a fix') + (sb.reason ? ' — ' + esc(sb.reason) : '') + '</i>'
+        + '<br>' + esc(first(row.commission_to || row.agent)) + ' notified · not resubmitted yet</div>';
+    }
+    return '';
+  };
+  const reviewActs = row => {
+    if(!canApprove || row.audit_status !== 'ready_for_audit') return '';
+    const own = (row.commission_to || row.agent || '') === (r.email || '') || (row.audit_submitted_by || '') === (r.email || '');
+    if(own) return '<div class="rvsub">yours — someone else approves it</div>';
+    return '<div class="rvacts"><button class="aok" onclick="approveAudit(\'' + row.id + '\')">Approve</button>'
+      + '<button class="ano" onclick="openSendBack(\'' + row.id + '\')">Send back…</button></div>'
+      + '<div class="rvmsg" id="rvmsg_' + row.id + '"></div>';
   };
 
   /* ------------------------------------------------------------------
@@ -1380,22 +1449,32 @@ async function renderAudit(el){
     && (String(a.doc_type || a.kind || '') === 'carrier_receipt'
         || String(a.doc_type || '').endsWith('_no_payment')));
   const open_ = x => x.audit_status !== 'complete' && x.audit_status !== 'pre_audit';
-  const needsProof = x => open_(x) && !hasReceipt(x);
-  const needsCost  = x => open_(x) &&  hasReceipt(x) && (x.service_cost == null);
+  const waiting = x => x.audit_status === 'ready_for_audit';
+  const sentBack = x => open_(x) && !waiting(x) && !!x.audit_sendback;
+  const needsProof = x => open_(x) && !waiting(x) && !hasReceipt(x);
+  const needsCost  = x => open_(x) && !waiting(x) && hasReceipt(x) && (x.service_cost == null);
   const bucket = x => needsProof(x) ? 0 : (needsCost(x) ? 1 : 2);
-  if(AUDIT_SORT === 'action'){
+  /* The approver's queue comes first by default, the moment there is one. Chosen
+     order is respected once they pick. */
+  const nWait = periodRows.filter(waiting).length;
+  if(canApprove && nWait && !AUDIT_SORT_CHOSEN) AUDIT_SORT = 'waiting';
+  if(AUDIT_SORT === 'waiting'){
+    periodRows = periodRows.slice().sort((a,b) =>
+      ((waiting(a) ? 0 : 1) - (waiting(b) ? 0 : 1)) || (bucket(a) - bucket(b)) || String(b.ts).localeCompare(String(a.ts)));
+  } else if(AUDIT_SORT === 'action'){
     periodRows = periodRows.slice().sort((a,b) =>
       (bucket(a) - bucket(b)) || String(b.ts).localeCompare(String(a.ts)));
   }
   const nProof = periodRows.filter(needsProof).length;
   const nCost  = periodRows.filter(needsCost).length;
+  const nBack  = periodRows.filter(sentBack).length;
 
   const totFees = periodRows.reduce((a,x)=> a + (x.fee||0), 0);
   const totComm = periodRows.reduce((a,x)=> a + (x.commission||0), 0);
   const auditedCount = periodRows.filter(x => x.audit_status === 'complete').length;
 
   let h = '<h2>Audit — full transaction trail</h2>' + auditSubNav();
-  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. Commission is earned only when the audit is complete.</div>';
+  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. The agent submits; commission is earned the day it is approved here.</div>';
 
   // search
   h += '<input id="auditSearch" placeholder="Search client name, #, transaction ref, agent, purpose…" value="'+esc(AUDIT_Q)+'" '
@@ -1417,16 +1496,33 @@ async function renderAudit(el){
     + (count ? ' <b style="color:'+colour+'">'+count+'</b>' : '') + '</span>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
     + '<span class="muted" style="font-size:12px;margin-right:2px">Order</span>'
+    + (canApprove ? schip('waiting','Waiting for you', nWait, '#7fa8ff') : '')
     + schip('action','Needs action first', nProof + nCost, '#f5a623')
     + schip('date','By date', 0, '')
-    + (nProof || nCost
+    + (nWait || nBack || nProof || nCost
         ? '<span class="muted" style="font-size:12px;margin-left:8px">'
-          + (nProof ? nProof + ' with no proof' : '')
-          + (nProof && nCost ? ' \u00b7 ' : '')
-          + (nCost ? nCost + ' waiting on a carrier cost' : '')
+          + [ nWait ? nWait + (canApprove ? ' waiting for your approval' : ' waiting for approval') : '',
+              nBack ? nBack + ' sent back, not yet resubmitted' : '',
+              nProof ? nProof + ' with no proof' : '',
+              nCost ? nCost + ' waiting on a carrier cost' : '' ].filter(Boolean).join(' \u00b7 ')
           + '</span>'
         : '')
     + '</div>';
+  /* THE BULK BAR. Approve many at once is a human decision made once per tick; send
+     back stays one at a time because each needs its own reason. Shows only when the
+     selection is not empty, and says what is in it in money and people. */
+  if(canApprove && AUDIT_SEL.size){
+    const sel = [...AUDIT_SEL].map(id => AUDIT_ROWS[id]).filter(Boolean);
+    const fees = sel.reduce((a,x) => a + (x.fee || 0), 0);
+    const byAgent = {}; for(const x of sel){ const k = first(x.commission_to || x.agent); byAgent[k] = (byAgent[k]||0) + 1; }
+    h += '<div class="bulkbar" id="bulkbar"><span><b>' + sel.length + ' selected</b> · ' + money(fees) + ' in fees · '
+      + esc(Object.entries(byAgent).map(([k,n]) => k + ' ×' + n).join(', ')) + '</span>'
+      + '<span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+      + '<button class="aok" style="padding:8px 16px" onclick="approveSelected()">Approve ' + sel.length + ' selected</button>'
+      + '<button class="ano" onclick="clearSel()">Clear</button>'
+      + '<span class="hint">Send back is one row at a time — it needs a reason.</span></span>'
+      + '<div class="rvmsg" id="bulkmsg" style="flex-basis:100%"></div></div>';
+  }
   h += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px">'
     + '<span class="muted">'+periodRows.length+' transaction'+(periodRows.length===1?'':'s')+'</span>'
     + '<span class="muted">·</span><span>Fees '+esc(periodLabel())+': <b class="amount">'+money(totFees)+'</b></span>'
@@ -1441,13 +1537,13 @@ async function renderAudit(el){
     h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:#e03131">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
   }
 
-  h += '<div class="tscroll"><table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
-  if(!periodRows.length) h += '<tr><td colspan="10" class="muted">No transactions in this period.</td></tr>';
+  h += '<div class="tscroll"><table><tr>' + (canApprove ? '<th class="selcell"></th>' : '') + '<th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
+  if(!periodRows.length) h += '<tr><td colspan="' + (canApprove ? 11 : 10) + '" class="muted">No transactions in this period.</td></tr>';
   for(const row of periodRows){
     const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
     const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount));
     const nm = row.client_name ? esc(row.client_name) : '';
-    const canComplete = !row.pre_audit && row.audit_status !== 'complete';
+    const canComplete = !row.pre_audit && row.audit_status !== 'complete' && row.audit_status !== 'ready_for_audit';
     /* This is a BUTTON, not a status, and it used to be labelled "+ proof" on every
        unfinished audit - including ones whose receipt was already attached and showing
        a green tick two columns away. Same words, two meanings. It now says what is
@@ -1459,7 +1555,12 @@ async function renderAudit(el){
       ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">'
         + (rowHasReceipt ? '+ carrier cost' : '+ proof') + '</span>'
       : '';
-    h += '<tr>'
+    const isWait = row.audit_status === 'ready_for_audit';
+    const ownRow = (row.commission_to || row.agent || '') === (r.email || '') || (row.audit_submitted_by || '') === (r.email || '');
+    h += '<tr' + (isWait && canApprove ? ' class="waitrow"' : '') + '>'
+      + (canApprove ? '<td class="selcell">' + (isWait && !ownRow
+          ? '<input type="checkbox" ' + (AUDIT_SEL.has(row.id) ? 'checked ' : '') + 'onchange="toggleSel(\'' + row.id + '\', this.checked)" aria-label="select for approval">'
+          : '') + '</td>' : '')
       + '<td class="muted" style="font-size:12px">'+esc(PT_STAMP(row.ts))+'</td>'
       /* WHAT THE CHARGE WAS FOR. `purpose` has always been returned and is already
          searchable — the placeholder promises it — but the table never showed it, so
@@ -1474,7 +1575,7 @@ async function renderAudit(el){
       + '<td class="amount">'+(row.fee!=null?signed(row.fee):'—')+'</td>'
       + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
       + '<td class="amount">'+(row.commission!=null?'<b style="color:'+(row.commission<0?'var(--red)':'#7fa8ff')+'">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
-      + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+'</td>'
+      + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+reviewSub(row)+reviewActs(row)+'</td>'
       + '<td class="docs">'+docCell+'</td>'
       + '</tr>';
   }
@@ -1489,6 +1590,89 @@ async function renderAudit(el){
     si.oninput = () => { AUDIT_Q = si.value; clearTimeout(window._auditT); window._auditT = setTimeout(()=>render(), 350); };
     si.focus(); si.setSelectionRange(si.value.length, si.value.length);
   }
+}
+
+/* ---------- AUDIT REVIEW actions ---------- */
+function toggleSel(id, on){ if(on) AUDIT_SEL.add(id); else AUDIT_SEL.delete(id); render(); }
+function clearSel(){ AUDIT_SEL.clear(); render(); }
+async function approveAudit(id){
+  const row = (window.AUDIT_ROWS||{})[id]; if(!row) return;
+  const msg = $('#rvmsg_' + id);
+  const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  say('Approving…');
+  const res = await apiPostBody({ action: 'approve_audit', payment_id: id });
+  if(res && res.ok){ AUDIT_SEL.delete(id); await render(); return; }
+  say((res && (res.message || res.error)) || 'Could not approve.', true);
+}
+async function approveSelected(){
+  const ids = [...AUDIT_SEL]; if(!ids.length) return;
+  const msg = $('#bulkmsg');
+  const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const sel = ids.map(id => AUDIT_ROWS[id]).filter(Boolean);
+  const fees = sel.reduce((a,x) => a + (x.fee || 0), 0);
+  if(!confirm('Approve ' + ids.length + ' audit' + (ids.length===1?'':'s') + ' — ' + money(fees) + ' in fees — now?\n\nEach one is dated today and its commission is earned this month.')) return;
+  say('Approving ' + ids.length + '…');
+  const res = await apiPostBody({ action: 'approve_audits', payment_ids: ids });
+  if(!res){ say('No response from the server.', true); return; }
+  const failed = (res.results || []).filter(x => !x.ok);
+  AUDIT_SEL.clear();
+  await render();
+  if(failed.length){
+    /* Say which ones, on the row, so a partial success is never read as a full one. */
+    for(const f of failed){ const m = $('#rvmsg_' + f.id); if(m){ m.textContent = f.error; m.style.color = 'var(--red)'; } }
+    alert((res.approved || 0) + ' approved, ' + failed.length + ' not:\n' + failed.map(f => '· ' + ((AUDIT_ROWS[f.id]||{}).client_name || f.id) + ' — ' + f.error).join('\n'));
+  }
+}
+function openSendBack(id){
+  const row = (window.AUDIT_ROWS||{})[id]; if(!row) return;
+  SB = { id, code: '', reason: '' };
+  let el = document.getElementById('sbSheet');
+  if(!el){ el = document.createElement('div'); el.id = 'sbSheet'; document.body.appendChild(el); }
+  drawSendBack();
+}
+function drawSendBack(){
+  const el = document.getElementById('sbSheet'); if(!el || !SB) return;
+  const row = AUDIT_ROWS[SB.id] || {};
+  const who = String(((AUDIT_CACHE||{}).names||{})[row.commission_to || row.agent] || row.commission_to || row.agent || 'the agent').split(' ')[0];
+  el.innerHTML = '<div class="sbcard">'
+    + '<div style="font-size:15px;font-weight:700">Send back to ' + esc(who) + ' — ' + esc(row.client_name || ('#' + row.client_no)) + ' · ' + money(row.amount) + '</div>'
+    + '<div class="muted" style="font-size:12.5px;margin-top:3px">' + esc(who) + ' sees the reason on the client card and on the carrier page, and gets a notification. Nothing is earned until it is resubmitted and approved.</div>'
+    + '<div class="lbl" style="margin-top:12px">Why</div>'
+    + '<div class="sbwhy">' + Object.entries(SENDBACK_CODES).map(([k,l]) =>
+        '<span class="perchip' + (SB.code===k ? ' sel' : '') + '" onclick="sbPick(\'' + k + '\')">' + esc(l) + '</span>').join('') + '</div>'
+    + '<textarea id="sbReason" placeholder="What exactly needs to change — ' + esc(who) + ' reads this.">' + esc(SB.reason) + '</textarea>'
+    + '<div class="rqacts"><button class="sbgo" id="sbGo" onclick="submitSendBack()"' + (SB.code ? '' : ' disabled') + '>Send back</button>'
+    + '<button class="rqno" onclick="closeSendBack()">Cancel</button></div>'
+    + '<div class="rvmsg" id="sbmsg"></div></div>';
+  const ta = document.getElementById('sbReason');
+  if(ta){ ta.oninput = () => { SB.reason = ta.value; }; ta.focus(); }
+}
+function sbPick(code){
+  if(!SB) return;
+  const ta = document.getElementById('sbReason');
+  if(ta) SB.reason = ta.value;
+  SB.code = code;
+  /* A pick seeds the text once; typed text is never overwritten. */
+  if(!SB.reason.trim() && code !== 'other') SB.reason = SENDBACK_CODES[code] + ' — ';
+  drawSendBack();
+  const ta2 = document.getElementById('sbReason'); if(ta2){ ta2.focus(); ta2.setSelectionRange(ta2.value.length, ta2.value.length); }
+}
+function closeSendBack(){ SB = null; const el = document.getElementById('sbSheet'); if(el) el.remove(); }
+async function submitSendBack(){
+  if(!SB) return;
+  const ta = document.getElementById('sbReason'); if(ta) SB.reason = ta.value;
+  const m = document.getElementById('sbmsg');
+  const say = (t, bad) => { if(m){ m.textContent = t; m.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  if(!SB.code){ say('Pick a reason.', true); return; }
+  /* The seed a pick leaves is "Label — "; on its own it says nothing to the agent. */
+  const txt = SB.reason.trim();
+  if(!txt || txt.endsWith('—')){ say('Say what needs to change — the agent reads this.', true); return; }
+  const btn = document.getElementById('sbGo'); if(btn) btn.disabled = true;
+  say('Sending back…');
+  const res = await apiPostBody({ action: 'reject_audit', payment_id: SB.id, code: SB.code, reason: SB.reason.trim() });
+  if(res && res.ok){ closeSendBack(); await render(); return; }
+  if(btn) btn.disabled = false;
+  say((res && (res.message || res.error)) || 'Could not send it back.', true);
 }
 
 function completeAudit(id){

@@ -209,6 +209,10 @@ function render(r) {
     { n: allItems.length, k: 'OPEN ITEMS', c: highCount ? 'hot' : '' },
     { n: highCount, k: 'HIGH PRIORITY', c: highCount ? 'hot' : 'ok' },
     { n: L.open_audits, k: 'OPEN AUDITS', c: L.open_audits > 20 ? 'hot' : 'warn' },
+    /* Submitted, not yet approved. Tony's queue; commission is not earned until he
+       clears it, so this number sitting high at month-end moves real money. */
+    { n: L.audits_waiting == null ? '?' : L.audits_waiting, k: 'WAITING FOR TONY',
+      c: L.audits_waiting == null ? 'warn' : L.audits_waiting > 30 ? 'hot' : L.audits_waiting ? 'warn' : 'ok' },
     { n: L.payments_30d, k: 'PAYMENTS 30D', c: '' },
     { n: L.agents_active, k: 'ACTIVE AGENTS', c: '' },
     { n: stored + ' / ' + L.documents, k: 'DOCS IN STORAGE', c: stored === L.documents ? 'ok' : 'warn' },

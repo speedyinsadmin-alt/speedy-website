@@ -351,11 +351,18 @@ async function sbInsert(s, table, rows) {
    v2.7 lesson, and again today with OWED/FEE_LOW in carrier.html. */
 const ROLE_CAPS = {
   owner: ['console', 'audit_approve', 'correct', 'refund', 'approve_month', 'manage_agents', 'commission_override'],
-  admin: ['console', 'audit_approve', 'correct'],
+  /* audit_approve is NOT an admin default: "Tony + admins with a grant" (Saif, Sep 12).
+     It releases commission, so it is handed out by name on the Staff page. */
+  admin: ['console', 'correct'],
   agent: [],
 };
 /* Every capability the system understands. A grant string not in here is ignored. */
 const ALL_CAPS = new Set(Object.values(ROLE_CAPS).flat());
+/* Send-back reasons an approver can pick. Free text always accompanies the code. */
+const AUDIT_SENDBACK_CODES = {
+  receipt_missing: 'Receipt missing', receipt_unreadable: 'Receipt unreadable', wrong_amount: 'Wrong amount',
+  wrong_carrier: 'Wrong carrier', need_photos: 'Need photos of documents', other: 'Other',
+};
 
 let _roster = null, _rosterUntil = 0;
 const ROSTER_TTL_MS = 60 * 1000;
@@ -1581,7 +1588,7 @@ if (view === 'portal_share_due') {
       // in.(), so each value must be double-quoted or the filter matches nothing.
       const since = new Date(Date.now() - 30 * 86400000).toISOString();
       const ev = await sbGet(s, `events?ts=gte.${since}`
-        + `&kind=in.("commission.reassigned","commission.shared","audit.repaired","client.corrected","client.correction_rejected","audit.completed_by_other","refund.decided")`
+        + `&kind=in.("commission.reassigned","commission.shared","audit.repaired","client.corrected","client.correction_rejected","audit.submitted_by_other","audit.sent_back","audit.approved","refund.decided")`
         + `&select=id,ts,actor,kind,client_no,payload&order=ts.desc&limit=100`);
 
       const seenRow = await sbGet(s, `agent_prefs?agent_email=eq.${encodeURIComponent(me)}&select=news_seen_at`);
@@ -1603,13 +1610,26 @@ if (view === 'portal_share_due') {
               title: nameOf(actor) + ' moved a payment off your list',
               detail: '$' + Number(p.amount || 0).toFixed(2) + ' now belongs to ' + nameOf(p.to) });
           }
-        } else if (e.kind === 'audit.completed_by_other' && p.owner === me && actor !== me) {
+        } else if (e.kind === 'audit.submitted_by_other' && p.owner === me && actor !== me) {
           items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
-            title: nameOf(actor) + ' finished an audit for you',
+            title: nameOf(actor) + ' submitted an audit for you',
             detail: '$' + Number(p.amount || 0).toFixed(2)
               + (p.carrier ? ' — ' + p.carrier : '')
               + (p.carrier_amount != null ? ', carrier cost $' + Number(p.carrier_amount).toFixed(2) : ''),
-            action: 'Check it — your commission is worked out from that cost' });
+            action: 'Check it — your commission is worked out from that cost, once it is approved' });
+        } else if (e.kind === 'audit.sent_back' && (p.owner === me || p.submitted_by === me)) {
+          /* The one thing the review leaves for the agent. Loud, with the reason verbatim. */
+          items.push({ id: e.id, ts: e.ts, tone: 'red', client_no: e.client_no, payment_id: p.payment_id,
+            title: nameOf(actor) + ' sent back your audit',
+            detail: (p.code_label || 'Needs a fix') + ': “' + (p.reason || '') + '” — $' + Number(p.amount || 0).toFixed(2) + ' on client #' + e.client_no,
+            action: 'Fix it and resubmit — nothing is earned on this one until it is approved' });
+        } else if (e.kind === 'audit.approved' && (p.owner === me || p.submitted_by === me) && actor !== me) {
+          items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no, payment_id: p.payment_id,
+            title: nameOf(actor) + ' approved your audit',
+            detail: '$' + Number(p.amount || 0).toFixed(2) + ' on client #' + e.client_no
+              + (p.fee != null ? ' — fee $' + Number(p.fee).toFixed(2) : '')
+              + (p.after_sendback ? ' (after a send-back)' : ''),
+            action: 'Commission earned this month.' });
         } else if (e.kind === 'commission.shared' && p.helper === me) {
           items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
             title: nameOf(p.owner) + ' shared commission with you',
@@ -1697,7 +1717,7 @@ if (view === 'portal_share_due') {
          ADMIN_ALLOWLIST, so the code list said he was not an admin. Item 70's rule. */
       const isAdminHere = (await rosterAdmins()).has(me);
       const showTest = (Number(no) === TEST_CLIENT && isAdminHere);
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,audit_submitted_by,audit_submitted_at,audit_sendback,audit_completed_by,audit_completed_at,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
@@ -1751,6 +1771,16 @@ if (view === 'portal_share_due') {
              says so rather than showing a blank. */
           client_notice: clientNoticeOf(r),
           is_test: r.is_test === true,
+          /* THE REVIEW, as the agent sees it: who submitted, the last send-back with its
+             reason (kept on the row for good), who approved. Names resolved here so the
+             card never shows a bare email. */
+          audit_submitted_by: r.audit_submitted_by || null,
+          audit_submitted_by_name: r.audit_submitted_by ? (AGENT_NAME[r.audit_submitted_by] || r.audit_submitted_by) : null,
+          audit_submitted_at: r.audit_submitted_at || null,
+          audit_sendback: r.audit_sendback ? { ...r.audit_sendback, by_name: AGENT_NAME[r.audit_sendback.by] || r.audit_sendback.by } : null,
+          audit_completed_by: r.audit_completed_by || null,
+          audit_completed_by_name: r.audit_completed_by ? (AGENT_NAME[r.audit_completed_by] || r.audit_completed_by) : null,
+          audit_completed_at: r.audit_completed_at || null,
           refund_request: rqBy[r.id] ? { id: rqBy[r.id].id, requested_by: rqBy[r.id].requested_by,
             requested_by_name: AGENT_NAME[rqBy[r.id].requested_by] || rqBy[r.id].requested_by,
             requested_at: rqBy[r.id].requested_at, amount: Number(rqBy[r.id].amount), reason: rqBy[r.id].reason } : null,
@@ -1792,7 +1822,7 @@ if (view === 'portal_share_due') {
          on every line since it shipped. The period test now depends on
          audit_completed_at, so a missing column here would put every payment in the
          wrong month rather than just dropping a name. */
-      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status,total_owed,balance_of,audit_completed_by,audit_completed_at&order=ts.desc&limit=500');
+      const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status,total_owed,balance_of,audit_completed_by,audit_completed_at,audit_submitted_at,audit_sendback&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
@@ -1955,6 +1985,11 @@ if (view === 'portal_share_due') {
           if (isOwner && inPeriod(earnedAt(r)) && feeGuess != null) pending += feeGuess;
           unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount),
             purpose: r.purpose, audit_status: r.audit_status || 'client_paid',
+            /* waiting for an approver, or sent back with a reason - the home list says
+               which, so "unfinished" never hides a row the agent cannot act on, or one
+               they must. */
+            audit_submitted_at: r.audit_submitted_at || null,
+            audit_sendback: r.audit_sendback ? { ...r.audit_sendback, by_name: AGENT_NAME[r.audit_sendback.by] || r.audit_sendback.by } : null,
             mine: isOwner,
             charged_by: AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent) || null,
             owner_name: AGENT_NAME[r.commission_to] || r.commission_to || null,
@@ -1988,6 +2023,7 @@ if (view === 'portal_share_due') {
           .filter(r => {
             if (String(r.ts || '').slice(0, 10) < AUDIT_CUTOFF) return false;
             if (r.audit_status === 'complete') return false;
+            if (r.audit_status === 'ready_for_audit') return false;   // submitted: nothing left to help with
             if (NON_PAYMENT.includes(r.audit_status)) return false;
             if (r.correction_status === 'pending') return false;
             if (r.balance_of) return false;
@@ -2565,6 +2601,78 @@ if (view === 'portal_share_due') {
        cost reverses) or 'no' (it is a loss). Money decision, so: permission, reason,
        event. The Trust arithmetic for both answers already exists and is tested; only
        the transition is new. */
+    /* ---------- AUDIT REVIEW (Sep 12) ----------
+       The agent submits (carrier.js: audit_status -> ready_for_audit). Someone holding
+       audit_approve approves or sends back. Approval is what earns the commission and
+       the approval date is what dates it (Tony's rule, Sep 1). Nobody approves their
+       own: the row's owner (commission_to) and the submitter are both refused. */
+    if (action === 'approve_audit' || action === 'approve_audits' || action === 'reject_audit') {
+      const me2 = String(email).toLowerCase();
+      if (!(await may(me2, 'audit_approve'))) return res.status(403).json({ ok: false, error: 'You do not have permission to approve audits.' });
+      const b3 = req.body || {};
+      const ids = action === 'approve_audits'
+        ? [...new Set((Array.isArray(b3.payment_ids) ? b3.payment_ids : []).map(x => String(x || '').trim()).filter(Boolean))]
+        : [String(b3.payment_id || '').trim()].filter(Boolean);
+      if (!ids.length) return res.status(400).json({ ok: false, error: 'payment_id required' });
+      if (ids.length > 50) return res.status(400).json({ ok: false, error: 'At most 50 at a time.' });
+      const approving = action !== 'reject_audit';
+      let code = null, why = null;
+      if (!approving) {
+        code = String(b3.code || '').trim();
+        why = String(b3.reason || '').trim().slice(0, 500);
+        if (!AUDIT_SENDBACK_CODES[code]) return res.status(400).json({ ok: false, error: 'Pick a reason.' });
+        if (!why) return res.status(400).json({ ok: false, error: 'Say what the agent needs to fix — they read this.' });
+      }
+      const rr = await sbGet(s, `bridge_ledger?id=in.(${ids.map(encodeURIComponent).join(',')})&select=id,client_id,amount,agent,commission_to,audit_status,audit_submitted_by,audit_submitted_at,audit_sendback,service_cost,fee_amount,carrier_name`);
+      const byId = {}; for (const r of (rr.rows || [])) byId[r.id] = r;
+      const stamp = new Date().toISOString();
+      const results = [];
+      for (const id of ids) {
+        const row = byId[id];
+        if (!row) { results.push({ id, ok: false, error: 'No such payment.' }); continue; }
+        if (row.audit_status !== 'ready_for_audit') { results.push({ id, ok: false, error: `Not waiting for approval (it is "${row.audit_status || 'client_paid'}").` }); continue; }
+        const owner = String(row.commission_to || agentEmailOf(row.agent) || '').toLowerCase();
+        const submitter = String(row.audit_submitted_by || '').toLowerCase();
+        if (owner === me2 || submitter === me2) { results.push({ id, ok: false, error: 'You cannot approve your own audit.' }); continue; }
+        if (approving) {
+          if (row.service_cost == null) { results.push({ id, ok: false, error: 'No carrier cost on this row — send it back instead.' }); continue; }
+          const p1 = await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(id)}&audit_status=eq.ready_for_audit`, {
+            method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=representation' },
+            body: JSON.stringify({ audit_status: 'complete', audit_completed_by: me2, audit_completed_at: stamp }) });
+          const got = await p1.json().catch(() => []);
+          if (!Array.isArray(got) || !got.length) { results.push({ id, ok: false, error: 'It changed under you — reload.' }); continue; }
+          await fetch(`${s.base}/rest/v1/audit_reviews`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify([{ payment_id: id, action: 'approved', actor: me2, bulk: action === 'approve_audits', at: stamp }]) });
+          await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify({ ts: stamp, actor: me2, kind: 'audit.approved', client_no: row.client_id, source: 'console',
+              payload: { payment_id: id, owner, submitted_by: submitter || null, amount: Number(row.amount || 0),
+                carrier: row.carrier_name || null, carrier_amount: row.service_cost != null ? Number(row.service_cost) : null,
+                fee: row.fee_amount != null ? Number(row.fee_amount) : null, bulk: action === 'approve_audits',
+                after_sendback: !!row.audit_sendback } }) });
+          results.push({ id, ok: true, status: 'complete' });
+        } else {
+          const sendback = { by: me2, at: stamp, code, reason: why };
+          const p1 = await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(id)}&audit_status=eq.ready_for_audit`, {
+            method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=representation' },
+            body: JSON.stringify({ audit_status: 'carrier_pending', audit_sendback: sendback }) });
+          const got = await p1.json().catch(() => []);
+          if (!Array.isArray(got) || !got.length) { results.push({ id, ok: false, error: 'It changed under you — reload.' }); continue; }
+          await fetch(`${s.base}/rest/v1/audit_reviews`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify([{ payment_id: id, action: 'sent_back', actor: me2, reason_code: code, reason: why, at: stamp }]) });
+          /* The agent hears it through portal_news; owner and submitter both, when they differ. */
+          await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify({ ts: stamp, actor: me2, kind: 'audit.sent_back', client_no: row.client_id, source: 'console',
+              payload: { payment_id: id, owner, submitted_by: submitter || null, amount: Number(row.amount || 0),
+                code, code_label: AUDIT_SENDBACK_CODES[code], reason: why } }) });
+          results.push({ id, ok: true, status: 'carrier_pending', sendback });
+        }
+      }
+      const okN = results.filter(r => r.ok).length;
+      if (action === 'approve_audits') return res.status(200).json({ ok: okN > 0, approved: okN, failed: results.length - okN, results });
+      const one = results[0];
+      return res.status(one.ok ? 200 : 409).json(one.ok ? { ok: true, ...one } : { ok: false, error: one.error });
+    }
+
     if (action === 'settle_carrier') {
       const me2 = String(email).toLowerCase();
       if (!(await may(me2, 'refund'))) return res.status(403).json({ ok: false, error: 'You do not have permission to settle refunds.' });
@@ -3048,8 +3156,14 @@ if (view === 'portal_share_due') {
            the declaration and MISSED this second use, which took the audit tab down.
            Grep every use of a name before deleting it, not just the one you read. */
         service_cost: cost, fee, pct, commission, doc_count: docs.length, task_id: null,
+        /* The review trail the Audit tab reads: who submitted and when, the last
+           send-back (kept on the row for good), and who approved. */
+        audit_submitted_by: p.audit_submitted_by || null, audit_submitted_at: p.audit_submitted_at || null,
+        audit_sendback: p.audit_sendback || null,
+        audit_completed_by: p.audit_completed_by || null, audit_completed_at: p.audit_completed_at || null,
       };
     });
+    const canApprove = await may(String(email).toLowerCase(), 'audit_approve');
     if (q) {
       rows = rows.filter(r =>
         String(r.client_no).includes(q) ||
@@ -3060,7 +3174,8 @@ if (view === 'portal_share_due') {
         (r.path || '').toLowerCase().includes(q)
       );
     }
-    return res.status(200).json({ ok: true, email, rows, attachments: atts.rows || [], commissions: comm.rows || [] });
+    return res.status(200).json({ ok: true, email, rows, attachments: atts.rows || [], commissions: comm.rows || [],
+      can_approve: canApprove, names: AGENT_NAME, sendback_codes: AUDIT_SENDBACK_CODES });
   }
 
   if (view === 'agent_breakdown') {
@@ -3147,7 +3262,9 @@ if (view === 'portal_share_due') {
     // 1) proof is on file but the audit never closed — the bug that hid Sammy's work
     add('high', 'Proof on file, audit still open',
       'A carrier receipt exists but the payment is not marked complete, so no fee or commission was recorded.',
-      rows.filter(r => ['client_paid','carrier_pending'].includes(r.audit_status)
+      /* ready_for_audit is excluded: that row is waiting for an approver, which is the
+         process working, not the bug this issue was written for. */
+      rows.filter(r => ['client_paid','carrier_pending'].includes(r.audit_status) && !r.audit_submitted_at
         && docsFor(r.id).some(d => dtype(d) === 'carrier_receipt')).map(brief));
 
     // 2) documents floating free of any payment
@@ -3171,7 +3288,7 @@ if (view === 'portal_share_due') {
     // 5) nobody owns the commission
     add('med', 'Payment with no commission owner',
       'No agent is credited, so it will not appear in anyone\'s queue.',
-      rows.filter(r => !r.commission_to && ['client_paid','carrier_pending','complete'].includes(r.audit_status)).map(brief));
+      rows.filter(r => !r.commission_to && ['client_paid','carrier_pending','ready_for_audit','complete'].includes(r.audit_status)).map(brief));
 
     // 6) a fee bigger than the charge means the numbers were entered wrongly
     add('high', 'Carrier cost exceeds what the client paid',
@@ -3565,13 +3682,14 @@ if (view === 'portal_share_due') {
       } catch { return null; }
     };
     const cutoff = '2026-07-29';
-    const [openAudits, docsTotal, docsInStorage, docsInline, agentsActive, ledger30] = await Promise.all([
+    const [openAudits, docsTotal, docsInStorage, docsInline, agentsActive, ledger30, auditsWaiting] = await Promise.all([
       cnt(`bridge_ledger?audit_status=neq.complete&is_test=is.false&ts=gte.${cutoff}`),
       cnt('attachments?id=not.is.null'),
       cnt('attachments?blob_url=not.is.null'),
       cnt('attachments?file_b64=not.is.null'),
       cnt('agents?active=is.true'),
       cnt(`bridge_ledger?is_test=is.false&ts=gte.${new Date(Date.now() - 30 * 864e5).toISOString()}`),
+      cnt('bridge_ledger?audit_status=eq.ready_for_audit&is_test=is.false'),
     ]);
     let lastSync = null;
     try {
@@ -3599,6 +3717,7 @@ if (view === 'portal_share_due') {
         agents_active: agentsActive,
         payments_30d: ledger30,
         last_client_sync: lastSync,
+        audits_waiting: auditsWaiting,
       },
       versions: OPS_VERSIONS,
       costs: OPS_COSTS,

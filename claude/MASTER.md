@@ -2413,7 +2413,7 @@ Full detail in `Speedy_Workspace_Setup.md`. Summary:
 
 ⚠️ **An older reply automation exists that is NOT on this account.** It replied to dozens of reviews ~Aug 22. Likely a Cowork desktop-local task. **Find it or the two collide.**
 
-**The post cadence has never run** — `posts_log.json` is `"published": []`; only one post ever published (Jul 10). The "4/4 posts live this week" KPI was fabricated by the page; corrected Aug 27.
+**Posting is automated (Sep 12).** Two Claude Code scheduled tasks (Claude app → Scheduled): `speedy-weekly-gbp` Fri 9:10 — review replies + English post; `speedy-tuesday-gbp-es` Tue 9:09 — review replies + the Spanish version of Friday's theme. Both publish without the native picker (extension `file_upload` into a throwaway input → copy the File into the Add-post iframe's hidden `<input type=file>` → dispatch `change`), verify the branch by the phone Google pre-fills on Call now, skip "copy to other profiles", never touch Golden Square, never email. The only thing left for Saif: a 1–3★ review newer than 6 months. Each run inserts a row in `gbp_runs`; **Speedy Ops → "Google Business — live"** (`ops_summary.gbp`, `gbpSummary()` in platform.js) shows replies/posts/per-branch EN+ES age and the "left for Saif" list. Warmup rows (`kind=warmup`) are excluded. The old Cowork task (wrong Van Buren address) was deleted Sep 12; the Sep 5 local `Speedy-GBP-Dashboard.html` and its builder were removed — one dashboard, the live one. History: `posts_log.json` was always empty and the old page's "4/4 posts live" was fabricated (Aug 27).
 
 **Moreno Valley's Sunday hours are correct** — checked live Aug 28, Google shows Sunday 10–5. The July "Sunday: Closed" screenshot is stale.
 

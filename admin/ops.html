@@ -76,6 +76,31 @@
   tr:last-child td{border-bottom:0}
   .tot td{font-weight:600;border-top:1px solid var(--rule)}
   .note{color:var(--dim);font-size:11.5px;margin-top:8px}
+
+  /* Google Business block. Same vocabulary as the rest of the board: a strip of
+     figures, then rows. The one loud element is the "needs Saif" list - it is the
+     only thing on this page that a task deliberately left for a person. */
+  .gbp-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;
+    background:var(--rule);border:1px solid var(--rule);margin-bottom:14px}
+  .gbp-need{border:1px solid var(--hot);padding:10px 12px;margin-bottom:14px;font-size:13px}
+  .gbp-need b{color:var(--hot);display:block;margin-bottom:4px;font-size:11px;letter-spacing:.06em}
+  .gbp-need div{padding:3px 0}
+  .gbp-calm{color:var(--ok);font-size:12.5px;margin-bottom:14px}
+  .gbp-row{display:grid;grid-template-columns:1.4fr 1fr 1fr .8fr;gap:10px;padding:8px 0;
+    border-bottom:1px solid var(--rule);font-size:13px;align-items:baseline}
+  .gbp-row:last-child{border-bottom:0}
+  .gbp-row .b{color:var(--ink)} .gbp-row .b small{color:var(--dim);display:block;font-size:11px}
+  .gbp-row .ok{color:var(--ok)} .gbp-row .warn{color:var(--warn)} .gbp-row .hot{color:var(--hot)}
+  .gbp-row .m{color:var(--mute)}
+  @media(max-width:640px){.gbp-row{grid-template-columns:1fr 1fr}}
+  .gbp-runs{margin-top:14px}
+  .gbp-runs .r{display:grid;grid-template-columns:78px 60px 1fr;gap:10px;padding:6px 0;
+    border-bottom:1px solid var(--rule);font-size:12.5px}
+  .gbp-runs .r:last-child{border-bottom:0}
+  .gbp-runs .r .d{color:var(--mute)} .gbp-runs .r .d small{display:block;color:var(--dim);font-size:10.5px}
+  .gbp-runs .r .p span{display:inline-block;margin-right:8px}
+  .gbp-runs .r .p .full{color:var(--ok)} .gbp-runs .r .p .part{color:var(--warn)} .gbp-runs .r .p .none{color:var(--hot)}
+  .gbp-runs .r .p em{display:block;color:var(--dim);font-style:normal;font-size:11px}
   footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--rule);
     color:var(--dim);font-size:11.5px}
 </style>
@@ -110,6 +135,7 @@
       <nav class="side" id="side"></nav>
       <main>
         <section id="s-decisions"><h2>Needs a decision</h2><div id="decisions"></div></section>
+        <section id="s-gbp"><h2>Google Business — live</h2><div id="gbp"></div></section>
         <div id="sections"></div>
         <section id="s-links"><h2>Every link, one place</h2><div class="cols" id="links"></div></section>
         <section id="s-map"><h2>Platform map</h2><div id="pmap"></div></section>
@@ -188,6 +214,8 @@ function render(r) {
     { n: stored + ' / ' + L.documents, k: 'DOCS IN STORAGE', c: stored === L.documents ? 'ok' : 'warn' },
     { n: inline, k: 'STILL INLINE', c: inline ? 'warn' : 'ok' },
     { n: ago(L.last_client_sync), k: 'LAST SYNC', c: '' },
+    { n: r.gbp ? (r.gbp.for_saif || []).length : '?', k: 'GBP · FOR SAIF',
+      c: !r.gbp ? 'warn' : (r.gbp.for_saif || []).length ? 'hot' : 'ok' },
   ];
   $('#strip').innerHTML = cells.map(c =>
     '<div class="cell ' + c.c + '"><div class="n">' + esc(c.n) + '</div>'
@@ -197,7 +225,8 @@ function render(r) {
      one and not the other. */
   const nav = [
     { grp: 'GO TO', links: [['s-links','Every link',''],['s-map','Platform map','A–E']] },
-    { grp: 'ACT ON', links: [['s-decisions','Needs a decision', (r.decisions||[]).length]] },
+    { grp: 'ACT ON', links: [['s-decisions','Needs a decision', (r.decisions||[]).length],
+      ['s-gbp','Google Business', r.gbp ? ((r.gbp.for_saif||[]).length ? (r.gbp.for_saif||[]).length + ' for you' : 'live') : 'no data']] },
   ];
   const secLinks = (r.sections || []).map(s =>
     ['sec-' + s.id, s.title, s.items.length]);
@@ -226,6 +255,8 @@ function render(r) {
   $('#recurring').innerHTML = (r.recurring || []).map(x =>
     '<div class="item"><div class="pri low">·</div><div>' + esc(x) + '</div></div>').join('');
 
+  $('#gbp').innerHTML = gbpHtml(r.gbp);
+
   $('#decisions').innerHTML = (r.decisions || []).map(d =>
     '<div class="item"><div class="who">' + esc(d.who) + '</div><div>' + esc(d.text) + '</div></div>'
   ).join('') || '<div class="note">Nothing waiting.</div>';
@@ -244,6 +275,39 @@ function render(r) {
 
   $('#foot').textContent = 'Generated ' + new Date(r.generated).toLocaleString()
     + ' · counts read live from Supabase · no credentials on this page';
+}
+
+/* The GBP block. g is ops_summary.gbp: null when the table could not be read -
+   said out loud, never rendered as zeros. Ages are whole days since the run that
+   published; a branch goes hot past 8 days because the two weekly tasks make
+   8 days the longest any branch should ever wait. */
+function gbpHtml(g) {
+  if (!g) return '<div class="note">gbp_runs could not be read — the numbers are unknown, not zero.</div>';
+  const age = n => n == null ? 'never' : n === 0 ? 'today' : n + 'd ago';
+  const cls = n => n == null || n > 8 ? 'hot' : n > 5 ? 'warn' : 'ok';
+  const need = (g.for_saif || []).length
+    ? '<div class="gbp-need"><b>LEFT FOR SAIF · ' + g.for_saif.length + '</b>'
+      + g.for_saif.map(x => '<div>' + esc(x.date) + ' — ' + esc(x.text) + '</div>').join('') + '</div>'
+    : '<div class="gbp-calm">Nothing left for you. Every review the tasks may answer is answered.</div>';
+  const strip = [
+    [g.replies_30d, 'REPLIES 30D'], [g.posts_7d, 'POSTS 7D'], [g.posts_30d, 'POSTS 30D'],
+    [g.last_run ? age(g.last_run.age) : 'never', 'LAST RUN' + (g.last_run ? ' · ' + g.last_run.kind.toUpperCase() : '')],
+  ].map(([n, k]) => '<div class="cell"><div class="n">' + esc(n) + '</div><div class="k">' + esc(k) + '</div></div>').join('');
+  const rows = (g.branches || []).map(b =>
+    '<div class="gbp-row"><div class="b">' + esc(b.name) + '<small>' + esc(b.phone) + '</small></div>'
+    + '<div class="' + cls(b.en_age) + '">EN ' + age(b.en_age) + (b.en ? '<small class="m"> · ' + esc(b.en.theme) + '</small>' : '') + '</div>'
+    + '<div class="' + cls(b.es_age) + '">ES ' + age(b.es_age) + (b.es ? '<small class="m"> · ' + esc(b.es.theme) + '</small>' : '') + '</div>'
+    + '<div class="m">' + esc(b.replies30) + ' replies 30d</div></div>').join('');
+  const runs = (g.runs || []).map(r =>
+    '<div class="r"><div class="d">' + esc(r.date) + '<small>' + esc(r.kind) + '</small></div>'
+    + '<div>' + esc(r.replies) + ' rep</div><div class="p">'
+    + (r.posts.length ? r.posts.map(p => '<span class="' + (p.n === 5 ? 'full' : p.n ? 'part' : 'none') + '">'
+        + esc(p.theme) + ' · ' + esc(String(p.lang).toUpperCase()) + ' · ' + p.n + '/5</span>'
+        + (p.reason ? '<em>' + esc(p.reason) + '</em>' : '')).join('') : '<span class="m">no post</span>')
+    + (r.notes ? '<em>' + esc(r.notes) + '</em>' : '') + '</div></div>').join('');
+  return need + '<div class="gbp-strip">' + strip + '</div>' + rows
+    + '<div class="gbp-runs">' + runs + '</div>'
+    + '<div class="note">Tue 9:09 Spanish post · Fri 9:10 English post · both answer reviews · hot past 8 days · source: gbp_runs</div>';
 }
 </script>
 </body>

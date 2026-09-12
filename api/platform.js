@@ -1257,7 +1257,49 @@ function matchesAllTokens(row, toks) {
    with everything else, so a diff shows when it drifted. NO CREDENTIALS EVER - the
    master project file contains a GitHub token and none of that belongs here. */
 const OPS_VERSIONS = { portal: 'v4.1', console: 'v6.0', charge: 'v2.37',
-  carrier: 'live', master_file: '2026-09-01' };
+  carrier: 'live', master_file: '2026-09-12' };
+
+/* ---------- Google Business Profile, live ----------
+   Two scheduled Claude tasks (Tue 9:09 Spanish post, Fri 9:10 English post, both
+   also answer reviews) insert one row each into gbp_runs. This reduces those rows
+   to what Speedy Ops shows. Same arithmetic that ran locally on Sep 12; moved here
+   so the number Saif reads on his phone is the number the task wrote. */
+const GBP_BRANCHES = [
+  { key: 'VanBuren',     name: 'Riverside — Van Buren', phone: '(951) 695-1500', review: 'https://g.page/r/CYRJKiQNEUAJEBE/review' },
+  { key: 'Magnolia',     name: 'Riverside — Magnolia',  phone: '(951) 977-9400', review: 'https://g.page/r/Ca8NG2LfuGczEBE/review' },
+  { key: 'MorenoValley', name: 'Moreno Valley',         phone: '(951) 472-0927', review: 'https://g.page/r/CRndOnckRyDfEBE/review' },
+  { key: 'LakeElsinore', name: 'Lake Elsinore',         phone: '(951) 579-4095', review: 'https://maps.app.goo.gl/TavZvYkmX9LgdvsAA' },
+  { key: 'Colton',       name: 'Colton',                phone: '(909) 587-6001', review: 'https://www.google.com/maps/search/?api=1&query=Speedy+Insurance+Agency+1047+N+Mt+Vernon+Ave+Colton+CA+92324' },
+];
+function gbpSummary(rows) {
+  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+  const days = d => Math.max(0, Math.round((today - new Date(d + 'T00:00:00Z')) / 864e5));
+  const sum = o => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+  const pubCount = p => Object.values(p.published || {}).filter(Boolean).length;
+  const within = n => rows.filter(r => days(r.run_date) <= n);
+  const posts = rs => rs.reduce((t, r) => t + (r.posts || []).reduce((a, p) => a + pubCount(p), 0), 0);
+  const branches = GBP_BRANCHES.map(b => {
+    let en = null, es = null, replies30 = 0;
+    for (const r of rows) {
+      for (const p of r.posts || []) if (p.published && p.published[b.key]) { const x = { date: r.run_date, theme: p.theme }; if (p.lang === 'es') es = x; else en = x; }
+      if (days(r.run_date) <= 30) replies30 += Number((r.replies || {})[b.key]) || 0;
+    }
+    const age = x => (x ? days(x.date) : null);
+    return { ...b, en, es, en_age: age(en), es_age: age(es), replies30,
+      stale: en == null || es == null || days(en.date) > 8 || days(es.date) > 8 };
+  });
+  const last = rows[rows.length - 1] || null;
+  return {
+    replies_30d: within(30).reduce((t, r) => t + sum(r.replies), 0),
+    posts_7d: posts(within(7)),
+    posts_30d: posts(within(30)),
+    for_saif: rows.flatMap(r => (r.for_saif || []).map(text => ({ date: r.run_date, text }))),
+    last_run: last ? { date: last.run_date, kind: last.kind, age: days(last.run_date) } : null,
+    branches,
+    runs: rows.slice(-10).reverse().map(r => ({ date: r.run_date, kind: r.kind, replies: sum(r.replies),
+      posts: (r.posts || []).map(p => ({ theme: p.theme, lang: p.lang, n: pubCount(p), reason: p.reason || null })), notes: r.notes || '' })),
+  };
+}
 
 const OPS_COSTS = { fixed_monthly: 190, lines: [
   { name: 'Vercel Pro', amount: 20 },
@@ -1300,8 +1342,13 @@ const OPS_LINKS = [
     { name: 'Clover', url: 'https://www.clover.com/dashboard', note: 'app pending since Jul 23' },
     { name: 'RingCentral', url: 'https://service.ringcentral.com' },
     { name: 'Tawk.to', url: 'https://dashboard.tawk.to' },
-    { name: 'Google Business Profile', url: 'https://business.google.com' },
+    { name: 'Google Business Profile', url: 'https://business.google.com/locations' },
+    { name: 'GBP reviews', url: 'https://business.google.com/reviews', note: 'all five branches, newest first' },
+    { name: 'Facebook', url: 'https://www.facebook.com/speedyinsuranceagency/' },
+    { name: 'Instagram', url: 'https://www.instagram.com/speedy.insurance/' },
   ]},
+  { group: 'Review links — send to clients', items: GBP_BRANCHES.map(b =>
+    ({ name: b.name, url: b.review, note: /g\.page/.test(b.review) ? 'opens the review box' : 'Maps link — client must find the button' })) },
 ];
 
 /* Grouped the way the sidebar reads: act on it, or it is backlog, or it is
@@ -1309,9 +1356,9 @@ const OPS_LINKS = [
 const OPS_SECTIONS = [
   { id: 'blocking', title: 'Blocking now', items: [
     { pri: 'high', text: 'Duplicate receipts — agents re-key what the bridge already posted. Esmeralda confirmed. Ask what she sees after a charge before building anything' },
-    { pri: 'high', text: 'Finish the roster table — public.agents is seeded and verified, nothing reads it. Admins must be ADDITIVE or a bad read locks the owner out' },
+    { pri: 'med',  text: 'Roster table — steps 1–4 DONE Sep 10–11 (role/grants columns, ADDITIVE read, may(), gates on the roster, Staff page). Left: step 5 activity view over events, then delete the temporary perm_check' },
     { pri: 'high', text: 'Clover terminal has never run a live charge — pending app approval since Jul 23' },
-    { pri: 'high', text: 'Golden Square Insurance — 6th verified Google profile on the old Lake Elsinore address, splitting reviews. Close or merge, NEVER delete' },
+    { pri: 'high', text: 'Golden Square Insurance — 6th verified Google profile on the old Lake Elsinore address, splitting reviews. Parked to Sep 4, OVERDUE. Close or merge, NEVER delete' },
   ]},
   { id: 'money', title: 'Money path', items: [
     { pri: 'high', text: 'Pol 1 — prove a PORTAL-launched charge files to the correct policy tab. Partially proven, waiting on a natural real charge' },
@@ -1353,11 +1400,10 @@ const OPS_SECTIONS = [
   ]},
   { id: 'gbp', title: 'Google Business', items: [
     { pri: 'high', text: 'Four reviewers across 2019–2025 allege paid reviews. Breaches Google policy. ESCALATED TO TONY — business decision, not a template' },
-    { pri: 'high', text: 'Golden Square — parked to Fri Sep 4. Close or merge, never delete or its reviews go too' },
-    { pri: 'med',  text: 'An older reply automation exists that is NOT on this account — find it or the two collide' },
-    { pri: 'med',  text: 'The weekly reply task still says Van Buren is 2955 — delete and recreate, a device-bound task cannot be edited' },
-    { pri: 'med',  text: 'Post cadence has never run — one post ever published, Jul 10' },
-    { pri: 'low',  text: 'GBP photos — Van Buren, Magnolia and Lake Elsinore may still need updating' },
+    { pri: 'high', text: 'Golden Square — was parked to Fri Sep 4, now OVERDUE. Close or merge into Lake Elsinore, never delete or its reviews go too' },
+    { pri: 'med',  text: 'Review links: Lake Elsinore is a Maps share link and Colton a Maps search — neither opens the review box. Grab the g.page short links from GBP Manager → Ask for reviews' },
+    { pri: 'med',  text: 'Photos — Van Buren last upload 1,400+ days ago; nothing automated uploads photos yet. Send a folder and the Friday task can post one a week' },
+    { pri: 'low',  text: 'Sep 12: posting is automated. Fri 9:10 English post + Tue 9:09 Spanish post, both answer reviews, both publish without the picker (extension file_upload into the dialog\'s hidden input). The old Cowork task (wrong Van Buren address) is deleted. Only a 1–3★ review newer than 6 months is left for Saif — it appears in the GBP block above' },
   ]},
 ];
 
@@ -3532,8 +3578,18 @@ if (view === 'portal_share_due') {
       const r = await sbGet(s, 'events?kind=eq.sync.delta&select=ts&order=ts.desc&limit=1');
       lastSync = (r.rows && r.rows[0] && r.rows[0].ts) || null;
     } catch {}
+    /* GBP: last 90 days of gbp_runs, reduced to what the console shows. A failed read
+       is reported as gbp:null and the page says so - it must never show zeros that
+       mean "could not read" as if they meant "nothing happened". */
+    let gbp = null;
+    try {
+      const since = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+      const r = await sbGet(s, `gbp_runs?run_date=gte.${since}&kind=neq.warmup&select=run_date,kind,run_by,replies,posts,for_saif,notes&order=run_date.asc,id.asc`);
+      gbp = gbpSummary(r.rows || []);
+    } catch {}
     return res.status(200).json({
       ok: true,
+      gbp,
       generated: new Date().toISOString(),
       live: {
         open_audits: openAudits,

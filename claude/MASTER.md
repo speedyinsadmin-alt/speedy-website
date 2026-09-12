@@ -84,8 +84,27 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 12 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `fb70f08`.
+Last written Sep 12 night. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `c54bc11`.
+
+### ⏭ MONDAY SEP 14 — IN THIS ORDER
+1. **Tell Tony before he opens the Console:** from tonight nothing earns commission
+   until he clicks Approve. The queue is "Waiting for you" at the top of Audit, and
+   "WAITING FOR TONY" on Speedy Ops. 25–50 a day. Bulk-approve by tick; send back one
+   at a time with a reason. He cannot approve his own rows.
+2. **Watch the first real submission** (any agent, any open audit) land as
+   `ready_for_audit` and get approved. Nothing has gone through the new path yet — the
+   145 checks ran against stubs, not Supabase. If anything looks wrong, `audit_reviews`
+   is the trail.
+3. **Grant `audit_approve` by name** on the Staff page to any admin Tony wants
+   approving (Yasmin?). Admins no longer have it by default.
+4. **Refunds:** charge $1 on ZZTEST, wait 25+ min, run the probe `live` mode → answer
+   partial-vs-full → build stage 4. Also: no `refund_requests` row exists yet — the
+   Sammy → Tony request loop has never actually been exercised; do it on ZZTEST.
+5. **Tuesday 9:09** the Spanish GBP post runs by itself; check Speedy Ops → Google
+   Business afterwards. Friday 9:10 the English one.
+6. Marketing plan: Saif to paste it from the claude.ai Project before that conversation.
+
 
 ### ✅ SEP 12 NIGHT · BACK GOES TO THE PREVIOUS PLACE, NOT THE MAIN ONE
 Saif: *"all back clicks should go to the previous page not to the main one, study them on

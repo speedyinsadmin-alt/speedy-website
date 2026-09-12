@@ -77,16 +77,57 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ## HOW TO CONTINUE IN A NEW CHAT
 1. Start the new task **inside the Speedy Insurance project**, and **attach the GitHub repos** (`speedy-website`, `speedy-dashboard`) using the repository picker when the task is created. Without that, Claude can read the repos but **cannot push** — see open item #55.
 2. Claude reads THIS file, then `Speedy_Workspace_Setup.md`.
-3. **Ops Console** (the one dashboard): https://claude.ai/code/artifact/13f422b8-9364-4783-b68b-879eba93a781
+3. **Speedy Ops** (the one dashboard, every link, Google Business live): https://www.speedyins.com/admin/ops.html — admin sign-in. The claude.ai artifact it replaced is dead.
 
 ---
 
 ---
 
-## 🔜 TOMORROW — SEP 11. START HERE.
-Written at the end of Sep 10. Everything below is pushed and live unless it says
-otherwise. Nothing here is half-finished in the working tree — `git status` is clean at
-`a26cbb0`.
+## 🔜 NEXT SESSION. START HERE.
+Last written Sep 12 evening. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `fb70f08`.
+
+### ✅ SEP 12 · GOOGLE BUSINESS IS AUTOMATED AND ON SPEEDY OPS
+The missed "scheduled task" was publishing: the Sep 11 Cowork run had replied to 15
+reviews and drafted the SR-22 set but could not attach images (native picker). Published
+all five from Claude Code by feeding the Add-post iframe's hidden `<input type=file>`
+through the extension's `file_upload` — no picker. Then:
+- **Two Claude Code scheduled tasks** (app → Scheduled; SKILL.md under
+  `~/.claude/scheduled-tasks/`): `speedy-tuesday-gbp-es` Tue 9:09 (replies + Spanish
+  version of Friday's theme) and `speedy-weekly-gbp` Fri 9:10 (replies + English post).
+  Both warmed up twice so every tool is pre-approved (Chrome, file_upload, JS, shell,
+  Supabase). Only a 1–3★ review newer than 6 months is left for Saif. Old Cowork task
+  deleted (it had Van Buren as 2955).
+- **`gbp_runs` table** — one row per run; `kind=warmup` rows (ids 4, 5) are excluded.
+  `ops_summary.gbp` (`gbpSummary()` in platform.js) → the **"Google Business — live"**
+  section on Speedy Ops: replies 30d, posts 7d/30d, per-branch EN/ES post age (hot past
+  8 days), "LEFT FOR SAIF" list, run history with reasons. A failed read renders
+  "unknown, not zero". Review links per branch joined "Every link"; Lake Elsinore and
+  Colton still need `g.page` short links.
+- Stale Ops items rewritten (Golden Square OVERDUE, roster steps 1–4 done). The Sep 5
+  local dashboard and its builder were deleted — one dashboard.
+- Saif asked "does posting more matter?" Answer given and agreed: no past weekly;
+  consistency, reviews, photos, the Golden Square duplicate and the phones matter more.
+- **Marketing plan:** lives in a claude.ai Project, not on disk. Saif to paste/export it
+  before the "boost sales" conversation continues.
+
+### ✅ SEP 11 · AGENTS REQUEST, TONY DECIDES — and STAGE 5 shipped (`0211140`)
+`refund_payment` became `issueRefund(s, me, body, opts)` with a `res` shim and
+`opts.dryRun`. Agents see "Ask for a refund…" → the same four questions → blue "Send to
+Tony for approval" → `request_refund` (validated by the real code in dry-run, one open
+request per payment, partial unique index, `refund.requested` event). Tony decides in
+the Console **Refunds** tab: approve calls `issueRefund` with the agent's answers
+verbatim (stays pending if Clover refuses); decline needs a reason; agent reads it in
+notifications. Same tab carries **stage 5**: "Carrier still owes us" → `settle_carrier`
+(`pending→yes|no`, reason, event). 342 refund checks + 32 through both pages' real
+markup; seven regressions confirmed caught. **The self-serve window is NOT built** —
+Tony has not named N; do not invent one. **Test loop still owed:** Sammy opens the $50
+on ZZTEST → Ask → Tony approves in Refunds.
+
+### ⚠️ THE $1 ZZTEST RESULT — refund landed, but as a VOID
+Saif charged and refunded $1 on ZZTEST Sep 11; ledger row, HawkSoft note, email all
+correct — but 11 minutes < 25, so Clover VOIDED. The true-refund settlement path and
+partial-vs-full are STILL unexercised. Step 1 below stands.
 
 ### ✅ SEP 11 · "NO SILENT INFO" — every refund and charge now says whether the client was told
 Saif, Sep 11: *"I don't want any silent info while we do that — if it did not continue
@@ -206,7 +247,7 @@ the original month's commission. It needs the fee reversal to be proportional
 Do not start it before the probe answers — building on an unverified Clover capability
 is the `pickInvoices` mistake.
 
-### 3. STAGE 5 — the carrier recovery queue. Agreed Sep 10, not started.
+### 3. ~~STAGE 5 — the carrier recovery queue~~ DONE Sep 11 (`0211140`) — kept for the design record
 **Why it matters:** `carrier_to_recover` is already a real figure in Trust with **no
 screen and nothing chasing it**. That is precisely the shape of the `carrier_pending`
 audit problem — an unfinished thing nobody sees — which is how a $141.00 gap sat
@@ -235,10 +276,8 @@ unnoticed in Trust until it was measured.
 raise something the way the audit queue does? Nobody has asked for it; do not invent it.
 
 ### 4. ALSO QUEUED, smaller
-- **The agent self-serve window and the "request for Tony" flow.** Refunds are
-  **owner-only** today. `may(email,'refund')` is the gate, so granting an agent `refund`
-  on the Staff page works with no deploy — but the mockup's "Send to Tony for approval"
-  path is not built.
+- ~~The "request for Tony" flow~~ DONE Sep 11. **The self-serve window** (agent refunds
+  own charge inside N minutes, no approval) waits on Tony naming N.
 - **Item 70 step 5** — the cross-cutting activity view over `events`, filterable by
   kind/actor/client/date. The last piece of "everything must show so Tony can understand
   why". Then delete the temporary `perm_check` view.
@@ -263,9 +302,11 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 
 | harness | covers |
 |---|---|
-| `harnessRefund.mjs` | 179 checks — refunds, the guards, the month rule, the Trust invariant |
+| `harnessRefund.mjs` | 342 checks — refunds, requests, decisions, carrier settle, the Trust invariant (`node --import ./mock_mail.mjs`) |
+| `harnessRequestUI.mjs` | 32 — the request flow through both pages' real markup |
+| `harnessGbp.mjs` | 28 — `gbpSummary()` on the real rows + ops.html render, calm/hot/null |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
-| `harnessStaff2.mjs` | 136 — the Staff page, on real jsdom, through the markup |
+| `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |
 | `harnessPortalStaff.mjs` | 42 — `portal_staff`, additively |
 | `portalscan.mjs` | orphaned identifiers and TDZ reads in `portal.html` |

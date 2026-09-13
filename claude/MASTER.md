@@ -84,20 +84,26 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 13 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `2fc5b15`.
+Last written Sep 13 night. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `0330b5f`.
 
 ### ⏭ MONDAY SEP 14 — IN THIS ORDER
-0. **Agents will notice four things Monday morning — tell them in one message:** the
+0. **Agents will notice five things Monday morning — tell them in one message:** the
    charge sheet asks the purpose differently (New business needs a source; Other needs
    text), it asks "paid in full, or part?", the audit button reads "Submit for
-   approval" and nothing is earned until Tony approves, and the Back button now goes
-   back instead of to the sign-in screen. None of it needs training; all of it will
-   get a question if nobody says it first.
+   approval" and nothing is earned until Tony approves, the Back button now goes
+   back instead of to the sign-in screen, and **when Tony sends an audit back there is
+   a reply box under his reason** — resubmitting with nothing changed and no reply is
+   refused. Client search by phone now works from the third digit, any format.
 1. **Tell Tony before he opens the Console:** from tonight nothing earns commission
    until he clicks Approve. The queue is "Waiting for you" at the top of Audit, and
    "WAITING FOR TONY" on Speedy Ops. 25–50 a day. Bulk-approve by tick; send back one
-   at a time with a reason. He cannot approve his own rows.
+   at a time with a reason. He cannot approve his own rows. **Click the file pill (or
+   "Open review") on a row: the review room** — the whole exchange, the files with
+   prev/next, zoom, rotate, expand, and Approve / Send back at the bottom. **Trust tab:**
+   one search box finds any payment of the month by exact amount, name, #, carrier,
+   agent, purpose or ref; click a carrier to open its payments; "Download <month>
+   (CSV)" is the full report.
 2. **Watch the first real submission** (any agent, any open audit) land as
    `ready_for_audit` and get approved. Nothing has gone through the new path yet — the
    145 checks ran against stubs, not Supabase. If anything looks wrong, `audit_reviews`
@@ -111,6 +117,59 @@ otherwise; `git status` is clean at `2fc5b15`.
    Business afterwards. Friday 9:10 the English one.
 6. Marketing plan: Saif to paste it from the claude.ai Project before that conversation.
 
+
+### ✅ SEP 13 NIGHT · THE REPLY, THE TRUST REPORT, THE REVIEW ROOM, PHONE SEARCH
+Four pushes after "stop for today", each on its own, each with a harness, a mutation
+run and a Chrome photograph of the real screen.
+
+**Phone search (`a22c856`).** Saif: *"the agent shouldn't care how he writes it."* The
+stored shape is `(AAA)BBB-CCCC`; the full number matched in any format but 6–9 typed
+digits produced patterns that could never match, so nothing appeared until the tenth
+digit. `phonePatterns()` lays the typed digits onto the stored shape as a prefix with
+`_` for the parentheses (a `(` inside PostgREST's `or=()` is the recorded trap);
+seven digits are also tried as a bare local number. `harnessPhoneSearch.mjs` (25).
+
+**The reply (`7cebb23`).** Daisy's fee-only endorsement was sent back for a missing
+carrier receipt and she had nowhere to say "there is none — it's a fee". Now the carrier
+page has **"Reply to Tony"** under the red reason (pre-filled with an earlier reply); the
+waiting banner shows "Your reply to Tony". `save_carrier_leg` stores `review_reply` on
+`audit_sendback` (`reply`, `reply_at`, `resubmitted_at`), in `audit_reviews`
+(`reason_code: resubmitted`, reason = the reply) and in the `audit.submitted` event.
+**An identical silent resubmit** after a send-back — same cost, same carrier, no new
+file, no reply — is refused `400 reply_required` and the page focuses the box. A fresh
+send-back from Tony starts a new exchange (old reply gone). `audit_list` returns
+`fee_only` (= `carrier_zero_ack`); the Console row shows **"fee only — no carrier
+payment"** and **"Daisy replied: …"**; the portal card shows "Your reply".
+`harnessReply.mjs` (68), 21/21 caught; `harnessAuditReview` updated to the rule (156).
+
+**Trust (`49baf57`).** The tab had totals and a carrier table and nothing underneath.
+The `trust` view now returns `items` — every collected row of the period, named — and
+`refund_items`. One box **searches anything**: a number with cents is an exact amount
+on the charge, the carrier cost **or** the fee ("312.43" finds the row whether the
+client paid it or the carrier got it, highlighted where it hit); words match client,
+#, carrier, agent, purpose, ref, all words required; the matches get their own totals
+line; typing never refetches. A carrier row **opens in place** to the payments its line
+was summed from. **"Download <month> (CSV)"** — every payment + the refunds, quoted,
+Pacific. *Latent bug fixed in the same commit:* the trust select never carried
+`refund_of` / `refund_carrier`, so every refund's parent was undefined — carrier cost
+0, answer "pending" — and `carrier_lost` could never count. The harness stub returned
+whole rows and hid it; `harnessTrust.mjs` (70) honours the select. 22/22 caught.
+
+**The review room (`0330b5f`).** Saif: a paragraph on the row is a hassle; the file
+viewer needs controls. The row keeps the first 110 characters of a reply or a long
+reason plus **"Open review ▸"**; the file pill opens the same room. `openDocs()` is now
+the room: header from the row (client, purpose, money, who submitted, fee-only);
+left the **exchange in full** (send-back with its label, the reply, who/when) then the
+files; right the viewer with **◀ ▶** (arrow keys too), **Fit / − / % / +**, **Rotate**
+(photos — a PDF has its own viewer, button disabled), **Expand** to the whole window
+(remembered), Download, New tab; a new file starts at Fit, upright. Bottom: **Approve /
+Send back…** for an approver on a waiting row that is not their own (approve posts and
+closes; send back opens the sheet). Without `AUDIT_ROWS` (other pages) it is plain
+Documents. *Two bugs fixed on the way:* Back closed the popup by emptying it and left
+the dark overlay on the page (now `closeDocs()`); and `roomZoom(+1)` vs
+`roomZoom(1)` were the same number — zoom words now (`in/out/one/fit`). The footer note
+wore the page's `.note` rule until the photograph showed it. `harnessRoom.mjs` (54),
+31/31 caught.
 
 ### ✅ SEP 13 · FIVE THINGS FROM ONE SCREENSHOT — receipts, purpose, one row, one card, part payments
 Saif opened with the two Audit views and asked what the point was if they showed
@@ -483,7 +542,11 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessPayCard.mjs` | 31 — shared card: read-only strips exactly the actions; portal bytes unchanged; Console renders it |
 | `harnessTotalOwed.mjs` | 18 — paid in full / part payment on the real sheet |
 | `harnessBack.mjs` | 40 — history/popstate on portal, Console, carrier page |
-| `harnessAuditReview.mjs` | 152 — submit/approve/send-back + both Audit views byte-identical |
+| `harnessAuditReview.mjs` | 156 — submit/approve/send-back + both Audit views byte-identical |
+| `harnessReply.mjs` | 68 — the reply rule on the real carrier.js; Console row, carrier page, portal card |
+| `harnessTrust.mjs` | 70 — the real trust view (select honoured) + search / open carrier / CSV on the real page |
+| `harnessRoom.mjs` | 54 — the review room: snippet, exchange, viewer toolbar, decision, closing |
+| `harnessPhoneSearch.mjs` | 25 — `buildClientSearch` phone patterns against a stored number |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

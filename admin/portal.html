@@ -73,6 +73,8 @@
   .chips{display:flex;flex-wrap:wrap;gap:5px}
   .chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:12px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
   .chips button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  /* the part-payment answer is the one that changes money; selected, it is red, not blue */
+  .chips button.part.sel{background:var(--red);border-color:var(--red);color:#fff}
   .cf{background:#fff;border-radius:10px;height:48px;padding:2px 10px;margin:6px 0;overflow:hidden}
   .cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
   .clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
@@ -363,7 +365,7 @@
         <div id="chgHsPreview" class="hide" style="border:1px solid var(--hair);border-radius:10px;padding:9px 12px;margin-bottom:12px"></div>
 
         <label for="chgAmt">Amount</label>
-        <input id="chgAmt" inputmode="decimal" placeholder="0.00" autocomplete="off" oninput="renderChgHsPreview()">
+        <input id="chgAmt" inputmode="decimal" placeholder="0.00" autocomplete="off" oninput="showBalance();renderChgHsPreview()">
 
         <label style="margin-top:12px">Purpose</label>
         <div id="chgPurp" class="chips"></div>
@@ -374,8 +376,21 @@
         </div>
 
         <div style="margin-top:12px">
-          <label for="chgTotal">Total owed &mdash; leave blank if paying in full</label>
-          <input id="chgTotal" inputmode="decimal" placeholder="Same as amount" autocomplete="off" oninput="showBalance()">
+          <!-- PAID IN FULL, OR PART? (Saif, Sep 13: "Total owed needs to be more recognised".)
+               A grey optional field was blank on every full payment and so invisible on the
+               one that was not - and a part payment recorded as full derives the fee from the
+               part, which is the Sep 9 negative-fee bug. A question is read; a field is skipped.
+               "Paid in full" stays the default so a full payment costs nothing extra; the amount
+               box appears, red and required, only when the answer is Part payment. -->
+          <label>Is this the full amount the client owes for this sale?</label>
+          <div id="chgFull" class="chips">
+            <button type="button" class="sel" onclick="pickFull(true,this)">Paid in full</button>
+            <button type="button" class="part" onclick="pickFull(false,this)">Part payment &mdash; client still owes</button>
+          </div>
+          <div id="chgTotalWrap" class="hide" style="margin-top:8px;padding:10px 11px;background:rgba(224,49,49,.08);border:1px solid rgba(224,49,49,.45);border-radius:10px">
+            <label for="chgTotal" style="color:var(--red-ink)">Total the client owes for this sale &mdash; required</label>
+            <input id="chgTotal" inputmode="decimal" placeholder="e.g. 187.00" autocomplete="off" oninput="showBalance();renderChgHsPreview()" style="border-color:rgba(224,49,49,.55)">
+          </div>
           <div id="chgBal" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px;font-size:12.5px;color:var(--amber-ink)"></div>
         </div>
 
@@ -1972,7 +1987,7 @@ function applyToBalance(id, left){
   CHG_BALANCE_OF = id;
   chgEl('chgAmt').value = left.toFixed(2);
   chgEl('chgTotal').value = '';           // the total lives on the original charge
-  showBalance();
+  pickFull(true, document.querySelector('#chgFull button'));
   chgEl('chgBalPicked').innerHTML = '<span style="color:var(--green)">\u2713 This payment will pay down that balance</span>'
     + ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="clearBalance()">not that</span>';
 }
@@ -2252,7 +2267,7 @@ async function openCharge(no, preselectPolicy){
     return;
   }
   CHG = { clientNo: no, confirmed: null };
-  CHG_PURPOSE = 'New business'; CHG_SUB = ''; CHG_METHOD = 'card';
+  CHG_PURPOSE = 'New business'; CHG_SUB = ''; CHG_METHOD = 'card'; CHG_FULL = true;
   chgEl('chgResult').innerHTML = ''; LEDGER_ID = null;
   chgEl('chgBody').classList.add('hide');
   chgEl('chgLoading').classList.remove('hide');
@@ -2292,6 +2307,8 @@ function closeCharge(){
   CHG = null;
   chgEl('chgAmt').value = ''; chgEl('chgNote').value = '';
   chgEl('chgOther').value = ''; chgEl('chgAltRef').value = ''; chgEl('chgTotal').value = ''; chgEl('chgBal').classList.add('hide');
+  chgEl('chgTotalWrap').classList.add('hide');
+  document.querySelectorAll('#chgFull button').forEach((x, i) => x.classList.toggle('sel', i === 0));
   chgEl('chgGo').disabled = false;
   loadHome();   // loadHome calls loadNews, so the bell catches up here too
 }
@@ -2565,7 +2582,34 @@ function renderChgHsPreview(){
   }
   el.innerHTML = '<div class="dim" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">What HawkSoft will receive</div>'
     + '<div style="font-size:12.5px;line-height:1.5">· For: <b>' + esc(chgPurposeText()) + '</b></div>'
+    + (function(){
+        if(CHG_FULL) return '';
+        const amt = parseFloat(String(chgEl('chgAmt').value).replace(/[^0-9.]/g,'')) || 0;
+        const tot = parseFloat(String(chgEl('chgTotal').value).replace(/[^0-9.]/g,'')) || 0;
+        return '<div style="font-size:12.5px;line-height:1.5;color:var(--red-ink)">· <b>Part payment</b>'
+          + (tot > amt && amt > 0 ? ' \u2014 ' + money(amt) + ' of ' + money(tot) + ', <b>' + money(tot - amt) + ' still owed</b>' : ' \u2014 total not entered yet') + '</div>';
+      })()
     + rows.map(r => '<div style="font-size:12.5px;line-height:1.5">· ' + r + '</div>').join('');
+}
+let CHG_FULL = true;   // the answer to "paid in full?"; false shows the total box
+function pickFull(full, btn){
+  CHG_FULL = !!full;
+  document.querySelectorAll('#chgFull button').forEach(x => x.classList.remove('sel'));
+  if(btn) btn.classList.add('sel');
+  chgEl('chgTotalWrap').classList.toggle('hide', CHG_FULL);
+  if(CHG_FULL){ chgEl('chgTotal').value = ''; chgEl('chgBal').classList.add('hide'); }
+  else chgEl('chgTotal').focus();
+  showBalance(); renderChgHsPreview();
+}
+/* Why the charge cannot go yet because of the total, or null. A part payment with no
+   total, or a total no bigger than the payment, is refused before any money path. */
+function chgTotalProblem(){
+  if(CHG_FULL) return null;
+  const amt = parseFloat(String(chgEl('chgAmt').value).replace(/[^0-9.]/g,'')) || 0;
+  const tot = parseFloat(String(chgEl('chgTotal').value).replace(/[^0-9.]/g,'')) || 0;
+  if(!tot) return 'Enter the total the client owes for this sale \u2014 or choose Paid in full.';
+  if(tot <= amt) return 'The total owed has to be more than the amount being collected \u2014 or choose Paid in full.';
+  return null;
 }
 function pickPurpose(p, btn){
   CHG_PURPOSE = p; CHG_SUB = '';
@@ -2631,6 +2675,7 @@ function doCharge(){
   const amt = amtVal();
   if(!(parseFloat(amt) > 0)){ chgSay('Enter the amount first.'); return; }
   const pp = chgPurposeProblem(); if(pp){ chgSay(pp); return; }
+  const tp = chgTotalProblem(); if(tp){ chgSay(tp); return; }
   if(CHG_METHOD === 'card') return chargeCardPortal(amt);
   if(CHG_METHOD === 'link') return createLinkPortal(amt);
   return chargeCashPortal(amt);

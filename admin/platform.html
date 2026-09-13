@@ -1247,12 +1247,14 @@ function renderAgentView(r){
     + '</div>';
   const totEarned = list.reduce((a,x)=>a+x.earned,0);
 
-  let h = '<div class="muted" style="font-size:12.5px;margin:-4px 0 10px">Commission is earned only when a transaction'+"'"+'s audit is complete. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
+  let h = '<div class="muted" style="font-size:12.5px;margin:-4px 0 10px">Commission is earned the day an audit is approved. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
   h += '<div style="margin-bottom:14px;font-size:14px">Total earned commission: <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></div>';
   h += agSort;
 
   if(!list.length) h += '<div class="muted">No agent activity.</div>';
 
+  const AG_CTX = { atts: r.attachments || [], canApprove: !!r.can_approve, email: r.email, names: r.names };
+  h += auditBulkBarHtml(AG_CTX);
   for(const g of list){
     const isEmail = g.agent.includes('@');
     const pct = commMap[g.agent] != null ? commMap[g.agent] : 10;
@@ -1293,7 +1295,9 @@ function renderAgentView(r){
           + '<input type="number" min="0" max="100" step="0.5" value="'+pct+'" onchange="setAgentPct(\''+g.agent+'\',this.value)" style="width:70px;background:var(--navy);border:1.5px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--ink);font-size:13px">'
           + '<span class="muted">% of fee · fees generated: <b class="amount">'+money(g.fees)+'</b></span></div>';
       }
-      h += '<table><tr><th>When</th><th>Client</th><th>Path</th><th>Charge</th><th>Fee</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
+      /* The same header and the same row as the Transactions view. */
+      const agCtx = AG_CTX;
+      h += '<table class="tscroll">' + auditHeadHtml(agCtx);
       const atts = r.attachments || [];
       /* THE SAME ORDER AS THE TRANSACTIONS VIEW. An agent opening their own row is
          looking for what they still have to do; date order buries it. Melisa's three
@@ -1304,7 +1308,7 @@ function renderAgentView(r){
       const agHasReceipt = z => atts.some(a => a.payment_id === z.id
         && (String(a.doc_type || a.kind || '') === 'carrier_receipt'
             || String(a.doc_type || '').endsWith('_no_payment')));
-      const agOpen = z => z.audit_status !== 'complete' && !z.pre_audit;
+      const agOpen = z => z.audit_status !== 'complete' && z.audit_status !== 'ready_for_audit' && !z.pre_audit;
       const agNeedsProof = z => agOpen(z) && !agHasReceipt(z);
       const agNeedsCost  = z => agOpen(z) &&  agHasReceipt(z) && (z.service_cost == null);
       const agBucket = z => agNeedsProof(z) ? 0 : (agNeedsCost(z) ? 1 : 2);
@@ -1312,20 +1316,7 @@ function renderAgentView(r){
         ? g.tx.slice().sort((p,q) => (agBucket(p) - agBucket(q))
                                      || String(q.ts).localeCompare(String(p.ts)))
         : g.tx;
-      for(const x of txList){
-        const st = x.pre_audit ? '<span class="muted">—</span>' : x.audit_status==='complete' ? '<span class="pill g">complete</span>' : '<span class="pill a">'+esc(String(x.audit_status||'open').replace(/_/g,' '))+'</span>';
-        const docs = atts.filter(a => (a.payment_id===x.id) || (a.client_no===x.client_no));
-        const docCell = docsCell(docs, !x.pre_audit && x.audit_status !== 'complete', x.id, (x.client_name||('#'+x.client_no))+' \u00b7 '+money(x.amount));
-        h += '<tr><td class="muted" style="font-size:12px">'+esc(PT_DAY(x.ts))+'</td>'
-          + '<td><span class="raw-t" onclick="openClient('+x.client_no+')">'+(x.client_name?esc(x.client_name)+' ':'')+'#'+x.client_no+'</span>'
-            + (x.charged_by_other ? '<div class="muted" style="font-size:10.5px">charged by ' + esc(String(x.charged_by||'').split(' ')[0]) + '</div>' : '')
-            + '</td>'
-          + '<td><span class="pill b">'+(x.path==='dmv_service'?'DMV':x.path==='insurance'?'Insurance':esc(x.path||'—'))+'</span></td>'
-          + '<td class="amount">'+money(x.amount)+balanceCell(x)+'</td>'
-          + '<td class="amount">'+(x.fee!=null?money(x.fee):'—')+'</td>'
-          + '<td class="amount">'+(x.commission!=null?'<b style="color:#7fa8ff">'+money(x.commission)+'</b>':(x.fee!=null?'<span class="muted">'+money(x.fee*x.pct/100)+'?</span>':'—'))+releasedNote(x)+'</td>'
-          + '<td>'+st+'</td><td class="docs">'+docCell+'</td></tr>';
-      }
+      for(const x of txList) h += auditRowHtml(x, agCtx);
       h += '</table></div>';
     }
     h += '</div>';
@@ -1366,26 +1357,14 @@ function setRange(){
   AUDIT_FROM = f ? f.value : ''; AUDIT_TO = t ? t.value : '';
   render();
 }
-async function renderAudit(el){
-  el.innerHTML = '<h2>Audit — full transaction trail</h2>' + auditSubNav() + '<div class="muted">Loading…</div>';
-  let r;
-  try { r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : '')); }
-  catch(e){ el.innerHTML = auditSubNav() + '<div class="err">Load error: ' + esc(String(e&&e.message||e)) + '</div>'; return; }
-  if(!r){ el.innerHTML = auditSubNav() + '<div class="err">No response from server (audit_list). It may be redeploying — try again in a moment.</div>'; return; }
-  if(!r.ok){ el.innerHTML = auditSubNav() + '<div class="err">Server error: ' + esc(r.error||'unknown') + '</div>'; return; }
-  AUDIT_CACHE = r;
-  if(AUDIT_SUB === 'agents'){
-    try { el.innerHTML = (await renderCorrections()) + '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); }
-    catch(e){ el.innerHTML = auditSubNav() + '<div class="err">By-agent render error: ' + esc(String(e&&e.message||e)) + '</div>'; }
-    return;
-  }
-  const rows = r.rows || [];
-  const atts = r.attachments || [];
-  window.AUDIT_ROWS = {}; rows.forEach(x => window.AUDIT_ROWS[x.id] = x);
-  const canApprove = !!r.can_approve;
-  /* Ticks on rows that are no longer waiting (approved meanwhile, or sent back) drop out. */
-  for(const id of [...AUDIT_SEL]) if(!(AUDIT_ROWS[id] && AUDIT_ROWS[id].audit_status === 'ready_for_audit')) AUDIT_SEL.delete(id);
-
+/* ---------- ONE ROW, TWO VIEWS (Sep 13) ----------
+   Saif: "when I click By agent I don't see all the same information." The by-agent
+   view had its own, older row: no Cost, no purpose, no time, raw status text, no
+   "+ proof", and it would never have shown "waiting for you" or "sent back". Same
+   bug shape MASTER.md already names - fix one reader, leave the other. Now both views
+   build every row through auditRowHtml with the same header, so they cannot differ.
+   ctx = { atts, canApprove, email, names }. */
+function auditRowKit(ctx){
   const pathLabel = p => p==='dmv_service' ? 'DMV service' : p==='insurance' ? 'Insurance' : p==='pre_audit' ? 'Pre-audit' : (p||'—');
   const statusPill = row => {
     if(row.pre_audit) return '<span class="muted" title="Charged before the proof-of-payment process">—</span>';
@@ -1393,7 +1372,7 @@ async function renderAudit(el){
     if(s==='complete') return '<span class="pill g">complete</span>';
     /* "waiting for YOU" only if this signed-in person can approve; otherwise it is
        waiting for someone else and the pill must not read as a to-do. */
-    if(s==='ready_for_audit') return '<span class="pill b">' + (canApprove ? 'waiting for you' : 'waiting for approval') + '</span>';
+    if(s==='ready_for_audit') return '<span class="pill b">' + (ctx.canApprove ? 'waiting for you' : 'waiting for approval') + '</span>';
     if(row.audit_sendback) return '<span class="pill r">sent back</span>';
     if(s==='carrier_pending') return '<span class="pill a">docs pending</span>';
     return '<span class="pill a">needs audit</span>';
@@ -1401,7 +1380,7 @@ async function renderAudit(el){
   /* THE LINE UNDER THE PILL: who did what, when, and the reason. Read from the row,
      never inferred - a "complete" with no submitter was approved by the agent
      themselves before Sep 12 and the line says nothing rather than something false. */
-  const nameOf = e => (r.names && r.names[e]) || (e ? String(e).split('@')[0] : '');
+  const nameOf = e => (ctx.names && ctx.names[e]) || (e ? String(e).split('@')[0] : '');
   const first = e => String(nameOf(e)).split(' ')[0];
   const agoOf = ts => { const m = Math.round((Date.now() - new Date(ts)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m/60) + ' h ago' : Math.round(m/1440) + ' d ago'; };
   const reviewSub = row => {
@@ -1424,13 +1403,105 @@ async function renderAudit(el){
     return '';
   };
   const reviewActs = row => {
-    if(!canApprove || row.audit_status !== 'ready_for_audit') return '';
-    const own = (row.commission_to || row.agent || '') === (r.email || '') || (row.audit_submitted_by || '') === (r.email || '');
+    if(!ctx.canApprove || row.audit_status !== 'ready_for_audit') return '';
+    const own = (row.commission_to || row.agent || '') === (ctx.email || '') || (row.audit_submitted_by || '') === (ctx.email || '');
     if(own) return '<div class="rvsub">yours — someone else approves it</div>';
     return '<div class="rvacts"><button class="aok" onclick="approveAudit(\'' + row.id + '\')">Approve</button>'
       + '<button class="ano" onclick="openSendBack(\'' + row.id + '\')">Send back…</button></div>'
       + '<div class="rvmsg" id="rvmsg_' + row.id + '"></div>';
   };
+  return { pathLabel, statusPill, nameOf, first, agoOf, reviewSub, reviewActs };
+}
+function auditHeadHtml(ctx){
+  return '<tr>' + (ctx.canApprove ? '<th class="selcell"></th>' : '') + '<th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
+}
+function auditRowHtml(row, ctx){
+  const { pathLabel, statusPill, reviewSub, reviewActs } = ctx.kit || (ctx.kit = auditRowKit(ctx));
+  let out = '';
+    const docs = ctx.atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
+    const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount));
+    const nm = row.client_name ? esc(row.client_name) : '';
+    const canComplete = !row.pre_audit && row.audit_status !== 'complete' && row.audit_status !== 'ready_for_audit';
+    /* This is a BUTTON, not a status, and it used to be labelled "+ proof" on every
+       unfinished audit - including ones whose receipt was already attached and showing
+       a green tick two columns away. Same words, two meanings. It now says what is
+       actually missing: a receipt, or the carrier cost. */
+    const rowHasReceipt = docs.some(d => d.payment_id === row.id
+                          && ((d.doc_type || d.kind) === 'carrier_receipt'
+                              || String(d.doc_type || '').endsWith('_no_payment')));
+    const completeBtn = canComplete
+      ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">'
+        + (rowHasReceipt ? '+ carrier cost' : '+ proof') + '</span>'
+      : '';
+    const isWait = row.audit_status === 'ready_for_audit';
+    const ownRow = (row.commission_to || row.agent || '') === (ctx.email || '') || (row.audit_submitted_by || '') === (ctx.email || '');
+    out += '<tr' + (isWait && ctx.canApprove ? ' class="waitrow"' : '') + '>'
+      + (ctx.canApprove ? '<td class="selcell">' + (isWait && !ownRow
+          ? '<input type="checkbox" ' + (AUDIT_SEL.has(row.id) ? 'checked ' : '') + 'onchange="toggleSel(\'' + row.id + '\', this.checked)" aria-label="select for approval">'
+          : '') + '</td>' : '')
+      + '<td class="muted" style="font-size:12px">'+esc(PT_STAMP(row.ts))+'</td>'
+      /* WHAT THE CHARGE WAS FOR. `purpose` has always been returned and is already
+         searchable — the placeholder promises it — but the table never showed it, so
+         every row read as an anonymous amount. Under the client rather than in a new
+         column: the table's minimum width is already the problem here. */
+      + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span>'
+        + (row.purpose ? '<div class="muted" style="font-size:11px;margin-top:1px">'+esc(row.purpose)+'</div>' : '')
+        + '</td>'
+      + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
+      + '<td class="amount">'+money(row.amount)+balanceCell(row)+'</td>'
+      + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
+      + '<td class="amount">'+(row.fee!=null?signed(row.fee):'—')+'</td>'
+      + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
+      + '<td class="amount">'+(row.commission!=null?'<b style="color:'+(row.commission<0?'var(--red)':'#7fa8ff')+'">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
+      + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+reviewSub(row)+reviewActs(row)+'</td>'
+      + '<td class="docs">'+docCell+'</td>'
+      + '</tr>';
+  return out;
+}
+
+/* THE BULK BAR, once, for both views. Ticks are one set (AUDIT_SEL) whichever view
+   they were made in, so the bar must be wherever the ticks are. */
+function auditBulkBarHtml(ctx){
+  let h = '';
+  const canApprove = !!ctx.canApprove;
+  const first = (ctx.kit || (ctx.kit = auditRowKit(ctx))).first;
+  if(canApprove && AUDIT_SEL.size){
+    const sel = [...AUDIT_SEL].map(id => AUDIT_ROWS[id]).filter(Boolean);
+    const fees = sel.reduce((a,x) => a + (x.fee || 0), 0);
+    const byAgent = {}; for(const x of sel){ const k = first(x.commission_to || x.agent); byAgent[k] = (byAgent[k]||0) + 1; }
+    h += '<div class="bulkbar" id="bulkbar"><span><b>' + sel.length + ' selected</b> · ' + money(fees) + ' in fees · '
+      + esc(Object.entries(byAgent).map(([k,n]) => k + ' ×' + n).join(', ')) + '</span>'
+      + '<span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+      + '<button class="aok" style="padding:8px 16px" onclick="approveSelected()">Approve ' + sel.length + ' selected</button>'
+      + '<button class="ano" onclick="clearSel()">Clear</button>'
+      + '<span class="hint">Send back is one row at a time — it needs a reason.</span></span>'
+      + '<div class="rvmsg" id="bulkmsg" style="flex-basis:100%"></div></div>';
+  }
+  return h;
+}
+async function renderAudit(el){
+  el.innerHTML = '<h2>Audit — full transaction trail</h2>' + auditSubNav() + '<div class="muted">Loading…</div>';
+  let r;
+  try { r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : '')); }
+  catch(e){ el.innerHTML = auditSubNav() + '<div class="err">Load error: ' + esc(String(e&&e.message||e)) + '</div>'; return; }
+  if(!r){ el.innerHTML = auditSubNav() + '<div class="err">No response from server (audit_list). It may be redeploying — try again in a moment.</div>'; return; }
+  if(!r.ok){ el.innerHTML = auditSubNav() + '<div class="err">Server error: ' + esc(r.error||'unknown') + '</div>'; return; }
+  AUDIT_CACHE = r;
+  if(AUDIT_SUB === 'agents'){
+    try { el.innerHTML = (await renderCorrections()) + '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); }
+    catch(e){ el.innerHTML = auditSubNav() + '<div class="err">By-agent render error: ' + esc(String(e&&e.message||e)) + '</div>'; }
+    return;
+  }
+  const rows = r.rows || [];
+  const atts = r.attachments || [];
+  window.AUDIT_ROWS = {}; rows.forEach(x => window.AUDIT_ROWS[x.id] = x);
+  const canApprove = !!r.can_approve;
+  /* Ticks on rows that are no longer waiting (approved meanwhile, or sent back) drop out. */
+  for(const id of [...AUDIT_SEL]) if(!(AUDIT_ROWS[id] && AUDIT_ROWS[id].audit_status === 'ready_for_audit')) AUDIT_SEL.delete(id);
+
+  const K = auditRowKit({ names: r.names, email: r.email, canApprove, atts });
+  const first = K.first;
+  const ctx0 = { atts, canApprove, email: r.email, names: r.names, kit: K };
 
   /* ------------------------------------------------------------------
      PACIFIC TIME, ALWAYS. The agency is in Los Angeles; this console ran
@@ -1544,18 +1615,7 @@ async function renderAudit(el){
   /* THE BULK BAR. Approve many at once is a human decision made once per tick; send
      back stays one at a time because each needs its own reason. Shows only when the
      selection is not empty, and says what is in it in money and people. */
-  if(canApprove && AUDIT_SEL.size){
-    const sel = [...AUDIT_SEL].map(id => AUDIT_ROWS[id]).filter(Boolean);
-    const fees = sel.reduce((a,x) => a + (x.fee || 0), 0);
-    const byAgent = {}; for(const x of sel){ const k = first(x.commission_to || x.agent); byAgent[k] = (byAgent[k]||0) + 1; }
-    h += '<div class="bulkbar" id="bulkbar"><span><b>' + sel.length + ' selected</b> · ' + money(fees) + ' in fees · '
-      + esc(Object.entries(byAgent).map(([k,n]) => k + ' ×' + n).join(', ')) + '</span>'
-      + '<span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
-      + '<button class="aok" style="padding:8px 16px" onclick="approveSelected()">Approve ' + sel.length + ' selected</button>'
-      + '<button class="ano" onclick="clearSel()">Clear</button>'
-      + '<span class="hint">Send back is one row at a time — it needs a reason.</span></span>'
-      + '<div class="rvmsg" id="bulkmsg" style="flex-basis:100%"></div></div>';
-  }
+  h += auditBulkBarHtml(ctx0);
   h += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px">'
     + '<span class="muted">'+periodRows.length+' transaction'+(periodRows.length===1?'':'s')+'</span>'
     + '<span class="muted">·</span><span>Fees '+esc(periodLabel())+': <b class="amount">'+money(totFees)+'</b></span>'
@@ -1570,48 +1630,10 @@ async function renderAudit(el){
     h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:#e03131">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
   }
 
-  h += '<div class="tscroll"><table><tr>' + (canApprove ? '<th class="selcell"></th>' : '') + '<th>When</th><th>Client</th><th>Path</th><th>Charge</th><th class="hidemob">Cost</th><th>Fee</th><th class="hidemob">Agent</th><th>Comm.</th><th>Status</th><th class="docs">Docs</th></tr>';
+  const ctx = ctx0;
+  h += '<div class="tscroll"><table>' + auditHeadHtml(ctx);
   if(!periodRows.length) h += '<tr><td colspan="' + (canApprove ? 11 : 10) + '" class="muted">No transactions in this period.</td></tr>';
-  for(const row of periodRows){
-    const docs = atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
-    const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount));
-    const nm = row.client_name ? esc(row.client_name) : '';
-    const canComplete = !row.pre_audit && row.audit_status !== 'complete' && row.audit_status !== 'ready_for_audit';
-    /* This is a BUTTON, not a status, and it used to be labelled "+ proof" on every
-       unfinished audit - including ones whose receipt was already attached and showing
-       a green tick two columns away. Same words, two meanings. It now says what is
-       actually missing: a receipt, or the carrier cost. */
-    const rowHasReceipt = docs.some(d => d.payment_id === row.id
-                          && ((d.doc_type || d.kind) === 'carrier_receipt'
-                              || String(d.doc_type || '').endsWith('_no_payment')));
-    const completeBtn = canComplete
-      ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">'
-        + (rowHasReceipt ? '+ carrier cost' : '+ proof') + '</span>'
-      : '';
-    const isWait = row.audit_status === 'ready_for_audit';
-    const ownRow = (row.commission_to || row.agent || '') === (r.email || '') || (row.audit_submitted_by || '') === (r.email || '');
-    h += '<tr' + (isWait && canApprove ? ' class="waitrow"' : '') + '>'
-      + (canApprove ? '<td class="selcell">' + (isWait && !ownRow
-          ? '<input type="checkbox" ' + (AUDIT_SEL.has(row.id) ? 'checked ' : '') + 'onchange="toggleSel(\'' + row.id + '\', this.checked)" aria-label="select for approval">'
-          : '') + '</td>' : '')
-      + '<td class="muted" style="font-size:12px">'+esc(PT_STAMP(row.ts))+'</td>'
-      /* WHAT THE CHARGE WAS FOR. `purpose` has always been returned and is already
-         searchable — the placeholder promises it — but the table never showed it, so
-         every row read as an anonymous amount. Under the client rather than in a new
-         column: the table's minimum width is already the problem here. */
-      + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span>'
-        + (row.purpose ? '<div class="muted" style="font-size:11px;margin-top:1px">'+esc(row.purpose)+'</div>' : '')
-        + '</td>'
-      + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
-      + '<td class="amount">'+money(row.amount)+balanceCell(row)+'</td>'
-      + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
-      + '<td class="amount">'+(row.fee!=null?signed(row.fee):'—')+'</td>'
-      + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
-      + '<td class="amount">'+(row.commission!=null?'<b style="color:'+(row.commission<0?'var(--red)':'#7fa8ff')+'">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
-      + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+reviewSub(row)+reviewActs(row)+'</td>'
-      + '<td class="docs">'+docCell+'</td>'
-      + '</tr>';
-  }
+  for(const row of periodRows) h += auditRowHtml(row, ctx);
   h += '</table></div>';
 
   // pre-audit note

@@ -1,0 +1,14 @@
+/* The payment card's classes, scoped, with the portal's tokens as fallbacks so the
+   Console (which has its own palette) renders it the same. Loaded by both pages. */
+/* Tokens the card reads (--field, --line, --mute, --dim, --blue-l, --green, --amber, --amber-ink, --red-ink, --ink)
+   come from each page's :root - the Console had to add --field, --red-ink, --amber-ink and --hair. A first version
+   defined fallbacks here on .paycard by referencing the page token from the same rule, which CSS treats as a
+   cycle: every colour in the card silently went to initial. */
+.paycard .row{display:flex;justify-content:space-between;align-items:center}
+.paycard .dim{color:var(--dim)} .paycard .muted{color:var(--mute)}
+.paycard .beta{background:var(--amber);color:#2a1a00;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;vertical-align:middle;letter-spacing:.03em}
+.paycard .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
+.paycard .rowacts{display:flex;gap:7px;margin-top:8px} .paycard .rowacts > *{flex:1}
+.paycard .actghost{text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer}
+.paycard .actrefund{text-align:center;background:transparent;border:1px solid rgba(224,49,49,.45);color:var(--red-ink);border-radius:9px;padding:7px;font-size:12px;font-weight:700;cursor:pointer}
+.paycard .note{font-size:11.5px;color:var(--mute);margin-top:5px;line-height:1.5}

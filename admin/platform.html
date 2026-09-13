@@ -11,6 +11,8 @@
     --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
     --red:#e03131; --blue:#4d7cfe; --green:#2fbf71; --amber:#f5a623;
     --ink:#f2f5ff; --mute:#8f9ac4; --radius:14px;
+    /* read by the shared payment card (/admin/shared/paycard.js), same values as the portal's dark theme */
+    --field:#161f45; --red-ink:#ff7b7b; --amber-ink:#f5a623; --hair:rgba(255,255,255,.06);
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     /* Both of these were already in the file as hardcoded hex - #7fa8ff on the
        commission column, and a dimmer grey improvised with opacity in several places.
@@ -361,6 +363,8 @@
   </div>
 
 </div>
+<link rel="stylesheet" href="/admin/shared/paycard.css">
+<script src="/admin/shared/paycard.js"></script>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, TAB = 'clients';
@@ -968,6 +972,17 @@ async function renderOurClient(el, no, _bg) {
     if (/captured|pending/i.test(t)) return 'a';
     return t.includes('charge') ? 'g' : 'b';
   };
+  /* THE SAME CARD THE AGENTS SEE. portal_client is the view the portal reads; this is
+     the portal's renderer, read-only (actions:false), so Tony reads a payment here
+     exactly as the agent reads it - audit state, review state, documents, refund
+     state, "client emailed at". The old ledger table (raw kinds, ref, office) is kept
+     underneath, collapsed, for the columns the card does not carry. */
+  let cardHtml = '<div class="muted" style="font-size:12px">Loading the payment card…</div>';
+  try {
+    const pc = await api('portal_client&no=' + no);
+    if (pc && pc.ok) cardHtml = PayCard.html(pc, { me: r.email || null, clientNo: no, actions: false });
+    else cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded' + (pc && pc.error ? ': ' + esc(pc.error) : '') + '.</div>';
+  } catch (e) { cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded.</div>'; }
   const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th class="hidemob">Office</th><th>Ref</th></tr>'
     + (r.payments||[]).map(p => '<tr>'
       + '<td>' + esc(String(p.ts).replace('T',' ').slice(0,16)) + '</td>'
@@ -976,8 +991,10 @@ async function renderOurClient(el, no, _bg) {
       + '<td class="hidemob">' + esc(p.purpose || '—') + '</td>'
       + '<td class="hidemob">' + esc((p.extra && p.extra.office) || '—') + '</td>'
       + '<td>' + esc(p.ref || '—') + '</td></tr>').join('') + '</table>';
-  h += section('pay_' + no, 'Payments', (r.payments||[]).length, payBody,
-    { defaultOpen: false, note: 'via Speedy platform', emptyText: 'No payments recorded yet.' });
+  h += section('card_' + no, 'Payments & documents', (r.payments||[]).length, cardHtml,
+    { defaultOpen: true, note: 'as the agent sees it', emptyText: 'No payments recorded yet.' });
+  h += section('pay_' + no, 'Ledger rows', (r.payments||[]).length, payBody,
+    { defaultOpen: false, note: 'raw', emptyText: 'No payments recorded yet.' });
 
   const actBody = '<table><tr><th>When</th><th>Event</th><th class="hidemob">By</th><th>Source</th></tr>'
     + (r.events||[]).map(e => '<tr>'

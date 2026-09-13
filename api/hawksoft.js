@@ -1677,14 +1677,27 @@ export default async function handler(req, res) {
         out.receipt = { ok: true, posted: false, reason: invPick.how };
       }
 
+      /* THE METHOD, BY ITS OWN NAME. HawkSoft's accounting receipt can only say Cash or
+         Check (hsPayMethod above) - that is HawkSoft's limit and the note carries the
+         truth. But the PDF and the attachment are OURS, and until Sep 13 a Zelle or
+         Other payment was filed as "Cash_Receipt" / "Cash receipt $X" with an Entry
+         line reading "Other - Other": the method label printed twice, and the agent's
+         reference (money order #, check #) - the one thing that identifies an "Other"
+         payment - nowhere on it. Saif: "when the agent clicks Other the receipt always
+         writes cash". */
+      const methodKey = payMethod.toLowerCase();
+      const methodWord = methodKey === 'zelle' ? 'Zelle' : methodKey === 'other' ? 'Other' : methodKey === 'check' ? 'Check' : 'Cash';
+      const entryLine = methodKey === 'zelle' ? ('Zelle \u2014 bank transfer' + (altRef ? ' \u00b7 ' + altRef : ''))
+        : methodKey === 'other' ? ('Other' + (altRef ? ' \u2014 ' + altRef : ' \u2014 no reference given'))
+        : methodKey === 'check' ? ('Check' + (altRef ? ' #' + altRef : ''))
+        : 'In person \u2014 counter';
       const pdfBuf = await buildReceiptPdf({
         total, stamp, clientName, clientId, purpose: purposeFull, policyNumber, policyCarrier,
         branchName: 'Speedy Insurance Agency',
-        headline: 'RECEIVED \u2014 ' + payMethod.toUpperCase(),
+        headline: 'RECEIVED \u2014 ' + methodWord.toUpperCase(),
         detailRows: [
-          ['Method', payMethod],
-          ['Entry', (payMethod.toLowerCase() === 'zelle') ? 'Zelle \u2014 bank transfer'
-            : (payMethod.toLowerCase() === 'other') ? ('Other \u2014 ' + payMethod) : 'In person \u2014 counter'],
+          ['Method', methodWord],
+          ['Entry', entryLine],
         ],
         recordTitle: 'PAYMENT RECORD',
         recordRows: [
@@ -1693,15 +1706,18 @@ export default async function handler(req, res) {
           ['Received by', who.slice(0, 42)],
         ],
         footerLines: [
-          (payMethod.toLowerCase() === 'zelle') ? 'Zelle payment received and'
-            : (payMethod.toLowerCase() === 'cash') ? 'Cash payment received at the agency counter and'
-            : (payMethod + ' payment received and'),
+          methodKey === 'zelle' ? 'Zelle payment received and'
+            : methodKey === 'cash' ? 'Cash payment received at the agency counter and'
+            : methodKey === 'check' ? 'Check received and'
+            : 'Payment received (' + (altRef ? altRef : 'other method') + ') and',
           'recorded to the HawkSoft client record by the', 'Speedy payment bridge.'],
       });
       /* Cash has no Clover id and no card, so the two method fields carry the payment's
          own reference and its method label instead. Same guarded builder. */
       const filedCash = await fileReceiptPdf({ hs, clientId, pdfBuf, now, total, who, policyGuid, txnId: ref,
-        filePrefix: 'Cash_Receipt', desc: `Cash receipt $${total.toFixed(2)}`,
+        filePrefix: methodWord + '_Receipt',
+        /* HawkSoft caps Desc at 41 chars; the reference goes first so it survives. */
+        desc: (methodKey === 'other' && altRef) ? `Other (${altRef}) receipt $${total.toFixed(2)}` : `${methodWord} receipt $${total.toFixed(2)}`,
         purpose: purposeFull, policyNumber, stamp,
         methodRef: ref ? `ref ${ref}` : null,
         methodLine: payMethod || null });

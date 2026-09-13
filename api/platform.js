@@ -1233,9 +1233,33 @@ export default async function handler(req, res) {
 
    Single-word and phone queries are untouched and still cost 25 rows. */
 const SEARCH_COLS = ['first_name', 'last_name', 'business_name', 'email'];
+/* PHONE, AS IT IS TYPED. Phones are stored (AAA)BBB-CCCC, and the full number matched
+   however it was written - "(619) 751-8581", "619-751-8581", "6197518581" all became
+   *751-8581*. But 6 to 9 digits produced patterns that could never match: "619751" (the
+   stored value has ")" in the middle) and "6197518" -> "619-7518" (the wrong seven).
+   So nothing appeared until the tenth digit, which read to the agents as "you have to
+   type it exactly". Saif, Sep 13: "the agent shouldn't care how he writes it."
+   Now the typed digits are laid onto the stored shape as a prefix - "6197" ->
+   "_619_7*" - with "_" standing for the parenthesis so the pattern never carries one
+   into PostgREST's or=() filter (a "(" there needs double-quoting, the trap MASTER.md
+   already records). Seven digits are ALSO tried as a bare local number, so "7518581"
+   still finds the client without an area code. Ten or more: the last ten, full shape. */
+function phonePatterns(digits) {
+  const d = digits.length > 10 ? digits.slice(-10) : digits;
+  const shaped = n => '_' + n.slice(0, 3) + (n.length > 3 ? '_' + n.slice(3, 6) : '') + (n.length > 6 ? '-' + n.slice(6, 10) : '');
+  const out = [];
+  if (d.length >= 10) out.push(shaped(d) + '*');
+  else {
+    out.push(shaped(d) + '*');                                             // typed from the area code
+    if (d.length === 7) out.push('*' + d.slice(0, 3) + '-' + d.slice(3) + '*'); // or the local number alone
+  }
+  return out;
+}
 function buildClientSearch(q) {
   const digits = q.replace(/\D/g, '');
-  const isPhone = digits.length >= 7;
+  /* a phone search from the third digit, as long as the agent typed only phone-ish
+     characters - "619" is a phone prefix, "619 Main St" is not */
+  const isPhone = digits.length >= 3 && /^[\d\s()+.-]+$/.test(q.trim());
   const toks = isPhone ? [] : q.split(/\s+/).map(t => t.trim()).filter(t => t.length >= 2);
   const multi = toks.length > 1;
   // Longest word first: fewest rows come back, so the JS pass has least to chew on.
@@ -1243,8 +1267,7 @@ function buildClientSearch(q) {
   const like = `*${seed.replace(/[,()*]/g, '')}*`;
   const ors = SEARCH_COLS.map(c => `${c}.ilike.${like}`);
   if (isPhone) {
-    const t = digits.length > 10 ? digits.slice(-10) : digits;
-    ors.push(`phone.ilike.*${t.slice(-7, -4)}-${t.slice(-4)}*`);
+    for (const p of phonePatterns(digits)) ors.push(`phone.ilike.${p}`);
   } else {
     ors.push(`phone.ilike.${like}`);
   }

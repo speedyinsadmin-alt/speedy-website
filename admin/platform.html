@@ -292,6 +292,27 @@
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
   .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
   .perchip.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  /* Trust: the search, the opened carrier, the CSV button */
+  .tsearch{width:100%;max-width:640px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin:0 0 6px}
+  .tsub{font-size:12px;color:var(--mute);margin:0 0 14px}
+  .tsub b{color:var(--ink)}
+  .thit{background:rgba(77,124,254,.16);color:var(--ink);border-radius:3px;padding:0 2px}
+  .cgrp{cursor:pointer;user-select:none}
+  .cgrp td:first-child{color:var(--ink);font-weight:600}
+  .cgrp .tri{display:inline-block;width:14px;color:var(--mute);transition:.12s}
+  .cgrp.open .tri{transform:rotate(90deg);color:var(--blue)}
+  .cdet{background:rgba(255,255,255,.02)}
+  .cdet td{padding:0 0 0 22px;border-bottom:1px solid var(--line)}
+  .cdet table{font-size:12.5px;margin:0;min-width:0}
+  .cdet th{font-size:11px;padding:6px 8px;border-bottom:1px solid var(--hair)}
+  .cdet td{padding:5px 8px;background:none}
+  .cdet tr:last-child td{border-bottom:0}
+  .amt{font-family:var(--mono);text-align:right;white-space:nowrap}
+  .dl{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--mute);cursor:pointer;background:transparent;font-family:inherit}
+  .dl:hover{color:var(--ink);border-color:rgba(255,255,255,.22)}
+  .trow{transition:background .1s}
+  .trow:hover{background:rgba(255,255,255,.03)}
+  .trow td{border-bottom:1px solid var(--line)}
   .dinput{background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--ink);font-size:12px}
   .abtn{display:inline-block;border:0;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.12s}
   .abtn.go{background:var(--green,#2fbf71);color:#04220f}
@@ -1145,7 +1166,72 @@ const PT_DAY_MINUS = (iso, n) => { const [Y,M,D] = String(iso).split('-').map(Nu
 /* Premium collected, what went to carriers, what Speedy kept - from OUR data only.
    Tony does not rely on HawkSoft accounting, and no figure here comes from it. */
 let TRUST_PERIOD = 'this';
-function setTrustPeriod(p){ TRUST_PERIOD = p; render(); }
+function setTrustPeriod(p){ TRUST_PERIOD = p; TRUST_Q = ''; TRUST_OPEN = {}; render(); }
+/* SEARCH ANYTHING, OPEN A CARRIER, TAKE THE MONTH (Saif, Sep 13). The tab had the
+   figures and nothing underneath them. Now every payment of the period is on the page:
+   one box finds it by an exact amount (charge, carrier cost OR fee - "312.43" finds the
+   row whether the client paid it or the carrier got it), by client name or #, carrier,
+   agent, purpose or transaction ref; a carrier row opens to the payments that make its
+   line; and the whole period downloads as a CSV. TRUST_DATA is the last answer, kept so
+   typing never refetches - the search is on what is already here. */
+let TRUST_Q = '', TRUST_OPEN = {}, TRUST_DATA = null;
+const trustNum = t => { const m = String(t).replace(/[$,]/g, ''); return /^\d+(\.\d{1,2})?$/.test(m) ? Number(m) : null; };
+const trustSameCents = (a, b) => a != null && b != null && Math.abs(Number(a) - Number(b)) < 0.005;
+function trustMatch(items, q){
+  const toks = String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if(!toks.length) return items.map(x => ({ item: x, hit: null }));
+  const out = [];
+  for(const x of items){
+    const hay = [x.client_name, x.client_no != null ? '#' + x.client_no : '', x.client_no, x.carrier, x.agent, x.purpose, x.ref, x.audit_status]
+      .filter(v => v != null && v !== '').join(' \u2022 ').toLowerCase();
+    let hit = null, all = true;
+    for(const t of toks){
+      const n = trustNum(t);
+      let okTok = false;
+      if(n != null){
+        /* a number is an amount to the cent - on any of the three money columns - or a client # or part of a ref */
+        if(trustSameCents(x.amount, n)) { okTok = true; hit = hit || 'amount'; }
+        else if(trustSameCents(x.cost, n)) { okTok = true; hit = hit || 'cost'; }
+        else if(trustSameCents(x.fee, n)) { okTok = true; hit = hit || 'fee'; }
+        else if(String(x.client_no) === t.replace(/^#/, '') || (x.ref && String(x.ref).toLowerCase().includes(t))) okTok = true;
+      } else okTok = hay.includes(t.replace(/^#/, ''));
+      if(!okTok){ all = false; break; }
+    }
+    if(all) out.push({ item: x, hit });
+  }
+  return out;
+}
+const trustStat = s => s === 'complete' ? '<span class="pill g">audited</span>'
+  : s === 'ready_for_audit' ? '<span class="pill b">waiting for Tony</span>'
+  : s === 'balance' ? '<span class="pill g">balance paid</span>'
+  : '<span class="pill a">' + esc(String(s || '').replace(/_/g, ' ')) + '</span>';
+const trustAmt = (v, colour, lit) => '<td class="amt"' + (colour ? ' style="color:' + colour + '"' : '') + '>'
+  + (v == null ? '<span class="muted">—</span>' : (lit ? '<span class="thit">' + money(v) + '</span>' : money(v))) + '</td>';
+function trustRowsHtml(list){
+  let h = '<table><tr><th>When</th><th>Client</th><th>Purpose</th><th>Carrier</th><th class="amt">Charge</th><th class="amt">To carrier</th><th class="amt">Fee</th><th>Agent</th><th>Status</th></tr>';
+  for(const { item: x, hit } of list){
+    h += '<tr class="trow"><td class="muted" style="white-space:nowrap">' + esc(PT_STAMP(x.ts)) + '</td>'
+      + '<td>' + (x.client_name ? esc(x.client_name) + ' ' : '') + '<span class="muted">#' + esc(x.client_no) + '</span></td>'
+      + '<td>' + esc(x.purpose || '') + '</td><td>' + esc(x.carrier || (x.audit_status === 'balance' ? 'on the first payment' : '')) + '</td>'
+      + trustAmt(x.amount, '', hit === 'amount') + trustAmt(x.cost, '#7fa8ff', hit === 'cost') + trustAmt(x.fee, '#2fbf71', hit === 'fee')
+      + '<td class="muted">' + esc(x.agent || '') + '</td><td>' + trustStat(x.audit_status) + '</td></tr>';
+  }
+  return h + '</table>';
+}
+function toggleCarrier(name){ TRUST_OPEN[name] = !TRUST_OPEN[name]; trustDraw(); }
+function trustSearch(v){ TRUST_Q = v; trustDraw(); }
+/* the CSV: every row of the period, then the refunds, as they are on the page */
+function trustCsv(){
+  const r = TRUST_DATA; if(!r) return;
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const lines = [['When (Pacific)', 'Client #', 'Client', 'Purpose', 'Carrier', 'Charge', 'To carrier', 'Fee', 'Agent', 'Status', 'Transaction ref', 'Payment id'].map(q).join(',')];
+  for(const x of (r.items || [])) lines.push([PT_STAMP(x.ts), x.client_no, x.client_name, x.purpose, x.carrier, x.amount, x.cost, x.fee, x.agent, String(x.audit_status || '').replace(/_/g, ' '), x.ref, x.id].map(q).join(','));
+  for(const x of (r.refund_items || [])) lines.push([PT_STAMP(x.ts), x.client_no, x.client_name, 'REFUND' + (x.reason ? ' — ' + x.reason : ''), x.carrier_name, -Math.abs(Number(x.amount || 0)), x.carrier === 'yes' ? -Math.abs(Number(x.carrier_cost || 0)) : 0, -Math.abs(Number(x.fee_reversed || 0)), x.agent, 'refund · carrier ' + (x.carrier || 'pending'), '', x.id].map(q).join(','));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'speedy-trust-' + (r.period || TRUST_PERIOD) + '.csv'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
 async function renderTrust(el){
   el.innerHTML = '<h2>Trust — premium collected and owed</h2><div class="muted">Loading…</div>';
   let r;
@@ -1157,12 +1243,39 @@ async function renderTrust(el){
       : 'Could not read the trust ledger' + (r && r.error ? ': ' + esc(r.error) : '.')) + '</div>';
     return;
   }
-  const T = r.totals || {};
+  TRUST_DATA = r;
   const chip = (k,l) => '<span class="perchip'+(TRUST_PERIOD===k?' sel':'')+'" onclick="setTrustPeriod(\''+k+'\')">'+l+'</span>';
-
+  const monthName = (() => { try { const [y, m] = String(r.period || '').split('-').map(Number); return new Date(Date.UTC(y, m - 1, 15)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }); } catch(e){ return r.period || ''; } })();
   let h = '<h2>Trust — premium collected and owed</h2>';
   h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">'+esc(r.source)+'</div>';
-  h += '<div style="display:flex;gap:6px;margin-bottom:14px">'+chip('this','This month')+chip('last','Last month')+'</div>';
+  h += '<div style="display:flex;gap:6px;margin-bottom:14px;align-items:center;flex-wrap:wrap">'+chip('this','This month')+chip('last','Last month')
+    + '<span style="flex:1"></span><button class="dl" onclick="trustCsv()" title="Every payment and refund of the period, as a spreadsheet">\u2b73 Download ' + esc(monthName) + ' (CSV) \u00b7 ' + (r.items||[]).length + ' payment' + ((r.items||[]).length === 1 ? '' : 's') + '</button></div>';
+  h += '<input class="tsearch" id="trustSearch" value="' + esc(TRUST_Q) + '" oninput="trustSearch(this.value)" placeholder="Search anything \u2014 an exact amount (112.43), client name or #, carrier, agent, purpose, transaction ref">';
+  h += '<div id="trustBody"></div>';
+  el.innerHTML = h;
+  trustDraw();
+}
+function trustDraw(){
+  const r = TRUST_DATA, el = document.getElementById('trustBody');
+  if(!r || !el) return;
+  const T = r.totals || {};
+  const items = r.items || [];
+
+  /* searching: the matches and their totals stand in for the summary */
+  if(String(TRUST_Q).trim()){
+    const list = trustMatch(items, TRUST_Q);
+    const sum = k => list.reduce((a, { item: x }) => a + (x[k] == null ? 0 : Number(x[k])), 0);
+    const hits = new Set(list.map(l => l.hit).filter(Boolean));
+    const where = hits.size ? ' \u2014 matched on ' + [...hits].map(k => k === 'amount' ? 'the charge' : k === 'cost' ? 'a carrier cost' : 'a fee').join(' and ') : '';
+    let h = '<div class="tsub"><b>' + list.length + ' payment' + (list.length === 1 ? '' : 's') + '</b> match <b>' + esc(TRUST_Q.trim()) + '</b>'
+      + (list.length ? ' \u00b7 collected <b>' + money(sum('amount')) + '</b> \u00b7 to carriers <b>' + money(sum('cost')) + '</b> \u00b7 Speedy kept <b>' + money(sum('fee')) + '</b>' + where : '') + '</div>';
+    h += list.length ? '<div class="tscroll">' + trustRowsHtml(list) + '</div>'
+      : '<div class="muted" style="font-size:13px;margin:6px 0 14px">Nothing in ' + (TRUST_PERIOD === 'last' ? 'last month' : 'this month') + ' matches that. An amount has to be exact to the cent; try the other month, or fewer words.</div>';
+    h += '<div class="muted" style="font-size:12px;margin-top:10px">An amount matches the charge, the carrier cost or the fee, to the cent. Words match client, #, carrier, agent, purpose and ref. Clear the box to get the summary back.</div>';
+    el.innerHTML = h; return;
+  }
+
+  let h = '<div class="tsub">Type to search every payment ' + (TRUST_PERIOD === 'last' ? 'last month' : 'this month') + '. Click a carrier to see its payments.</div>';
 
   /* Unaccounted sits beside the others deliberately: it is collected money that is
      neither owed to a carrier nor earned, and it should look unresolved. */
@@ -1200,15 +1313,21 @@ async function renderTrust(el){
       + 'so it is neither owed to a carrier nor earned by Speedy. Every one has an agent and an unfinished audit behind it.</div>';
   }
 
-  h += '<h3 style="font-size:13px;margin:18px 0 8px">By carrier</h3>';
+  h += '<h3 style="font-size:13px;margin:18px 0 8px">By carrier <span class="muted" style="font-weight:400">\u00b7 click a row to see its payments</span></h3>';
   if(!(r.by_carrier||[]).length) h += '<div class="muted">Nothing in this period.</div>';
   else {
-    h += '<table><tr><th>Carrier</th><th>Payments</th><th>Collected</th><th>To carrier</th><th>Speedy kept</th></tr>';
+    h += '<div class="tscroll"><table><tr><th style="width:18px"></th><th>Carrier</th><th>Payments</th><th class="amt">Collected</th><th class="amt">To carrier</th><th class="amt">Speedy kept</th></tr>';
     for(const c of r.by_carrier){
-      h += '<tr><td>'+esc(c.carrier)+'</td><td>'+c.payments+'</td><td>'+money(c.collected)+'</td>'
-        + '<td style="color:#7fa8ff">'+money(c.to_carrier)+'</td><td style="color:#2fbf71">'+money(c.fees)+'</td></tr>';
+      const open = !!TRUST_OPEN[c.carrier];
+      h += '<tr class="cgrp' + (open ? ' open' : '') + '" onclick="toggleCarrier(' + JSON.stringify(c.carrier).replace(/"/g, '&quot;') + ')"><td><span class="tri">\u25b6</span></td><td>'+esc(c.carrier)+'</td><td>'+c.payments+'</td><td class="amt">'+money(c.collected)+'</td>'
+        + '<td class="amt" style="color:#7fa8ff">'+money(c.to_carrier)+'</td><td class="amt" style="color:#2fbf71">'+money(c.fees)+'</td></tr>';
+      if(open){
+        /* the same rows the line was summed from: attributed, and named for this carrier */
+        const mine = items.filter(x => x.cost != null && x.carrier === c.carrier).map(x => ({ item: x, hit: null }));
+        h += '<tr class="cdet"><td colspan="6">' + (mine.length ? trustRowsHtml(mine) : '<div class="muted" style="padding:8px">No rows.</div>') + '</td></tr>';
+      }
     }
-    h += '</table>';
+    h += '</table></div>';
   }
 
   if((r.unaccounted_items||[]).length){

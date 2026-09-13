@@ -3549,7 +3549,11 @@ if (view === 'portal_share_due') {
        Neither was selected, which is why a balance payment landed in "unaccounted". */
     const rows = (await sbGet(s, 'bridge_ledger?is_test=is.false'
       + '&select=id,ts,client_id,amount,purpose,agent,commission_to,audit_status,'
-      + 'service_cost,fee_amount,carrier_name,kind,audit_completed_at,balance_of,total_owed'
+      + 'service_cost,fee_amount,carrier_name,kind,audit_completed_at,balance_of,total_owed,'
+      /* refund_of / refund_carrier were READ in the refund loop below but never selected,
+         so every refund's parent came back undefined: carrier cost 0, answer "pending".
+         The stub in the harness returns whole rows and never noticed. Selected now. */
+      + 'refund_of,refund_carrier,refund_reason,refund_note,txn_id'
       + '&order=ts.desc&limit=2000')).rows || [];
 
     /* Only real, collected money. A declined attempt never moved a cent, and a pay
@@ -3660,10 +3664,38 @@ if (view === 'portal_share_due') {
         agent: r.commission_to || r.agent || null, note: r.refund_note || null });
     }
 
+    /* THE ROWS BEHIND THE FIGURES (Saif, Sep 13). The tab showed totals and a carrier
+       table and nothing else - Tony could not find "the $312.43 payment" or see which
+       four payments made ASPIRE's line. Every collected row of the period goes back,
+       named, so the page can search it (an amount, a client, a carrier, an agent, a
+       purpose, a ref), open a carrier to its payments, and hand the month over as a
+       CSV. The figures above are computed from exactly these rows. */
+    const cids = [...new Set(collected.concat(refunds).map(r => r.client_id).filter(Boolean))];
+    const cname = {};
+    if (cids.length) {
+      try {
+        const cl = await sbGet(s, `clients?client_no=in.(${cids.join(',')})&select=client_no,first_name,last_name,business_name`);
+        for (const c of (cl.rows || [])) cname[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
+      } catch { /* names are a courtesy; the numbers still go out */ }
+    }
+    const short = e => { const em = agentEmailOf(e); return em ? em.split('@')[0] : (e ? String(e).split(' ')[0].toLowerCase() : ''); };
+    const items = collected.map(r => {
+      const amt = Number(r.amount) || 0;
+      const cost = r.balance_of ? null : (r.service_cost == null ? null : Number(r.service_cost));
+      const fee = r.balance_of ? null : (r.service_cost == null ? null : (r.fee_amount != null ? Number(r.fee_amount) : amt - cost));
+      return { id: r.id, ts: r.ts, client_no: r.client_id, client_name: cname[r.client_id] || null,
+        purpose: r.purpose || null, carrier: r.balance_of ? null : (r.service_cost == null ? (r.carrier_name || null) : (r.carrier_name || '(carrier not named)')),
+        amount: money(amt), cost: cost == null ? null : money(cost), fee: fee == null ? null : money(fee),
+        agent: short(r.commission_to || r.agent), audit_status: r.balance_of ? 'balance' : (r.audit_status || 'client_paid'),
+        kind: r.kind, ref: r.txn_id || null, balance_of: r.balance_of || null };
+    });
+
     return res.status(200).json({
       ok: true,
       period: period.label, period_from: period.from, period_to: period.to,
       source: 'Speedy platform only — no HawkSoft data is used in any figure below.',
+      items,
+      refund_items: refundItems.map(x => ({ ...x, client_name: cname[x.client_no] || null, agent: short(x.agent) })),
       totals: {
         payments: collected.length,
         collected: money(inTotal),

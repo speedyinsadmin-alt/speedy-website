@@ -636,13 +636,30 @@ export default async function handler(req, res) {
     let priorRow = null;
     if (payment_id) {
       try {
-        const pr = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(payment_id)}&select=audit_status,audit_sendback,commission_to`);
+        const pr = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(payment_id)}&select=audit_status,audit_sendback,commission_to,service_cost,carrier_name,carrier_zero_ack`);
         priorRow = (pr.rows || [])[0] || null;
       } catch { priorRow = null; }
     }
     if (complete && priorRow && priorRow.audit_status === 'complete') {
       return res.status(409).json({ ok: false, error: 'already_approved',
         message: 'This audit has already been approved, so the carrier cost is final. To change it, ask for a correction from the client card.' });
+    }
+    /* THE REPLY (Saif, Sep 13). A send-back was one-way: Tony wrote a reason, the agent
+       could only change the numbers and press Resubmit. When the answer was "it is right
+       as it is" - Daisy's fee-only endorsement - she had nowhere to say so and phoned him.
+       Now the carrier page carries a reply box under the reason. Optional in general;
+       REQUIRED when the resubmit changes nothing (same cost, same carrier, no new file),
+       because a silent identical resubmit is exactly what Tony cannot act on. */
+    const reviewReply = String(body.review_reply || '').trim().slice(0, 500);
+    const wasSentBack = !!(priorRow && priorRow.audit_sendback);                       // a send-back is on the row
+    const answering = wasSentBack && priorRow.audit_status !== 'ready_for_audit';       // ...and this submit answers it
+    if (complete && answering && !reviewReply && !receipt_b64) {
+      const sameCost = (body.service_cost != null ? Number(body.service_cost) : (carrier_amount != null ? Number(carrier_amount) : null)) === (priorRow.service_cost != null ? Number(priorRow.service_cost) : null);
+      const sameCarrier = String(carrier || '').trim() === String(priorRow.carrier_name || '').trim();
+      if (sameCost && sameCarrier) {
+        return res.status(400).json({ ok: false, error: 'reply_required',
+          message: 'You are resubmitting this exactly as it was. Tell Tony why it is right as it is - he reads your reply on the row.' });
+      }
     }
 
     /* Audit-complete requires the carrier receipt - UNLESS nothing was paid to a
@@ -838,6 +855,8 @@ export default async function handler(req, res) {
           /* Who submitted, and when - the approver reads this. audit_completed_by/at
              are NOT written here any more; see approve_audit. */
           ...(complete ? { audit_submitted_by: email, audit_submitted_at: nowIso } : {}),
+          /* the reply rides on the send-back it answers, so the row shows both halves */
+          ...(complete && wasSentBack && (answering || reviewReply) ? { audit_sendback: { ...priorRow.audit_sendback, reply: reviewReply || null, reply_at: nowIso, resubmitted_at: nowIso } } : {}),
         }),
       });
       /* The trail. A resubmission after a send-back says so, so the approver can tell a
@@ -847,7 +866,8 @@ export default async function handler(req, res) {
           await fetch(`${s.base}/rest/v1/audit_reviews`, {
             method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
             body: JSON.stringify([{ payment_id, action: 'submitted', actor: email,
-              reason: (priorRow && priorRow.audit_sendback) ? 'resubmitted after send-back' : null, at: nowIso }]),
+              reason_code: wasSentBack ? 'resubmitted' : null,
+              reason: wasSentBack ? (reviewReply || 'resubmitted after send-back') : null, at: nowIso }]),
           });
         } catch { /* the trail must never block the submission it records */ }
       }
@@ -859,7 +879,8 @@ export default async function handler(req, res) {
       body: JSON.stringify([{
         actor: email, kind: complete ? 'audit.submitted' : 'carrier_leg.saved',
         client_no, policy_id: policy_id || null, source: 'carrier_capture',
-        payload: { carrier, carrier_amount, carrier_card, status, hawksoft_filed: hsFiled, attachment_id: attachment && attachment.id },
+        payload: { carrier, carrier_amount, carrier_card, status, hawksoft_filed: hsFiled, attachment_id: attachment && attachment.id,
+                   ...(complete && wasSentBack ? { resubmitted: true, reply: reviewReply || null } : {}) },
       }]),
     });
 

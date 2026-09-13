@@ -47,6 +47,9 @@
   .review.wait{background:rgba(143,154,196,.12);border:1px solid var(--line,#2a3558);color:var(--mute,#9aa6cc)}
   .review.done{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.4);color:var(--ink,#eef2ff)}
   .review b{font-weight:700}
+  .review textarea{width:100%;min-height:64px;margin-top:8px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:13px;font-family:inherit;resize:vertical}
+  .review .replylbl{font-size:12px;margin-top:10px;color:var(--ink);font-weight:600}
+  .review .replyhint{font-size:11.5px;opacity:.8;margin-top:4px}
   .btns button{flex:1;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:0}
   .save{background:var(--navy2);border:1.5px solid var(--line)!important;color:var(--mute)}
   .submit{background:var(--green);color:#04220f;flex:1.4}
@@ -1210,7 +1213,8 @@ function showReviewState(r){
   if(r.audit_status === 'ready_for_audit'){
     el.className = 'review wait';
     el.innerHTML = '<b>Submitted' + (r.audit_submitted_at ? ' ' + escAttr(when(r.audit_submitted_at)) : '') + ' — waiting for Tony.</b> '
-      + 'You can still change it; submitting again replaces what he will see. Nothing is earned until he approves.';
+      + 'You can still change it; submitting again replaces what he will see. Nothing is earned until he approves.'
+      + (sb && sb.reply ? '<div style="margin-top:6px;opacity:.85">Your reply to ' + who(sb.by) + ': “' + escAttr(sb.reply) + '”</div>' : '');
     if(btn) btn.textContent = 'Submit again';
     return;
   }
@@ -1219,7 +1223,12 @@ function showReviewState(r){
     el.innerHTML = '<b>Sent back by ' + who(sb.by) + (sb.at ? ' · ' + escAttr(when(sb.at)) : '') + ' — '
       + escAttr(SENDBACK_LABELS[sb.code] || 'Needs a fix') + '.</b>'
       + (sb.reason ? '<div style="margin-top:4px">“' + escAttr(sb.reason) + '”</div>' : '')
-      + '<div style="margin-top:4px;opacity:.85">Fix that, then resubmit. He will see it again.</div>';
+      + '<div style="margin-top:4px;opacity:.85">Fix that, then resubmit. He will see it again.</div>'
+      /* THE REPLY. Under the reason, where the agent is already reading. Optional when
+         something changed; required when nothing did - the server enforces that. */
+      + '<div class="replylbl">Reply to ' + who(sb.by) + '</div>'
+      + '<textarea id="reviewReply" maxlength="500" placeholder="What you fixed - or why it is right as it is">' + escAttr(sb.reply || '') + '</textarea>'
+      + '<div class="replyhint">He reads this on the row when you resubmit. If you resubmit without changing anything, this is required.</div>';
     if(btn) btn.textContent = 'Resubmit for approval';
   }
 }
@@ -1286,6 +1295,7 @@ async function submit(complete){
     action: 'save_carrier_leg',
     client_no: Number(CTX.client_no)||null,
     policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, policy_num: CTX.policy_num||null, payment_id: CTX.payment_id||null,
+    review_reply: ($('#reviewReply') ? $('#reviewReply').value.trim() : ''),
     carrier: effCarrier(),
     carrier_amount: carrierAmt(),
     carrier_zero_ack: (feeOnly() || (carrierAmt() === 0 && zeroAcked())) || null,
@@ -1340,6 +1350,9 @@ async function submit(complete){
       return;
     } else if(j && j.error === 'already_approved'){
       mainMsg = j.message || 'This audit has already been approved, so the carrier cost is final.';
+    } else if(j && j.error === 'reply_required'){
+      mainMsg = j.message || 'Tell Tony why it is right as it is - the reply box is under his reason.';
+      const ta = $('#reviewReply'); if(ta){ ta.focus(); ta.style.borderColor = 'var(--red)'; }
     } else {
       mainMsg = (j && j.error) ? j.error : friendlyError(r.status, complete);
     }

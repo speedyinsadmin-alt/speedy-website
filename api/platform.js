@@ -3184,6 +3184,9 @@ if (view === 'portal_share_due') {
         audit_submitted_by: p.audit_submitted_by || null, audit_submitted_at: p.audit_submitted_at || null,
         audit_sendback: p.audit_sendback || null,
         audit_completed_by: p.audit_completed_by || null, audit_completed_at: p.audit_completed_at || null,
+        /* "fee only - no carrier payment", said on the row. Daisy's send-back was for a
+           fee-only endorsement Tony read as a missing receipt. */
+        fee_only: p.carrier_zero_ack === true,
       };
     });
     const canApprove = await may(String(email).toLowerCase(), 'audit_approve');

@@ -55,7 +55,8 @@ function auditLineHtml(p){
       + (p.audit_submitted_by_name ? ' by ' + first(p.audit_submitted_by_name) : '')
       + (p.audit_submitted_at ? ' · ' + esc(t(p.audit_submitted_at)) : '')
       + (sb ? ' · <b style="color:var(--amber-ink)">resubmitted after a send-back</b>' : '')
-      + ' · nothing is earned until Tony approves</div>';
+      + ' · nothing is earned until Tony approves</div>'
+      + (sb && sb.reply ? '<div style="font-size:11.5px;margin-top:4px;color:var(--mute);padding-left:9px;border-left:2px solid var(--line)">Your reply: “' + esc(sb.reply) + '”</div>' : '');
   }
   if(sb){
     return '<div style="font-size:11.5px;margin-top:5px;color:var(--red-ink);padding-left:9px;border-left:2px solid var(--red-ink)">✗ Sent back by '

@@ -336,6 +336,46 @@
   .docitem.carrier{border-color:rgba(47,191,113,.5)}
   .docpane{flex:1;background:#f4f4f2;border-radius:9px;min-height:460px;position:relative}
   .docpane iframe{width:100%;height:460px;border:0;border-radius:9px;display:block}
+  /* THE REVIEW ROOM (Saif, Sep 13): the documents popup grown into the place where the
+     approver decides. Left: the exchange in full and the files; right: the viewer with
+     real controls; bottom: Approve / Send back. Expand takes the whole window. */
+  .docwrap.room{max-width:1180px}
+  .docwrap.room.full{max-width:none;min-height:calc(100vh - 40px)}
+  .roomhdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:11px;border-bottom:1px solid var(--line);gap:12px}
+  .roomhdr .t{font-size:15px;font-weight:700}
+  .roomhdr .s{font-size:12px;color:var(--mute);margin-top:2px;line-height:1.5}
+  .roomhdr .x{cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px;flex-shrink:0}
+  .roomgrid{display:flex;gap:14px;margin-top:12px}
+  .roomside{width:300px;flex-shrink:0;max-height:560px;overflow-y:auto}
+  .full .roomside{max-height:calc(100vh - 220px)}
+  .xchg{margin-bottom:12px}
+  .xchg .who{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px;color:var(--mute)}
+  .msg{border-left:3px solid var(--line);padding:8px 11px;border-radius:0 9px 9px 0;font-size:13px;line-height:1.5;margin-bottom:8px;background:rgba(255,255,255,.03);white-space:pre-wrap;word-break:break-word}
+  .msg.back{border-color:var(--red);background:rgba(224,49,49,.08)}
+  .msg.reply{border-color:var(--amber);background:rgba(245,166,35,.08)}
+  .msg .when{display:block;font-size:11px;color:var(--mute);margin-top:5px;white-space:normal}
+  .msg .code{font-weight:700;color:#ff8f8f}
+  .roompane{flex:1;display:flex;flex-direction:column;min-width:0}
+  .vtool{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+  .vtool .vb{border:1px solid var(--line);background:var(--navy);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .vtool .vb:hover{border-color:rgba(255,255,255,.25)}
+  .vtool .vb.on{border-color:var(--blue);color:var(--blue)}
+  .vtool .vb:disabled{opacity:.35;cursor:default}
+  .vtool .pg{font-size:12px;color:var(--mute);padding:0 6px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
+  .vtool .sp{flex:1}
+  .roompane .docpane{overflow:auto;min-height:520px}
+  .roompane .docpane iframe{height:520px}
+  .full .roompane .docpane{min-height:calc(100vh - 240px)}
+  .full .roompane .docpane iframe{height:calc(100vh - 240px)}
+  .docpane .zoomwrap{transform-origin:0 0;display:block}
+  .docpane .zoomwrap img{display:block;margin:0 auto;border-radius:9px}
+  .docpane .zoomwrap.fit img{max-width:100%;max-height:520px}
+  .full .docpane .zoomwrap.fit img{max-height:calc(100vh - 240px)}
+  .roomfoot{display:flex;gap:8px;margin-top:12px;align-items:center;border-top:1px solid var(--line);padding-top:12px;flex-wrap:wrap}
+  .roomfoot .rnote{flex:1;font-size:12px;color:var(--mute);min-width:160px}
+  .roomfoot .close{border:1px solid var(--line);background:none;color:var(--mute);border-radius:8px;padding:7px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .rvsub .more{color:var(--blue);cursor:pointer;font-weight:600;white-space:nowrap}
+  @media (max-width:760px){.roomgrid{flex-direction:column}.roomside{width:auto;max-height:none}.roompane .docpane{min-height:360px}.roompane .docpane iframe{height:360px}}
   .dchip:first-child{margin-left:0}
   td.docs,th.docs{white-space:nowrap;width:1%;text-align:right}
   .pill.g{background:rgba(47,191,113,.15);color:var(--green)}
@@ -558,7 +598,7 @@ function navReplace(){ try { history.replaceState(navState(), ''); } catch(e){} 
 window.addEventListener('popstate', e => {
   if(!TOKEN) return;
   const sb = document.getElementById('sbSheet'); if(sb){ closeSendBack(); navPush(); return; }
-  const dm = document.getElementById('docModal'); if(dm && dm.innerHTML){ dm.innerHTML = ''; navPush(); return; }
+  const dm = document.getElementById('docModal'); if(dm && dm.innerHTML){ closeDocs(); navPush(); return; }
   const st = e.state;
   if(!st || st.v !== 'console'){ navReplace(); return; }
   TAB = st.tab || 'clients'; OPEN_CLIENT = st.client || null; OPEN_FROM = st.from || null;
@@ -1528,8 +1568,8 @@ function auditRowKit(ctx){
         + (row.audit_submitted_at ? ' · ' + esc(agoOf(row.audit_submitted_at)) : '')
         + (row.fee_only ? ' · <span class="fee">fee only — no carrier payment</span>' : '')
         + (sb ? ' · <span class="re">resubmitted after send-back</span>' : '')
-        /* the agent's reply, verbatim, where Tony decides */
-        + (sb && sb.reply ? '<span class="reply"><b>' + esc(first(row.audit_submitted_by || row.commission_to || row.agent)) + ' replied:</b> “' + esc(sb.reply) + '”</span>' : '')
+        /* the agent's reply - the first line of it; the room has the whole thing */
+        + (sb && sb.reply ? '<span class="reply"><b>' + esc(first(row.audit_submitted_by || row.commission_to || row.agent)) + ' replied:</b> “' + esc(snip(sb.reply)) + '” ' + openReview(row) + '</span>' : '')
         + '</div>';
     }
     if(row.audit_status === 'complete'){
@@ -1539,11 +1579,17 @@ function auditRowKit(ctx){
     }
     if(sb){
       return '<div class="rvsub">sent back by ' + esc(first(sb.by)) + (sb.at ? ' · ' + esc(PT_STAMP(sb.at)) : '')
-        + ' · <i>' + esc(SENDBACK_CODES[sb.code] || 'needs a fix') + (sb.reason ? ' — ' + esc(sb.reason) : '') + '</i>'
+        + ' · <i>' + esc(SENDBACK_CODES[sb.code] || 'needs a fix') + (sb.reason ? ' — ' + esc(snip(sb.reason)) : '') + '</i>'
+        + (sb.reason && sb.reason.length > SNIP ? ' ' + openReview(row) : '')
         + '<br>' + esc(first(row.commission_to || row.agent)) + ' notified · not resubmitted yet</div>';
     }
     return '';
   };
+  /* A paragraph does not belong on a row. The row shows the first line; the whole
+     exchange, readable, is in the review room. */
+  const SNIP = 110;
+  const snip = t => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > SNIP ? t.slice(0, SNIP).replace(/\s+\S*$/, '') + '…' : t; };
+  const openReview = row => '<span class="more" onclick="openDocs(\'' + row.id + '\')">Open review ▸</span>';
   const reviewActs = row => {
     if(!ctx.canApprove || row.audit_status !== 'ready_for_audit') return '';
     const own = (row.commission_to || row.agent || '') === (ctx.email || '') || (row.audit_submitted_by || '') === (ctx.email || '');
@@ -1911,18 +1957,20 @@ function openDocs(rowKey){
   const docs  = own.concat(other);
   let el = document.getElementById('docModal');
   if(!el){ el = document.createElement('div'); el.id = 'docModal'; document.body.appendChild(el); }
-  el.innerHTML = '<div class="docwrap">'
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:11px;border-bottom:1px solid var(--line)">'
-    + '<div><div style="font-size:15px;font-weight:700">Documents</div>'
-    + '<div class="muted" style="font-size:12px;margin-top:2px">' + esc(entry.title || '') + ' \u00b7 ' + own.length + ' file' + (own.length===1?'':'s') + ' on this payment</div></div>'
-    + '<div onclick="closeDocs()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">\u2715</div></div>'
-    + '<div class="docgrid"><div class="doclist" id="docList"></div>'
-    + '<div class="docpane" id="docPane"><div class="muted" style="padding:18px;font-size:13px">Select a file to view it.</div></div></div>'
-    + '<div style="display:flex;gap:8px;margin-top:12px;align-items:center">'
-    + '<button class="btn" onclick="docDownload()" id="docDl" style="display:none">Download</button>'
-    + '<button class="btn" onclick="docNewTab()" id="docNt" style="display:none">Open in new tab</button>'
-    + '<div style="flex:1"></div><span class="muted" style="font-size:11.5px" id="docNote"></span></div>'
+  /* the row this popup is about, when the Audit tab drew it - the header, the exchange
+     and the decision buttons all come from it. Elsewhere it is just the files. */
+  const row = (window.AUDIT_ROWS || {})[rowKey] || null;
+  ROOM = { rowKey, i: 0, zoom: 'fit', rot: 0, full: ROOM && ROOM.full || false };
+  el.innerHTML = '<div class="docwrap room' + (ROOM.full ? ' full' : '') + '" id="roomWrap">'
+    + '<div class="roomhdr"><div><div class="t">' + (row ? 'Review — ' + esc(row.client_name || ('#' + row.client_no)) : 'Documents') + '</div>'
+    + '<div class="s">' + (row ? roomSubHtml(row) : esc(entry.title || '')) + ' \u00b7 ' + own.length + ' file' + (own.length===1?'':'s') + ' on this payment</div></div>'
+    + '<div class="x" onclick="closeDocs()">\u2715</div></div>'
+    + '<div class="roomgrid"><div class="roomside">' + (row ? roomExchangeHtml(row) : '') + '<div class="doclist" id="docList"></div></div>'
+    + '<div class="roompane"><div class="vtool" id="vtool"></div>'
+    + '<div class="docpane" id="docPane"><div class="muted" style="padding:18px;font-size:13px">' + (docs.length ? 'Select a file to view it.' : 'No file to show.') + '</div></div></div></div>'
+    + '<div class="roomfoot">' + roomFootHtml(row) + '</div>'
     + '</div>';
+  drawTool();
   const item = (d,i) => {
     const k = docKind(d);
     return '<div class="docitem' + (k==='carrier_receipt'?' carrier':'') + '" id="di'+i+'" onclick="showDoc(\''+rowKey+'\','+i+')">'
@@ -1948,9 +1996,119 @@ function openDocs(rowKey){
 }
 const DOC_SORTED = {};
 let DOC_CUR = null;
+let ROOM = null;
+function roomSubHtml(row){
+  const nm = e => String(((AUDIT_CACHE||{}).names||{})[e] || (e ? String(e).split('@')[0] : '')).split(' ')[0];
+  const ago = ts => { const m = Math.round((Date.now() - new Date(ts)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m/60) + ' h ago' : Math.round(m/1440) + ' d ago'; };
+  let s = esc(row.purpose || '') + ' \u00b7 ' + money(row.amount) + ' charged';
+  if(row.service_cost != null) s += ' \u00b7 ' + money(row.service_cost) + ' to carrier';
+  if(row.fee != null) s += ' \u00b7 ' + money(row.fee) + ' fee';
+  if(row.audit_status === 'ready_for_audit') s += ' \u00b7 submitted by ' + esc(nm(row.audit_submitted_by || row.commission_to || row.agent)) + (row.audit_submitted_at ? ' ' + esc(ago(row.audit_submitted_at)) : '');
+  else if(row.audit_status === 'complete') s += ' \u00b7 approved' + (row.audit_completed_by ? ' by ' + esc(nm(row.audit_completed_by)) : '') + (row.audit_completed_at ? ' ' + esc(PT_STAMP(row.audit_completed_at)) : '');
+  else if(row.audit_sendback) s += ' \u00b7 <span style="color:var(--red-ink)">sent back, not resubmitted yet</span>';
+  if(row.fee_only) s += ' \u00b7 <b style="color:var(--green)">fee only \u2014 no carrier payment</b>';
+  return s;
+}
+/* The exchange, in full: his send-back, then the agent's reply. Nothing is cut here. */
+function roomExchangeHtml(row){
+  const sb = row.audit_sendback; if(!sb) return '';
+  const nm = e => String(((AUDIT_CACHE||{}).names||{})[e] || (e ? String(e).split('@')[0] : '')).split(' ')[0];
+  let h = '<div class="xchg"><div class="who">The exchange</div>';
+  h += '<div class="msg back"><span class="code">' + esc(SENDBACK_CODES[sb.code] || 'Needs a fix') + '</span>' + (sb.reason ? '\n' + esc(sb.reason) : '')
+    + '<span class="when">' + esc(nm(sb.by)) + (sb.at ? ' \u00b7 ' + esc(PT_STAMP(sb.at)) : '') + '</span></div>';
+  if(sb.reply) h += '<div class="msg reply">' + esc(sb.reply) + '<span class="when">' + esc(nm(row.audit_submitted_by || row.commission_to || row.agent)) + (sb.reply_at ? ' \u00b7 ' + esc(PT_STAMP(sb.reply_at)) : '') + ' \u00b7 resubmitted</span></div>';
+  else if(sb.resubmitted_at || row.audit_status === 'ready_for_audit') h += '<div class="msg"><span class="muted">Resubmitted without a note' + (sb.resubmitted_at ? ' \u00b7 ' + esc(PT_STAMP(sb.resubmitted_at)) : '') + '</span></div>';
+  else h += '<div class="msg"><span class="muted">No reply yet \u2014 ' + esc(nm(row.commission_to || row.agent)) + ' has not resubmitted.</span></div>';
+  return h + '</div>';
+}
+function roomFootHtml(row){
+  let h = '';
+  const canApprove = !!(AUDIT_CACHE && AUDIT_CACHE.can_approve);
+  const me = (AUDIT_CACHE && AUDIT_CACHE.email) || '';
+  if(row && row.audit_status === 'ready_for_audit' && canApprove){
+    const own = (row.commission_to || row.agent || '') === me || (row.audit_submitted_by || '') === me;
+    if(own) h += '<span class="rnote">Yours \u2014 someone else approves it.</span>';
+    else h += '<button class="abtn go" onclick="roomApprove(\'' + row.id + '\')">Approve</button>'
+      + '<button class="abtn no" onclick="roomSendBack(\'' + row.id + '\')">Send back\u2026</button>'
+      + '<span class="rnote" id="roomMsg">Approving here is the same as on the row: dated today' + (row.fee != null && row.pct != null ? ', earns ' + money(row.fee * row.pct / 100) : '') + '.</span>';
+  } else h += '<span class="rnote" id="roomMsg"></span>';
+  return h + '<button class="close" onclick="closeDocs()">Close</button>';
+}
+async function roomApprove(id){
+  const m = document.getElementById('roomMsg');
+  const say = (t, bad) => { if(m){ m.textContent = t; m.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  say('Approving\u2026');
+  const res = await apiPostBody({ action: 'approve_audit', payment_id: id });
+  if(res && res.ok){ AUDIT_SEL.delete(id); closeDocs(); await render(); return; }
+  say((res && (res.message || res.error)) || 'Could not approve.', true);
+}
+function roomSendBack(id){ closeDocs(); openSendBack(id); }
+/* ---- the viewer controls ---- */
+const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+function drawTool(){
+  const t = document.getElementById('vtool'); if(!t || !ROOM) return;
+  const docs = DOC_SORTED[ROOM.rowKey] || [];
+  const d = docs[ROOM.i];
+  const isImg = !!(DOC_CUR && /^image\//.test(DOC_CUR.mime));
+  const z = ROOM.zoom;
+  t.innerHTML = '<button class="vb" onclick="roomNav(-1)" ' + (docs.length > 1 ? '' : 'disabled') + ' title="Previous file (\u2190)">\u25c0</button>'
+    + '<span class="pg">' + (docs.length ? (ROOM.i + 1) + ' / ' + docs.length + ' \u00b7 ' + esc(d ? (d.filename || 'file') : '') : 'no files') + '</span>'
+    + '<button class="vb" onclick="roomNav(1)" ' + (docs.length > 1 ? '' : 'disabled') + ' title="Next file (\u2192)">\u25b6</button><span class="sp"></span>'
+    + '<button class="vb' + (z === 'fit' ? ' on' : '') + '" onclick="roomZoom(\'fit\')" ' + (DOC_CUR ? '' : 'disabled') + '>Fit</button>'
+    + '<button class="vb" onclick="roomZoom(\'out\')" ' + (DOC_CUR ? '' : 'disabled') + ' title="Zoom out">\u2212</button>'
+    + '<button class="vb' + (z === 1 ? ' on' : '') + '" onclick="roomZoom(\'one\')" ' + (DOC_CUR ? '' : 'disabled') + '>' + (z === 'fit' ? '100%' : Math.round(z * 100) + '%') + '</button>'
+    + '<button class="vb" onclick="roomZoom(\'in\')" ' + (DOC_CUR ? '' : 'disabled') + ' title="Zoom in">+</button>'
+    + '<button class="vb" onclick="roomRotate()" ' + (isImg ? '' : 'disabled') + ' title="' + (isImg ? 'Rotate a quarter turn' : 'Rotate works on photos; a PDF has its own viewer') + '">\u27f3 Rotate</button>'
+    + '<button class="vb' + (ROOM.full ? ' on' : '') + '" onclick="roomExpand()">' + (ROOM.full ? '\u2934 Shrink' : '\u26f6 Expand') + '</button>'
+    + '<button class="vb" onclick="docDownload()" ' + (DOC_CUR ? '' : 'disabled') + '>Download</button>'
+    + '<button class="vb" onclick="docNewTab()" ' + (DOC_CUR ? '' : 'disabled') + '>New tab</button>';
+}
+function roomNav(step){
+  if(!ROOM) return;
+  const docs = DOC_SORTED[ROOM.rowKey] || []; if(docs.length < 2) return;
+  showDoc(ROOM.rowKey, (ROOM.i + step + docs.length) % docs.length);
+}
+function roomZoom(how){
+  if(!ROOM) return;
+  /* 'fit' | 'one' (100%) | 'in' | 'out' - words, because +1 and 1 are the same number */
+  if(how === 'fit') ROOM.zoom = 'fit';
+  else if(how === 'one') ROOM.zoom = 1;
+  else { const cur = ROOM.zoom === 'fit' ? 1 : ROOM.zoom; let i = ZOOMS.indexOf(cur); if(i < 0) i = 2; i = Math.max(0, Math.min(ZOOMS.length - 1, i + (how === 'in' ? 1 : -1))); ROOM.zoom = ZOOMS[i]; }
+  applyView(); drawTool();
+}
+function roomRotate(){ if(!ROOM) return; ROOM.rot = (ROOM.rot + 90) % 360; applyView(); }
+function roomExpand(){
+  if(!ROOM) return; ROOM.full = !ROOM.full;
+  const w = document.getElementById('roomWrap'); if(w) w.classList.toggle('full', ROOM.full);
+  applyView(); drawTool();
+}
+/* zoom and rotation, applied to what is in the pane. A photo scales and turns; a PDF
+   scales (its own viewer inside re-lays out to the scaled width - which is the zoom). */
+function applyView(){
+  const wrap = document.querySelector('#docPane .zoomwrap'); if(!wrap || !ROOM) return;
+  const isImg = !!wrap.querySelector('img');
+  const z = ROOM.zoom === 'fit' ? 1 : ROOM.zoom, r = isImg ? ROOM.rot : 0;
+  wrap.classList.toggle('fit', ROOM.zoom === 'fit');
+  if(isImg){
+    wrap.style.transform = (z !== 1 ? 'scale(' + z + ')' : '') + (r ? ' rotate(' + r + 'deg)' : '');
+    wrap.style.transformOrigin = r ? 'center center' : '0 0';
+    wrap.style.width = ''; wrap.style.height = '';
+  } else {
+    const fr = wrap.querySelector('iframe');
+    wrap.style.transform = z !== 1 ? 'scale(' + z + ')' : ''; wrap.style.transformOrigin = '0 0';
+    wrap.style.width = z !== 1 ? (100 / z) + '%' : '';
+    if(fr) fr.style.height = z !== 1 ? 'calc(' + (ROOM.full ? '(100vh - 240px)' : '520px') + ' / ' + z + ')' : '';
+  }
+}
+document.addEventListener('keydown', e => {
+  if(!ROOM || !document.getElementById('roomWrap')) return;
+  if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if(e.key === 'ArrowLeft') roomNav(-1); else if(e.key === 'ArrowRight') roomNav(1);
+});
 async function showDoc(rowKey, i){
   const docs = DOC_SORTED[rowKey] || [];
   const d = docs[i]; if(!d) return;
+  if(ROOM && ROOM.rowKey === rowKey){ ROOM.i = i; ROOM.rot = 0; ROOM.zoom = 'fit'; DOC_CUR = null; drawTool(); }   // a new file starts at Fit, upright
   document.querySelectorAll('.docitem').forEach(x => x.classList.remove('sel'));
   const li = document.getElementById('di'+i); if(li) li.classList.add('sel');
   const pane = document.getElementById('docPane');
@@ -1958,7 +2116,7 @@ async function showDoc(rowKey, i){
   const r = await api('attachment_get&id=' + encodeURIComponent(d.id));
   if(!r || !r.ok || (!r.file_b64 && !r.blob_url)){
     pane.innerHTML = '<div style="padding:18px;font-size:13px;color:#a32d2d">No file is stored for this record.</div>';
-    return;
+    drawTool(); return;
   }
   let url = r.blob_url;
   if(!url){
@@ -1975,12 +2133,12 @@ async function showDoc(rowKey, i){
   }
   DOC_CUR = { url, name: r.filename || d.filename || 'document.pdf', mime: r.mime || '' };
   const isImg = /^image\//.test(DOC_CUR.mime);
-  pane.innerHTML = isImg
-    ? '<img src="' + url + '" style="max-width:100%;max-height:460px;display:block;margin:0 auto;border-radius:9px">'
-    : '<iframe src="' + url + '"></iframe>';
-  document.getElementById('docDl').style.display = '';
-  document.getElementById('docNt').style.display = '';
-  document.getElementById('docNote').textContent = fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed to HawkSoft' : ' \u00b7 not filed to HawkSoft');
+  pane.innerHTML = '<div class="zoomwrap fit">' + (isImg
+    ? '<img src="' + url + '" alt="">'
+    : '<iframe src="' + url + '"></iframe>') + '</div>';
+  applyView(); drawTool();
+  const note = document.getElementById('roomMsg');
+  if(note && !note.textContent) note.textContent = fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed to HawkSoft' : ' \u00b7 not filed to HawkSoft');
 }
 // Thumbnails load after the list is on screen, for this payment only.
 async function loadThumbs(rowKey){
@@ -2019,6 +2177,7 @@ function closeDocs(){
   document.body.style.overflow = '';
   DOC_URLS.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
   DOC_URLS = []; DOC_CUR = null;
+  ROOM = ROOM ? { full: ROOM.full } : null;   // Expand is remembered for the next one; everything else is gone
 }
 document.addEventListener('keydown', e => { if(e.key === 'Escape') closeDocs(); });
 

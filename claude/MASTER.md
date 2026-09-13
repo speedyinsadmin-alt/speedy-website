@@ -84,10 +84,16 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 12 night. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `c54bc11`.
+Last written Sep 13 evening. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `2fc5b15`.
 
 ### ⏭ MONDAY SEP 14 — IN THIS ORDER
+0. **Agents will notice four things Monday morning — tell them in one message:** the
+   charge sheet asks the purpose differently (New business needs a source; Other needs
+   text), it asks "paid in full, or part?", the audit button reads "Submit for
+   approval" and nothing is earned until Tony approves, and the Back button now goes
+   back instead of to the sign-in screen. None of it needs training; all of it will
+   get a question if nobody says it first.
 1. **Tell Tony before he opens the Console:** from tonight nothing earns commission
    until he clicks Approve. The queue is "Waiting for you" at the top of Audit, and
    "WAITING FOR TONY" on Speedy Ops. 25–50 a day. Bulk-approve by tick; send back one
@@ -105,6 +111,65 @@ otherwise; `git status` is clean at `c54bc11`.
    Business afterwards. Friday 9:10 the English one.
 6. Marketing plan: Saif to paste it from the claude.ai Project before that conversation.
 
+
+### ✅ SEP 13 · FIVE THINGS FROM ONE SCREENSHOT — receipts, purpose, one row, one card, part payments
+Saif opened with the two Audit views and asked what the point was if they showed
+different things, why the Console's client looked nothing like the portal's, for a real
+purpose list on the charge, and why an "Other" payment's receipt said cash. Built in the
+order he chose (4 → 3 → 1 → 2, then Total owed), each pushed on its own.
+
+**4 · Receipts (`957195e`).** Zelle/Other were filed as `Cash_Receipt` / "Cash receipt
+$X" and the PDF's Entry line printed "Other — Other". Now `Other_Receipt` /
+`Zelle_Receipt`, "Other (MO 4471) receipt $187.00" inside HawkSoft's 41-char Desc, the
+Entry line is the agent's reference. HawkSoft's own accounting receipt still says Cash
+for those — HawkSoft accepts Cash/Check only; the note carries the truth (unchanged).
+`harnessReceiptMethod.mjs` (17) runs the real `charge_cash` and reads the filed PDF's text
+back (streams inflated, hex text decoded). Needs `node --import ./resolve_local.mjs` so
+the repo's `pdf-lib` resolves from the scratchpad.
+
+**3 · Purpose (`eef6378`).** Measured first: 118 of 333 charges in 60 days were
+"Other: …", ~70 of them a monthly payment typed by hand, 21 reinstatements, agents typing
+the METHOD into the purpose. Now one list in portal.html and charge.html (harness fails
+if they drift): **New business → Walk-in/Referral/Online/Rewrite/Second policy/Other
+(required)** · **Monthly payment → On time/Late/Late + fee/Last payment (optional)** ·
+Endorsement · Renewal · Reinstatement · Cancellation · DMV · **Other → typed (required)**.
+Down payment is gone (it was new business). Strings: "New business — Walk-in",
+"Monthly payment — Late", "Other: broker fee" (old format kept). Refused before any money
+path when New business has no source or Other has no text. Terminal stays faded.
+`harnessPurpose.mjs` (38), 5/5 planted breaks caught.
+
+**1 · One audit row (`c318354`).** By-agent had its own older row (no Cost, purpose,
+time, review state, actions). `auditRowKit / auditHeadHtml / auditRowHtml /
+auditBulkBarHtml` lifted out of renderAudit verbatim; both views call them. The harness
+renders both views from one fixture and asserts the rows are byte-identical — the first
+version of that check was vacuous (the view switch had not taken because the page script
+was `window.eval`'d and its `let`s were out of reach; loading it as a real `<script>`
+fixed it, and a planted ctx difference now fails it). A waiting row is not the agent's
+to-do in either order.
+
+**2 · One payment card (`a212c49`).** `/admin/shared/paycard.js` (+ `paycard.css`): the
+portal's `payHistoryHtml` and every helper, lifted verbatim, `window.PayCard.html(card,
+{ me, clientNo, actions })`. Portal keeps one-line wrappers; its output is byte-identical
+(asserted). Console client view renders the same card read-only from `portal_client`,
+raw ledger rows collapsed beneath. **Trap:** fallbacks on `.paycard` that referenced the
+page token from the same rule made a CSS cycle — every colour in the card went to
+initial and only the Chrome screenshot showed it. Fixed by adding `--field --red-ink
+--amber-ink --hair` to the Console's `:root`. jsdom does not fetch `<script src>`: every
+page-loading harness now inlines the shared file (`inline_shared.mjs`, which also
+normalises CRLF). `harnessPayCard.mjs` (31), 2/2 breaks caught.
+
+**Total owed (`2fc5b15`).** Saif: "more recognised, like red". Not red-always — a field
+blank on every full payment is wallpaper. Now a question: **"Is this the full amount the
+client owes for this sale?" Paid in full (default) / Part payment — client still owes**
+(red chip, red required total box, amber "Balance left", preview says "$100.00 of
+$187.00, $87.00 still owed"). Refused before any money path when part has no total or the
+total is not bigger than the payment — the Sep 9 negative-fee bug closed at the source.
+Paying down an earlier balance resets to full. `harnessTotalOwed.mjs` (18), 2/2 caught.
+
+**Recurring trap, three times today:** `node -e` and bash heredocs through the tool
+ate `\n`, `\b`, `\r\n` and `$` — patches "succeeded" with mangled regexes or a lost
+dollar sign. Write patch scripts as files (Write tool), never inline; and grep the
+result before trusting it.
 
 ### ✅ SEP 12 NIGHT · BACK GOES TO THE PREVIOUS PLACE, NOT THE MAIN ONE
 Saif: *"all back clicks should go to the previous page not to the main one, study them on
@@ -413,6 +478,12 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessRefund.mjs` | 342 checks — refunds, requests, decisions, carrier settle, the Trust invariant (`node --import ./mock_mail.mjs`) |
 | `harnessRequestUI.mjs` | 32 — the request flow through both pages' real markup |
 | `harnessGbp.mjs` | 28 — `gbpSummary()` on the real rows + ops.html render, calm/hot/null |
+| `harnessReceiptMethod.mjs` | 17 — `charge_cash` filed attachment name/Desc + PDF text (`--import ./resolve_local.mjs`) |
+| `harnessPurpose.mjs` | 38 — the purpose picker on both pages; the two lists identical |
+| `harnessPayCard.mjs` | 31 — shared card: read-only strips exactly the actions; portal bytes unchanged; Console renders it |
+| `harnessTotalOwed.mjs` | 18 — paid in full / part payment on the real sheet |
+| `harnessBack.mjs` | 40 — history/popstate on portal, Console, carrier page |
+| `harnessAuditReview.mjs` | 152 — submit/approve/send-back + both Audit views byte-identical |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

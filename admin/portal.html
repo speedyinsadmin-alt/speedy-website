@@ -367,9 +367,10 @@
 
         <label style="margin-top:12px">Purpose</label>
         <div id="chgPurp" class="chips"></div>
+        <div id="chgPurpSub" class="hide" style="margin-top:8px;padding:10px 11px;background:var(--field);border:1px solid var(--line);border-radius:10px"></div>
         <div id="chgOtherWrap" class="hide">
           <label for="chgOther" style="margin-top:10px">What's this payment for?</label>
-          <input id="chgOther" placeholder="e.g. broker fee, reinstatement" maxlength="60" autocomplete="off">
+          <input id="chgOther" placeholder="e.g. broker fee, notary, late fee only" maxlength="60" autocomplete="off" oninput="renderChgHsPreview()">
         </div>
 
         <div style="margin-top:12px">
@@ -2427,7 +2428,19 @@ function openPolicyDocs(policyNum, policyGuid){
    Reuses the SAME /api/hawksoft actions charge.html uses (charge_lookup, ecomm_config,
    charge_live, charge_cash, paylink_create). No new endpoints, no divergence.
    Money always uses the HawkSoft record, never the portal's cached Supabase card. */
-const PURPOSES = ['Down payment','Renewal','Endorsement','Cancellation','DMV','Other'];
+/* PURPOSE (Saif, Sep 13). Two levels where a second word answers a real question:
+   New business - HOW did it come in (required: that is the marketing answer); Monthly
+   payment - late or not (optional). Measured before this list existed, last 60 days:
+   118 of 333 charges were "Other: ..." and ~70 of those were a monthly payment typed
+   by hand ("late mp", "mp", "monthly payment", "late payment"), 21 were reinstatements
+   (two spellings), and agents typed the METHOD into the purpose ("mp mp cash").
+   Down payment is gone: it was new business under another name (97 rows). */
+const PURPOSES = [
+  { k: 'New business',    sub: ['Walk-in', 'Referral', 'Online', 'Rewrite', 'Second policy', 'Other'], ask: 'How did this one come in?', required: true },
+  { k: 'Monthly payment', sub: ['On time', 'Late', 'Late + fee', 'Last payment'], ask: 'Anything to add?', required: false },
+  { k: 'Endorsement' }, { k: 'Renewal' }, { k: 'Reinstatement' }, { k: 'Cancellation' }, { k: 'DMV' },
+  { k: 'Other', typed: true },
+];
 const METHODS  = [['card','Card'],['cash','Cash'],['link','Pay link'],['zelle','Zelle'],['other','Other']];
 let CHG = null;            // { clientNo, confirmed } — one charge at a time
 let CHG_PRESELECT = null;  // policy to open the picker on, for one charge only
@@ -2436,7 +2449,8 @@ let CHG_PRESELECT = null;  // policy to open the picker on, for one charge only
    invoiceId. The server no longer guesses one, so if this is not sent, no accounting
    receipt is posted at all. null is the default and a deliberate answer. */
 let CHG_PICKED_INV = null;
-let CHG_PURPOSE = 'Down payment';
+let CHG_PURPOSE = 'New business';
+let CHG_SUB = '';          // the second word, when the purpose has one
 let CHG_METHOD = 'card';
 let cloverSDK = null, cloverMounted = false;
 let _plUrl = '', _plMsg = '', _plEmail = '';
@@ -2445,10 +2459,37 @@ let LEDGER_ID = null;  // bridge_ledger row id of the charge just made — passe
 
 const chgEl = id => document.getElementById(id);
 function amtVal(){ return String(chgEl('chgAmt').value || '').replace(/,/g, '').trim(); }
+function chgPurposeDef(){ return PURPOSES.find(p => p.k === CHG_PURPOSE) || PURPOSES[0]; }
+/* What the receipt, HawkSoft and the Audit tab will read. "New business — Walk-in",
+   "Monthly payment — Late", "Other: broker fee"; the em dash is the same joiner the
+   server uses for the note, so the whole line reads as one phrase. */
 function chgPurposeText(){
-  if(CHG_PURPOSE !== 'Other') return CHG_PURPOSE;
-  const t = chgEl('chgOther').value.trim();
-  return t ? 'Other: ' + t : 'Other';
+  const d = chgPurposeDef();
+  if(d.typed){ const t = chgEl('chgOther').value.trim(); return t ? 'Other: ' + t : 'Other'; }
+  return CHG_SUB ? d.k + ' \u2014 ' + CHG_SUB : d.k;
+}
+/* Why the charge cannot go yet, or null. Asked BEFORE any money path, so a charge is
+   never taken with "New business" and no source, or "Other" and nothing typed - the
+   two answers that make the purpose worth recording at all. */
+function chgPurposeProblem(){
+  const d = chgPurposeDef();
+  if(d.typed && !chgEl('chgOther').value.trim()) return 'Say what this payment is for \u2014 it goes on the receipt.';
+  if(d.sub && d.required && !CHG_SUB) return d.ask + ' Pick one under Purpose.';
+  return null;
+}
+function renderChgSub(){
+  const d = chgPurposeDef(), el = chgEl('chgPurpSub');
+  if(!el) return;
+  if(!d.sub){ el.classList.add('hide'); el.innerHTML = ''; return; }
+  el.classList.remove('hide');
+  el.innerHTML = '<div class="dim" style="font-size:11px;margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase">' + esc(d.ask)
+    + (d.required ? '' : ' <span style="text-transform:none;letter-spacing:0">\u2014 optional</span>') + '</div>'
+    + '<div class="chips">' + d.sub.map(s => '<button type="button" class="' + (s === CHG_SUB ? 'sel' : '') + '" onclick="pickChgSub(\'' + s.replace(/'/g, '') + '\',this)">' + esc(s) + '</button>').join('') + '</div>';
+}
+function pickChgSub(s, btn){
+  CHG_SUB = (CHG_SUB === s && !chgPurposeDef().required) ? '' : s;   // optional rows can be un-picked
+  document.querySelectorAll('#chgPurpSub button').forEach(x => x.classList.toggle('sel', x.textContent === CHG_SUB));
+  renderChgHsPreview();
 }
 function chgNoteText(){ return chgEl('chgNote').value.trim(); }
 
@@ -2530,7 +2571,7 @@ async function openCharge(no, preselectPolicy){
     return;
   }
   CHG = { clientNo: no, confirmed: null };
-  CHG_PURPOSE = 'Down payment'; CHG_METHOD = 'card';
+  CHG_PURPOSE = 'New business'; CHG_SUB = ''; CHG_METHOD = 'card';
   chgEl('chgResult').innerHTML = ''; LEDGER_ID = null;
   chgEl('chgBody').classList.add('hide');
   chgEl('chgLoading').classList.remove('hide');
@@ -2751,7 +2792,8 @@ function renderChargeForm(){
   } else inv.innerHTML = '';
 
   chgEl('chgPurp').innerHTML = PURPOSES.map(p =>
-    '<button type="button" class="'+(p===CHG_PURPOSE?'sel':'')+'" onclick="pickPurpose(\''+p+'\',this)">'+p+'</button>').join('');
+    '<button type="button" class="'+(p.k===CHG_PURPOSE?'sel':'')+'" onclick="pickPurpose(\''+p.k+'\',this)">'+esc(p.k)+'</button>').join('');
+  renderChgSub();
   chgEl('chgMeth').innerHTML = METHODS.map(m =>
     '<button type="button" class="'+(m[0]===CHG_METHOD?'sel':'')+'" onclick="pickChgMethod(\''+m[0]+'\',this)">'+m[1]+'</button>').join('')
     + '<button type="button" disabled style="opacity:.45;cursor:default;border-style:dashed">Terminal — soon</button>';
@@ -2841,14 +2883,17 @@ function renderChgHsPreview(){
                  : '<b>No accounting receipt</b> — open invoices stay open'];
   }
   el.innerHTML = '<div class="dim" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">What HawkSoft will receive</div>'
+    + '<div style="font-size:12.5px;line-height:1.5">· For: <b>' + esc(chgPurposeText()) + '</b></div>'
     + rows.map(r => '<div style="font-size:12.5px;line-height:1.5">· ' + r + '</div>').join('');
 }
 function pickPurpose(p, btn){
-  CHG_PURPOSE = p;
+  CHG_PURPOSE = p; CHG_SUB = '';
   document.querySelectorAll('#chgPurp button').forEach(x => x.classList.remove('sel'));
   btn.classList.add('sel');
-  chgEl('chgOtherWrap').classList.toggle('hide', p !== 'Other');
-  if(p === 'Other') chgEl('chgOther').focus();
+  chgEl('chgOtherWrap').classList.toggle('hide', !chgPurposeDef().typed);
+  renderChgSub();
+  if(chgPurposeDef().typed) chgEl('chgOther').focus();
+  renderChgHsPreview();
 }
 function pickChgMethod(m, btn){
   CHG_METHOD = m;
@@ -2904,6 +2949,7 @@ function doCharge(){
   if(!CHG || !CHG.confirmed) return;
   const amt = amtVal();
   if(!(parseFloat(amt) > 0)){ chgSay('Enter the amount first.'); return; }
+  const pp = chgPurposeProblem(); if(pp){ chgSay(pp); return; }
   if(CHG_METHOD === 'card') return chargeCardPortal(amt);
   if(CHG_METHOD === 'link') return createLinkPortal(amt);
   return chargeCashPortal(amt);

@@ -178,17 +178,11 @@
     <div class="eyebrow">Amount</div>
     <div class="amt"><span>$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00" oninput="renderHsPreview()"></div>
     <label>Payment for</label>
-    <div class="purpose" id="purp">
-      <button class="sel" type="button" onclick="pick(this)">Down payment</button>
-      <button type="button" onclick="pick(this)">Renewal</button>
-      <button type="button" onclick="pick(this)">Endorsement</button>
-      <button type="button" onclick="pick(this)">Cancellation</button>
-      <button type="button" onclick="pick(this)">DMV</button>
-      <button type="button" onclick="pick(this)">Other</button>
-    </div>
+    <div class="purpose" id="purp"></div>
+    <div id="purpSub" class="hide" style="margin-top:8px;padding:10px 11px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px"></div>
     <div id="otherWrap" class="hide">
       <label for="otherText">What's this payment for?</label>
-      <input type="text" id="otherText" maxlength="60" placeholder="e.g. broker fee, reinstatement" autocomplete="off">
+      <input type="text" id="otherText" maxlength="60" placeholder="e.g. broker fee, notary, late fee only" autocomplete="off">
     </div>
     <label for="noteText" style="margin-top:12px;display:block">Note <span class="hint" style="font-weight:400">— optional (shows on receipt &amp; log)</span></label>
     <input type="text" id="noteText" maxlength="120" placeholder="e.g. partial payment, policy #, reinstatement" autocomplete="off" style="width:100%;box-sizing:border-box">
@@ -257,7 +251,7 @@
 <script>
 const API = '/api/hawksoft';
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-let confirmed = null, purpose = 'Down payment', gToken = null; // memory only — sign-in required every launch
+let confirmed = null, purpose = 'New business', purposeSub = '', gToken = null; // memory only — sign-in required every launch
 
 const STAFF_UI = {
   'sammy@speedyins.com':['Samuel Rodriguez','Moreno Valley'],'yolanda@speedyins.com':['Yolanda Hernandez','Lake Elsinore'],
@@ -638,13 +632,47 @@ function effPolicy(){
   if(sel && !document.getElementById('polPickWrap').classList.contains('hide')) return sel.value || '';
   return document.getElementById('hsPolicyNumber').value.trim();
 }
-function pick(b){document.querySelectorAll('#purp button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');purpose=b.textContent;
-  document.getElementById('otherWrap').classList.toggle('hide', purpose!=='Other');
-  if(purpose==='Other') document.getElementById('otherText').focus();}
+/* PURPOSE (Saif, Sep 13). Two levels where a second word answers a real question:
+   New business - HOW did it come in (required: that is the marketing answer); Monthly
+   payment - late or not (optional). Measured before this list existed, last 60 days:
+   118 of 333 charges were "Other: ..." and ~70 of those were a monthly payment typed
+   by hand ("late mp", "mp", "monthly payment", "late payment"), 21 were reinstatements
+   (two spellings), and agents typed the METHOD into the purpose ("mp mp cash").
+   Down payment is gone: it was new business under another name (97 rows). */
+const PURPOSES = [
+  { k: 'New business',    sub: ['Walk-in', 'Referral', 'Online', 'Rewrite', 'Second policy', 'Other'], ask: 'How did this one come in?', required: true },
+  { k: 'Monthly payment', sub: ['On time', 'Late', 'Late + fee', 'Last payment'], ask: 'Anything to add?', required: false },
+  { k: 'Endorsement' }, { k: 'Renewal' }, { k: 'Reinstatement' }, { k: 'Cancellation' }, { k: 'DMV' },
+  { k: 'Other', typed: true },
+];
+const purposeDef = () => PURPOSES.find(p => p.k === purpose) || PURPOSES[0];
+function renderPurposes(){
+  document.getElementById('purp').innerHTML = PURPOSES.map(p =>
+    '<button type="button" class="' + (p.k === purpose ? 'sel' : '') + '" onclick="pick(this)">' + p.k + '</button>').join('');
+  renderPurpSub();
+}
+function renderPurpSub(){
+  const d = purposeDef(), el = document.getElementById('purpSub');
+  if(!d.sub){ el.classList.add('hide'); el.innerHTML = ''; return; }
+  el.classList.remove('hide');
+  el.innerHTML = '<div class="hint" style="margin:0 0 6px">' + d.ask + (d.required ? '' : ' \u2014 optional') + '</div>'
+    + '<div class="purpose" style="margin-top:0">' + d.sub.map(s => '<button type="button" class="' + (s === purposeSub ? 'sel' : '') + '" onclick="pickSub(this)">' + s + '</button>').join('') + '</div>';
+}
+function pick(b){ purpose = b.textContent; purposeSub = ''; renderPurposes();
+  document.getElementById('otherWrap').classList.toggle('hide', !purposeDef().typed);
+  if(purposeDef().typed) document.getElementById('otherText').focus(); }
+function pickSub(b){ const s = b.textContent; purposeSub = (purposeSub === s && !purposeDef().required) ? '' : s; renderPurpSub(); }
 function purposeText(){
-  if(purpose!=='Other') return purpose;
-  const t=document.getElementById('otherText').value.trim();
-  return t ? 'Other: '+t : 'Other';}
+  const d = purposeDef();
+  if(d.typed){ const t = document.getElementById('otherText').value.trim(); return t ? 'Other: ' + t : 'Other'; }
+  return purposeSub ? d.k + ' \u2014 ' + purposeSub : d.k; }
+/* Asked before any money path. */
+function purposeProblem(){
+  const d = purposeDef();
+  if(d.typed && !document.getElementById('otherText').value.trim()) return 'Say what this payment is for \u2014 it goes on the receipt.';
+  if(d.sub && d.required && !purposeSub) return d.ask + ' Pick one under "Payment for".';
+  return null; }
+document.addEventListener('DOMContentLoaded', renderPurposes);
 function noteText(){
   const n=document.getElementById('noteText'); return n ? n.value.trim() : '';}
 
@@ -671,6 +699,7 @@ async function chargeLive(){
   const btn = document.getElementById('liveBtn');
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.textContent = 'Verify and confirm the client first.'; return; }
+  { const pp = purposeProblem(); if(pp){ out.textContent = pp; return; } }
     document.getElementById('resultbox').innerHTML = '';
   if(!cloverSDK){ out.textContent = 'Card fields not ready — tap the client confirm again or refresh.'; return; }
   btn.disabled = true;
@@ -743,6 +772,7 @@ async function chargeCash(method){
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm the client first.'; return; }
   if(!parseFloat(amt)){ out.style.display='block'; out.textContent='Enter the amount first.'; return; }
+  { const pp = purposeProblem(); if(pp){ out.style.display='block'; out.textContent = pp; return; } }
   const methLabel = meth==='zelle'?'Zelle':meth==='other'?'Other':'Cash';
   const altRef = isAlt ? (document.getElementById('altRef').value.trim()) : '';
     rb.innerHTML=''; btn.disabled = true; out.style.display='block'; out.textContent='Recording '+methLabel+' payment\u2026';
@@ -784,6 +814,7 @@ async function createLink(){
   const amt = document.getElementById('amount').value || '0';
   if(!confirmed){ out.style.display='block'; out.textContent='Verify and confirm the client first.'; return; }
   if(!parseFloat(amt)){ out.style.display='block'; out.textContent='Enter the amount first \u2014 the link locks it in.'; return; }
+  { const pp = purposeProblem(); if(pp){ out.style.display='block'; out.textContent = pp; return; } }
     out.style.display='none'; btn.disabled = true; lo.innerHTML='<div class="hint">Creating link\u2026</div>';
   try{
     const j = await post({action:'paylink_create', clientId: confirmed.clientNumber, clientName: confirmed.name || '',

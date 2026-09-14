@@ -237,6 +237,34 @@
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let SUBMITTED = false;   // set on a successful submit, so Back stops warning
 let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null, FILE_THUMB = null;
+/* BIG FILES (Saif, Sep 14). Anything over BIG_MIN is not turned into base64 and sent
+   through our API - Vercel refuses any request over 4.5 MB before our code runs, so a
+   PDF over ~3.3 MB has never gone through, whatever we did. A big file is kept as the
+   File itself (FILE_BIG / d.big) and, at submit time, goes STRAIGHT to the document
+   bucket through a one-time signed address the API hands out; the API then gets the
+   path, never the bytes. Up to 50 MB. Photos are still shrunk first, so a phone photo
+   almost never takes this road. */
+const BIG_MIN = 3 * 1024 * 1024, BIG_MAX = 50 * 1024 * 1024;
+let FILE_BIG = null;
+function hasProofFile(){ return !!FILE_B64 || !!FILE_BIG; }
+async function uploadBig(file, name, mime, say){
+  const r0 = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
+    body: JSON.stringify({ action:'upload_url', client_no:Number(CTX.client_no)||null, filename:name, mime:mime, bytes:file.size }) });
+  let j0 = null; try { j0 = await r0.json(); } catch(e){}
+  if(!r0.ok || !j0 || !j0.ok) throw new Error((j0 && (j0.message || j0.error)) || 'Could not prepare the upload.');
+  const mb = (file.size / 1048576).toFixed(1);
+  await new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('PUT', j0.put_url, true);
+    x.setRequestHeader('Content-Type', mime || 'application/octet-stream');
+    x.setRequestHeader('x-upsert', 'false');
+    x.upload.onprogress = e => { if(say && e.lengthComputable) say('Uploading ' + name + ' \u2014 ' + mb + ' MB \u00b7 ' + Math.round(e.loaded / e.total * 100) + '%'); };
+    x.onload = () => (x.status >= 200 && x.status < 300) ? resolve() : reject(new Error('The upload was refused (' + x.status + '). ' + (x.status === 413 ? 'The file is over the storage limit.' : 'Try again.')));
+    x.onerror = () => reject(new Error('The upload did not go through. Check the connection and try again.'));
+    x.send(file);
+  });
+  return j0.path;
+}
 /* A carrier receipt already attached to this payment on a previous attempt. The page
    knew only about a file dropped in THIS session, so returning to a half-finished
    audit demanded a receipt HawkSoft already held - and every retry filed another copy
@@ -344,7 +372,7 @@ function renderProof(){
   const cur = proofType();
   c.innerHTML = PROOF_TYPES.map(([k, l]) => '<button type="button" class="' + (k === cur ? 'sel' : '') + '" onclick="pickProof(\'' + k + '\')">' + l + (k === def.usual ? '<span class="usual">usual</span>' : '') + '</button>').join('');
   const oth = $('#proofOther'); if(oth) oth.classList.toggle('hide', cur !== 'other');
-  const dt = $('#droptxt'); if(dt && !FILE_B64 && !HAS_RECEIPT) dt.textContent = 'Drag the ' + (cur === 'other' ? 'document' : proofLabel(cur).toLowerCase()) + ' here, or tap to choose';
+  const dt = $('#droptxt'); if(dt && !hasProofFile() && !HAS_RECEIPT) dt.textContent = 'Drag the ' + (cur === 'other' ? 'document' : proofLabel(cur).toLowerCase()) + ' here, or tap to choose';
   const badge = $('#recReq');
   if(badge){ badge.textContent = fee ? 'optional \u2014 fee only'
               : (HAS_RECEIPT ? (HAS_RECEIPT.filed_hawksoft ? 'on file \u00b7 in hawksoft' : 'on file') : 'required for audit'); }
@@ -530,6 +558,9 @@ function b64Bytes(dataUrl){
 async function prepareFile(file){
   const original = file.size;
   if(!/^image\//i.test(file.type)){
+    /* a big PDF: no base64 - it will go straight to the bucket at submit */
+    if(original > BIG_MIN) return { b64: null, big: file, thumb: null, name: file.name,
+             mime: file.type || 'application/pdf', bytes: original, originalBytes: original, shrunk: false, tooBig: original > BIG_MAX };
     return { b64: await readAsDataUrl(file), thumb: null, name: file.name,
              mime: file.type || 'application/pdf', bytes: original, originalBytes: original, shrunk: false };
   }
@@ -547,6 +578,7 @@ async function prepareFile(file){
     const newBytes = b64Bytes(full);
     // if the camera already produced something smaller, keep the original
     if(newBytes >= original){
+      if(original > BIG_MIN) return { b64: null, big: file, thumb, name: file.name, mime: file.type, bytes: original, originalBytes: original, shrunk: false, tooBig: original > BIG_MAX };
       return { b64: await readAsDataUrl(file), thumb, name: file.name, mime: file.type,
                bytes: original, originalBytes: original, shrunk: false };
     }
@@ -554,13 +586,15 @@ async function prepareFile(file){
     return { b64: full, thumb, name, mime: 'image/jpeg', bytes: newBytes, originalBytes: original, shrunk: true };
   } catch(e){
     // HEIC or anything the browser can't decode — upload as-is rather than lose the photo
+    if(original > BIG_MIN) return { b64: null, big: file, thumb: null, name: file.name, mime: file.type || 'application/octet-stream', bytes: original, originalBytes: original, shrunk: false, tooBig: original > BIG_MAX };
     return { b64: await readAsDataUrl(file), thumb: null, name: file.name, mime: file.type || 'application/octet-stream',
              bytes: original, originalBytes: original, shrunk: false };
   }
 }
 function sizeNote(p){
   const kb = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b/1024) + ' KB' : (b/1048576).toFixed(1) + ' MB';
-  return p.shrunk ? kb(p.originalBytes) + ' \u2192 ' + kb(p.bytes) : kb(p.bytes);
+  if(p.tooBig) return kb(p.bytes) + ' \u00b7 over the 50 MB limit';
+  return (p.shrunk ? kb(p.originalBytes) + ' \u2192 ' + kb(p.bytes) : kb(p.bytes)) + (p.big ? ' \u00b7 uploads at submit' : '');
 }
 
 /* ---------- Drag and drop ----------
@@ -608,7 +642,8 @@ async function acceptReceiptFiles(files){
   if(files.length > 1) msgLine('Only the first file was used as the carrier receipt — add the rest under Documents.');
   $('#droptxt').textContent = 'Preparing ' + f.name + '…';
   const p = await prepareFile(f);
-  FILE_B64 = p.b64; FILE_NAME = p.name; FILE_MIME = p.mime; FILE_THUMB = p.thumb;
+  if(p.tooBig){ FILE_B64 = null; FILE_BIG = null; $('#droptxt').textContent = f.name + ' is over 50 MB'; const h0 = $('#drop').querySelector('.hint'); if(h0) h0.textContent = 'Split it, or scan at a lower setting, then try again'; updateSubmit(); return; }
+  FILE_B64 = p.b64; FILE_BIG = p.big || null; FILE_NAME = p.name; FILE_MIME = p.mime; FILE_THUMB = p.thumb;
   $('#drop').classList.add('has');
   $('#dropic').textContent = '\u2713';
   $('#droptxt').textContent = p.name;
@@ -758,7 +793,8 @@ function cancelReview(){
 function confirmReview(){
   if(REVIEW_FILES.some(r => r.guessed && !r.confirmed)) return;
   for(const r of REVIEW_FILES){
-    DOCS.push({ doc_type: r.type, doc_label: (r.label || '').trim() || null, name: r.p.name, mime: r.p.mime, b64: r.p.b64, thumb: r.p.thumb, note: sizeNote(r.p) });
+    if(r.p.tooBig){ msgLine(r.p.name + ' is over 50 MB and was not added.'); continue; }
+    DOCS.push({ doc_type: r.type, doc_label: (r.label || '').trim() || null, name: r.p.name, mime: r.p.mime, b64: r.p.b64, big: r.p.big || null, thumb: r.p.thumb, note: sizeNote(r.p) });
   }
   cancelReview();
   renderDocs();
@@ -768,7 +804,8 @@ async function acceptDocFiles(files){
   // one file: no interruption, use the type already chosen
   if(files.length === 1){
     const p = await prepareFile(files[0]);
-    DOCS.push({ doc_type: $('#dtype').value, doc_label: effDocLabel(), name: p.name, mime: p.mime, b64: p.b64, thumb: p.thumb, note: sizeNote(p) });
+    if(p.tooBig){ msgLine(p.name + ' is over 50 MB and was not added.'); return; }
+    DOCS.push({ doc_type: $('#dtype').value, doc_label: effDocLabel(), name: p.name, mime: p.mime, b64: p.b64, big: p.big || null, thumb: p.thumb, note: sizeNote(p) });
     renderDocs();
     return;
   }
@@ -810,7 +847,7 @@ function hasUnsavedWork(){
   const amt = $('#camt'), card = $('#card');
   const typed = !!(amt && String(amt.value || '').trim() && Number(amt.value) !== 0);
   const chose = !!(card && card.value);
-  const filed = !!FILE_B64;
+  const filed = hasProofFile();
   const docs  = !!(typeof DOCS !== 'undefined' && DOCS && DOCS.length);
   const staged = !!(typeof REVIEW_FILES !== 'undefined' && REVIEW_FILES && REVIEW_FILES.length);
   return typed || chose || filed || docs || staged;
@@ -976,12 +1013,13 @@ async function submitDocsOnly(){
   let ok = 0;
   const failed = [];
   const postDoc = async d => {
+    if(d.big && !d.path) d.path = await uploadBig(d.big, d.name, d.mime, t => { msg.textContent = t; });
     const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
       body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
         policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, policy_num:CTX.policy_num||null,
         payment_id:CTX.payment_id||null, no_payment:CTX.no_payment === true,
         doc_type:d.doc_type, doc_label:d.doc_label || null,
-        receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
+        receipt_b64:d.big ? null : d.b64, receipt_path:d.path || null, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
     return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };
   };
@@ -1073,7 +1111,7 @@ function updateSubmit(){
      thing asking. Same shape as the receipt gate: a control demanding something that
      does not exist for this kind of charge. */
   const needCarrier = !feeOnly();
-  $('#submitBtn').disabled = !((!needCarrier || !!effCarrier()) && amtOk && cardOk && (!needReceipt || FILE_B64));
+  $('#submitBtn').disabled = !((!needCarrier || !!effCarrier()) && amtOk && cardOk && (!needReceipt || hasProofFile()));
 }
 /* Shows the acknowledgement only on an exact zero, and carries the live amount so the
    agent reads the real consequence, not a generic warning. No purpose gate: zero is
@@ -1193,7 +1231,7 @@ function pendingMsg(){
   const missing = [];
   if(!feeOnly() && !effCarrier()) missing.push('which carrier was paid');
   if(!feeOnly() && carrierAmt() === null) missing.push('the amount paid to the carrier');
-  if(!feeOnly() && !HAS_RECEIPT && !FILE_B64) missing.push('the proof of payment (' + proofLabel().toLowerCase() + ')');
+  if(!feeOnly() && !HAS_RECEIPT && !hasProofFile()) missing.push('the proof of payment (' + proofLabel().toLowerCase() + ')');
   const kept = 'Your work so far is saved.';
   if(!missing.length) return 'Saved — not submitted to audit yet. ' + kept;
   const list = missing.length === 1 ? missing[0]
@@ -1324,7 +1362,7 @@ async function submit(complete){
      What is no longer possible is having the receipt and skipping the amount, which
      is how ten audits ended up unfinished with commission nobody could claim. */
   if(!complete && !feeOnly()){
-    const haveReceipt = !!FILE_B64 || !!HAS_RECEIPT;
+    const haveReceipt = hasProofFile() || !!HAS_RECEIPT;
     if(haveReceipt && carrierAmt() === null){
       msg.className = '';
       msg.style.color = 'var(--amber)';
@@ -1385,7 +1423,7 @@ async function submit(complete){
     audit_note: ($('#auditNote') ? $('#auditNote').value.trim().slice(0, 500) : ''),
     purpose: CTX.purpose || null,
     carrier_card: $('#card').value||null,
-    receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME, thumb_b64: FILE_THUMB,
+    receipt_b64: FILE_B64, receipt_path: null, receipt_name: FILE_NAME, receipt_mime: FILE_MIME, thumb_b64: FILE_THUMB,
     complete: !!complete,
     /* Null on the first attempt. The server only looks at it when it has already
        refused once for a missing total, so sending it always is harmless. */
@@ -1395,6 +1433,16 @@ async function submit(complete){
   // 1) MAIN submit (carrier leg + receipt) — this is what matters
   let mainOk = false, mainMsg = '';
   try{
+    /* a big proof: straight to the bucket first; the API gets the path */
+    if(FILE_BIG){
+      try { payload.receipt_path = await uploadBig(FILE_BIG, FILE_NAME, FILE_MIME, t => { msg.textContent = t; }); }
+      catch(e){
+        msg.className = ''; msg.style.color = 'var(--red)'; msg.textContent = String(e && e.message || e);
+        if(btn) btn.disabled = false; if(saveBtn) saveBtn.disabled = false;
+        return;
+      }
+      msg.textContent = complete ? 'Submitting to audit\u2026' : 'Saving\u2026';
+    }
     let r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     // If the token expired (401), re-authenticate WITHOUT losing the form, then retry once.
     if(r.status === 401){
@@ -1452,10 +1500,11 @@ async function submit(complete){
   let docsOk = 0;
   const stillFailed = [];
   const postDoc = async d => {
+    if(d.big && !d.path) d.path = await uploadBig(d.big, d.name, d.mime, t => { msg.textContent = t; });
     const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
       body: JSON.stringify({ action:'add_document', client_no:Number(CTX.client_no)||null,
         policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, policy_num:CTX.policy_num||null, payment_id:CTX.payment_id||null,
-        doc_type:d.doc_type, doc_label:d.doc_label || null, receipt_b64:d.b64, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
+        doc_type:d.doc_type, doc_label:d.doc_label || null, receipt_b64:d.big ? null : d.b64, receipt_path:d.path || null, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
     return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };
   };

@@ -240,6 +240,38 @@ function migrateObjectPath(attId, clientNo, filename, mime) {
   return `${cn}/${String(attId).replace(/[^0-9a-f-]/gi, '')}.${safe}`;
 }
 
+/* BIG FILES (Saif, Sep 14: "a document above 25 MB, why can't our system upload it?").
+   A file used to travel to this function as base64 inside JSON, and Vercel refuses any
+   request over 4.5 MB before our code runs - so a PDF over ~3.3 MB was never
+   uploadable, whatever the setting said. Photos are shrunk on the page; a PDF cannot
+   be. Now the page asks here for a one-time signed address and sends the bytes
+   STRAIGHT to the bucket (up to its 50 MB limit); this function only ever sees the
+   object path. The signed token lives two minutes and opens one path only. */
+const BIG_MAX_BYTES = 50 * 1024 * 1024;
+async function storageSignedUpload(objectPath) {
+  const st = docStorage();
+  if (!st) return { ok: false, error: 'no_supabase_env' };
+  try {
+    const r = await fetch(`${st.base}/storage/v1/object/upload/sign/${DOC_BUCKET}/${objectPath}`, {
+      method: 'POST', headers: { apikey: st.key, Authorization: `Bearer ${st.key}`, 'Content-Type': 'application/json' }, body: '{}' });
+    const j = await r.json().catch(() => ({}));
+    if (r.status !== 200 || !j.url) return { ok: false, error: 'sign_' + r.status, detail: JSON.stringify(j).slice(0, 160) };
+    /* j.url is "/object/upload/sign/<bucket>/<path>?token=..." - relative to /storage/v1 */
+    return { ok: true, put_url: `${st.base}/storage/v1${j.url.startsWith('/') ? '' : '/'}${j.url}`, path: objectPath };
+  } catch (e) { return { ok: false, error: 'sign_error', detail: String(e).slice(0, 160) }; }
+}
+async function storageGetBuf(objectPath) {
+  const st = docStorage();
+  if (!st || !objectPath) return null;
+  try {
+    const r = await fetch(`${st.base}/storage/v1/object/${DOC_BUCKET}/${objectPath}`, { headers: { apikey: st.key, Authorization: `Bearer ${st.key}` } });
+    if (r.status !== 200) return null;
+    return Buffer.from(await r.arrayBuffer());
+  } catch { return null; }
+}
+/* the object path the page was given must be one of ours, for this client: "4600/<uuid>.<ext>" */
+const uploadPathOk = (p, clientNo) => new RegExp('^' + String(parseInt(clientNo, 10) || 0) + '/[0-9a-f-]{36}\\.(pdf|jpg|jpeg|png|webp|eml)$', 'i').test(String(p || ''));
+
 function docObjectPath(clientNo, filename, mime) {
   const ext = String(filename || '').split('.').pop().toLowerCase();
   const safe = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'eml'].includes(ext)
@@ -502,6 +534,19 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, deleted, failed, remaining_after: paths.length - deleted });
   }
 
+  if (action === 'upload_url') {
+    const client_no = parseInt(body.client_no, 10) || null;
+    const bytes = Number(body.bytes || 0);
+    const mime = String(body.mime || '');
+    if (!client_no) return res.status(400).json({ ok: false, error: 'client_no required' });
+    if (!(bytes > 0) || bytes > BIG_MAX_BYTES) return res.status(400).json({ ok: false, error: 'too_large', message: 'That file is over 50 MB. Split it or scan at a lower setting.' });
+    if (!/^(application\/pdf|image\/(jpeg|png|webp)|message\/rfc822)$/.test(mime)) return res.status(400).json({ ok: false, error: 'unsupported_type', message: 'Only PDF and photos (JPG, PNG, WebP) can be uploaded.' });
+    const path = docObjectPath(client_no, body.filename, mime);
+    const signed = await storageSignedUpload(path);
+    if (!signed.ok) return res.status(502).json({ ok: false, error: signed.error, message: 'Could not prepare the upload. Try again in a moment.' });
+    return res.status(200).json({ ok: true, path: signed.path, put_url: signed.put_url, max_bytes: BIG_MAX_BYTES });
+  }
+
   if (action === 'add_document') {
     // Lightweight: just store a supporting document (no ledger/carrier logic)
     const { client_no, policy_id, policy_guid, doc_type, doc_label, receipt_b64, receipt_name, receipt_mime } = body;
@@ -526,7 +571,9 @@ export default async function handler(req, res) {
         + `&select=id&order=ts.desc&limit=2`);
       if ((open.rows || []).length === 1) payment_id = open.rows[0].id;
     }
-    if (!client_no || !receipt_b64) return res.status(400).json({ ok: false, error: 'client_no + file required' });
+    /* a big file arrived through the bucket: the page sends its path, not its bytes */
+    const receiptPath = (!receipt_b64 && body.receipt_path && uploadPathOk(body.receipt_path, client_no)) ? String(body.receipt_path) : null;
+    if (!client_no || (!receipt_b64 && !receiptPath)) return res.status(400).json({ ok: false, error: 'client_no + file required' });
 
     /* Any agent may ADD a document to any payment (Saif, Aug 24). Adding paperwork
        is follow-up finishing, not a money change: this branch never touches
@@ -539,7 +586,8 @@ export default async function handler(req, res) {
       policy_guid, client_no, payment_id, policy_num: body.policy_num,
     });
 
-    const buf = b64ToBuf(receipt_b64);
+    const buf = receiptPath ? await storageGetBuf(receiptPath) : b64ToBuf(receipt_b64);
+    if (!buf || !buf.length) return res.status(400).json({ ok: false, error: 'upload_missing', message: 'The file did not reach storage. Try the upload again.' });
     const hash = await sha256hex(buf);
     const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
     const dtype = doc_type || 'other';
@@ -550,7 +598,7 @@ export default async function handler(req, res) {
     /* This path stored bytes ONLY in Postgres - the storage helper was never
        called here at all, only from save_carrier_leg. Both now write to the same
        private bucket. */
-    const putDoc = await storagePut(docObjectPath(client_no, niceName, receipt_mime), buf, receipt_mime || 'application/pdf');
+    const putDoc = receiptPath ? { path: receiptPath, status: 'direct' } : await storagePut(docObjectPath(client_no, niceName, receipt_mime), buf, receipt_mime || 'application/pdf');
 
     const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
       method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
@@ -563,7 +611,8 @@ export default async function handler(req, res) {
         /* DUAL WRITE, deliberately. The inline copy stays until documents have been
            read from storage for a month. Dropping it now would mean trusting a path
            that has never served a single file. */
-        file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
+        /* a big file is in the bucket only - no inline copy of 25 MB in a Postgres row */
+        file_b64: receiptPath ? null : receipt_b64, thumb_b64: body.thumb_b64 || null,
         sha256: hash, mime: receipt_mime, bytes: buf.length,
         uploaded_by: email,
       }]),
@@ -667,7 +716,9 @@ export default async function handler(req, res) {
        resubmit with a new document was refused as "nothing changed". The page now says
        how many new documents are coming; any is a change. */
     const newDocs = Number(body.new_docs || 0) > 0;
-    if (complete && answering && !reviewReply && !receipt_b64 && !newDocs) {
+    /* a big proof arrived through the bucket */
+    const receiptPath = (!receipt_b64 && body.receipt_path && uploadPathOk(body.receipt_path, client_no)) ? String(body.receipt_path) : null;
+    if (complete && answering && !reviewReply && !receipt_b64 && !receiptPath && !newDocs) {
       const sameCost = (body.service_cost != null ? Number(body.service_cost) : (carrier_amount != null ? Number(carrier_amount) : null)) === (priorRow.service_cost != null ? Number(priorRow.service_cost) : null);
       const sameCarrier = String(carrier || '').trim() === String(priorRow.carrier_name || '').trim();
       if (sameCost && sameCarrier) {
@@ -685,14 +736,14 @@ export default async function handler(req, res) {
        creates a duplicate over there that cannot be deleted - the API has no
        attachment-delete endpoint. */
     let hasFiledReceipt = false;
-    if (complete && !receipt_b64 && payment_id) {
+    if (complete && !receipt_b64 && !receiptPath && payment_id) {
       try {
         const a = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(payment_id)}`
           + `&or=(kind.eq.proof,doc_type.in.(carrier_receipt,endorsement_no_payment,cancellation_no_payment,renewal_no_payment))&select=id&limit=1`);
         hasFiledReceipt = ((a.rows || []).length > 0);
       } catch { hasFiledReceipt = false; }
     }
-    if (complete && !receipt_b64 && carrier_zero_ack !== true && !hasFiledReceipt) {
+    if (complete && !receipt_b64 && !receiptPath && carrier_zero_ack !== true && !hasFiledReceipt) {
       return res.status(400).json({ ok: false, error: 'Carrier receipt is required to submit to audit' });
     }
 
@@ -760,12 +811,13 @@ export default async function handler(req, res) {
     let blobUrl = null;   // hoisted — the response below reads it outside the upload block
     let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'optional';
 
-    if (receipt_b64) {
-      const buf = b64ToBuf(receipt_b64);
+    if (receipt_b64 || receiptPath) {
+      const buf = receiptPath ? await storageGetBuf(receiptPath) : b64ToBuf(receipt_b64);
+      if (!buf || !buf.length) return res.status(400).json({ ok: false, error: 'upload_missing', message: 'The file did not reach storage. Try the upload again.' });
       const hash = await sha256hex(buf);
       const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
       const path = `carrier-receipts/${client_no}/${Date.now()}_${(carrier || 'carrier').replace(/[^a-z0-9]/gi, '').slice(0, 20)}.${ext}`;
-      const blobRes = await storagePut(docObjectPath(client_no, receipt_name, receipt_mime), buf, receipt_mime || 'application/octet-stream');
+      const blobRes = receiptPath ? { path: receiptPath, status: 'direct' } : await storagePut(docObjectPath(client_no, receipt_name, receipt_mime), buf, receipt_mime || 'application/octet-stream');
       blobUrl = blobRes.path; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
 
       // Store attachment row in our vault — file bytes stored INLINE in Supabase (guaranteed, no Blob dependency)
@@ -788,7 +840,7 @@ export default async function handler(req, res) {
              payment, whichever it is. The Console and the gates read kind. */
           kind: body.proof ? 'proof' : dtype, doc_type: dtype, filename: niceName,
           doc_label: body.proof_label ? String(body.proof_label).slice(0, 41) : null,
-          blob_url: blobUrl, file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
+          blob_url: blobUrl, file_b64: receiptPath ? null : receipt_b64, thumb_b64: body.thumb_b64 || null,
           sha256: hash, mime: receipt_mime, bytes: buf.length,
           carrier: carrier || null, amount: carrier_amount != null ? Number(carrier_amount) : null,
           uploaded_by: email,

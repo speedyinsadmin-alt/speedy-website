@@ -47,6 +47,15 @@
   .review.wait{background:rgba(143,154,196,.12);border:1px solid var(--line,#2a3558);color:var(--mute,#9aa6cc)}
   .review.done{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.4);color:var(--ink,#eef2ff)}
   .review b{font-weight:700}
+  /* PROOF OF PAYMENT (Tony, Sep 14): one document proves the payment - the guide says
+     which one is usual for this purpose, the agent picks freely. */
+  .guide{border-left:3px solid var(--blue);padding:8px 11px;border-radius:0 9px 9px 0;background:rgba(77,124,254,.08);font-size:12.5px;line-height:1.5;margin-bottom:4px;color:var(--mute)}
+  .guide b{color:var(--ink)}
+  .proofchips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}
+  .proofchips button{background:var(--navy);border:1px solid var(--line);color:var(--mute);font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:inherit}
+  .proofchips button.sel{background:var(--green);border-color:var(--green);color:#04220f}
+  .proofchips button .usual{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.75;margin-left:6px}
+  #auditNote{width:100%;min-height:58px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:13px;font-family:inherit;resize:vertical}
   .review textarea{width:100%;min-height:64px;margin-top:8px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:13px;font-family:inherit;resize:vertical}
   .review .replylbl{font-size:12px;margin-top:10px;color:var(--ink);font-weight:600}
   .review .replyhint{font-size:11.5px;opacity:.8;margin-top:4px}
@@ -147,10 +156,17 @@
     </div>
 
     <div class="card" id="recCard">
-      <div class="eyebrow"><span style="color:var(--green)">◆</span> <span id="recTitle">Carrier receipt</span> <span class="pill a" id="recReq">required for audit</span></div>
+      <div class="eyebrow"><span style="color:var(--green)">◆</span> <span id="recTitle">Proof of payment</span> <span class="pill a" id="recReq">required for audit</span></div>
+      <!-- Tony, Sep 14: a signed application already proves the payment three ways - the
+           amount is printed on it, the carrier issued it, the client signed it. One
+           document. The guide names the usual one for this purpose; the agent picks. -->
+      <div class="guide" id="proofGuide"></div>
+      <label>What are you attaching?</label>
+      <div class="proofchips" id="proofChips"></div>
+      <input id="proofOther" class="hide" placeholder="What is this document?" autocomplete="off" maxlength="41" style="margin:0 0 10px">
       <div class="drop" id="drop" onclick="document.getElementById('file').click()">
         <div class="ic" id="dropic">⇪</div>
-        <div id="droptxt" style="font-size:13px;margin-top:6px">Drag the receipt here, or tap to choose</div>
+        <div id="droptxt" style="font-size:13px;margin-top:6px">Drag the proof here, or tap to choose</div>
         <div class="hint" id="recHint">PDF or photo — this is the proof of payment</div>
       </div>
       <input type="file" id="file" accept="application/pdf,image/*" style="display:none">
@@ -202,6 +218,10 @@
       </div>
     </div>
 
+    <div class="card" id="noteCard">
+      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Note to Tony <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional</span></div>
+      <textarea id="auditNote" maxlength="500" placeholder="Anything he should know before he approves this — a fee-only, a special case, why the cost is what it is"></textarea>
+    </div>
     <div class="btns" id="auditBtns">
       <button class="save" onclick="submit(false)">Save &amp; finish later</button>
       <button class="submit" id="submitBtn" onclick="submit(true)" disabled>Submit for approval</button>
@@ -268,6 +288,67 @@ const CTX = {
    there is no carrier receipt to upload and the agent files whatever they have under
    a label that says "proof of payment". That is how ENDO DOCS.pdf landed in HawkSoft
    mislabelled, and HawkSoft has no modify endpoint. Label follows the charge purpose. */
+/* ---------- PROOF OF PAYMENT ----------
+   Which document proves the payment depends on what the charge was FOR - and the
+   purpose already travels here from the charge sheet. The guide says what is usual;
+   nothing is forced: a signed application, a carrier receipt, a signed endorsement, a
+   cancellation request, a DMV receipt or anything else the agent names. Whatever is
+   picked is what the file is filed as, here and in HawkSoft. */
+const PROOF_TYPES = [
+  ['carrier_application', 'Signed application'],
+  ['carrier_receipt',     'Carrier receipt'],
+  ['carrier_endo',        'Signed endorsement'],
+  ['cancellation',        'Cancellation request'],
+  ['dmv_receipt',         'DMV receipt'],
+  ['other',               'Other\u2026'],
+];
+function purposeFamily(){
+  const p = String(CTX.purpose || '').toLowerCase();
+  if(/new business/.test(p)) return 'new_business';
+  if(/endorse/.test(p)) return 'endorsement';
+  if(/cancel/.test(p)) return 'cancellation';
+  if(/\bdmv\b/.test(p) || String(CTX.path || '') === 'dmv_service') return 'dmv';
+  if(/monthly|installment|balance/.test(p)) return 'monthly';
+  if(/renew/.test(p)) return 'renewal';
+  if(/reinstat/.test(p)) return 'reinstatement';
+  if(/down payment/.test(p)) return 'down_payment';
+  return 'other';
+}
+const PROOF_GUIDE = {
+  new_business:  { usual: 'carrier_application', text: 'For a <b>{purpose}</b> the proof is usually the <b>signed application</b>: the amount paid to the carrier is printed on it, the carrier issued it, the client signed it. One document. A carrier receipt works just as well.' },
+  endorsement:   { usual: 'carrier_endo', text: 'For an <b>Endorsement</b> the proof is usually the <b>signed endorsement</b> \u2014 it shows what changed, what the carrier charged, and that the client agreed. A carrier receipt works too.',
+                   fee: 'For an <b>Endorsement</b> with no carrier payment, the proof is the <b>signed endorsement</b> \u2014 it shows what changed and that the client agreed. If nothing was signed, pick <b>Other</b> and say what you are attaching, or tell Tony in the note below.' },
+  cancellation:  { usual: 'cancellation', text: 'For a <b>Cancellation</b> the proof is the <b>signed cancellation request</b>. If the carrier charged anything, a carrier receipt works too.' },
+  dmv:           { usual: 'dmv_receipt', text: 'For a <b>DMV</b> service the proof is the <b>DMV receipt</b>.' },
+  monthly:       { usual: 'carrier_receipt', text: 'For a <b>{purpose}</b> the proof is the <b>carrier receipt</b> \u2014 there is no signed paper for a payment on an existing policy.' },
+  down_payment:  { usual: 'carrier_receipt', text: 'For a <b>Down payment</b> the proof is usually the <b>carrier receipt</b>; a signed application works just as well.' },
+  renewal:       { usual: 'carrier_receipt', text: 'For a <b>Renewal</b> the proof is usually the <b>carrier receipt</b>; a signed renewal paper from the carrier works too.' },
+  reinstatement: { usual: 'carrier_receipt', text: 'For a <b>Reinstatement</b> the proof is usually the <b>carrier receipt</b>; a signed reinstatement paper from the carrier works too.' },
+  other:         { usual: 'carrier_receipt', text: 'Attach whatever proves the payment to the carrier \u2014 a receipt, a signed application or endorsement \u2014 and pick what it is.' },
+};
+const FEE_GUIDE = 'No carrier payment on this one. Attach anything that shows what the fee was for if you have it \u2014 a signed paper, a screenshot \u2014 or tell Tony in the note below.';
+let PROOF = null;   // the chosen type; null = the usual one for this purpose
+function proofUsual(){ return (PROOF_GUIDE[purposeFamily()] || PROOF_GUIDE.other).usual; }
+function proofType(){ return PROOF || proofUsual(); }
+function proofLabel(t){ const x = PROOF_TYPES.find(p => p[0] === (t || proofType())); return x ? x[1].replace('\u2026', '') : 'proof'; }
+function pickProof(t){
+  PROOF = t; renderProof();
+  const oth = $('#proofOther'); if(t === 'other' && oth) oth.focus();
+  updateSubmit();
+}
+function renderProof(){
+  const g = $('#proofGuide'), c = $('#proofChips'); if(!g || !c) return;
+  const fam = purposeFamily(), def = PROOF_GUIDE[fam] || PROOF_GUIDE.other, fee = feeOnly();
+  const text = fee ? (def.fee || FEE_GUIDE) : def.text;
+  g.innerHTML = text.replace('{purpose}', escAttr(CTX.purpose || 'payment'));
+  const cur = proofType();
+  c.innerHTML = PROOF_TYPES.map(([k, l]) => '<button type="button" class="' + (k === cur ? 'sel' : '') + '" onclick="pickProof(\'' + k + '\')">' + l + (k === def.usual ? '<span class="usual">usual</span>' : '') + '</button>').join('');
+  const oth = $('#proofOther'); if(oth) oth.classList.toggle('hide', cur !== 'other');
+  const dt = $('#droptxt'); if(dt && !FILE_B64 && !HAS_RECEIPT) dt.textContent = 'Drag the ' + (cur === 'other' ? 'document' : proofLabel(cur).toLowerCase()) + ' here, or tap to choose';
+  const badge = $('#recReq');
+  if(badge){ badge.textContent = fee ? 'optional \u2014 fee only'
+              : (HAS_RECEIPT ? (HAS_RECEIPT.filed_hawksoft ? 'on file \u00b7 in hawksoft' : 'on file') : 'required for audit'); }
+}
 const NOPAY_DOC = {
   'Endorsement':  ['Endorsement paperwork',  'endorsement_no_payment'],
   'Cancellation': ['Cancellation paperwork', 'cancellation_no_payment'],
@@ -793,13 +874,15 @@ async function loadCarriers(){
   OWED = (r.owed_amount != null) ? Number(r.owed_amount) : null;
   recalcFee();
   showReviewState(r);
+  renderProof();
+  const an = $('#auditNote'); if(an && r.audit_note && !an.value) an.value = r.audit_note;
 
   /* Show what is already on file BEFORE anything else, so the agent is never asked
      for a document that exists. */
   if(r.existing_receipt){
     HAS_RECEIPT = r.existing_receipt;
     const drop = $('#drop'), txt = $('#droptxt'), ic = $('#dropic'), badge = $('#recReq');
-    if(txt) txt.innerHTML = 'Receipt already on file &mdash; <b>' + escAttr(HAS_RECEIPT.filename || 'attached') + '</b>';
+    if(txt) txt.innerHTML = 'Proof already on file &mdash; <b>' + escAttr(HAS_RECEIPT.filename || 'attached') + '</b>' + (HAS_RECEIPT.doc_type ? ' <span class="hint">(' + escAttr(HAS_RECEIPT.doc_label || proofLabel(HAS_RECEIPT.doc_type).toLowerCase()) + ')</span>' : '');
     if(ic) ic.textContent = '\u2713';
     if(drop) drop.style.borderColor = 'var(--green)';
     if(badge) badge.textContent = HAS_RECEIPT.filed_hawksoft ? 'on file \u00b7 in hawksoft' : 'on file';
@@ -1024,16 +1107,15 @@ function nopayDoc(){
   return NOPAY_DOC[p] || ['Supporting paperwork', 'supporting_no_payment'];
 }
 function syncDocSlot(zero){
-  const t = $('#recTitle'), h = $('#recHint'); if(!t || !h) return;
+  renderProof();
+  const h = $('#recHint'); if(!h) return;
   if(zero){
-    t.textContent = nopayDoc()[0];
-    h.textContent = 'no carrier payment \u2014 this is not proof of payment';
+    h.textContent = 'no carrier payment \u2014 attach what shows the fee was earned, if anything';
   } else {
-    t.textContent = 'Carrier receipt';
     h.textContent = 'PDF or photo \u2014 this is the proof of payment';
   }
 }
-function receiptDocType(){ return (carrierAmt() === 0 && zeroAcked()) ? nopayDoc()[1] : 'carrier_receipt'; }
+function receiptDocType(){ return proofType(); }
 ['carrier','camt','card'].forEach(id => $('#'+id).addEventListener('input', updateSubmit));
 $('#carrierSel').addEventListener('change', updateSubmit);
 $('#zeroAck').addEventListener('change', updateSubmit);
@@ -1054,10 +1136,7 @@ function applyFeeOnly(){
   ['carrierWrap','card','carrierSel'].forEach(id => { const e = $('#' + id); if(e) e.style.opacity = on ? .45 : ''; });
   const z = $('#zeroAck'); if(z) z.checked = on;     // the statement is still recorded
   const rc = $('#recCard'); if(rc) rc.style.opacity = on ? .5 : '';
-  const badge = $('#recReq');
-  if(badge){ badge.textContent = on ? 'not needed'
-              : (HAS_RECEIPT ? (HAS_RECEIPT.filed_hawksoft ? 'on file \u00b7 in hawksoft' : 'on file')
-                             : 'required for audit'); }
+  renderProof();   // the guide and the badge follow the tick
   recalcFee();   // NOT recalc() - that does not exist
   updateSubmit();
 }
@@ -1114,7 +1193,7 @@ function pendingMsg(){
   const missing = [];
   if(!feeOnly() && !effCarrier()) missing.push('which carrier was paid');
   if(!feeOnly() && carrierAmt() === null) missing.push('the amount paid to the carrier');
-  if(!feeOnly() && !HAS_RECEIPT && !FILE_B64) missing.push('the carrier receipt');
+  if(!feeOnly() && !HAS_RECEIPT && !FILE_B64) missing.push('the proof of payment (' + proofLabel().toLowerCase() + ')');
   const kept = 'Your work so far is saved.';
   if(!missing.length) return 'Saved — not submitted to audit yet. ' + kept;
   const list = missing.length === 1 ? missing[0]
@@ -1301,6 +1380,9 @@ async function submit(complete){
     carrier_amount: carrierAmt(),
     carrier_zero_ack: (feeOnly() || (carrierAmt() === 0 && zeroAcked())) || null,
     doc_type: receiptDocType(),
+    proof: true,                                              // the file in this slot IS the proof, whatever type it is
+    proof_label: (proofType() === 'other' && $('#proofOther')) ? $('#proofOther').value.trim().slice(0, 41) : null,
+    audit_note: ($('#auditNote') ? $('#auditNote').value.trim().slice(0, 500) : ''),
     purpose: CTX.purpose || null,
     carrier_card: $('#card').value||null,
     receipt_b64: FILE_B64, receipt_name: FILE_NAME, receipt_mime: FILE_MIME, thumb_b64: FILE_THUMB,

@@ -335,13 +335,13 @@ export default async function handler(req, res) {
     let chargeAmount = null, totalOwed = null, owedAmount = null;
     /* The review state, so the page can show a send-back reason at the top and say
        "resubmit" rather than "submit", and refuse up front on an approved row. */
-    let auditStatus = null, sendback = null, submittedAt = null;
+    let auditStatus = null, sendback = null, submittedAt = null, auditNote = null;
     if (body.payment_id) {
-      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose,amount,total_owed,audit_status,audit_sendback,audit_submitted_at`);
+      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose,amount,total_owed,audit_status,audit_sendback,audit_submitted_at,audit_note`);
       const row = p.rows && p.rows[0];
       if (row) {
         const ex = row.extra || {};
-        auditStatus = row.audit_status || null; sendback = row.audit_sendback || null; submittedAt = row.audit_submitted_at || null;
+        auditStatus = row.audit_status || null; sendback = row.audit_sendback || null; submittedAt = row.audit_submitted_at || null; auditNote = row.audit_note || null;
         suggested = row.carrier_name || ex.policyCarrier || (ex.hawksoft && ex.hawksoft.policyCarrier) || null;
         program   = ex.policyProgram || (ex.hawksoft && ex.hawksoft.policyProgram) || null;
         purpose   = row.purpose || null;
@@ -362,10 +362,10 @@ export default async function handler(req, res) {
     if (body.payment_id) {
       try {
         const a = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(body.payment_id)}`
-          + `&doc_type=in.(carrier_receipt,endorsement_no_payment,cancellation_no_payment,renewal_no_payment)`
-          + `&select=id,filename,doc_type,filed_hawksoft,created_at&order=created_at.desc&limit=1`);
+          + `&or=(kind.eq.proof,doc_type.in.(carrier_receipt,endorsement_no_payment,cancellation_no_payment,renewal_no_payment))`
+          + `&select=id,filename,doc_type,doc_label,filed_hawksoft,created_at&order=created_at.desc&limit=1`);
         const r = (a.rows || [])[0];
-        if (r) existing = { id: r.id, filename: r.filename, doc_type: r.doc_type,
+        if (r) existing = { id: r.id, filename: r.filename, doc_type: r.doc_type, doc_label: r.doc_label || null,
                             filed_hawksoft: r.filed_hawksoft === true, created_at: r.created_at };
       } catch { /* absence is handled; a lookup failure must not block the audit */ }
     }
@@ -387,7 +387,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, suggested, program, purpose, existing_receipt: existing,
       charge_amount: chargeAmount, total_owed: totalOwed, owed_amount: owedAmount,
-      audit_status: auditStatus, audit_sendback: sendback, audit_submitted_at: submittedAt,
+      audit_status: auditStatus, audit_sendback: sendback, audit_submitted_at: submittedAt, audit_note: auditNote,
       onThisClient: mine, carriers: ranked });
   }
 
@@ -651,6 +651,8 @@ export default async function handler(req, res) {
        REQUIRED when the resubmit changes nothing (same cost, same carrier, no new file),
        because a silent identical resubmit is exactly what Tony cannot act on. */
     const reviewReply = String(body.review_reply || '').trim().slice(0, 500);
+    /* the agent's optional note to the approver, written at submission (Saif, Sep 14) */
+    const auditNote = String(body.audit_note || '').trim().slice(0, 500);
     const wasSentBack = !!(priorRow && priorRow.audit_sendback);                       // a send-back is on the row
     const answering = wasSentBack && priorRow.audit_status !== 'ready_for_audit';       // ...and this submit answers it
     /* Sep 14: a document added in the Documents card (a signed endorsement, say) is
@@ -679,7 +681,7 @@ export default async function handler(req, res) {
     if (complete && !receipt_b64 && payment_id) {
       try {
         const a = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(payment_id)}`
-          + `&doc_type=in.(carrier_receipt,endorsement_no_payment,cancellation_no_payment,renewal_no_payment)&select=id&limit=1`);
+          + `&or=(kind.eq.proof,doc_type.in.(carrier_receipt,endorsement_no_payment,cancellation_no_payment,renewal_no_payment))&select=id&limit=1`);
         hasFiledReceipt = ((a.rows || []).length > 0);
       } catch { hasFiledReceipt = false; }
     }
@@ -773,7 +775,12 @@ export default async function handler(req, res) {
           client_no,
           policy_id: polLeg.guid || (UUID_RE.test(String(policy_id || '')) ? policy_id : null),
           payment_id: payment_id || null,
-          kind: dtype, doc_type: dtype, filename: niceName,
+          /* PROOF (Tony, Sep 14): the file in the proof slot is filed as what it is - a
+             signed application, a signed endorsement, a cancellation request, a DMV
+             receipt, a carrier receipt - and kind='proof' says it is the proof of this
+             payment, whichever it is. The Console and the gates read kind. */
+          kind: body.proof ? 'proof' : dtype, doc_type: dtype, filename: niceName,
+          doc_label: body.proof_label ? String(body.proof_label).slice(0, 41) : null,
           blob_url: blobUrl, file_b64: receipt_b64, thumb_b64: body.thumb_b64 || null,
           sha256: hash, mime: receipt_mime, bytes: buf.length,
           carrier: carrier || null, amount: carrier_amount != null ? Number(carrier_amount) : null,
@@ -788,7 +795,9 @@ export default async function handler(req, res) {
         const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
         const refId = crypto.randomUUID();
         const fname = (receipt_name || `carrier_receipt_${carrier}`).replace(/\.[^.]+$/, '').slice(0, 60);
-        const desc = `Carrier receipt ${carrier || ''} $${Number(carrier_amount || 0).toFixed(2)}`.slice(0, 41);
+        const PROOF_WORD = { carrier_application: 'Signed application', carrier_endo: 'Signed endorsement', cancellation: 'Cancellation request', dmv_receipt: 'DMV receipt', carrier_receipt: 'Carrier receipt' };
+        const proofWord = body.proof ? (body.proof_label ? String(body.proof_label) : (PROOF_WORD[dtype] || 'Proof')) : 'Carrier receipt';
+        const desc = `${proofWord} ${carrier || ''} $${Number(carrier_amount || 0).toFixed(2)}`.slice(0, 41);
         const r2 = await fetch(`${HS_BASE}/vendor/agency/${AGENCY_ID}/client/${client_no}/attachment?version=4.0`, {
           method: 'POST',
           headers: {
@@ -859,7 +868,7 @@ export default async function handler(req, res) {
              audit_completed_at stays null and the work is not yet earned. */
           /* Who submitted, and when - the approver reads this. audit_completed_by/at
              are NOT written here any more; see approve_audit. */
-          ...(complete ? { audit_submitted_by: email, audit_submitted_at: nowIso } : {}),
+          ...(complete ? { audit_submitted_by: email, audit_submitted_at: nowIso, audit_note: auditNote || null } : {}),
           /* the reply rides on the send-back it answers, so the row shows both halves */
           ...(complete && wasSentBack && (answering || reviewReply) ? { audit_sendback: { ...priorRow.audit_sendback, reply: reviewReply || null, reply_at: nowIso, resubmitted_at: nowIso } } : {}),
         }),
@@ -872,7 +881,7 @@ export default async function handler(req, res) {
             method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
             body: JSON.stringify([{ payment_id, action: 'submitted', actor: email,
               reason_code: wasSentBack ? 'resubmitted' : null,
-              reason: wasSentBack ? (reviewReply || 'resubmitted after send-back') : null, at: nowIso }]),
+              reason: wasSentBack ? (reviewReply || 'resubmitted after send-back') : (auditNote || null), at: nowIso }]),
           });
         } catch { /* the trail must never block the submission it records */ }
       }
@@ -885,7 +894,8 @@ export default async function handler(req, res) {
         actor: email, kind: complete ? 'audit.submitted' : 'carrier_leg.saved',
         client_no, policy_id: policy_id || null, source: 'carrier_capture',
         payload: { carrier, carrier_amount, carrier_card, status, hawksoft_filed: hsFiled, attachment_id: attachment && attachment.id,
-                   ...(complete && wasSentBack ? { resubmitted: true, reply: reviewReply || null } : {}) },
+                   ...(complete && wasSentBack ? { resubmitted: true, reply: reviewReply || null } : {}),
+                   ...(complete && auditNote ? { note: auditNote } : {}) },
       }]),
     });
 

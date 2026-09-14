@@ -300,6 +300,23 @@ async function ledger(event) {
   if (!url || !key) return false;
   try {
     const kind = event.action || 'event';
+    /* ADD TO AN EARLIER PAYMENT (Saif, Sep 14). "The carrier asked for more, so I
+       charged the client again" - the agent picked the earlier payment on the charge
+       sheet, and this charge joins it: same client, that payment not approved yet, not
+       itself a balance payment. This row becomes its balance payment, inherits its
+       purpose, and the earlier payment's total is raised to what the client has now
+       paid, so one audit carries one proof, one carrier cost and one fee. Fail-soft:
+       if the earlier payment cannot be read or does not qualify, this is an ordinary
+       charge - money is never refused over a link. */
+    let addParent = null;
+    if (event.addTo && auditStatusFor(kind) === 'client_paid') {
+      try {
+        const H = { apikey: key, Authorization: `Bearer ${key}` };
+        const pr = await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(event.addTo)}&select=id,client_id,amount,total_owed,audit_status,balance_of,purpose`, { headers: H });
+        const p = (await pr.json().catch(() => []))[0];
+        if (p && Number(p.client_id) === parseInt(event.clientId, 10) && p.audit_status !== 'complete' && !p.balance_of) addParent = p;
+      } catch { addParent = null; }
+    }
     const row = {
       kind,
       audit_status: auditStatusFor(kind),
@@ -310,12 +327,12 @@ async function ledger(event) {
       // payment at the original charge it pays down.
       total_owed: (event.totalOwed != null && parseMoney(event.totalOwed) > 0)
         ? parseMoney(event.totalOwed) : null,
-      balance_of: event.balanceOf || null,
+      balance_of: addParent ? addParent.id : (event.balanceOf || null),
       // snapshot of the client's producer at the time of charge — never rewritten later
       producer_code: event.producerCode ? String(event.producerCode).slice(0, 8) : null,
       client_id: Number.isFinite(parseInt(event.clientId, 10)) ? parseInt(event.clientId, 10) : null,
       amount: (typeof event.amount === 'number') ? event.amount : null,
-      purpose: event.purpose ? String(event.purpose).slice(0, 120) : null,
+      purpose: addParent ? (addParent.purpose || null) : (event.purpose ? String(event.purpose).slice(0, 120) : null),
       agent: event.who ? String(event.who).slice(0, 120) : null,
       txn_id: event.txnId || null,
       auth_code: event.authCode ? String(event.authCode) : null,
@@ -333,11 +350,20 @@ async function ledger(event) {
       body: JSON.stringify(row),
     });
     if (r.status !== 201) return false;
-    try {
-      const rows = await r.json();
-      const id = Array.isArray(rows) && rows[0] ? rows[0].id : null;
-      return id ? { ok: true, id } : true;
-    } catch { return true; }
+    let newId = null;
+    try { const rows = await r.json(); newId = Array.isArray(rows) && rows[0] ? rows[0].id : null; } catch { newId = null; }
+    if (addParent) {
+      /* raise the earlier payment's total to what the client has now paid for the sale */
+      try {
+        const H = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' };
+        const sr = await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger?balance_of=eq.${encodeURIComponent(addParent.id)}&select=amount`, { headers: H });
+        const sibs = (await sr.json().catch(() => [])) || [];
+        const collected = Number(addParent.amount || 0) + sibs.reduce((a, x) => a + Number(x.amount || 0), 0);
+        const newTotal = +Math.max(Number(addParent.total_owed || 0), collected).toFixed(2);
+        await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(addParent.id)}`, { method: 'PATCH', headers: H, body: JSON.stringify({ total_owed: newTotal }) });
+      } catch { /* the link is written; the total can be repaired from the card */ }
+    }
+    return newId ? { ok: true, id: newId, added_to: addParent ? addParent.id : null } : true;
   } catch { return false; }
 }
 
@@ -1121,7 +1147,7 @@ export default async function handler(req, res) {
           auditSaved = (pr.status === 200 || pr.status === 204) ? { id: safetyLedgerId } : false;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action, who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, addTo: b.addTo, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
@@ -1735,7 +1761,7 @@ export default async function handler(req, res) {
       out.confirmationEmail = await sendConfirmEmail({
         to: String(b.clientEmail || '').trim(), name: (clientName || '').split(',').pop().trim().split(' ')[0],
         amount: total, purpose, method: 'Cash — at our office', confirmation: ref, stamp });
-      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: out });
+      const auditSaved = await audit({ action: 'charge_cash', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode, totalOwed: b.totalOwed, balanceOf: b.balanceOf, addTo: b.addTo, amount: total, purpose: purposeFull, ref, policyNumber, policyGuid, policyCarrier, policyProgram, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: out });
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {
         await linkReceiptToPayment(out.vault.id, auditSaved.id);
@@ -2015,7 +2041,7 @@ export default async function handler(req, res) {
           auditSaved = (pr.status === 200 || pr.status === 204) ? { id: safetyLedgerId } : false;
         } catch { auditSaved = false; }
       } else {
-        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, commissionTo: (req.body||{}).commissionTo, producerCode: (req.body||{}).producerCode, totalOwed: (req.body||{}).totalOwed, balanceOf: (req.body||{}).balanceOf, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
+        auditSaved = await audit({ action: 'terminal_charge', who, office: String((req.body||{}).office || branch.branch || '').slice(0, 40) || null, clientId, clientName, commissionTo: (req.body||{}).commissionTo, producerCode: (req.body||{}).producerCode, totalOwed: (req.body||{}).totalOwed, balanceOf: (req.body||{}).balanceOf, addTo: (req.body||{}).addTo, amount: total, purpose, txnId, authCode, brand, last4, policyNumber, policyGuid, policyCarrier, policyProgram, branch: branch.branch, invoiceApply: out.invoiceApply, confirmationEmail: out.confirmationEmail, hawksoft: { receipt: out.receipt, attachment: out.attachment, log: out.log } });
       }
       // link this receipt to its ledger row so the viewer scopes files to the payment
       if (auditSaved && auditSaved.id && out.vault && out.vault.id) {

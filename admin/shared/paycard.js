@@ -16,6 +16,10 @@ function docType(d){ return d.doc_type || d.kind || 'document'; }
 function docTypeLabel(k){
   return k === 'carrier_receipt' ? 'Carrier receipt'
        : k === 'client_receipt'  ? 'Speedy receipt'
+       : k === 'carrier_application' ? 'Signed application'
+       : k === 'carrier_endo' ? 'Signed endorsement'
+       : k === 'cancellation' ? 'Cancellation request'
+       : k === 'dmv_receipt' ? 'DMV receipt'
        : String(k).replace(/_/g, ' ');
 }
 function bytesLabel(b){
@@ -140,7 +144,7 @@ function payHistoryHtml(c, opts){
        than this row itself? Same helper the charge sheet uses, so the card and the
        "Pay this balance" box can never disagree about what is outstanding. */
     const otherOpenBalance = openBalances(c).some(b => b.id !== p.id);
-    const hasCarrier = dl.some(d => docType(d) === 'carrier_receipt');
+    const hasCarrier = dl.some(d => d.kind === 'proof' || docType(d) === 'carrier_receipt' || String(d.doc_type || '').endsWith('_no_payment'));
     /* A REFUND ROW, and a row that has BEEN refunded, are two different things and both
        have to be legible. Without the second one the card would show a $187.00 payment
        at full value with a −$187.00 line somewhere below it and nothing joining them —

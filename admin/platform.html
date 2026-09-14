@@ -196,6 +196,8 @@
   .rvsub .re{color:var(--amber);font-weight:700}
   .rvsub .fee{color:var(--green);font-weight:700}
   .rvsub .reply{display:block;margin-top:4px;padding:6px 9px;border-left:2px solid var(--amber);background:rgba(245,166,35,.08);color:var(--ink);font-style:normal;border-radius:0 6px 6px 0;max-width:260px}
+  .rvsub .reply.note{border-left-color:var(--blue);background:rgba(77,124,254,.08)}
+  .msg.note{border-color:var(--blue);background:rgba(77,124,254,.08)}
   .rvmsg{font-size:11.5px;margin-top:4px}
   .bulkbar{border:1px solid var(--blue);background:rgba(77,124,254,.10);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
   .bulkbar b{color:#7fa8ff}
@@ -527,16 +529,24 @@ function balanceCell(r){
       + money(left) + ' still owed</div>';
 }
 
-function docsCell(docs, needsProof, rowKey, title){
+/* THE PROOF (Tony, Sep 14). One document proves a payment: a signed application, a
+   signed endorsement, a cancellation request, a DMV receipt, a carrier receipt, or
+   whatever the agent named. The carrier page files it with kind='proof'; older rows
+   only ever had carrier_receipt or a *_no_payment paper. One test, everywhere. */
+const PROOF_WORD = { carrier_application: 'signed application', carrier_receipt: 'carrier receipt', carrier_endo: 'signed endorsement',
+  cancellation: 'cancellation request', dmv_receipt: 'DMV receipt', endorsement_no_payment: 'endorsement paperwork', cancellation_no_payment: 'cancellation paperwork',
+  renewal_no_payment: 'renewal paperwork', dmv_no_payment: 'DMV paperwork', supporting_no_payment: 'paperwork' };
+function isProofDoc(d){
+  const dt = String(d.doc_type || d.kind || '');
+  return d.kind === 'proof' || dt === 'carrier_receipt' || dt.endsWith('_no_payment');
+}
+function proofWord(d){ return d.doc_label || PROOF_WORD[String(d.doc_type || d.kind || '')] || 'proof'; }
+function docsCell(docs, needsProof, rowKey, title, row){
   const own   = docs.filter(d => d.payment_id === rowKey);
   const other = docs.filter(d => d.payment_id !== rowKey);
   DOC_ROWS[rowKey] = { own, other, title };
-  /* A no-payment document IS the proof on a fee-only charge - there is no carrier
-     receipt to have, which is exactly why that path exists. */
-  const hasCarrier = own.some(d => {
-    const dt = String(d.doc_type || d.kind || '');
-    return dt === 'carrier_receipt' || dt.endsWith('_no_payment');
-  });
+  const proof = own.find(isProofDoc) || null;
+  const hasCarrier = !!proof;
   const n = own.length;
   if(!n && !other.length && !needsProof) return '<span class="muted">\u2014</span>';
   /* One question, one colour: is the proof requirement satisfied?
@@ -545,10 +555,17 @@ function docsCell(docs, needsProof, rowKey, title){
        red    - nothing at all
      Blue used to mean "not green", which is not a meaning: a completed fee-only
      charge and an audit missing its receipt wore the same badge. */
-  const settled = hasCarrier || !needsProof;
+  /* a fee-only charge with nothing attached is settled too: there was nothing to
+     prove, and the agent said so (carrier_zero_ack) */
+  const feeOnly = !!(row && row.fee_only);
+  const settled = hasCarrier || !needsProof || feeOnly;
   const cls = settled ? 'g' : (n ? 'a' : 'r');
-  const label = settled ? (n ? ('\u2713 ' + n + ' file' + (n>1?'s':'')) : '\u2713 nothing to prove')
-              : (n ? n + ' file' + (n>1?'s':'') + ' \u00b7 no receipt' : 'No proof');
+  /* the badge says WHAT the proof is, not just that files exist */
+  const label = settled
+    ? (proof ? '\u2713 ' + esc(proofWord(proof)) + (n > 1 ? ' \u00b7 ' + n + ' files' : '')
+             : feeOnly ? '\u2713 fee only' + (n ? ' \u00b7 ' + n + ' file' + (n>1?'s':'') : '')
+             : (n ? ('\u2713 ' + n + ' file' + (n>1?'s':'')) : '\u2713 nothing to prove'))
+    : (n ? n + ' file' + (n>1?'s':'') + ' \u00b7 no proof yet' : 'No proof');
   return '<span class="docbtn ' + cls + '" onclick="openDocs(\'' + rowKey + '\')">'
        + '<i class="ti"></i>' + label + '</span>';
 }
@@ -1483,9 +1500,7 @@ function renderAgentView(r){
          control, so the two views cannot disagree. */
       /* Same test as the badge and as the transactions view - a carrier receipt, not
          merely any document. */
-      const agHasReceipt = z => atts.some(a => a.payment_id === z.id
-        && (String(a.doc_type || a.kind || '') === 'carrier_receipt'
-            || String(a.doc_type || '').endsWith('_no_payment')));
+      const agHasReceipt = z => z.fee_only || atts.some(a => a.payment_id === z.id && isProofDoc(a));
       const agOpen = z => z.audit_status !== 'complete' && z.audit_status !== 'ready_for_audit' && !z.pre_audit;
       const agNeedsProof = z => agOpen(z) && !agHasReceipt(z);
       const agNeedsCost  = z => agOpen(z) &&  agHasReceipt(z) && (z.service_cost == null);
@@ -1593,6 +1608,8 @@ function auditRowKit(ctx){
         + (sb ? ' · <span class="re">resubmitted after send-back</span>' : '')
         /* the agent's reply - the first line of it; the room has the whole thing */
         + (sb && sb.reply ? '<span class="reply"><b>' + esc(first(row.audit_submitted_by || row.commission_to || row.agent)) + ' replied:</b> “' + esc(snip(sb.reply)) + '” ' + openReview(row) + '</span>' : '')
+        /* the note written at submission (Saif, Sep 14) */
+        + (row.audit_note ? '<span class="reply note"><b>' + esc(first(row.audit_submitted_by || row.commission_to || row.agent)) + ':</b> “' + esc(snip(row.audit_note)) + '” ' + (row.audit_note.length > SNIP ? openReview(row) : '') + '</span>' : '')
         + '</div>';
     }
     if(row.audit_status === 'complete'){
@@ -1630,16 +1647,14 @@ function auditRowHtml(row, ctx){
   const { pathLabel, statusPill, reviewSub, reviewActs } = ctx.kit || (ctx.kit = auditRowKit(ctx));
   let out = '';
     const docs = ctx.atts.filter(a => (a.payment_id===row.id) || (a.client_no===row.client_no));
-    const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount));
+    const docCell = docsCell(docs, !row.pre_audit && row.audit_status !== 'complete', row.id, (row.client_name||('#'+row.client_no))+' \u00b7 '+money(row.amount), row);
     const nm = row.client_name ? esc(row.client_name) : '';
     const canComplete = !row.pre_audit && row.audit_status !== 'complete' && row.audit_status !== 'ready_for_audit';
     /* This is a BUTTON, not a status, and it used to be labelled "+ proof" on every
        unfinished audit - including ones whose receipt was already attached and showing
        a green tick two columns away. Same words, two meanings. It now says what is
        actually missing: a receipt, or the carrier cost. */
-    const rowHasReceipt = docs.some(d => d.payment_id === row.id
-                          && ((d.doc_type || d.kind) === 'carrier_receipt'
-                              || String(d.doc_type || '').endsWith('_no_payment')));
+    const rowHasReceipt = !!row.fee_only || docs.some(d => d.payment_id === row.id && isProofDoc(d));
     const completeBtn = canComplete
       ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">'
         + (rowHasReceipt ? '+ carrier cost' : '+ proof') + '</span>'
@@ -1764,9 +1779,7 @@ async function drawAudit(el, r){
      colours. doc_count counts ANY document - a client receipt is not proof of what was
      paid to the carrier - so a row showing "1 file · no receipt" was landing in the
      carrier-cost bucket and mixing with rows that genuinely had their receipt. */
-  const hasReceipt = x => atts.some(a => a.payment_id === x.id
-    && (String(a.doc_type || a.kind || '') === 'carrier_receipt'
-        || String(a.doc_type || '').endsWith('_no_payment')));
+  const hasReceipt = x => !!x.fee_only || atts.some(a => a.payment_id === x.id && isProofDoc(a));
   const open_ = x => x.audit_status !== 'complete' && x.audit_status !== 'pre_audit';
   const waiting = x => x.audit_status === 'ready_for_audit';
   const sentBack = x => open_(x) && !waiting(x) && !!x.audit_sendback;
@@ -1973,6 +1986,10 @@ function docKind(d){ return d.doc_type || d.kind || 'document'; }
 function docLabel(k){
   return k === 'carrier_receipt' ? 'Carrier receipt'
        : k === 'client_receipt'  ? 'Speedy receipt'
+       : k === 'carrier_application' ? 'Signed application'
+       : k === 'carrier_endo' ? 'Signed endorsement'
+       : k === 'cancellation' ? 'Cancellation request'
+       : k === 'dmv_receipt' ? 'DMV receipt'
        : String(k).replace(/_/g, ' ');
 }
 function fmtBytes(b){
@@ -1982,8 +1999,8 @@ function fmtBytes(b){
 function openDocs(rowKey){
   const entry = DOC_ROWS[rowKey];
   if(!entry) return;
-  const rank = k => k === 'carrier_receipt' ? 0 : k === 'client_receipt' ? 2 : 1;
-  const bySort = (a,b) => rank(docKind(a)) - rank(docKind(b));
+  const rank = d => isProofDoc(d) ? 0 : docKind(d) === 'client_receipt' ? 2 : 1;
+  const bySort = (a,b) => rank(a) - rank(b);
   const own   = (entry.own   || []).slice().sort(bySort);
   const other = (entry.other || []).slice().sort(bySort);
   const docs  = own.concat(other);
@@ -2005,9 +2022,10 @@ function openDocs(rowKey){
   drawTool();
   const item = (d,i) => {
     const k = docKind(d);
-    return '<div class="docitem' + (k==='carrier_receipt'?' carrier':'') + '" id="di'+i+'" onclick="showDoc(\''+rowKey+'\','+i+')">'
-      + '<div style="font-size:10.5px;font-weight:700;color:' + (k==='carrier_receipt'?'#7ee2a8':k==='client_receipt'?'#a8b2d4':'#8fadff') + '">'
-      + esc(docLabel(k)).toUpperCase() + '</div>'
+    const isProof = isProofDoc(d);
+    return '<div class="docitem' + (isProof?' carrier':'') + '" id="di'+i+'" onclick="showDoc(\''+rowKey+'\','+i+')">'
+      + '<div style="font-size:10.5px;font-weight:700;color:' + (isProof?'#7ee2a8':k==='client_receipt'?'#a8b2d4':'#8fadff') + '">'
+      + esc(d.doc_label || docLabel(k)).toUpperCase() + (isProof ? ' \u00b7 PROOF' : '') + '</div>'
       + '<div style="font-size:12px;margin-top:3px;word-break:break-all">' + esc(d.filename || 'file') + '</div>'
       + '<div class="muted" style="font-size:10.5px">' + fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed \u2713' : '') + '</div></div>';
   };
@@ -2043,9 +2061,11 @@ function roomSubHtml(row){
 }
 /* The exchange, in full: his send-back, then the agent's reply. Nothing is cut here. */
 function roomExchangeHtml(row){
-  const sb = row.audit_sendback; if(!sb) return '';
+  const sb = row.audit_sendback;
   const nm = e => String(((AUDIT_CACHE||{}).names||{})[e] || (e ? String(e).split('@')[0] : '')).split(' ')[0];
-  let h = '<div class="xchg"><div class="who">The exchange</div>';
+  const noteHtml = row.audit_note ? '<div class="msg note">' + esc(row.audit_note) + '<span class="when">' + esc(nm(row.audit_submitted_by || row.commission_to || row.agent)) + (row.audit_submitted_at ? ' \u00b7 ' + esc(PT_STAMP(row.audit_submitted_at)) : '') + ' \u00b7 note at submission</span></div>' : '';
+  if(!sb) return noteHtml ? '<div class="xchg"><div class="who">Note to you</div>' + noteHtml + '</div>' : '';
+  let h = '<div class="xchg"><div class="who">The exchange</div>' + noteHtml;
   h += '<div class="msg back"><span class="code">' + esc(SENDBACK_CODES[sb.code] || 'Needs a fix') + '</span>' + (sb.reason ? '\n' + esc(sb.reason) : '')
     + '<span class="when">' + esc(nm(sb.by)) + (sb.at ? ' \u00b7 ' + esc(PT_STAMP(sb.at)) : '') + '</span></div>';
   if(sb.reply) h += '<div class="msg reply">' + esc(sb.reply) + '<span class="when">' + esc(nm(row.audit_submitted_by || row.commission_to || row.agent)) + (sb.reply_at ? ' \u00b7 ' + esc(PT_STAMP(sb.reply_at)) : '') + ' \u00b7 resubmitted</span></div>';

@@ -1743,18 +1743,37 @@ async function linkBalance(paymentId, amount){
   const c = CLIENT_CACHE[ACTIVE_TAB];
   if(!c){ alert('Open the client again and retry.'); return; }
   const bals = openBalances(c).filter(b => b.id !== paymentId);
-  if(!bals.length){ alert('No earlier payment on this client is showing a balance owed.'); return; }
+  /* and the sales this could be MORE money for (Sep 14): recent, not approved, not a balance row */
+  const adds = addToCandidates(c).filter(p => p.id !== paymentId).map(p => ({ id: p.id, ts: p.ts, add: true, amount: Number(p.amount || 0), purpose: p.purpose || 'payment',
+    got: p.collected != null ? Number(p.collected) : Number(p.amount || 0) }));
+  if(!bals.length && !adds.length){ alert('No earlier payment on this client is showing a balance owed, and none is recent and still open to add to.'); return; }
 
-  let pick = bals[0];
-  if(bals.length > 1){
-    const opts = bals.map((b,i) => (i+1) + '. $' + b.owed.toFixed(2) + ' from ' + String(b.ts).slice(0,10)
-      + ' — $' + b.left.toFixed(2) + ' still owed').join('\n');
-    const ans = prompt('Which payment does this $' + Number(amount).toFixed(2) + ' pay down?\n\n'
+  const all = bals.concat(adds);
+  let pick = all[0];
+  if(all.length > 1){
+    const opts = all.map((b,i) => (i+1) + '. ' + (b.add
+      ? '$' + b.amount.toFixed(2) + ' ' + b.purpose + ' from ' + String(b.ts).slice(0,10) + ' — add this payment to that sale'
+      : '$' + b.owed.toFixed(2) + ' from ' + String(b.ts).slice(0,10) + ' — $' + b.left.toFixed(2) + ' still owed')).join('\n');
+    const ans = prompt('Which earlier payment does this $' + Number(amount).toFixed(2) + ' belong to?\n\n'
       + opts + '\n\nEnter a number:');
     if(!ans) return;
     const idx = parseInt(ans, 10) - 1;
-    if(!(idx >= 0 && idx < bals.length)) return;
-    pick = bals[idx];
+    if(!(idx >= 0 && idx < all.length)) return;
+    pick = all[idx];
+  }
+  if(pick.add){
+    const after = +(pick.got + Number(amount)).toFixed(2);
+    if(!confirm('Add this $' + Number(amount).toFixed(2) + ' to the ' + pick.purpose + ' sale from ' + String(pick.ts).slice(0,10) + '?\n\n'
+      + 'Paid so far on it:  $' + pick.got.toFixed(2) + '\n'
+      + 'After this:         $' + after.toFixed(2) + '\n\n'
+      + 'This $' + Number(amount).toFixed(2) + ' will no longer need its own audit; the proof, the carrier cost and the fee stay on the earlier payment, worked out from the $' + after.toFixed(2) + ' the client has now paid.\n\nAdd it?')) return;
+    const r = await apiPost({ action: 'link_balance', mode: 'add', payment_id: paymentId, parent_id: pick.id });
+    if(r && r.ok){
+      alert('Added. That sale now reads $' + Number(r.collected).toFixed(2) + ' paid by the client.');
+      if(ACTIVE_TAB){ delete CLIENT_CACHE[ACTIVE_TAB]; openClient(ACTIVE_TAB); }
+      await loadHome();
+    } else alert((r && r.error) || 'Could not add it.');
+    return;
   }
 
   /* Say what it does to the MONEY, not just to the record: linking raises the parent's
@@ -1968,20 +1987,93 @@ async function moveClient(paymentId, fromClientNo, amount){
    fully releases, and the agent is asked to audit a payment that has no carrier cost
    of its own. HawkSoft cannot create invoices, so the balance lives in our ledger. */
 let CHG_BALANCE_OF = null;
+/* ADD TO AN EARLIER PAYMENT (Saif, Sep 14). "The carrier asked for more, so I charged
+   the client again" - that is not a balance the agent forgot to write down, it is a
+   second payment on the SAME sale. So the box asks: is this more money for a sale
+   already charged? A recent payment on this client that is not approved yet (and not
+   itself a balance payment) can be picked; this charge then joins it - same purpose,
+   one audit, the client's total for that sale raised to what they have now paid. */
+let CHG_ADD_TO = null;
+const ADD_WINDOW_DAYS = 45;
+function addToCandidates(cache){
+  const pays = (cache && cache.payments) || [];
+  const bal = new Set(openBalances(cache).map(b => b.id));
+  const cutoff = Date.now() - ADD_WINDOW_DAYS * 86400e3;
+  return pays.filter(p => p.audit_status !== 'complete' && !p.balance_of && !p.refund_of
+    && !/declin|fail|void|refund/i.test(String(p.kind || ''))
+    && !['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'].includes(String(p.audit_status || ''))
+    && Number(p.amount) > 0 && new Date(p.ts).getTime() > cutoff && !bal.has(p.id));
+}
 function renderOpenBalance(cache){
   const box = chgEl('chgOpenBal');
   const bals = openBalances(cache);
-  CHG_BALANCE_OF = null;
-  if(!bals.length){ box.classList.add('hide'); box.innerHTML = ''; return; }
-  box.innerHTML = '<div style="font-size:12.5px;font-weight:700;color:var(--amber-ink)">This client still owes money</div>'
+  const adds = addToCandidates(cache);
+  CHG_BALANCE_OF = null; CHG_ADD_TO = null;
+  if(!bals.length && !adds.length){ box.classList.add('hide'); box.innerHTML = ''; return; }
+  const who = p => String(p.agent || '').replace(/\s*\(.*$/, '').split(' ')[0];
+  box.innerHTML = '<div style="font-size:12.5px;font-weight:700;color:var(--amber-ink)">' + (adds.length ? 'Is this more money for a sale already charged?' : 'This client still owes money') + '</div>'
     + bals.map(b =>
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
-        + '<div><b style="font-size:13px">$' + b.left.toFixed(2) + '</b>'
+        '<div class="balrow" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
+        + '<div><b style="font-size:13px">$' + b.left.toFixed(2) + ' still owed</b>'
         + '<div class="dim" style="font-size:11px">of $' + b.owed.toFixed(2) + ' from ' + esc(String(b.ts).slice(0,10)) + '</div></div>'
         + '<button type="button" class="btn btn-ghost" style="margin:0;padding:7px 12px;width:auto" '
         + 'onclick="applyToBalance(\'' + b.id + '\',' + b.left + ')">Pay this balance</button></div>').join('')
+    + adds.map(p =>
+        '<div class="addrow" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
+        + '<div><b style="font-size:13px">$' + Number(p.amount).toFixed(2) + '</b> \u00b7 ' + esc(p.purpose || 'payment')
+        + '<div class="dim" style="font-size:11px">' + esc(String(p.ts).slice(0,10)) + (who(p) ? ' \u00b7 ' + esc(who(p)) : '') + ' \u00b7 not approved yet</div></div>'
+        + '<button type="button" class="btn btn-ghost" style="margin:0;padding:7px 12px;width:auto;white-space:nowrap" '
+        + 'onclick="addToPayment(\'' + p.id + '\')">Add this payment to it</button></div>').join('')
     + '<div class="dim" id="chgBalPicked" style="font-size:11px;margin-top:8px">Or ignore this and charge something new.</div>';
   box.classList.remove('hide');
+}
+/* this charge joins an earlier payment: the purpose is theirs, the total is the sum */
+function addToPayment(id){
+  const c = CLIENT_CACHE[CHG.clientNo]; const p = ((c && c.payments) || []).find(x => x.id === id); if(!p) return;
+  CHG_ADD_TO = id; CHG_BALANCE_OF = null;
+  /* inherit the purpose, whole - "New business — Walk-in", "Other: broker fee" */
+  const raw = String(p.purpose || '');
+  const m = raw.match(/^(.*?)\s+\u2014\s+(.*)$/);
+  const typed = raw.match(/^Other:\s*(.*)$/);
+  const def = PURPOSES.find(x => x.k === (typed ? 'Other' : (m ? m[1] : raw))) || null;
+  if(def){
+    CHG_PURPOSE = def.k; CHG_SUB = m ? m[2] : '';
+    if(def.typed) chgEl('chgOther').value = typed ? typed[1] : '';
+  }
+  chgEl('chgPurp').innerHTML = PURPOSES.map(x => '<button type="button" class="' + (x.k===CHG_PURPOSE?'sel':'') + '" onclick="pickPurpose(\'' + x.k + '\',this)">' + esc(x.k) + '</button>').join('');
+  chgEl('chgOtherWrap').classList.toggle('hide', !chgPurposeDef().typed);
+  renderChgSub();
+  fadePurpose(true);
+  chgEl('chgTotal').value = '';
+  pickFull(true, document.querySelector('#chgFull button'));
+  const amt = parseFloat(String(chgEl('chgAmt').value).replace(/[^0-9.]/g,'')) || 0;
+  const paid = (p.collected != null ? Number(p.collected) : Number(p.amount || 0));
+  const box = chgEl('chgOpenBal');
+  box.querySelectorAll('.addrow, .balrow').forEach(r => {
+    if(!r.innerHTML.includes(id)) r.style.display = 'none';
+    else { const b = r.querySelector('button'); if(b) b.outerHTML = '<span style="color:var(--green);font-size:12px;white-space:nowrap">✓ picked</span>'; }
+  });
+  chgEl('chgBalPicked').innerHTML = '<span style="color:var(--green)">\u2713 Adding to the sale from ' + esc(String(p.ts).slice(0,10)) + '</span>'
+    + ' \u00b7 <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="clearAddTo()">not that</span>'
+    + '<div id="chgAddNote" style="margin-top:6px;color:var(--green)">' + addNote(paid, amt) + '</div>';
+  renderChgHsPreview();
+}
+/* the purpose is inherited from the sale being added to: shown, not pickable */
+function fadePurpose(on){
+  ['chgPurp', 'chgPurpSub', 'chgOtherWrap'].forEach(id => { const e = chgEl(id); if(!e) return; e.style.opacity = on ? '.45' : ''; e.style.pointerEvents = on ? 'none' : ''; });
+  let n = chgEl('chgPurpInherit');
+  if(on){ if(!n){ n = document.createElement('div'); n.id = 'chgPurpInherit'; n.className = 'dim'; n.style.cssText = 'font-size:11px;margin-top:4px'; chgEl('chgPurpSub').insertAdjacentElement('afterend', n); } n.textContent = 'same as the earlier payment'; }
+  else if(n) n.remove();
+}
+function addNote(paid, amt){
+  return 'This ' + (amt > 0 ? '$' + amt.toFixed(2) + ' ' : 'payment ') + 'joins it: the client will have paid <b>$' + (paid + amt).toFixed(2) + '</b> for that sale. '
+    + 'The purpose and the audit stay on the earlier payment \u2014 one proof, one carrier cost, one fee.';
+}
+function clearAddTo(){
+  CHG_ADD_TO = null;
+  fadePurpose(false);
+  renderOpenBalance(CLIENT_CACHE[CHG.clientNo]);
+  renderChgHsPreview();
 }
 function applyToBalance(id, left){
   CHG_BALANCE_OF = id;
@@ -1992,7 +2084,7 @@ function applyToBalance(id, left){
     + ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="clearBalance()">not that</span>';
 }
 function clearBalance(){
-  CHG_BALANCE_OF = null;
+  CHG_BALANCE_OF = null; CHG_ADD_TO = null;
   chgEl('chgBalPicked').textContent = 'Or ignore this and charge something new.';
 }
 
@@ -2267,7 +2359,8 @@ async function openCharge(no, preselectPolicy){
     return;
   }
   CHG = { clientNo: no, confirmed: null };
-  CHG_PURPOSE = 'New business'; CHG_SUB = ''; CHG_METHOD = 'card'; CHG_FULL = true;
+  CHG_PURPOSE = 'New business'; CHG_SUB = ''; CHG_METHOD = 'card'; CHG_FULL = true; CHG_ADD_TO = null;
+  fadePurpose(false);
   chgEl('chgResult').innerHTML = ''; LEDGER_ID = null;
   chgEl('chgBody').classList.add('hide');
   chgEl('chgLoading').classList.remove('hide');
@@ -2692,6 +2785,7 @@ function baseBody(amt){
     commissionTo: chgEl('chgComm').value || EMAIL,
     totalOwed: chgEl('chgTotal').value || '',
     balanceOf: CHG_BALANCE_OF || '',
+    addTo: CHG_ADD_TO || '',        // this charge joins that earlier payment (same sale)
     producerCode: (CLIENT_CACHE[CHG.clientNo] && CLIENT_CACHE[CHG.clientNo].producer_code) || '' };
 }
 async function chargeCardPortal(amt){
@@ -2748,9 +2842,17 @@ function showChargeResult(amt, rows){
 }
 function carrierLink(amt){
   const c = CHG.confirmed || {};
-  const p = new URLSearchParams({ client: c.clientNumber || '', name: c.name || '', paid: amt,
+  /* an added charge has no audit of its own: the proof goes on the earlier payment,
+     and "paid" is what the client has now paid for the whole sale */
+  let payId = LEDGER_ID || '', paid = amt;
+  if(CHG_ADD_TO){
+    const cc = CLIENT_CACHE[CHG.clientNo]; const par = ((cc && cc.payments) || []).find(x => x.id === CHG_ADD_TO);
+    payId = CHG_ADD_TO;
+    if(par) paid = ((par.collected != null ? Number(par.collected) : Number(par.amount || 0)) + Number(amt || 0)).toFixed(2);
+  }
+  const p = new URLSearchParams({ client: c.clientNumber || '', name: c.name || '', paid: paid,
     method: 'client paid', policy: chgPolicy() || (c.policyNumber || ''),
-    policy_guid: (c.policyGuid || c.policyId || ''), payment_id: (LEDGER_ID || '') });
+    policy_guid: (c.policyGuid || c.policyId || ''), payment_id: payId });
   return '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : '');
 }
 function stashHandoff(){ try{ if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); }catch(e){} }

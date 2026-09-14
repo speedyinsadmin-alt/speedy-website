@@ -2311,6 +2311,46 @@ if (view === 'portal_share_due') {
       if (parent.balance_of) {
         return res.status(400).json({ ok: false, error: 'That earlier payment is itself a balance payment. Link to the original charge instead.' });
       }
+      /* ADD TO AN EARLIER PAYMENT (Saif, Sep 14). The carrier asked for more after the
+         first charge, so the agent charged the client again: the two are ONE sale.
+         Nothing was "still owed" - the first was taken as paid in full - so the total
+         on the first payment is RAISED to what the client has now paid, this row joins
+         it as a balance payment, and there is one audit: one proof, one carrier cost,
+         one fee. Only while the first is not approved (its fee would change). */
+      const mode = String((req.body || {}).mode || 'balance');
+      if (mode === 'add') {
+        if (parent.audit_status === 'complete') {
+          return res.status(400).json({ ok: false, error: 'That earlier payment is already approved, so its fee is final. Ask Tony for a correction instead.' });
+        }
+        const sib0 = await sbGet(s, `bridge_ledger?balance_of=eq.${encodeURIComponent(parentId)}&select=amount`);
+        const already0 = (sib0.rows || []).reduce((a, r) => a + Number(r.amount || 0), 0);
+        const pAmt0 = Number(parent.amount || 0);
+        const collected0 = +(pAmt0 + already0).toFixed(2);
+        const newTotal = +Math.max(Number(parent.total_owed || 0), collected0 + amt).toFixed(2);
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ balance_of: parentId }) });
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(parentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ total_owed: newTotal }) });
+        let noteOk = false;
+        try {
+          const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
+            method: 'POST',
+            body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+              note: `The $${amt.toFixed(2)} payment on this record is more money for the same sale as the $${pAmt0.toFixed(2)} payment of `
+                + `${String(parent.ts || '').slice(0, 10)} (${parent.purpose || 'payment'}), which carries the audit. `
+                + `The client has now paid $${(collected0 + amt).toFixed(2)} for that sale. No separate carrier cost or fee applies to this payment. Added by ${me2}.` }) });
+          noteOk = (r.status === 200 || r.status === 202);
+        } catch { noteOk = false; }
+        await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ ts: stamp, actor: me2, kind: 'payment.added_to_sale',
+            client_no: row.client_id, source: 'portal',
+            payload: { payment_id: paymentId, parent_id: parentId, amount: amt, total_before: parent.total_owed, total_after: newTotal,
+                       collected_after: +(collected0 + amt).toFixed(2), owner: parent.commission_to || agentEmailOf(parent.agent), hawksoft_note: noteOk } }) });
+        return res.status(200).json({ ok: true, linked: true, added: true, parent_id: parentId,
+          total_owed: newTotal, collected: +(collected0 + amt).toFixed(2), still_owed: +(newTotal - collected0 - amt).toFixed(2), hawksoft_note: noteOk });
+      }
       if (parent.total_owed == null) {
         return res.status(400).json({ ok: false, error: 'That earlier payment has no total recorded, so it is not showing a balance owed. It has to be audited with the total first.' });
       }
@@ -3187,6 +3227,7 @@ if (view === 'portal_share_due') {
         /* "fee only - no carrier payment", said on the row. Daisy's send-back was for a
            fee-only endorsement Tony read as a missing receipt. */
         fee_only: p.carrier_zero_ack === true,
+        audit_note: p.audit_note || null,
       };
     });
     const canApprove = await may(String(email).toLowerCase(), 'audit_approve');
@@ -3291,7 +3332,7 @@ if (view === 'portal_share_due') {
       /* ready_for_audit is excluded: that row is waiting for an approver, which is the
          process working, not the bug this issue was written for. */
       rows.filter(r => ['client_paid','carrier_pending'].includes(r.audit_status) && !r.audit_submitted_at
-        && docsFor(r.id).some(d => dtype(d) === 'carrier_receipt')).map(brief));
+        && docsFor(r.id).some(d => d.kind === 'proof' || dtype(d) === 'carrier_receipt')).map(brief));
 
     // 2) documents floating free of any payment
     const orphans = docs.filter(d => !d.payment_id);

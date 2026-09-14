@@ -1164,7 +1164,7 @@ function auditSubNav(){
   const btn = (id,label) => '<button onclick="setAuditSub(\''+id+'\')" style="background:'+(AUDIT_SUB===id?'var(--blue)':'var(--navy)')+';color:'+(AUDIT_SUB===id?'#fff':'var(--mute)')+';border:1px solid var(--line);padding:7px 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;margin-right:8px">'+label+'</button>';
   return '<div style="margin:2px 0 14px">'+btn('tx','Transactions')+btn('agents','By agent')+'</div>';
 }
-function setAuditSub(s){ AUDIT_SUB = s; AGENT_OPEN = null; render(); }
+function setAuditSub(s){ AUDIT_SUB = s; AGENT_OPEN = null; redrawAudit(); }
 
 function agentName(email){
   const M = { 'sammy@speedyins.com':'Samuel Rodriguez', 'info@speedyins.com':'Tony Dabouqi (owner)',
@@ -1501,7 +1501,7 @@ function renderAgentView(r){
   }
   return h;
 }
-function toggleAgent(email){ AGENT_OPEN = (AGENT_OPEN===email) ? null : email; render(); }
+function toggleAgent(email){ AGENT_OPEN = (AGENT_OPEN===email) ? null : email; redrawAudit(); }
 async function setAgentPct(email, val){
   const r = await fetch('/api/platform', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'}, body: JSON.stringify({ action:'set_commission', agent_email:email, percentage:Number(val) }) });
   const j = await r.json();
@@ -1513,7 +1513,7 @@ let AUDIT_PERIOD = 'month';   // default: this month — the number an owner act
 /* 'action' = what still needs doing first. The default, because the reason to open
    this page is almost always to find what is unfinished, not to read history. */
 let AUDIT_SORT = 'action';
-function setAuditSort(s){ AUDIT_SORT = s; AUDIT_SORT_CHOSEN = true; render(); }
+function setAuditSort(s){ AUDIT_SORT = s; AUDIT_SORT_CHOSEN = true; redrawAudit(); }
 /* Review state: which waiting rows are ticked, and what the send-back sheet is about.
    Ticks survive a re-render (the set is keyed on payment id) but not a tab change. */
 let AUDIT_SEL = new Set();
@@ -1529,11 +1529,34 @@ function periodLabel(){
        : AUDIT_PERIOD==='custom' ? (AUDIT_FROM||'start') + ' to ' + (AUDIT_TO||'now')
        : 'all time';
 }
-function setPeriod(k){ AUDIT_PERIOD = k; render(); }
+function setPeriod(k){ AUDIT_PERIOD = k; redrawAudit(); }
 function setRange(){
   const f = document.getElementById('auditFrom'), t = document.getElementById('auditTo');
   AUDIT_FROM = f ? f.value : ''; AUDIT_TO = t ? t.value : '';
-  render();
+  redrawAudit();
+}
+/* NO REFRESH FOR A TICK OR A LETTER (Saif, Sep 14: "when you select an audit line it
+   keeps refreshing; when you search, each letter the page refreshes"). Every one of
+   those went through render(), which re-downloaded audit_list and redrew the tab from
+   "Loading…". The answer is already here: AUDIT_CACHE. Tick, search, sort, period and
+   the by-agent fold redraw from it; the search box itself is not redrawn, so the
+   cursor stays where it is. render() - a real refetch - is kept for after an approve
+   or a send-back, when the rows have actually changed. */
+function redrawAudit(){
+  const el = $('#view');
+  if(TAB === 'audit' && AUDIT_CACHE && AUDIT_CACHE.ok && el) return drawAudit(el, AUDIT_CACHE);
+  return render();
+}
+/* the same test the server ran when the search was a round trip - kept identical so
+   the page finds exactly what it used to */
+function auditRowMatches(x, q){
+  if(!q) return true;
+  return String(x.client_no).includes(q)
+    || (x.client_name || '').toLowerCase().includes(q)
+    || (x.purpose || '').toLowerCase().includes(q)
+    || (x.ref || '').toLowerCase().includes(q)
+    || (x.agent || '').toLowerCase().includes(q)
+    || (x.path || '').toLowerCase().includes(q);
 }
 /* ---------- ONE ROW, TWO VIEWS (Sep 13) ----------
    Saif: "when I click By agent I don't see all the same information." The by-agent
@@ -1670,19 +1693,23 @@ function auditBulkBarHtml(ctx){
 async function renderAudit(el){
   el.innerHTML = '<h2>Audit — full transaction trail</h2>' + auditSubNav() + '<div class="muted">Loading…</div>';
   let r;
-  try { r = await api('audit_list' + (AUDIT_Q ? '&q=' + encodeURIComponent(AUDIT_Q) : '')); }
+  try { r = await api('audit_list'); }   // the whole list; the search runs here, on it
   catch(e){ el.innerHTML = auditSubNav() + '<div class="err">Load error: ' + esc(String(e&&e.message||e)) + '</div>'; return; }
   if(!r){ el.innerHTML = auditSubNav() + '<div class="err">No response from server (audit_list). It may be redeploying — try again in a moment.</div>'; return; }
   if(!r.ok){ el.innerHTML = auditSubNav() + '<div class="err">Server error: ' + esc(r.error||'unknown') + '</div>'; return; }
   AUDIT_CACHE = r;
+  return drawAudit(el, r);
+}
+async function drawAudit(el, r){
   if(AUDIT_SUB === 'agents'){
     try { el.innerHTML = (await renderCorrections()) + '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); }
     catch(e){ el.innerHTML = auditSubNav() + '<div class="err">By-agent render error: ' + esc(String(e&&e.message||e)) + '</div>'; }
     return;
   }
-  const rows = r.rows || [];
+  const q = String(AUDIT_Q || '').trim().toLowerCase();
+  const rows = (r.rows || []).filter(x => auditRowMatches(x, q));
   const atts = r.attachments || [];
-  window.AUDIT_ROWS = {}; rows.forEach(x => window.AUDIT_ROWS[x.id] = x);
+  window.AUDIT_ROWS = {}; (r.rows || []).forEach(x => window.AUDIT_ROWS[x.id] = x);
   const canApprove = !!r.can_approve;
   /* Ticks on rows that are no longer waiting (approved meanwhile, or sent back) drop out. */
   for(const id of [...AUDIT_SEL]) if(!(AUDIT_ROWS[id] && AUDIT_ROWS[id].audit_status === 'ready_for_audit')) AUDIT_SEL.delete(id);
@@ -1765,12 +1792,12 @@ async function renderAudit(el){
   const totComm = periodRows.reduce((a,x)=> a + (x.commission||0), 0);
   const auditedCount = periodRows.filter(x => x.audit_status === 'complete').length;
 
-  let h = '<h2>Audit — full transaction trail</h2>' + auditSubNav();
-  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. The agent submits; commission is earned the day it is approved here.</div>';
-
-  // search
-  h += '<input id="auditSearch" placeholder="Search client name, #, transaction ref, agent, purpose…" value="'+esc(AUDIT_Q)+'" '
+  /* the head is drawn once and left alone: the search box lives in it */
+  const head = '<h2>Audit — full transaction trail</h2>' + auditSubNav()
+    + '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. The agent submits; commission is earned the day it is approved here.</div>'
+    + '<input id="auditSearch" placeholder="Search client name, #, transaction ref, agent, purpose…" value="'+esc(AUDIT_Q)+'" '
     + 'style="width:100%;max-width:520px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin-bottom:12px">';
+  let h = '';
 
   const chip = (k,label) => '<span class="perchip'+(AUDIT_PERIOD===k?' sel':'')+'" onclick="setPeriod(\''+k+'\')">'+label+'</span>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'
@@ -1827,17 +1854,22 @@ async function renderAudit(el){
   // pre-audit note
   if(periodRows.some(x=>x.pre_audit)) h += '<div class="muted" style="font-size:12px;margin-top:10px">— Transactions marked "—" were charged before the proof-of-payment process began; no audit documents are required for them.</div>';
 
-  el.innerHTML = h;
-  const si = document.getElementById('auditSearch');
-  if(si){
-    si.oninput = () => { AUDIT_Q = si.value; clearTimeout(window._auditT); window._auditT = setTimeout(()=>render(), 350); };
-    si.focus(); si.setSelectionRange(si.value.length, si.value.length);
+  const body = document.getElementById('auditBody');
+  if(body && document.getElementById('auditSearch') && el.contains(body)){
+    body.innerHTML = h;                  // a redraw: the head, and the cursor in its box, stay put
+  } else {
+    el.innerHTML = head + '<div id="auditBody">' + h + '</div>';
+    const si = document.getElementById('auditSearch');
+    if(si){
+      si.oninput = () => { AUDIT_Q = si.value; clearTimeout(window._auditT); window._auditT = setTimeout(redrawAudit, 120); };
+      if(AUDIT_Q){ si.focus(); si.setSelectionRange(si.value.length, si.value.length); }
+    }
   }
 }
 
 /* ---------- AUDIT REVIEW actions ---------- */
-function toggleSel(id, on){ if(on) AUDIT_SEL.add(id); else AUDIT_SEL.delete(id); render(); }
-function clearSel(){ AUDIT_SEL.clear(); render(); }
+function toggleSel(id, on){ if(on) AUDIT_SEL.add(id); else AUDIT_SEL.delete(id); redrawAudit(); }
+function clearSel(){ AUDIT_SEL.clear(); redrawAudit(); }
 async function approveAudit(id){
   const row = (window.AUDIT_ROWS||{})[id]; if(!row) return;
   const msg = $('#rvmsg_' + id);

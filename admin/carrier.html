@@ -1228,7 +1228,7 @@ function showReviewState(r){
          something changed; required when nothing did - the server enforces that. */
       + '<div class="replylbl">Reply to ' + who(sb.by) + '</div>'
       + '<textarea id="reviewReply" maxlength="500" placeholder="What you fixed - or why it is right as it is">' + escAttr(sb.reply || '') + '</textarea>'
-      + '<div class="replyhint">He reads this on the row when you resubmit. If you resubmit without changing anything, this is required.</div>';
+      + '<div class="replyhint">He reads this on the row when you resubmit. If you resubmit without changing anything and without adding a document, this is required.</div>';
     if(btn) btn.textContent = 'Resubmit for approval';
   }
 }
@@ -1296,6 +1296,7 @@ async function submit(complete){
     client_no: Number(CTX.client_no)||null,
     policy_id: CTX.policy_id||null, policy_guid: CTX.policy_guid||null, policy_num: CTX.policy_num||null, payment_id: CTX.payment_id||null,
     review_reply: ($('#reviewReply') ? $('#reviewReply').value.trim() : ''),
+    new_docs: DOCS.filter(d => !d.uploaded).length,   // documents that upload right after this call
     carrier: effCarrier(),
     carrier_amount: carrierAmt(),
     carrier_zero_ack: (feeOnly() || (carrierAmt() === 0 && zeroAcked())) || null,

@@ -653,7 +653,12 @@ export default async function handler(req, res) {
     const reviewReply = String(body.review_reply || '').trim().slice(0, 500);
     const wasSentBack = !!(priorRow && priorRow.audit_sendback);                       // a send-back is on the row
     const answering = wasSentBack && priorRow.audit_status !== 'ready_for_audit';       // ...and this submit answers it
-    if (complete && answering && !reviewReply && !receipt_b64) {
+    /* Sep 14: a document added in the Documents card (a signed endorsement, say) is
+       uploaded by the page AFTER this call, so it was invisible here and a fee-only
+       resubmit with a new document was refused as "nothing changed". The page now says
+       how many new documents are coming; any is a change. */
+    const newDocs = Number(body.new_docs || 0) > 0;
+    if (complete && answering && !reviewReply && !receipt_b64 && !newDocs) {
       const sameCost = (body.service_cost != null ? Number(body.service_cost) : (carrier_amount != null ? Number(carrier_amount) : null)) === (priorRow.service_cost != null ? Number(priorRow.service_cost) : null);
       const sameCarrier = String(carrier || '').trim() === String(priorRow.carrier_name || '').trim();
       if (sameCost && sameCarrier) {

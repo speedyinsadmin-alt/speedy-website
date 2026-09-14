@@ -84,10 +84,86 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 13 night. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `0330b5f`.
+Last written Sep 14 evening. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `d36c8a0`.
 
-### ⏭ MONDAY SEP 14 — IN THIS ORDER
+### ⏭ TUESDAY SEP 15 — IN THIS ORDER
+0. **Client 4600, Laura's $0.50 "invoice".** Sep 14 4:13 PM she charged $0.50 cash,
+   purpose "Other: INVOICE DUE FOR ENDORSEMENT", total $316 — a workaround for the open
+   invoice we did not have. Row `d4398ea7-df8f-45e0-95ca-c128e6e984be`. Once Saif
+   confirms no 50 cents was taken: convert it to a real open invoice (kind
+   `invoice_open`, amount 0, total_owed 316, audit_status `invoice_open`, ref cleared)
+   and post a HawkSoft log note saying the $0.50 receipt was a placeholder (the receipt
+   itself cannot be deleted). Then tell Laura the **Open invoice** method exists.
+1. **Try a big PDF on ZZTEST** (10–25 MB) through the carrier page — the first real
+   upload through the signed-URL path (`d36c8a0`). The harness ran against the
+   Supabase API shapes from the docs, not against the live bucket. If the PUT is refused,
+   the page says the status; `upload_url` in carrier.js is where to look. Bucket
+   `client-documents` file_size_limit was raised 5 MB → 50 MB by SQL on Sep 14.
+2. **Tell the agents** (one message): the audit page now asks for the *proof* by purpose
+   (signed application / signed endorsement / …, they pick freely), there is a *Note to
+   Tony*, the charge sheet has *Open invoice* and *Add this payment to it* (more money on
+   a sale already charged), and New business waits for its source before Charge.
+3. Everything still open from the Sep 13 list below (Tony's grants, the first real
+   submission, refunds stage 4, Tuesday GBP).
+
+### ✅ SEP 14 · TESTED BY TONY AND SAIF — nine pushes from one round of feedback
+Saif's message after they tested: it works; ticking a line or typing a letter refreshes
+the page; a fee-only send-back could not take an extra document; Tony wants the proof to
+follow the purpose (a signed application proves the payment three ways); 25 MB files
+fail; New business should wait for its source; and an agent could not open an invoice.
+
+**No refresh (`bb0f2e2`).** Tick, search, sort, period and the by-agent fold all went
+through `render()` → a fresh `audit_list` and "Loading…". Now one fetch, `drawAudit()`
+redraws from `AUDIT_CACHE`, the head with the search box is never redrawn (cursor stays),
+`auditRowMatches()` is the server's six-field test on the page. Approve/send-back still
+refetch. Same commit: a new document counts as a change on a fee-only resubmit (the page
+sends `new_docs`; documents upload after the main call, so the server never saw them).
+
+**Proof by purpose + note + add-to (`5efaf21`).** Tony's rule: *one document is the
+proof* — a signed application (amount printed, carrier-issued, client-signed), a signed
+endorsement, a cancellation request, a DMV receipt, a carrier receipt, or anything the
+agent names. The "Carrier receipt" card became **Proof of payment**: a guide sentence per
+purpose family (`purposeFamily()`, `PROOF_GUIDE`), six chips, the usual one pre-picked
+and marked, free choice, Other takes a label, fee-only makes it optional. Filed with
+`kind='proof'` + the real `doc_type`/`doc_label`; HawkSoft Desc names it. Every "is
+there a proof" test — carrier.js gates, `carrier_list`, Console badge/buckets/room, the
+client card — reads `isProofDoc()` (kind proof OR the old receipt types). The badge says
+what the proof is ("✓ signed application · 2 files", "✓ fee only"). **Note to Tony:**
+new column `bridge_ledger.audit_note` (migration `bridge_ledger_audit_note`), optional
+box above the buttons, on the row as a blue snippet, in the room as "Note to you", in the
+trail. **Add this payment to it:** the charge sheet asks "Is this more money for a sale
+already charged?" and lists recent not-approved payments; `ledger()` in hawksoft.js
+takes `addTo` (balance_of, purpose inherited, the sale's total raised to what the client
+has now paid); `link_balance` has `mode:'add'` for after the fact; refused on an approved
+sale. `harnessProof.mjs` (91), 44/44 caught.
+
+**The purpose gate (`d7828d7`).** `syncPurposeGate()`: New business without a source
+(or Other without text) fades the other purposes, rings the row that needs the answer,
+disables Charge and says why — the same `chgPurposeProblem()` doCharge refuses on.
+`harnessGate.mjs` (15), 10/10.
+
+**Open invoice (`431fb7d`).** Sixth method on the charge sheet. hawksoft.js
+`invoice_open`: ledger row kind `invoice_open`, amount 0, total_owed, audit_status
+`invoice_open`, a HawkSoft log note, no receipt, no $0.50 minimum, agents may call it.
+The first payment against it (Pay this balance, or a link from the card in either mode)
+flips it to `client_paid` — it becomes the sale to audit, like a part payment. Until
+then it is out of the audit queue, the unfinished list and Trust (`invoice_open` joined
+the NON_PAYMENT lists; Trust's collected filter includes a *paid* invoice as a sale).
+`audit_list` and `carrier_list` report the money collected, not the $0. The card reads
+"Open invoice $316.00 · nothing collected yet". `harnessInvoice.mjs` (42), 24/24.
+
+**Big files (`d36c8a0`).** Vercel refuses any request over 4.5 MB before our code runs;
+files travelled as base64 in JSON, so a PDF over ~3.3 MB never worked, and the bucket
+itself was capped at 5 MB. Now: `upload_url` hands out a one-time signed PUT address
+(Supabase `POST /storage/v1/object/upload/sign/…`), the page PUTs anything over 3 MB
+straight to the bucket (XHR, progress line), then sends `receipt_path`; the API reads
+the bytes back, points the attachment at the path with no inline copy, files HawkSoft.
+Path must be `<client>/<uuid>.<ext>`; up to 50 MB; refused types and sizes say why.
+`harnessBigFiles.mjs` (35), 22/22. **Not yet exercised against the live bucket** — item 1
+above.
+
+### ⏭ ~~MONDAY SEP 14~~ — carried forward (still true)
 0. **Agents will notice five things Monday morning — tell them in one message:** the
    charge sheet asks the purpose differently (New business needs a source; Other needs
    text), it asks "paid in full, or part?", the audit button reads "Submit for
@@ -547,6 +623,11 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessTrust.mjs` | 70 — the real trust view (select honoured) + search / open carrier / CSV on the real page |
 | `harnessRoom.mjs` | 54 — the review room: snippet, exchange, viewer toolbar, decision, closing |
 | `harnessPhoneSearch.mjs` | 25 — `buildClientSearch` phone patterns against a stored number |
+| `harnessNoRefresh.mjs` | 38 — the Audit tab redraws from its cache; search parity with the server; new_docs |
+| `harnessProof.mjs` | 91 — proof by purpose (server + carrier page + Console + card), the note, add-to (ledger + link_balance + sheet). `--import ./resolve_local.mjs` |
+| `harnessGate.mjs` | 15 — the purpose gate on the charge sheet |
+| `harnessInvoice.mjs` | 42 — invoice_open end to end: server, waking, lists, Trust, card, sheet |
+| `harnessBigFiles.mjs` | 35 — signed uploads: upload_url, receipt_path on both actions, the page's File path |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

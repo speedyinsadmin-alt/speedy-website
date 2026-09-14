@@ -235,6 +235,12 @@ function payHistoryHtml(c, opts){
             + ((!isBal && !complete && otherOpenBalance)
                 ? ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();linkBalance(\'' + p.id + '\',' + Number(p.amount||0) + ')">pays down a balance</span>'
                 : '')
+            /* THE CLIENT STILL OWES MORE (Sep 14): a payment taken as paid in full that
+               turns out to be part of a bigger sale. Not on balance rows, refunds,
+               links, invoices or approved payments. */
+            + ((!isBal && !complete && !isRefund && !isLink && !isInvoice)
+                ? ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();setTotalOwed(\'' + p.id + '\',' + Number(p.collected != null ? p.collected : (p.amount || 0)) + ',' + Number(p.total_owed || 0) + ')">' + (p.total_owed && p.total_owed > (p.collected || p.amount) ? 'change the total owed' : 'client still owes more') + '</span>'
+                : '')
             /* The way back out, while nothing has been audited. */
             + (isBal
                 ? ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();unlinkBalance(\'' + p.id + '\',' + Number(p.amount||0) + ')">not a balance payment</span>'

@@ -2074,7 +2074,7 @@ if (view === 'portal_share_due') {
      can, and he can give you the permission on the Staff page" — instead of a bare
      401 that reads like a bug. may(email,'refund') is the gate, not this list. */
   const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share', 'move_client',
-                         'link_balance', 'unlink_balance', 'refund_payment', 'request_refund'];
+                         'link_balance', 'unlink_balance', 'refund_payment', 'request_refund', 'set_total_owed'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -2230,6 +2230,55 @@ if (view === 'portal_share_due') {
        released share of its commission — 25420 went from $1.41 to $1.78 earned. So the
        guards are the ownership test move_client uses, plus refusals for every state
        where a link would destroy or invent something. */
+    /* THE CLIENT STILL OWES MORE (Saif, Sep 14): a payment was taken as "paid in full"
+       and only afterwards it turns out the client owes more for that sale - the carrier
+       asked for more, or the agent skipped the part-payment question. The agent sets the
+       total on the payment after the fact; from then on it is a part payment: the card
+       shows what is still owed, the next charge offers "Pay this balance", commission
+       releases as it is collected. Owner / charger / admin, not on an approved payment
+       (its fee is final), not on a balance row, never below what is already collected. */
+    if (action === 'set_total_owed') {
+      const paymentId = String((req.body || {}).payment_id || '');
+      const total = Math.round(Number(String((req.body || {}).total_owed || '').replace(/[^0-9.]/g, '')) * 100) / 100;
+      if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required' });
+      if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ ok: false, error: 'Enter the total the client owes for this sale.' });
+      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=*`);
+      const row = (cur.rows || [])[0];
+      if (!row) return res.status(404).json({ ok: false, error: 'Payment not found' });
+      const me2 = String(email).toLowerCase();
+      const isAdmin = ADMIN_ALLOWLIST.includes(me2) || (await rosterAdmins()).has(me2);
+      const iCharged = agentEmailOf(row.agent) === me2;
+      const iOwn = (row.commission_to || agentEmailOf(row.agent)) === me2;
+      if (!isAdmin && !iCharged && !iOwn) return res.status(403).json({ ok: false, error: 'You can only correct a payment you took.' });
+      if (row.audit_status === 'complete') return res.status(403).json({ ok: false, error: 'That payment is already approved, so its fee is final. Ask Tony for a correction.' });
+      const totalBefore = row.total_owed == null ? null : Number(row.total_owed);
+      if (row.balance_of) return res.status(400).json({ ok: false, error: 'That is a balance payment. Set the total on the original charge instead.' });
+      if (/declin|fail|void|refund/i.test(String(row.kind || '')) || ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'].includes(String(row.audit_status || ''))) {
+        return res.status(400).json({ ok: false, error: 'That row is not a collected payment.' });
+      }
+      const sib = await sbGet(s, `bridge_ledger?balance_of=eq.${encodeURIComponent(paymentId)}&select=amount,kind`);
+      const collected = +(Number(row.amount || 0) + (sib.rows || []).filter(x => !/refund|declin|void/i.test(String(x.kind || ''))).reduce((a, x) => a + Number(x.amount || 0), 0)).toFixed(2);
+      if (total < collected - 0.005) return res.status(400).json({ ok: false, error: `The total cannot be less than the $${collected.toFixed(2)} already collected on it.` });
+      const stamp = new Date().toISOString();
+      await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ total_owed: total }) });
+      const stillOwed = +(total - collected).toFixed(2);
+      let noteOk = false;
+      try {
+        const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
+          method: 'POST',
+          body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+            note: `The client owes $${total.toFixed(2)} in total for the ${row.purpose || 'payment'} of ${String(row.ts || '').slice(0, 10)}; $${collected.toFixed(2)} collected so far, `
+              + (stillOwed > 0.005 ? `$${stillOwed.toFixed(2)} still owed - tracked on the Speedy platform.` : 'paid in full.') + ` Set by ${me2}.` }) });
+        noteOk = (r.status === 200 || r.status === 202);
+      } catch { noteOk = false; }
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'payment.total_set', client_no: row.client_id, source: 'portal',
+          payload: { payment_id: paymentId, total_before: totalBefore, total_after: total, collected, still_owed: stillOwed, owner: row.commission_to || agentEmailOf(row.agent), hawksoft_note: noteOk } }) });
+      return res.status(200).json({ ok: true, total_owed: total, collected, still_owed: stillOwed, hawksoft_note: noteOk });
+    }
+
     if (action === 'link_balance' || action === 'unlink_balance') {
       const paymentId = String((req.body || {}).payment_id || '');
       const parentId  = String((req.body || {}).parent_id || '');

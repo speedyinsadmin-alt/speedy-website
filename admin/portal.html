@@ -1817,6 +1817,27 @@ async function linkBalance(paymentId, amount){
     await loadHome();
   } else alert((r && r.error) || 'Could not link it.');
 }
+/* "Client still owes more": set the total for the sale after the fact. The card and the
+   charge sheet read total_owed, so from here on it behaves as a part payment. */
+async function setTotalOwed(paymentId, collected, currentTotal){
+  const ans = prompt('What does the client owe IN TOTAL for this sale?\n\nCollected so far: $' + Number(collected).toFixed(2)
+    + (currentTotal > 0 ? '\nTotal on record:  $' + Number(currentTotal).toFixed(2) : '')
+    + '\n\nEnter the total (carrier cost + Speedy fee):', currentTotal > 0 ? String(Number(currentTotal).toFixed(2)) : '');
+  if(ans == null) return;
+  const total = Number(String(ans).replace(/[^0-9.]/g, ''));
+  if(!(total > 0)){ alert('Enter the total the client owes.'); return; }
+  if(total < Number(collected) - 0.005){ alert('The total cannot be less than the $' + Number(collected).toFixed(2) + ' already collected.'); return; }
+  const left = +(total - Number(collected)).toFixed(2);
+  if(!confirm('Set the total for this sale to $' + total.toFixed(2) + '?\n\n'
+    + 'Collected so far:  $' + Number(collected).toFixed(2) + '\n'
+    + (left > 0.005 ? 'Still owed:        $' + left.toFixed(2) + '\n\nThe card will show it as owed and the next charge on this client will offer "Pay this balance". Commission releases as it is collected.' : 'That makes it paid in full.') + '\n\nSet it?')) return;
+  const r = await apiPost({ action: 'set_total_owed', payment_id: paymentId, total_owed: total });
+  if(r && r.ok){
+    alert('Set. That sale now reads $' + Number(r.collected).toFixed(2) + ' of $' + Number(r.total_owed).toFixed(2) + (Number(r.still_owed) > 0.005 ? ' — $' + Number(r.still_owed).toFixed(2) + ' still owed.' : ' — paid in full.'));
+    if(ACTIVE_TAB){ delete CLIENT_CACHE[ACTIVE_TAB]; openClient(ACTIVE_TAB); }
+    await loadHome();
+  } else alert((r && r.error) || 'Could not set the total.');
+}
 async function unlinkBalance(paymentId, amount){
   if(!confirm('Undo this?\n\nThe $' + Number(amount).toFixed(2) + ' will stand on its own again, '
     + 'need its own audit, and the earlier payment will show that money as still owed.\n\nUnlink?')) return;

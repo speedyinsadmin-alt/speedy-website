@@ -1917,7 +1917,7 @@ if (view === 'portal_share_due') {
          one so a charge taken a minute ago still counts. */
       const inPeriod = ts => ts >= monthStart && (!period.to || ts < period.to);
 
-      const NON_PAYMENT = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
+      const NON_PAYMENT = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded', 'invoice_open'];
       /* The lines BEHIND the two numbers. portal_home already walks every
          qualifying row to produce `earned` and `pending`; it just never returned
          what it walked, so an agent saw a total with nothing to check it against.
@@ -2332,7 +2332,7 @@ if (view === 'portal_share_due') {
           body: JSON.stringify({ balance_of: parentId }) });
         await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(parentId)}`, {
           method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-          body: JSON.stringify({ total_owed: newTotal }) });
+          body: JSON.stringify({ total_owed: newTotal, ...(parent.audit_status === 'invoice_open' ? { audit_status: 'client_paid' } : {}) }) });
         let noteOk = false;
         try {
           const r = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
@@ -2378,6 +2378,12 @@ if (view === 'portal_share_due') {
       await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
         method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
         body: JSON.stringify({ balance_of: parentId }) });
+      /* the first money on an open invoice: the invoice is now the sale to audit */
+      if (parent.audit_status === 'invoice_open') {
+        await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(parentId)}`, {
+          method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify({ audit_status: 'client_paid' }) });
+      }
 
       const nowCollected = +(collected + amt).toFixed(2);
       const stillOwed = +(owed - nowCollected).toFixed(2);
@@ -3153,7 +3159,7 @@ if (view === 'portal_share_due') {
     }
     const commMap = {}; for (const c of (comm.rows || [])) commMap[c.agent_email] = Number(c.percentage);
 
-    const NON_PAYMENT_STATUS = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'];
+    const NON_PAYMENT_STATUS = ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded', 'invoice_open'];
     /* How much has been refunded off each payment. A refund row is NOT a work item —
        there is no carrier receipt to file for one, so it stays out of this queue — but
        the payment it came off must say what happened to it, or the Audit tab shows a
@@ -3209,6 +3215,8 @@ if (view === 'portal_share_due') {
         path, audit_status: auditStatus, pre_audit: preAudit,
         total_owed: p.total_owed != null ? Number(p.total_owed) : null,
         collected: collectedFor(p, pays.rows || []),
+        /* an open invoice collects through its balance payments: the row shows the money, not the $0 it opened with */
+        ...(p.kind === 'invoice_open' ? { amount: collectedFor(p, pays.rows || []), invoice: true } : {}),
         collected_ratio: collectedRatio(p, pays.rows || []),
         commission_to: p.commission_to || agentEmailOf(p.agent) || null,
         helper_email: p.helper_email || null,
@@ -3600,7 +3608,10 @@ if (view === 'portal_share_due') {
     /* Only real, collected money. A declined attempt never moved a cent, and a pay
        link that was merely sent is not a payment. */
     const collected = rows.filter(r =>
-      ['charge_live', 'charge_cash', 'paylink_charge', 'terminal_charge'].includes(r.kind)
+      (['charge_live', 'charge_cash', 'paylink_charge', 'terminal_charge'].includes(r.kind)
+        /* an open invoice that money has arrived on: $0 of its own, the obligation is
+           its total, the money is on its balance rows - the same shape as a part payment */
+        || (r.kind === 'invoice_open' && r.audit_status !== 'invoice_open'))
       && !/declin|fail|void|refund/i.test(String(r.kind || ''))
       && String(r.ts) >= period.from && (!period.to || String(r.ts) < period.to));
 
@@ -3650,7 +3661,7 @@ if (view === 'portal_share_due') {
         /* Collected, but nobody has said how much of it belongs to a carrier. Until
            they do, the whole amount is unattributed - it is NOT profit. */
         unaccounted += amt;
-        openItems.push({ id: r.id, client_no: r.client_id, amount: money(amt),
+        if (r.kind !== 'invoice_open') openItems.push({ id: r.id, client_no: r.client_id, amount: money(amt),
           purpose: r.purpose, ts: r.ts, audit_status: r.audit_status,
           agent: r.commission_to || r.agent || null });
         continue;

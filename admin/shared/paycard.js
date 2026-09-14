@@ -44,6 +44,7 @@ const SENDBACK_LABELS = { receipt_missing: 'Receipt missing', receipt_unreadable
   wrong_carrier: 'Wrong carrier', need_photos: 'Need photos of documents', other: 'Needs a fix' };
 function sendbackLabel(code){ return SENDBACK_LABELS[code] || 'Needs a fix'; }
 function auditLineHtml(p){
+  if(p.audit_status === 'invoice_open') return '<div style="font-size:11px;margin-top:3px;color:var(--mute)">No payment yet \u2014 the audit starts when the first payment comes in. Collect it from Charge \u2192 Pay this balance.</div>';
   /* Pacific, like every other stamp the agents read - the ISO slice printed UTC next to a "6 hr ago". */
   const t = ts => { try { return new Date(ts).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch(e){ return String(ts || '').slice(0, 16); } };
   const first = n => esc(String(n || '').split(' ')[0] || 'Tony');
@@ -156,6 +157,10 @@ function payHistoryHtml(c, opts){
        "Add documents to help" and "Sammy still confirms the carrier cost" — three
        things that are only true of money that arrived. Seen on ZZTEST, Sep 11. */
     const isLink = p.kind === 'paylink_create' || p.audit_status === 'link_sent';
+    /* OPEN INVOICE (Sep 14): what the client owes, recorded without a payment. Nothing
+       to audit until money arrives; "Pay this balance" on the charge sheet collects it. */
+    const isInvoice = p.kind === 'invoice_open';
+    const invoiceOpen = isInvoice && p.audit_status === 'invoice_open';
     /* THE REVIEW (Sep 12). "waiting for Tony" is submitted and not yet approved: the
        agent may still edit it, but nothing is earned. "sent back" is the one state the
        agent MUST act on, and it carries the approver's reason on the row for good. */
@@ -165,7 +170,7 @@ function payHistoryHtml(c, opts){
     return '<div style="background:var(--field);border:1px solid ' + (isRefund ? 'rgba(224,49,49,.35)' : 'var(--line)')
       + ';border-radius:10px;padding:10px 11px;margin-bottom:7px">'
       + '<div class="row" style="align-items:flex-start">'
-      + '<div><b style="font-size:14px' + (isRefund ? ';color:var(--red-ink)' : '') + '">' + money(p.amount) + '</b>'
+      + '<div><b style="font-size:14px' + (isRefund ? ';color:var(--red-ink)' : '') + '">' + (isInvoice ? 'Open invoice ' + money(p.total_owed) : money(p.amount)) + '</b>'
       /* Only ever true on ZZTEST for an admin (item 84). Said in amber on the row so a
          test dollar is never read as a real one. */
       + (p.is_test ? ' <span class="beta" style="background:var(--amber)">TEST</span>' : '')
@@ -174,9 +179,10 @@ function payHistoryHtml(c, opts){
          row the same morning, which balanceCell now fixes there. Fixing one reader and
          leaving the other is how two screens end up disagreeing about one number. */
       + ((p.total_owed && p.total_owed > (p.collected || p.amount))
-          ? '<span style="color:var(--amber-ink);font-size:11.5px"> · $'
-            + Number(p.collected || p.amount).toFixed(2) + ' of $' + Number(p.total_owed).toFixed(2)
-            + ' · $' + (p.total_owed - (p.collected || p.amount)).toFixed(2) + ' still owed</span>' : '')
+          ? '<span style="color:var(--amber-ink);font-size:11.5px"> · ' + (invoiceOpen ? 'nothing collected yet' : '$'
+            + Number(p.collected || p.amount).toFixed(2) + ' of $' + Number(p.total_owed).toFixed(2))
+            + ' · $' + (p.total_owed - (p.collected || p.amount)).toFixed(2) + ' still owed</span>'
+          : (isInvoice && p.total_owed ? '<span style="color:var(--green);font-size:11.5px"> · collected in full</span>' : ''))
       + ' <span class="dim" style="font-size:11.5px">' + esc(p.purpose || '') + '</span></div>'
       + '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;'
       /* GREY, not blue. The card's colour language is amber = needs attention, green =
@@ -190,6 +196,7 @@ function payHistoryHtml(c, opts){
         : p.refund_request ? 'background:rgba(245,166,35,.15);color:var(--amber-ink)'
         : refundedOff > 0 ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
         : isLink ? 'background:rgba(143,154,196,.14);color:var(--mute)'
+        : invoiceOpen ? 'background:rgba(245,166,35,.15);color:var(--amber-ink)'
         : isBal ? 'background:rgba(143,154,196,.14);color:var(--mute)'
                : complete ? 'background:rgba(47,191,113,.15);color:var(--green)'
                : sentBack ? 'background:rgba(224,49,49,.15);color:var(--red-ink)'
@@ -199,6 +206,7 @@ function payHistoryHtml(c, opts){
         : p.refund_request ? 'refund requested'
         : refundedOff > 0 ? (refundedOff + 0.004 >= Number(p.collected != null ? p.collected : p.amount) ? 'refunded' : 'part refunded')
         : isLink ? 'link sent · not paid'
+        : invoiceOpen ? 'open invoice · nothing collected'
         : isBal ? 'balance payment' : complete ? 'audited' : sentBack ? 'sent back' : waiting ? 'waiting for Tony' : 'needs proof') + '</span></div>'
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
@@ -256,7 +264,7 @@ function payHistoryHtml(c, opts){
          have recorded this since July and shown it nowhere: 19 of the last 60 said
          "no client email on file" behind a green success screen. A row with no record
          at all says so, because "nothing recorded" is different from "not sent". */
-      + (isLink ? '' : noticeLineHtml(p.client_notice))
+      + (isLink || invoiceOpen ? '' : noticeLineHtml(p.client_notice))   // nothing was charged on an open invoice: nothing to have told the client
       + (isLink || isBal || isRefund ? '' : auditLineHtml(p))
       /* A REFUND REQUEST WAITING ON TONY. Shown on the payment, with who asked and when,
          and the Refund button is withheld for everyone until he decides. */
@@ -285,8 +293,9 @@ function payHistoryHtml(c, opts){
                 + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '')
                 + (d.uploaded_by ? ' · ' + esc(uploaderShort(d.uploaded_by)) : '') + '</span>').join('')
             + '</div>'
-          : (!complete && !isBal && !isLink ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
-      + (opts.actions && !complete && !isBal && !isLink && mine
+          : (!complete && !isBal && !isLink && !invoiceOpen ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
+      /* an open invoice has no payment to prove yet: no proof button until money arrives */
+      + (opts.actions && !complete && !isBal && !isLink && !invoiceOpen && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:' + (waiting ? 'transparent;border:1px solid var(--line);color:var(--blue-l)' : 'var(--amber);color:#2a1a00') + ';border-radius:9px;padding:8px;font-size:12.5px;font-weight:' + (waiting ? '600' : '700') + ';cursor:pointer">'
             + (sentBack ? 'Fix and resubmit' : waiting ? 'Edit before Tony reviews' : 'Add proof of payment') + '</div>'

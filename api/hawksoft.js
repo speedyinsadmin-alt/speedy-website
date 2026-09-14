@@ -286,6 +286,10 @@ function auditStatusFor(kind) {
   const k = String(kind || '');
   if (/declin|fail|void|refund/i.test(k)) return 'declined';
   if (k === 'paylink_create') return 'link_sent';
+  /* OPEN INVOICE (Saif, Sep 14): what the client owes, nothing collected. Out of the
+     audit queue and out of Trust until money arrives - then the row becomes the sale
+     that gets audited, like a part payment. */
+  if (k === 'invoice_open') return 'invoice_open';
   if (k === 'charge_create_client') return 'not_a_payment';
   // charge_captured is the safety-net row written the instant Clover confirms — real
   // money, receipt still pending. It must NEVER be filtered out of the audit queue.
@@ -352,6 +356,17 @@ async function ledger(event) {
     if (r.status !== 201) return false;
     let newId = null;
     try { const rows = await r.json(); newId = Array.isArray(rows) && rows[0] ? rows[0].id : null; } catch { newId = null; }
+    /* money on an open invoice: the invoice becomes the sale to audit */
+    if (row.balance_of && auditStatusFor(kind) === 'client_paid') {
+      try {
+        const H = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' };
+        const pr = await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(row.balance_of)}&select=id,audit_status`, { headers: H });
+        const p = (await pr.json().catch(() => []))[0];
+        if (p && p.audit_status === 'invoice_open') {
+          await fetch(`${url.replace(/\/$/, '')}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: H, body: JSON.stringify({ audit_status: 'client_paid' }) });
+        }
+      } catch { /* the payment is recorded; the invoice can be woken from the card */ }
+    }
     if (addParent) {
       /* raise the earlier payment's total to what the client has now paid for the sale */
       try {
@@ -708,7 +723,7 @@ export default async function handler(req, res) {
     if (!isAdmin && !userEmail && !PUBLIC_PAY.includes(action)) {
       return res.status(401).json({ ok: false, error: 'Sign in required.' });
     }
-    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create', 'probe_invoices', 'terminal_config', 'terminal_charge'].includes(action)) {
+    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create', 'probe_invoices', 'terminal_config', 'terminal_charge', 'invoice_open'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 
@@ -1618,6 +1633,41 @@ export default async function handler(req, res) {
     }
 
     /* ---------- Charge page: record a CASH payment (no card, full HawkSoft trail) ---------- */
+    /* ---------- OPEN INVOICE (Saif, Sep 14) ----------
+       "She wanted to make an open invoice and we don't have it, so she charged $0.50
+       cash with the full amount as the total." A real one: the amount the client owes
+       is recorded, nothing is collected, no receipt, no minimum. HawkSoft cannot create
+       invoices, so the client file gets a log note and the balance lives in our ledger,
+       where the next charge offers "Pay this balance" and every payment joins it. */
+    if (action === 'invoice_open') {
+      const b = req.body || {};
+      const clientId = parseInt(b.clientId, 10);
+      if (!clientId || clientId < 1) return res.status(400).json({ ok: false, error: 'Verify and confirm the client in HawkSoft first.' });
+      const owed = Math.round(parseMoney(b.amount) * 100) / 100;
+      if (!owed || owed < 0.5) return res.status(400).json({ ok: false, error: 'Enter what the client owes (at least $0.50).' });
+      const purpose = String(b.purpose || 'Payment due').slice(0, 80);
+      const note = String(b.note || '').slice(0, 120).trim();
+      const purposeFull = note ? `${purpose} — ${note}` : purpose;
+      const office = String(b.office || '').slice(0, 40) || null;
+      const policyNumber = String(b.policyNumber || '').trim().slice(0, POLICY_NUM_MAX);
+      const clientName = String(b.clientName || '').slice(0, 40);
+      const who = userEmail ? (STAFF[userEmail] ? `${STAFF[userEmail][0]} (${userEmail})` : userEmail) : 'admin key';
+      const now = new Date();
+      const policyGuid = CHG_UUID_RE.test(String(b.policyGuid || '').trim()) ? String(b.policyGuid).trim().toLowerCase() : null;
+      const out = {};
+      try {
+        const r3 = await hs(`/vendor/agency/${AGENCY_ID}/client/${clientId}/log?version=4.0`, {
+          method: 'POST', body: JSON.stringify({
+            refId: crypto.randomUUID(), ts: now.toISOString(), channel: 32,
+            ...(policyGuid ? { policyId: policyGuid, PolicyId: policyGuid } : {}),
+            note: `OPEN INVOICE — $${owed.toFixed(2)} owed · ${purposeFull}${policyNumber ? ' · policy ' + policyNumber : ''} · by ${who}. No payment received yet; the balance is tracked on the Speedy platform and each payment against it will be logged here.`,
+          }) });
+        out.log = { ok: r3.status === 200 || r3.status === 202, status: r3.status };
+      } catch { out.log = { ok: false, status: 0 }; }
+      const auditSaved = await audit({ action: 'invoice_open', who, office, clientId, clientName, commissionTo: b.commissionTo, producerCode: b.producerCode,
+        totalOwed: owed, amount: 0, purpose: purposeFull, policyNumber, policyGuid, hawksoft: out });
+      return res.status(200).json({ ok: !!(auditSaved && auditSaved.id), results: out, owed, auditSaved, ledgerId: (auditSaved && auditSaved.id) || null });
+    }
     if (action === 'charge_cash') {
       const b = req.body || {};
       const clientId = parseInt(b.clientId, 10);

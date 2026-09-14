@@ -2240,7 +2240,7 @@ const PURPOSES = [
   { k: 'Endorsement' }, { k: 'Renewal' }, { k: 'Reinstatement' }, { k: 'Cancellation' }, { k: 'DMV' },
   { k: 'Other', typed: true },
 ];
-const METHODS  = [['card','Card'],['cash','Cash'],['link','Pay link'],['zelle','Zelle'],['other','Other']];
+const METHODS  = [['card','Card'],['cash','Cash'],['link','Pay link'],['zelle','Zelle'],['other','Other'],['invoice','Open invoice']];
 let CHG = null;            // { clientNo, confirmed } — one charge at a time
 let CHG_PRESELECT = null;  // policy to open the picker on, for one charge only
 /* The invoice the AGENT picked, or null for "no invoice". pickInv used to read the
@@ -2686,7 +2686,11 @@ function renderChgHsPreview(){
   if(!CHG || !CHG.confirmed){ el.classList.add('hide'); return; }
   el.classList.remove('hide');
   let rows;
-  if(CHG_METHOD === 'link'){
+  if(CHG_METHOD === 'invoice'){
+    rows = ['<b>No money moves</b> — what the client owes is recorded',
+            'Log note on the client file: "OPEN INVOICE — $' + (parseFloat(amtVal()) > 0 ? parseFloat(amtVal()).toFixed(2) : '…') + ' owed"',
+            'The next charge on this client offers <b>Pay this balance</b>; the audit starts with the first payment'];
+  } else if(CHG_METHOD === 'link'){
     rows = ['A payment link is created and logged now',
             'When the client pays: log note + receipt PDF',
             '<b>No accounting receipt</b> — a client cannot pick an invoice, so nothing is applied'];
@@ -2752,13 +2756,19 @@ function pickChgMethod(m, btn){
 function applyMethodUI(){
   const isCard = CHG_METHOD === 'card';
   const isAlt = (CHG_METHOD === 'zelle' || CHG_METHOD === 'other');
+  /* OPEN INVOICE: no money moves - the amount is what the client owes, the "paid in
+     full?" question does not apply, the button says what it does */
+  const isInv = CHG_METHOD === 'invoice';
   chgEl('chgCard').classList.toggle('hide', !isCard);
   chgEl('chgAltWrap').classList.toggle('hide', !isAlt);
+  { const lab = document.querySelector('label[for="chgAmt"]'); if(lab) lab.textContent = isInv ? 'Amount the client owes' : 'Amount'; }
+  { const fw = chgEl('chgFull') && chgEl('chgFull').parentElement; if(fw){ fw.style.display = isInv ? 'none' : ''; } }
+  if(isInv){ pickFull(true, document.querySelector('#chgFull button')); }
   if(isAlt){
     chgEl('chgAltLabel').textContent = (CHG_METHOD === 'zelle' ? 'Zelle confirmation / reference' : 'Payment reference') + ' — optional';
     chgEl('chgAltRef').placeholder = CHG_METHOD === 'zelle' ? 'Zelle conf # or sender name' : 'money order #, check #, other';
   }
-  chgEl('chgGo').textContent = CHG_METHOD === 'link' ? 'Create payment link' : 'Charge';
+  chgEl('chgGo').textContent = CHG_METHOD === 'link' ? 'Create payment link' : isInv ? 'Record open invoice' : 'Charge';
   renderChgHsPreview();   // the preview depends on the method — a link applies no invoice
   if(isCard) initPortalClover();
 }
@@ -2801,7 +2811,31 @@ function doCharge(){
   const tp = chgTotalProblem(); if(tp){ chgSay(tp); return; }
   if(CHG_METHOD === 'card') return chargeCardPortal(amt);
   if(CHG_METHOD === 'link') return createLinkPortal(amt);
+  if(CHG_METHOD === 'invoice') return openInvoicePortal(amt);
   return chargeCashPortal(amt);
+}
+/* the open invoice: recorded, not collected */
+async function openInvoicePortal(amt){
+  const btn = chgEl('chgGo');
+  chgEl('chgResult').innerHTML = ''; btn.disabled = true;
+  chgSay('Recording the open invoice\u2026');
+  try{
+    const j = await hsPost(Object.assign({ action:'invoice_open' }, baseBody(amt)));
+    if(j.ok){
+      LEDGER_ID = j.ledgerId || null;
+      chgQuiet();
+      const c = CHG.confirmed;
+      chgEl('chgBody').classList.add('hide');
+      chgEl('chgResult').innerHTML = '<div class="res good">'
+        + '<div style="font-size:15px;font-weight:800;color:var(--amber-ink)">Open invoice recorded</div>'
+        + '<div style="font-size:28px;font-weight:800;margin:6px 0 10px">$' + parseFloat(amt).toFixed(2) + ' <span class="dim" style="font-size:13px;font-weight:400">owed</span></div>'
+        + '<div class="kv"><span class="muted">Client</span><b>' + esc(c.name || '') + ' \u00b7 #' + c.clientNumber + '</b></div>'
+        + '<div class="kv"><span class="muted">For</span><b>' + esc(chgPurposeText()) + '</b></div>'
+        + '<div class="kv"><span class="muted">Collected</span><b>$0.00</b></div>'
+        + '<div class="dim" style="font-size:11.5px;margin-top:8px">Nothing was charged. A log note is on the HawkSoft record; the balance is on the client card. When the client pays, open Charge and tap <b>Pay this balance</b> \u2014 the audit starts with that first payment.</div>'
+        + '<button class="btn btn-ghost" onclick="closeCharge()">Done</button></div>';
+    } else chgFail(j.error || 'Could not record the invoice.');
+  }catch(e){ chgFail(String(e)); }
 }
 function baseBody(amt){
   const c = CHG.confirmed;

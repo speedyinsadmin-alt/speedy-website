@@ -337,7 +337,7 @@ export default async function handler(req, res) {
        "resubmit" rather than "submit", and refuse up front on an approved row. */
     let auditStatus = null, sendback = null, submittedAt = null, auditNote = null;
     if (body.payment_id) {
-      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose,amount,total_owed,audit_status,audit_sendback,audit_submitted_at,audit_note`);
+      const p = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(body.payment_id)}&select=extra,carrier_name,purpose,amount,total_owed,audit_status,audit_sendback,audit_submitted_at,audit_note,kind`);
       const row = p.rows && p.rows[0];
       if (row) {
         const ex = row.extra || {};
@@ -346,6 +346,13 @@ export default async function handler(req, res) {
         program   = ex.policyProgram || (ex.hawksoft && ex.hawksoft.policyProgram) || null;
         purpose   = row.purpose || null;
         chargeAmount = row.amount != null ? Number(row.amount) : null;
+        /* an open invoice opened with $0: what the client paid is on its balance rows */
+        if (row.kind === 'invoice_open') {
+          try {
+            const kids = await sbGet(s, `bridge_ledger?balance_of=eq.${encodeURIComponent(body.payment_id)}&select=amount,kind`);
+            chargeAmount = (kids.rows || []).filter(k => !/refund|declin|void/i.test(String(k.kind || ''))).reduce((a, k) => a + Number(k.amount || 0), 0);
+          } catch { /* stays 0 */ }
+        }
         totalOwed    = row.total_owed != null ? Number(row.total_owed) : null;
         /* Mirrors owedFor() in platform.js and the derivation in save_carrier_leg. */
         owedAmount = (totalOwed != null && chargeAmount != null && totalOwed > chargeAmount)

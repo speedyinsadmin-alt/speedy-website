@@ -73,6 +73,14 @@
   .chips{display:flex;flex-wrap:wrap;gap:5px}
   .chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:12px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
   .chips button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  /* THE PURPOSE GATE (Saif, Sep 14): "New business" needs a source before anything
+     else - the other purposes step back, the source row lights up, Charge waits. */
+  .chips button.faded{opacity:.35}
+  #chgPurpSub.need{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,124,254,.22);animation:needpulse 1.1s ease-in-out 2}
+  #chgOtherWrap.need input{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,124,254,.22)}
+  @keyframes needpulse{0%,100%{box-shadow:0 0 0 3px rgba(77,124,254,.22)}50%{box-shadow:0 0 0 6px rgba(77,124,254,.10)}}
+  #chgGo:disabled{opacity:.45;cursor:default}
+  #chgGoWhy{font-size:12px;color:var(--blue-l);text-align:center;margin-top:8px}
   /* the part-payment answer is the one that changes money; selected, it is red, not blue */
   .chips button.part.sel{background:var(--red);border-color:var(--red);color:#fff}
   .cf{background:#fff;border-radius:10px;height:48px;padding:2px 10px;margin:6px 0;overflow:hidden}
@@ -372,7 +380,7 @@
         <div id="chgPurpSub" class="hide" style="margin-top:8px;padding:10px 11px;background:var(--field);border:1px solid var(--line);border-radius:10px"></div>
         <div id="chgOtherWrap" class="hide">
           <label for="chgOther" style="margin-top:10px">What's this payment for?</label>
-          <input id="chgOther" placeholder="e.g. broker fee, notary, late fee only" maxlength="60" autocomplete="off" oninput="renderChgHsPreview()">
+          <input id="chgOther" placeholder="e.g. broker fee, notary, late fee only" maxlength="60" autocomplete="off" oninput="syncPurposeGate();renderChgHsPreview()">
         </div>
 
         <div style="margin-top:12px">
@@ -440,6 +448,7 @@
           <input id="chgAltRef" autocomplete="off" maxlength="60">
         </div>
 
+        <div id="chgGoWhy" class="hide"></div>
         <button class="btn btn-red" id="chgGo" onclick="doCharge()">Charge</button>
         <button class="btn btn-ghost" onclick="closeCharge()">Cancel</button>
         <div id="chgOut" class="hide dim" style="font-size:12.5px;margin-top:10px;text-align:center"></div>
@@ -2043,6 +2052,7 @@ function addToPayment(id){
   chgEl('chgPurp').innerHTML = PURPOSES.map(x => '<button type="button" class="' + (x.k===CHG_PURPOSE?'sel':'') + '" onclick="pickPurpose(\'' + x.k + '\',this)">' + esc(x.k) + '</button>').join('');
   chgEl('chgOtherWrap').classList.toggle('hide', !chgPurposeDef().typed);
   renderChgSub();
+  syncPurposeGate();
   fadePurpose(true);
   chgEl('chgTotal').value = '';
   pickFull(true, document.querySelector('#chgFull button'));
@@ -2073,6 +2083,7 @@ function clearAddTo(){
   CHG_ADD_TO = null;
   fadePurpose(false);
   renderOpenBalance(CLIENT_CACHE[CHG.clientNo]);
+  syncPurposeGate();
   renderChgHsPreview();
 }
 function applyToBalance(id, left){
@@ -2277,7 +2288,23 @@ function renderChgSub(){
 function pickChgSub(s, btn){
   CHG_SUB = (CHG_SUB === s && !chgPurposeDef().required) ? '' : s;   // optional rows can be un-picked
   document.querySelectorAll('#chgPurpSub button').forEach(x => x.classList.toggle('sel', x.textContent === CHG_SUB));
+  syncPurposeGate();
   renderChgHsPreview();
+}
+/* What the picker looks like while a purpose is half-answered. New business without
+   a source (or Other without text): the other purposes fade, the row that needs the
+   answer lights up, the Charge button waits and says why. The moment it is answered,
+   everything comes back. Same test as doCharge() uses - chgPurposeProblem() - so the
+   button can never be live while the charge would be refused. */
+function syncPurposeGate(){
+  const problem = chgPurposeProblem();
+  const d = chgPurposeDef();
+  document.querySelectorAll('#chgPurp button').forEach(x => x.classList.toggle('faded', !!problem && !x.classList.contains('sel')));
+  const sub = chgEl('chgPurpSub'); if(sub) sub.classList.toggle('need', !!problem && !!d.sub);
+  const ow = chgEl('chgOtherWrap'); if(ow) ow.classList.toggle('need', !!problem && !!d.typed);
+  const go = chgEl('chgGo'), why = chgEl('chgGoWhy');
+  if(go) go.disabled = !!problem;
+  if(why){ why.textContent = problem || ''; why.classList.toggle('hide', !problem); }
 }
 function chgNoteText(){ return chgEl('chgNote').value.trim(); }
 
@@ -2585,6 +2612,7 @@ function renderChargeForm(){
   chgEl('chgPurp').innerHTML = PURPOSES.map(p =>
     '<button type="button" class="'+(p.k===CHG_PURPOSE?'sel':'')+'" onclick="pickPurpose(\''+p.k+'\',this)">'+esc(p.k)+'</button>').join('');
   renderChgSub();
+  syncPurposeGate();
   chgEl('chgMeth').innerHTML = METHODS.map(m =>
     '<button type="button" class="'+(m[0]===CHG_METHOD?'sel':'')+'" onclick="pickChgMethod(\''+m[0]+'\',this)">'+m[1]+'</button>').join('')
     + '<button type="button" disabled style="opacity:.45;cursor:default;border-style:dashed">Terminal — soon</button>';
@@ -2710,6 +2738,7 @@ function pickPurpose(p, btn){
   btn.classList.add('sel');
   chgEl('chgOtherWrap').classList.toggle('hide', !chgPurposeDef().typed);
   renderChgSub();
+  syncPurposeGate();
   if(chgPurposeDef().typed) chgEl('chgOther').focus();
   renderChgHsPreview();
 }
@@ -2762,6 +2791,7 @@ function chgFail(msg){
   chgEl('chgResult').innerHTML = '<div class="res bad"><div style="font-size:15px;font-weight:800;margin-bottom:4px">Not completed</div>'
     + '<div style="font-size:13px">' + esc(msg) + '</div></div>';
   chgEl('chgGo').disabled = false;
+  syncPurposeGate();
 }
 function doCharge(){
   if(!CHG || !CHG.confirmed) return;

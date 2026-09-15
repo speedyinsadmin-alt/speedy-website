@@ -1418,7 +1418,7 @@ function openRefund(paymentId, clientNo){
   /* notify: null until chosen. { channel:'email', to, source } or { channel:'none',
      skip_reason }. The button does not enable without it — "no silent info". */
   RF = { id: paymentId, clientNo: clientNo, p: p, c: c, reason: null, carrier: null,
-         amount: refundable(p), notify: null, typed: '', skip: '' };
+         amount: refundable(p), mode: 'all', typedAmt: '', notify: null, typed: '', skip: '' };
   document.getElementById('refundSheet').classList.remove('hide');
   document.body.style.overflow = 'hidden';
   drawRefund();
@@ -1432,6 +1432,32 @@ function rfPick(what, value){
   if(!RF) return;
   RF[what] = value;
   drawRefund();
+}
+/* HOW MUCH (stage 4, Sep 15). "All of it" is what is still refundable - earlier partials
+   already off. "Part of it" opens a box; the amount is capped here and again on the
+   server and again by Clover. The box is text with a decimal keyboard so the caret
+   survives the redraw every keystroke causes. */
+function rfMode(m){
+  if(!RF) return;
+  RF.mode = m;
+  if(m === 'all'){ RF.amount = refundable(RF.p); RF.typedAmt = ''; }
+  else { RF.amount = rfParse(RF.typedAmt); }
+  drawRefund();
+  if(m === 'part'){ const i = document.getElementById('rfAmt'); if(i){ i.focus(); } }
+}
+function rfParse(v){ const n = Math.round(Number(String(v || '').replace(/[^0-9.]/g, '')) * 100) / 100; return Number.isFinite(n) ? n : 0; }
+function rfAmt(v){
+  if(!RF) return;
+  RF.typedAmt = String(v || '');
+  RF.amount = rfParse(v);
+  drawRefund();
+  const i = document.getElementById('rfAmt');
+  if(i){ i.focus(); const L = i.value.length; try { i.setSelectionRange(L, L); } catch(e){} }
+}
+function rfAmtOk(){
+  if(!RF) return false;
+  const cap = refundable(RF.p);
+  return RF.mode === 'all' || (RF.amount >= 0.01 && RF.amount <= cap + 0.004);
 }
 function rfNotify(kind, addr){
   if(!RF) return;
@@ -1480,13 +1506,33 @@ function drawRefund(){
     + (fee != null ? '<div class="kv" style="border-bottom:0"><span class="muted">Speedy kept</span><span>'
         + money(fee) + '</span></div>' : '');
 
-  h += '<div class="sec">How much</div>'
-    + '<div class="kv" style="border-bottom:0"><span class="muted">' + (isVoid ? 'Voiding' : 'Refunding') + '</span>'
+  /* HOW MUCH. Proven on ZZTEST Sep 15: Clover takes a partial amount, a second one on
+     the same charge, and refuses one over the charge. So: all of it, or part of it. */
+  const cap = refundable(p);
+  const alreadyBack = Number(p.refunded) || 0;
+  const collectedAmt = Number(p.collected != null ? p.collected : p.amount) || 0;
+  const amtOk = rfAmtOk();
+  const isPart = RF.mode === 'part';
+  h += '<div class="sec">How much</div><div class="chips">'
+    + '<button class="' + (RF.mode === 'all' ? 'sel' : '') + '" onclick="rfMode(\'all\')">All of it \u2014 ' + money(cap) + '</button>'
+    + '<button class="' + (isPart ? 'sel' : '') + '" onclick="rfMode(\'part\')">Part of it\u2026</button>'
+    + '</div>'
+    + (alreadyBack > 0 ? '<div class="note">' + money(alreadyBack) + ' of this payment was refunded earlier; ' + money(cap) + ' is still refundable.</div>' : '');
+  if(isPart){
+    h += '<div class="row" style="gap:8px;align-items:center;margin-top:8px"><span style="font-size:15px;font-weight:700">$</span>'
+      + '<input id="rfAmt" type="text" inputmode="decimal" placeholder="0.00" value="' + esc(RF.typedAmt) + '" oninput="rfAmt(this.value)" '
+      + 'style="flex:1;font-size:16px;font-weight:700;padding:9px 12px;border-radius:9px;border:1.5px solid ' + (amtOk ? 'var(--line)' : 'var(--red)') + ';background:var(--navy);color:var(--ink)">'
+      + '<span class="muted" style="font-size:12px">of ' + money(cap) + '</span></div>'
+      + (amtOk
+          ? '<div class="conseq good"><b>Refunding ' + money(amt) + ' of ' + money(cap) + '.</b> '
+            + (amt + 0.004 >= cap ? 'That is everything that is left' : money(cap - amt) + ' of the payment stays with Speedy')
+            + (alreadyBack > 0 ? ' (' + money(alreadyBack) + ' went back earlier)' : '') + '.</div>'
+          : '<div class="note" style="color:var(--red-ink)">Enter an amount between $0.01 and ' + money(cap) + '.</div>');
+  } else {
+    h += '<div class="kv" style="border-bottom:0"><span class="muted">' + (isVoid ? 'Voiding' : 'Refunding') + '</span>'
       + '<b style="font-size:15px">' + money(amt) + '</b></div>'
-    /* Said, not offered. A disabled "Part of it" chip would invite a click that can
-       only be refused; the reason it is missing is more useful than the control. */
-    + '<div class="note">The whole payment. A partial refund is not available yet — whether '
-      + 'Clover accepts one is still unverified, and getting it wrong refunds more than intended.</div>';
+      + (RF.reason === 'wrong_amount' ? '<div class="note">Wrong amount usually means <b>part of it</b> \u2014 the difference, not the whole payment.</div>' : '');
+  }
 
   h += '<div class="sec">Why</div><div class="chips">'
     + RF_REASONS.map(r => '<button class="' + (RF.reason === r[0] ? 'sel' : '')
@@ -1503,15 +1549,19 @@ function drawRefund(){
         '<button class="' + (RF.carrier === x[0] ? 'sel' : '')
         + '" onclick="rfPick(\'carrier\',\'' + x[0] + '\')">' + esc(x[1]) + '</button>').join('')
     + '</div>';
+  /* on a partial, the carrier's share is the refunded share of its cost (Sep 15) */
+  const partialNow = isPart && amtOk && amt + 0.004 < cap;
+  const cShare = partialNow ? Math.round((cost || 0) * amt / (collectedAmt || 1) * 100) / 100 : (cost || 0);
+  const cWord = partialNow ? money(cShare) + ' of the carrier’s ' + money(cost || 0) : money(cost || 0);
   if(RF.carrier === 'yes'){
-    h += '<div class="conseq good"><b>The carrier returns ' + money(cost || 0) + '.</b> '
-      + 'The carrier cost and Speedy’s share both reverse and this payment nets to nothing.</div>';
+    h += '<div class="conseq good"><b>The carrier returns ' + cWord + '.</b> '
+      + (partialNow ? 'That share of the carrier cost and of Speedy’s fee both reverse.' : 'The carrier cost and Speedy’s share both reverse and this payment nets to nothing.') + '</div>';
   } else if(RF.carrier === 'no'){
-    h += '<div class="loss"><b>' + money(cost || 0) + ' is money Speedy has lost.</b> '
-      + first + ' is refunded in full, the carrier keeps its premium, and the difference comes '
+    h += '<div class="loss"><b>' + cWord + ' is money Speedy has lost.</b> '
+      + first + ' is refunded ' + (partialNow ? money(amt) : 'in full') + ', the carrier keeps its premium, and the difference comes '
       + 'out of Speedy. It shows on the Trust tab as a loss, not as profit.</div>';
   } else if(RF.carrier === 'pending'){
-    h += '<div class="conseq">' + money(cost || 0) + ' stays attributed to '
+    h += '<div class="conseq">' + cWord + ' stays attributed to '
       + esc(p.carrier_name || 'the carrier') + ' and this goes on the <b>carrier recovery</b> list '
       + 'until somebody confirms it. Nothing chases it on its own.</div>';
   } else {
@@ -1575,14 +1625,16 @@ function drawRefund(){
        rate is worse than no number: say what reverses and where, and let the agent's
        own Earnings screen show their figure. */
     + (fee != null
-        ? '<li>Speedy’s <b>' + money(fee) + '</b> on this payment is <span class="neg">reversed</span>, '
+        ? '<li>' + (partialNow
+              ? 'Of Speedy’s <b>' + money(fee) + '</b> on this payment, <b>' + money(Math.round(fee * amt / (collectedAmt || 1) * 100) / 100) + '</b> \u2014 the refunded share \u2014 is <span class="neg">reversed</span>, '
+              : 'Speedy’s <b>' + money(fee) + '</b> on this payment is <span class="neg">reversed</span>, ')
           + 'and the commission released on it comes back off <b>'
           + esc(p.commission_to_name || 'whoever earned it') + '</b>’s total for <b>this month</b> '
           + '— the month of the refund, not the month of the charge. A closed month never moves.</li>'
         : '<li>This payment has never been audited, so no commission has been released on it and '
           + 'there is none to reverse.</li>')
     + (cost != null && RF.carrier
-        ? '<li>The ' + money(cost) + ' carrier cost is <b>'
+        ? '<li>The ' + (partialNow ? money(cShare) + ' refunded share of the ' + money(cost) + ' carrier cost' : money(cost) + ' carrier cost') + ' is <b>'
           + (RF.carrier === 'yes' ? 'reversed' : RF.carrier === 'no' ? 'a loss to Speedy' : 'held open for recovery')
           + '</b>.</li>' : '')
     + (nz && nz.channel === 'email'
@@ -1603,12 +1655,12 @@ function drawRefund(){
   const nzReady = !!(nz && (
     (nz.channel === 'email' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(nz.to || '')))
     || (nz.channel === 'none' && String(nz.skip_reason || '').trim())));
-  const ready = !!(RF.reason && RF.carrier && nzReady);
+  const ready = !!(RF.reason && RF.carrier && nzReady && amtOk);
   h += '<div id="rfMsg" class="note" style="min-height:0"></div>'
     + '<button class="btn ' + (isReq ? 'btn-blue' : 'btn-red') + '" ' + (ready ? '' : 'disabled style="opacity:.45;cursor:not-allowed" ')
       + 'onclick="submitRefund()">'
       + (isReq ? 'Send to the owner for approval' : (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '')) + '</button>'
-    + (ready ? '' : '<div class="note" style="text-align:center">Answer why, the carrier, and whether to tell the client first.</div>')
+    + (ready ? '' : '<div class="note" style="text-align:center">' + (!amtOk ? 'Enter the amount first.' : 'Answer why, the carrier, and whether to tell the client first.') + '</div>')
     + '<button class="btn btn-ghost" onclick="closeRefund()">Cancel</button>';
 
   document.getElementById('rfBody').innerHTML = h;
@@ -1630,14 +1682,16 @@ async function submitRefund(){
   const first = String((RF.c.client && (RF.c.client.business_name
     || [RF.c.client.first_name, RF.c.client.last_name].filter(Boolean).join(' '))) || 'the client').split(' ')[0];
   const isReq = !RF.c.can_refund;
-  if(!isReq && !confirm('Send ' + money(RF.amount) + ' back to ' + first + '?\n\nThis cannot be undone from here.')) return;
+  if(!rfAmtOk()) return say('Enter an amount between $0.01 and ' + money(refundable(RF.p)) + '.', true);
+  const partOf = RF.amount + 0.004 < refundable(RF.p) ? ' (part of ' + money(refundable(RF.p)) + ')' : '';
+  if(!isReq && !confirm('Send ' + money(RF.amount) + partOf + ' back to ' + first + '?\n\nThis cannot be undone from here.')) return;
 
   say(isReq ? 'Sending for approval…' : 'Refunding…');
   const btn = document.querySelector('#refundSheet .btn-red, #refundSheet .btn-blue');
   if(btn){ btn.disabled = true; btn.style.opacity = '.45'; }
   if(!RF.notify) return say('Say whether to tell the client.', true);
   const r = await apiPost({ action: isReq ? 'request_refund' : 'refund_payment', payment_id: RF.id,
-    reason: RF.reason, carrier: RF.carrier, note: note, notify: RF.notify });
+    reason: RF.reason, carrier: RF.carrier, note: note, notify: RF.notify, amount: RF.amount });
   if(r && r.ok && isReq){
     const done = RF.clientNo;
     closeRefund();

@@ -254,9 +254,11 @@ function payHistoryHtml(c, opts){
          what decided whether the client still owes the money, so it belongs on the row
          and not only in an event nobody opens. */
       + (isRefund
-          ? '<div style="font-size:11px;margin-top:3px;color:var(--mute)">Refunds the '
-            + (refParent ? money(refParent.amount) + ' payment from ' + esc(String(refParent.ts||'').slice(0,10))
-                         : 'earlier payment on this client')
+          ? '<div style="font-size:11px;margin-top:3px;color:var(--mute)">Refunds '
+            /* a partial names its share: "Refunds $100.00 of the $559.12 payment" (Sep 15) */
+            + (refParent ? (Math.abs(Number(p.amount || 0)) + 0.004 < Number(refParent.amount || 0) ? money(Math.abs(Number(p.amount || 0))) + ' of the ' : 'the ')
+                           + money(refParent.amount) + ' payment from ' + esc(String(refParent.ts||'').slice(0,10))
+                         : 'the earlier payment on this client')
             + (p.refund_reason ? ' · ' + esc(String(p.refund_reason).replace(/_/g, ' ')) : '')
             + (p.refund_carrier ? ' · carrier money '
                 + (p.refund_carrier === 'yes' ? 'returned'
@@ -279,6 +281,19 @@ function payHistoryHtml(c, opts){
             + ' requested by ' + esc(String(p.refund_request.requested_by_name || p.refund_request.requested_by).split(' ')[0])
             + ' on ' + esc(String(p.refund_request.requested_at || '').slice(0, 10))
             + ' — <b>waiting for the owner</b></div>'
+          : '')
+      /* THE DECISION (Sep 15): what the owner did with the request - as asked, for a
+         different amount, or declined and why. Only while nothing newer is pending. */
+      + (!p.refund_request && p.refund_decision
+          ? '<div style="font-size:11px;margin-top:3px;color:' + (p.refund_decision.status === 'approved' ? 'var(--green)' : 'var(--red-ink)') + '">'
+            + (p.refund_decision.status === 'approved'
+                ? 'Refund request <b>approved</b>' + (p.refund_decision.approved_amount != null && Math.abs(p.refund_decision.approved_amount - p.refund_decision.amount) > 0.004
+                    ? ' for <b>' + money(p.refund_decision.approved_amount) + '</b> of the ' + money(p.refund_decision.amount) + ' asked'
+                    : ' as asked, ' + money(p.refund_decision.amount))
+                : 'Refund request for ' + money(p.refund_decision.amount) + ' <b>declined</b>')
+            + ' by ' + esc(String(p.refund_decision.decided_by_name || p.refund_decision.decided_by || '').split(' ')[0])
+            + ' on ' + esc(String(p.refund_decision.decided_at || '').slice(0, 10))
+            + (p.refund_decision.note ? ' — “' + esc(p.refund_decision.note) + '”' : '') + '</div>'
           : '')
       /* And on the payment itself: how much of it has gone back. */
       + (!isRefund && refundedOff > 0

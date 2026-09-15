@@ -210,6 +210,8 @@
   .sbgo{background:var(--red);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;flex:1}
   .sbgo:disabled{opacity:.5;cursor:default}
   .lbl{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
+  .rqamt{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .rqamt input{width:110px;font-size:15px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--navy);color:var(--ink)}
   .lbl.amber{background:rgba(245,166,35,.15);color:var(--amber)}
   .lbl.green{background:rgba(47,191,113,.15);color:var(--green)}
   .lbl.red{background:rgba(224,49,49,.15);color:#ff7b7b}
@@ -2944,6 +2946,7 @@ function refundsHtml() {
     h += '<div class="rq" id="rq_' + esc(q.id) + '">'
       + '<div class="row" style="align-items:flex-start;gap:10px">'
       + '<div><b style="font-size:15px">' + money(q.amount) + '</b>'
+      + (Number(q.amount) + 0.004 < Number(p.amount || 0) ? ' <span class="lbl">part</span>' : '')
       + ' <span class="muted" style="font-size:12px">of ' + money(p.amount) + ' · client ' + esc(String(q.client_no || ''))
       + (q.client_name ? ' ' + esc(q.client_name) : '') + '</span></div>'
       + '<span class="lbl amber">needs you</span></div>'
@@ -2964,8 +2967,15 @@ function refundsHtml() {
       + '<li>A note goes on the HawkSoft file; the receipt stays</li>'
       + '</ul>'
       + '<div id="rqmsg_' + esc(q.id) + '" class="shint" style="margin-top:6px;min-height:0"></div>'
+      /* THE OWNER MAY CHANGE THE AMOUNT (Saif, Sep 15) - full to part, or less. The
+         box starts at what was asked; the button follows it; the cap is what is still
+         refundable on the payment. */
+      + '<div class="rqamt"><span class="muted" style="font-size:12px">Approve</span><span style="font-weight:700">$</span>'
+      + '<input id="rqamt_' + esc(q.id) + '" type="text" inputmode="decimal" value="' + esc(Number(q.amount).toFixed(2)) + '" oninput="rqAmtChanged(\'' + esc(q.id) + '\', this.value)">'
+      + '<span class="muted" style="font-size:12px">of ' + money(q.refundable != null ? q.refundable : p.amount) + ' refundable</span>'
+      + '<span id="rqamtnote_' + esc(q.id) + '" class="muted" style="font-size:11.5px"></span></div>'
       + '<div class="rqacts">'
-      + '<button class="rqok" onclick="decideRefund(\'' + esc(q.id) + '\', true)">Approve &amp; refund ' + money(q.amount) + '</button>'
+      + '<button class="rqok" id="rqok_' + esc(q.id) + '" onclick="decideRefund(\'' + esc(q.id) + '\', true)">Approve &amp; refund ' + money(q.amount) + '</button>'
       + '<button class="rqno" onclick="declineRefund(\'' + esc(q.id) + '\')">Decline…</button>'
       + '</div></div>';
   }
@@ -2995,8 +3005,9 @@ function refundsHtml() {
   if (done.length) {
     h += '<div class="sgrp" style="margin-top:22px">Decided · last ' + done.length + '</div>';
     for (const q of done) {
+      const changed = q.status === 'approved' && q.approved_amount != null && Math.abs(q.approved_amount - q.amount) > 0.004;
       h += '<div class="rq" style="opacity:.8">'
-        + '<div class="row"><div>' + money(q.amount) + ' <span class="muted" style="font-size:12px">· client ' + esc(String(q.client_no || ''))
+        + '<div class="row"><div>' + (changed ? money(q.approved_amount) + ' <span class="muted" style="font-size:12px">approved of ' + money(q.amount) + ' asked</span>' : money(q.amount)) + ' <span class="muted" style="font-size:12px">· client ' + esc(String(q.client_no || ''))
         + (q.client_name ? ' ' + esc(q.client_name) : '') + ' · asked by ' + esc(q.requested_by_name || q.requested_by) + '</span></div>'
         + '<span class="lbl ' + (q.status === 'approved' ? 'green' : 'red') + '">' + esc(q.status) + '</span></div>'
         + '<div class="muted" style="font-size:11.5px;margin-top:3px">' + esc(q.status) + ' by ' + esc(q.decided_by_name || q.decided_by || '')
@@ -3010,13 +3021,30 @@ function refundsHtml() {
 /* Every outcome — approved, declined, or the refund failing at Clover — is said on the
    card itself. A request whose approval FAILED stays in the queue, because the money
    did not move, and the message says so. */
+function rqParse(v){ const n = Math.round(Number(String(v || '').replace(/[^0-9.]/g, '')) * 100) / 100; return Number.isFinite(n) ? n : 0; }
+function rqAmtChanged(id, v) {
+  const q = (RQ_DATA.pending || []).find(x => x.id === id); if (!q) return;
+  const cap = q.refundable != null ? q.refundable : Number((q.payment || {}).amount || 0);
+  const n = rqParse(v);
+  const ok = n >= 0.01 && n <= cap + 0.004;
+  const btn = $('#rqok_' + id), note = $('#rqamtnote_' + id);
+  if (btn) { btn.disabled = !ok; btn.style.opacity = ok ? '' : '.45'; btn.textContent = ok ? 'Approve & refund ' + money(n) : 'Enter an amount up to ' + money(cap); }
+  if (note) note.textContent = !ok ? '' : Math.abs(n - Number(q.amount)) > 0.004 ? (n < Number(q.amount) ? 'part of the ' + money(q.amount) + ' asked · the fee and carrier shares scale to it' : 'more than the ' + money(q.amount) + ' asked') : '';
+}
 async function decideRefund(id, approve, note) {
   const msg = $('#rqmsg_' + id);
   const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
   const q = (RQ_DATA.pending || []).find(x => x.id === id); if (!q) return;
-  if (approve && !confirm('Refund ' + money(q.amount) + ' to client ' + q.client_no + ' now, as ' + (q.requested_by_name || q.requested_by) + ' asked?\n\nThis cannot be undone from here.')) return;
+  const box = $('#rqamt_' + id);
+  const amt = approve ? (box ? rqParse(box.value) : Number(q.amount)) : null;
+  if (approve) {
+    const cap = q.refundable != null ? q.refundable : Number((q.payment || {}).amount || 0);
+    if (!(amt >= 0.01 && amt <= cap + 0.004)) return say('Enter an amount between $0.01 and ' + money(cap) + '.', true);
+  }
+  const changed = approve && Math.abs(amt - Number(q.amount)) > 0.004;
+  if (approve && !confirm('Refund ' + money(amt) + ' to client ' + q.client_no + ' now' + (changed ? ' (' + (q.requested_by_name || q.requested_by) + ' asked for ' + money(q.amount) + ')' : ', as ' + (q.requested_by_name || q.requested_by) + ' asked') + '?\n\nThis cannot be undone from here.')) return;
   say(approve ? 'Refunding…' : 'Declining…');
-  const r = await apiPostBody({ action: 'decide_refund', request_id: id, approve: !!approve, note: note || '' });
+  const r = await apiPostBody({ action: 'decide_refund', request_id: id, approve: !!approve, note: note || '', ...(approve ? { amount: amt } : {}) });
   if (r && r.ok) {
     if (approve) {
       const cn = r.client_notice || {};

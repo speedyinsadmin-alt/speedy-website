@@ -110,7 +110,7 @@ async function sendRefundEmail(o) {
       <tr><td style="background:#0B1829;padding:12px 28px;text-align:center"><span style="color:#fff;font-size:18px;font-weight:bold">${o.voided ? 'Payment Cancelled' : 'Refund Issued'}</span></td></tr>
       <tr><td style="padding:22px 28px 6px">
         <p style="margin:0 0 14px;line-height:1.7;font-size:15px">Hi ${o.name || 'there'},</p>
-        <p style="margin:0 0 16px;line-height:1.7;font-size:15px">We have ${o.voided ? 'cancelled' : 'refunded'} a payment on your account. ${how}</p>
+        <p style="margin:0 0 16px;line-height:1.7;font-size:15px">We have ${o.voided ? 'cancelled' : 'refunded'} ${o.partial ? 'part of' : ''} a payment on your account. ${how}${o.partial ? ` This is a partial refund: $${Number(o.partial.remaining).toFixed(2)} of your $${Number(o.partial.of).toFixed(2)} payment stands.` : ''}</p>
         <table width="100%" cellpadding="9" cellspacing="0" style="border:1px solid #e0e0e0;font-size:14px;margin:0 0 18px">
           <tr style="background:#0B1829"><td colspan="2" style="color:#fff;font-weight:bold">${o.voided ? 'Cancellation' : 'Refund'} Details</td></tr>
           <tr><td style="color:#555;font-weight:bold;width:45%;border-bottom:1px solid #eee">Amount</td><td style="border-bottom:1px solid #eee"><b>${amt}</b></td></tr>
@@ -972,13 +972,25 @@ async function issueRefund(s, me2, b3, opts = {}) {
             + 'Refunding a part-paid obligation changes the commission arithmetic and is stage 4. '
             + 'Ask Saif rather than working around it.' });
       }
-      if (wantAmount != null && Math.abs(wantAmount - refundable) > 0.004) {
-        return res.status(400).json({ ok: false, error: 'partial_not_supported_yet',
-          message: `Only a full refund of $${refundable.toFixed(2)} can be issued today. `
-            + 'Whether Clover accepts a partial amount is still unverified, and getting it wrong '
-            + 'refunds more than intended.' });
+      /* STAGE 4 — PARTIAL (Sep 15). Proven on ZZTEST with a real dollar: Clover's
+         /v1/refunds takes an amount, takes a second partial on the same charge, and
+         refuses one over the charge ("Refund bigger than original payment"). So the
+         amount is the agent's, capped here at what is still refundable - which counts
+         earlier partials - and Clover caps it again on its side. */
+      let amount = refundable;
+      if (wantAmount != null) {
+        const w = Math.round(wantAmount * 100) / 100;
+        if (!Number.isFinite(w) || w < 0.01) return res.status(400).json({ ok: false, error: 'Enter an amount of at least $0.01.' });
+        if (w > refundable + 0.004) {
+          return res.status(400).json({ ok: false, error: 'over_refundable',
+            message: `Only $${refundable.toFixed(2)} is still refundable on this payment`
+              + (alreadyRefunded > 0 ? ` — $${alreadyRefunded.toFixed(2)} was refunded earlier.` : '.') });
+        }
+        amount = Math.min(w, refundable);
       }
-      const amount = refundable;
+      const partial = amount + 0.004 < refundable;
+      const refundableAfter = +(refundable - amount).toFixed(2);
+      const cents = Math.round(amount * 100);
 
       const isCard = /^(charge_live|charge_card|paylink_charge|terminal_charge)$/.test(String(row.kind))
         && !!row.txn_id;
@@ -986,12 +998,29 @@ async function issueRefund(s, me2, b3, opts = {}) {
          has been touched, and this says what WOULD happen. A request is only accepted
          if it would succeed right now; a request that would be refused later is
          refused now, to the person who can fix it. */
+      /* THE FEE THAT COMES BACK OFF. The parent's fee, in proportion to what is being
+         returned; the refund that empties the payment takes whatever is left, so the
+         reversals always add up to the parent's fee exactly, rounding included. */
+      const parentFee = row.fee_amount != null ? Number(row.fee_amount)
+        : (row.service_cost != null ? +(Number(row.amount || 0) - Number(row.service_cost)).toFixed(2) : null);
+      const feeReversedSoFar = +Math.abs(priorRefunds.reduce((a, r) => a + Number(r.fee_amount || 0), 0)).toFixed(2);
+      const feeReverse = parentFee == null ? null
+        : partial ? +(parentFee * amount / collected).toFixed(2)
+        : +(parentFee - Math.sign(parentFee) * feeReversedSoFar).toFixed(2);
+      /* THE CARRIER'S SHARE of what goes back. A full refund puts the whole carrier
+         cost in play (returned, lost, or to recover - the carrier answer). A partial
+         puts the refunded share of it in play, by the same rule as the fee, and the
+         piece that empties the payment takes whatever cost is left. Trust and the
+         recovery queue read this off the refund row instead of the parent's cost. */
+      const parentCost = row.service_cost != null ? Number(row.service_cost) : 0;
+      const costSoFar = +priorRefunds.reduce((a, r) => a + Number(((r.extra || {}).partial || {}).carrier_share != null ? r.extra.partial.carrier_share : parentCost), 0).toFixed(2);
+      const carrierShare = partial ? +(parentCost * amount / collected).toFixed(2) : +Math.max(0, parentCost - costSoFar).toFixed(2);
       if (opts.dryRun) {
         return res.status(200).json({ ok: true, dry_run: true, amount, method: isCard ? 'card' : 'cash',
           client_id: row.client_id, is_test: row.is_test === true,
+          partial, refundable, refundable_after: refundableAfter, collected, already_refunded: alreadyRefunded,
           obligation: REASONS[reason].owes ? 'still_owed' : 'closed',
-          fee_to_reverse: row.fee_amount != null ? Number(row.fee_amount)
-            : (row.service_cost != null ? +(Number(row.amount || 0) - Number(row.service_cost)).toFixed(2) : null),
+          fee_to_reverse: feeReverse, carrier_share: carrierShare,
           notify: { channel: nzChannel, to: nzChannel === 'email' ? nzTo : null,
             source: nzChannel === 'email' ? nzSource : null, skip_reason: nzChannel === 'none' ? nzSkip : null } });
       }
@@ -1010,9 +1039,11 @@ async function issueRefund(s, me2, b3, opts = {}) {
             method: 'POST',
             headers: { Authorization: `Bearer ${PRIV}`, 'Content-Type': 'application/json',
               /* Keyed on the PAYMENT, not on the request, so a double-tap from a slow
-                 phone cannot refund the same charge twice. */
-              'idempotency-key': 'refund-' + paymentId },
-            body: JSON.stringify({ charge: row.txn_id }),
+                 phone cannot refund the same charge twice. A partial, or any refund
+                 after an earlier one, carries the amount and the count too - otherwise
+                 the second partial would be answered with the first one's result. */
+              'idempotency-key': 'refund-' + paymentId + ((partial || priorRefunds.length) ? '-' + priorRefunds.length + '-' + cents : '') },
+            body: JSON.stringify({ charge: row.txn_id, amount: cents }),
           });
           cloverStatus = cr.status;
           const ctext = await cr.text();
@@ -1035,23 +1066,29 @@ async function issueRefund(s, me2, b3, opts = {}) {
                 clover_status: cloverStatus, clover_error: msg } }) });
           return res.status(402).json({ ok: false, error: `Clover refused the refund: ${msg}` });
         }
+        /* Clover answered an idempotent replay with a refund we already hold (a double
+           tap that got past the button): say so and record nothing new. */
+        if (clover && clover.id) {
+          const seen = await sbGet(s, `bridge_ledger?txn_id=eq.${encodeURIComponent(String(clover.id))}&kind=eq.charge_refund&select=id,amount`);
+          const prior = (seen.rows || [])[0];
+          if (prior) return res.status(200).json({ ok: true, refund_id: prior.id, amount: Math.abs(Number(prior.amount || 0)), method: 'card',
+            clover_refund_id: clover.id, already_recorded: true, client_notice: null });
+        }
       }
 
       /* ---- THE LEDGER ROW. Negative, pointing at its parent, carrying the reversal. ---- */
       const stamp = new Date().toISOString();
       const refundId = randomUUID();
-      /* The fee that was actually recognised on the parent. Null when the parent was
-           never audited — then there is no commission to take back, and the commission
-           loop skips a row with no fee, which is the correct outcome rather than a zero. */
-      const parentFee = row.fee_amount != null ? Number(row.fee_amount)
-        : (row.service_cost != null ? +(Number(row.amount || 0) - Number(row.service_cost)).toFixed(2) : null);
+      /* parentFee / feeReverse: computed above the dry run. Null when the parent was
+         never audited — then there is no commission to take back, and the commission
+         loop skips a row with no fee, which is the correct outcome rather than a zero. */
       const refundRow = {
         id: refundId,
         ts: stamp,
         kind: 'charge_refund',
         client_id: row.client_id,
         amount: -amount,
-        purpose: 'Refund — ' + REASONS[reason].label,
+        purpose: 'Refund — ' + REASONS[reason].label + (partial ? ' (part)' : ''),
         agent: me2,
         /* WHOSE COMMISSION MOVES: the person who earned the original, not whoever
            pressed the button. "A refund reduces commission in the month of the refund"
@@ -1064,7 +1101,7 @@ async function issueRefund(s, me2, b3, opts = {}) {
         audit_status: 'complete',
         audit_completed_at: stamp,
         audit_completed_by: me2,
-        fee_amount: parentFee != null ? -parentFee : null,
+        fee_amount: feeReverse != null ? -feeReverse : null,
         is_test: row.is_test === true,
         refund_of: paymentId,
         refund_reason: reason,
@@ -1073,7 +1110,8 @@ async function issueRefund(s, me2, b3, opts = {}) {
         /* Written with the row, result 'pending', and patched once the send has been
            attempted — so even a crash between the two leaves a record that says what
            was DECIDED, which is never silent. */
-        extra: { client_notice: { channel: nzChannel, to: nzChannel === 'email' ? nzTo : null,
+        extra: { partial: { is_partial: partial, of: collected, refundable_before: refundable, refundable_after: refundableAfter, carrier_share: carrierShare },
+          client_notice: { channel: nzChannel, to: nzChannel === 'email' ? nzTo : null,
           source: nzChannel === 'email' ? nzSource : null, chosen_by: me2, at: stamp,
           skip_reason: nzChannel === 'none' ? nzSkip : null,
           result: nzChannel === 'email' ? 'pending' : 'skipped',
@@ -1114,6 +1152,7 @@ async function issueRefund(s, me2, b3, opts = {}) {
           to: nzTo, name: cn.business_name || cn.first_name || '',
           amount, method: isCard ? 'card' : 'cash', voided: isCard && ageMin < 25,
           original: `$${Number(row.amount || 0).toFixed(2)} on ${String(row.ts || '').slice(0, 10)}${row.ref ? ' · ' + row.ref : ''}`,
+          partial: partial ? { of: collected, remaining: refundableAfter } : null,
           reason: REASONS[reason].label, confirmation: (clover && clover.id) || null,
           stamp: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) });
         notice.result = r.startsWith('sent to') ? 'sent' : 'failed';
@@ -1136,18 +1175,19 @@ async function issueRefund(s, me2, b3, opts = {}) {
         const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
           method: 'POST',
           body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
-            note: `REFUND — $${amount.toFixed(2)} returned to the client `
+            note: (partial ? `PARTIAL REFUND — $${amount.toFixed(2)} of the $${collected.toFixed(2)} payment returned to the client ` : `REFUND — $${amount.toFixed(2)} returned to the client `)
               + (isCard
                   ? `on the card used for the original payment (Clover refund ${(clover && clover.id) || 'n/a'}).`
                   : `in cash by the agent.`)
               + ` The original payment of $${Number(row.amount || 0).toFixed(2)} on `
               + `${String(row.ts || '').slice(0, 10)}${row.txn_id ? ' (' + row.txn_id + ')' : ''} REMAINS ON FILE `
               + `and is unchanged — a filed receipt cannot be withdrawn. `
+              + (partial ? `$${refundableAfter.toFixed(2)} of the payment stands${alreadyRefunded > 0 ? ` ($${alreadyRefunded.toFixed(2)} was refunded earlier)` : ''}. ` : '')
               + `Reason: ${REASONS[reason].label}. `
               + (REASONS[reason].owes
                   ? `The client still owes what they owed; this does not write the balance off. `
                   : `This closes the obligation — nothing further is owed on it. `)
-              + `Carrier money: ${carrier === 'yes' ? 'returned by the carrier'
+              + `Carrier money${partial ? ` ($${carrierShare.toFixed(2)} of the carrier's $${parentCost.toFixed(2)})` : ''}: ${carrier === 'yes' ? 'returned by the carrier'
                   : carrier === 'no' ? 'NOT returned — absorbed by Speedy' : 'not returned yet'}. `
               + noticeLine + ` `
               + `Refunded by ${me2}. Note: ${note}` }) });
@@ -1166,8 +1206,9 @@ async function issueRefund(s, me2, b3, opts = {}) {
             reason, reason_label: REASONS[reason].label,
             obligation: REASONS[reason].owes ? 'still owed' : 'closed',
             total_owed: { from: owedBefore, to: owedAfter },
-            carrier, carrier_cost: row.service_cost != null ? Number(row.service_cost) : null,
-            fee_reversed: parentFee,
+            carrier, carrier_cost: row.service_cost != null ? Number(row.service_cost) : null, carrier_share: carrierShare,
+            fee_reversed: feeReverse, parent_fee: parentFee,
+            partial, collected, refundable_before: refundable, refundable_after: refundableAfter,
             commission_to: refundRow.commission_to,
             hawksoft_note: noteOk, note,
             client_notice: notice,
@@ -1177,10 +1218,11 @@ async function issueRefund(s, me2, b3, opts = {}) {
         refund_id: refundId,
         client_notice: notice,
         amount, method: isCard ? 'card' : 'cash',
+        partial, refundable_after: refundableAfter, fee_reversed: feeReverse, carrier_share: carrierShare,
         clover_refund_id: (clover && clover.id) || null,
         obligation: REASONS[reason].owes ? 'still_owed' : 'closed',
         total_owed_now: owedAfter,
-        fee_reversed: parentFee,
+        parent_fee: parentFee,
         hawksoft_note: noteOk,
         /* The one thing the agent will be asked, in the words to use. */
         tell_the_client: isCard
@@ -1748,6 +1790,12 @@ if (view === 'portal_share_due') {
          instead of offering the button again. */
       const rqs = await sbGet(s, `refund_requests?client_id=eq.${no}&status=eq.pending&select=id,payment_id,requested_by,requested_at,amount,reason`);
       const rqBy = Object.fromEntries((rqs.rows || []).map(r => [r.payment_id, r]));
+      /* and the last DECISION on each payment (Sep 15): the agent who asked sees what the
+         owner did with it - approved as asked, approved for a different amount, declined
+         and why - instead of a refund row appearing with no explanation, or nothing. */
+      const dec = await sbGet(s, `refund_requests?client_id=eq.${no}&status=in.(approved,declined)&select=id,payment_id,requested_by,requested_at,amount,approved_amount,status,decided_by,decided_at,decision_note&order=decided_at.desc&limit=40`);
+      const decBy = {};
+      for (const r of (dec.rows || [])) if (!decBy[r.payment_id]) decBy[r.payment_id] = r;
       return res.status(200).json({
         ok: true, client, policies: po.rows || [],
         recent: (pay.rows || []).slice(0, 6),
@@ -1807,6 +1855,11 @@ if (view === 'portal_share_due') {
           refund_request: rqBy[r.id] ? { id: rqBy[r.id].id, requested_by: rqBy[r.id].requested_by,
             requested_by_name: AGENT_NAME[rqBy[r.id].requested_by] || rqBy[r.id].requested_by,
             requested_at: rqBy[r.id].requested_at, amount: Number(rqBy[r.id].amount), reason: rqBy[r.id].reason } : null,
+          refund_decision: decBy[r.id] ? { id: decBy[r.id].id, status: decBy[r.id].status,
+            requested_by: decBy[r.id].requested_by, requested_by_name: AGENT_NAME[decBy[r.id].requested_by] || decBy[r.id].requested_by,
+            amount: Number(decBy[r.id].amount), approved_amount: decBy[r.id].approved_amount != null ? Number(decBy[r.id].approved_amount) : null,
+            decided_by: decBy[r.id].decided_by, decided_by_name: AGENT_NAME[decBy[r.id].decided_by] || decBy[r.id].decided_by,
+            decided_at: decBy[r.id].decided_at, note: decBy[r.id].decision_note || null } : null,
           // NOTE: no commission figures here — the client log is shared with every agent
         })),
         /* The card gated its correction links on "I earn it or I took it", so an ADMIN
@@ -2685,6 +2738,18 @@ if (view === 'portal_share_due') {
       if (!rq) return res.status(404).json({ ok: false, error: 'No such request.' });
       if (rq.status !== 'pending') return res.status(409).json({ ok: false, error: `That request was already ${rq.status}.` });
       const stamp = new Date().toISOString();
+      /* THE OWNER MAY CHANGE THE AMOUNT (Saif, Sep 15): an agent asked for the whole
+         payment when only the difference was wrong. The approved amount is what is
+         refunded, recorded on the request, and said on the row so the agent sees
+         "asked $559.12, approved $100.00". Capped by the refund code like any amount. */
+      const requestedAmt = Number(rq.amount);
+      let approvedAmt = requestedAmt;
+      if (approve && b3.amount != null) {
+        const w = Math.round(Number(b3.amount) * 100) / 100;
+        if (!Number.isFinite(w) || w < 0.01) return res.status(400).json({ ok: false, error: 'Enter an amount of at least $0.01.' });
+        approvedAmt = w;
+      }
+      const amountChanged = approve && Math.abs(approvedAmt - requestedAmt) > 0.004;
       let refundOut = null;
       if (approve) {
         /* The agent's answers, verbatim, plus who asked — so the ledger row, the
@@ -2692,8 +2757,9 @@ if (view === 'portal_share_due') {
            approved, not something Tony did on his own. */
         refundOut = await issueRefund(s, me2, {
           payment_id: rq.payment_id, reason: rq.reason, carrier: rq.carrier, notify: rq.notify,
-          note: rq.note + ` (requested by ${rq.requested_by}, approved by ${me2}` + (decisionNote ? ': ' + decisionNote : '') + ')',
-          amount: Number(rq.amount) });
+          note: rq.note + ` (requested by ${rq.requested_by}, approved by ${me2}` + (decisionNote ? ': ' + decisionNote : '')
+            + (amountChanged ? `; amount changed from $${requestedAmt.toFixed(2)} asked to $${approvedAmt.toFixed(2)}` : '') + ')',
+          amount: approvedAmt });
         if (refundOut.status !== 200) {
           /* The request STAYS PENDING: the refund did not happen, so the queue must
              still show it. The error goes back to Tony as-is. */
@@ -2703,13 +2769,16 @@ if (view === 'portal_share_due') {
       await fetch(`${s.base}/rest/v1/refund_requests?id=eq.${encodeURIComponent(reqId)}`, {
         method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
         body: JSON.stringify({ status: approve ? 'approved' : 'declined', decided_by: me2, decided_at: stamp,
-          decision_note: decisionNote || null, refund_id: approve ? refundOut.body.refund_id : null }) });
+          decision_note: decisionNote || null, refund_id: approve ? refundOut.body.refund_id : null,
+          approved_amount: approve ? approvedAmt : null }) });
       await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
         body: JSON.stringify({ ts: stamp, actor: me2, kind: 'refund.decided', client_no: rq.client_id,
           source: 'console', payload: { request_id: reqId, payment_id: rq.payment_id, requested_by: rq.requested_by,
-            amount: Number(rq.amount), approved: approve, note: decisionNote || null,
+            amount: requestedAmt, approved_amount: approve ? approvedAmt : null, amount_changed: amountChanged,
+            approved: approve, note: decisionNote || null,
             refund_id: approve ? refundOut.body.refund_id : null } }) });
       return res.status(200).json({ ok: true, approved: approve, request_id: reqId,
+        requested_amount: requestedAmt, approved_amount: approve ? approvedAmt : null, amount_changed: amountChanged,
         ...(approve ? refundOut.body : {}) });
     }
 
@@ -3035,17 +3104,26 @@ if (view === 'portal_share_due') {
       sbGet(s, 'refund_requests?status=eq.pending&is_test=is.false&select=*&order=requested_at.asc&limit=100'),
       sbGet(s, 'refund_requests?status=neq.pending&is_test=is.false&select=*&order=decided_at.desc&limit=30'),
       sbGet(s, 'bridge_ledger?kind=eq.charge_refund&refund_carrier=eq.pending&is_test=is.false'
-        + '&select=id,ts,client_id,amount,refund_of,refund_reason,refund_note,agent,commission_to&order=ts.asc&limit=200'),
+        + '&select=id,ts,client_id,amount,refund_of,refund_reason,refund_note,agent,commission_to,extra&order=ts.asc&limit=200'),
     ]);
     /* Each pending request needs its payment's context — carrier, cost, fee — and each
        pending carrier recovery needs its PARENT's carrier and cost. One read for all. */
     const ids = [...new Set([
       ...(pend.rows || []).map(r => r.payment_id),
       ...(carr.rows || []).map(r => r.refund_of)].filter(Boolean))];
+    /* a partial refund's carrier share is on the row; a full one means the parent's cost */
+    const costOf = (r, p) => { const sh = ((r.extra || {}).partial || {}).carrier_share; return sh != null ? Number(sh) : (p.service_cost != null ? Number(p.service_cost) : 0); };
     const pays = ids.length
       ? await sbGet(s, `bridge_ledger?id=in.(${ids.map(encodeURIComponent).join(',')})&select=id,ts,client_id,amount,purpose,kind,ref,carrier_name,service_cost,fee_amount,commission_to,agent,audit_status`)
       : { rows: [] };
     const pay = Object.fromEntries((pays.rows || []).map(p => [p.id, p]));
+    /* what has already gone back on each pending payment, so the Console's amount box
+       is capped at what is still refundable (Sep 15) */
+    const backOff = {};
+    if (ids.length) {
+      const backs = await sbGet(s, `bridge_ledger?refund_of=in.(${ids.map(encodeURIComponent).join(',')})&kind=eq.charge_refund&select=refund_of,amount`);
+      for (const b of (backs.rows || [])) backOff[b.refund_of] = +((backOff[b.refund_of] || 0) + Math.abs(Number(b.amount || 0))).toFixed(2);
+    }
     const cids = [...new Set([...(pend.rows || []), ...(carr.rows || []), ...(done.rows || [])].map(r => r.client_id).filter(Boolean))];
     const cls = cids.length ? await sbGet(s, `clients?client_no=in.(${cids.join(',')})&select=client_no,first_name,last_name,business_name`) : { rows: [] };
     const cname = Object.fromEntries((cls.rows || []).map(c => [c.client_no, c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ')]));
@@ -3056,6 +3134,8 @@ if (view === 'portal_share_due') {
       amount: Number(r.amount), reason: r.reason, carrier: r.carrier, notify: r.notify, note: r.note,
       status: r.status, decided_by: r.decided_by, decided_by_name: nameOf(r.decided_by), decided_at: r.decided_at,
       decision_note: r.decision_note, refund_id: r.refund_id,
+      approved_amount: r.approved_amount != null ? Number(r.approved_amount) : null,
+      refundable: p.amount != null ? +(Number(p.amount) - Number(backOff[r.payment_id] || 0)).toFixed(2) : null,
       payment: { ts: p.ts, amount: p.amount != null ? Number(p.amount) : null, purpose: p.purpose, kind: p.kind, ref: p.ref,
         carrier_name: p.carrier_name, service_cost: p.service_cost != null ? Number(p.service_cost) : null,
         fee_amount: p.fee_amount != null ? Number(p.fee_amount) : null, audit_status: p.audit_status,
@@ -3070,9 +3150,9 @@ if (view === 'portal_share_due') {
       carrier_pending: (carr.rows || []).map(r => { const p = pay[r.refund_of] || {}; return {
         refund_id: r.id, payment_id: r.refund_of, client_no: r.client_id, client_name: cname[r.client_id] || null,
         refunded_at: r.ts, amount: Math.abs(Number(r.amount || 0)), reason: r.refund_reason, note: r.refund_note,
-        carrier_name: p.carrier_name || null, carrier_cost: p.service_cost != null ? Number(p.service_cost) : 0,
+        carrier_name: p.carrier_name || null, carrier_cost: costOf(r, p),
         refunded_by: nameOf(agentEmailOf(r.agent) || r.agent), commission_to_name: nameOf(r.commission_to) }; }),
-      carrier_pending_total: +((carr.rows || []).reduce((a, r) => a + ((pay[r.refund_of] || {}).service_cost != null ? Number(pay[r.refund_of].service_cost) : 0), 0)).toFixed(2),
+      carrier_pending_total: +((carr.rows || []).reduce((a, r) => a + costOf(r, pay[r.refund_of] || {}), 0)).toFixed(2),
     });
   }
 
@@ -3651,7 +3731,7 @@ if (view === 'portal_share_due') {
       /* refund_of / refund_carrier were READ in the refund loop below but never selected,
          so every refund's parent came back undefined: carrier cost 0, answer "pending".
          The stub in the harness returns whole rows and never noticed. Selected now. */
-      + 'refund_of,refund_carrier,refund_reason,refund_note,txn_id'
+      + 'refund_of,refund_carrier,refund_reason,refund_note,txn_id,extra'
       + '&order=ts.desc&limit=2000')).rows || [];
 
     /* Only real, collected money. A declined attempt never moved a cent, and a pay
@@ -3750,7 +3830,10 @@ if (view === 'portal_share_due') {
          the commission reversal can never disagree. */
       const feeBack = r.fee_amount != null ? Math.abs(Number(r.fee_amount)) : 0;
       kept -= feeBack;
-      const cost = parent && parent.service_cost != null ? Number(parent.service_cost) : 0;
+      /* a partial refund carries its own carrier share (Sep 15); an older full refund
+         has none on the row and means the whole parent cost */
+      const share = ((r.extra || {}).partial || {}).carrier_share;
+      const cost = share != null ? Number(share) : (parent && parent.service_cost != null ? Number(parent.service_cost) : 0);
       if (r.refund_carrier === 'yes') {
         toCarriers -= cost;                 // the carrier gave its share back too
       } else if (r.refund_carrier === 'no') {

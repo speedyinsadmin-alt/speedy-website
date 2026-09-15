@@ -868,7 +868,7 @@ async function issueRefund(s, me2, b3, opts = {}) {
       if (!['yes', 'no', 'pending'].includes(carrier)) {
         return res.status(400).json({ ok: false, error: 'Say whether the carrier is giving their money back: yes, no, or not yet.' });
       }
-      if (!note) return res.status(400).json({ ok: false, error: 'A reason in words is required — Tony and the next person will read it.' });
+      if (!note) return res.status(400).json({ ok: false, error: 'A reason in words is required — the owner and the next person will read it.' });
 
       /* ---- TELL THE CLIENT. Validated BEFORE any money moves, so a malformed notice
          cannot leave a refund half-recorded. Email only for now (Saif, Sep 11): the
@@ -942,7 +942,7 @@ async function issueRefund(s, me2, b3, opts = {}) {
         return res.status(400).json({ ok: false, error: 'That row never collected any money.' });
       }
       if (row.correction_status === 'pending') {
-        return res.status(400).json({ ok: false, error: 'That payment is waiting on Tony for a different correction. Settle that one first.' });
+        return res.status(400).json({ ok: false, error: 'That payment is waiting on the owner for a different correction. Settle that one first.' });
       }
 
       /* WHAT IS ACTUALLY REFUNDABLE — not row.amount. The obligation may have been paid
@@ -2206,7 +2206,7 @@ if (view === 'portal_share_due') {
             client_no: row.client_id, source: 'portal',
             payload: { payment_id: paymentId, amount: row.amount, from: row.client_id, to: toClient, reason } }) });
         return res.status(200).json({ ok: true, pending: true,
-          message: 'Sent to Tony to approve. It will stay out of your list until he decides.' });
+          message: 'Sent to the owner to approve. It will stay out of your list until they decide.' });
       }
 
       const applied = await applyClientMove(s, row, toClient, me2, reason, false);
@@ -2250,7 +2250,7 @@ if (view === 'portal_share_due') {
       const iCharged = agentEmailOf(row.agent) === me2;
       const iOwn = (row.commission_to || agentEmailOf(row.agent)) === me2;
       if (!isAdmin && !iCharged && !iOwn) return res.status(403).json({ ok: false, error: 'You can only correct a payment you took.' });
-      if (row.audit_status === 'complete') return res.status(403).json({ ok: false, error: 'That payment is already approved, so its fee is final. Ask Tony for a correction.' });
+      if (row.audit_status === 'complete') return res.status(403).json({ ok: false, error: 'That payment is already approved, so its fee is final. Ask the owner for a correction.' });
       const totalBefore = row.total_owed == null ? null : Number(row.total_owed);
       if (row.balance_of) return res.status(400).json({ ok: false, error: 'That is a balance payment. Set the total on the original charge instead.' });
       if (/declin|fail|void|refund/i.test(String(row.kind || '')) || ['declined', 'link_sent', 'not_a_payment', 'void', 'refunded'].includes(String(row.audit_status || ''))) {
@@ -2300,10 +2300,10 @@ if (view === 'portal_share_due') {
          audit_status filter, so that fee would keep counting as Speedy profit on a row
          nobody can reach any more. Admin only, and only via a deliberate decision. */
       if (row.audit_status === 'complete') {
-        return res.status(403).json({ ok: false, error: 'That payment is already audited. Ask Tony — its carrier cost and fee would have to be undone first.' });
+        return res.status(403).json({ ok: false, error: 'That payment is already audited. Ask the owner — its carrier cost and fee would have to be undone first.' });
       }
       if (row.correction_status === 'pending') {
-        return res.status(403).json({ ok: false, error: 'That payment is waiting on Tony for a different correction.' });
+        return res.status(403).json({ ok: false, error: 'That payment is waiting on the owner for a different correction.' });
       }
       /* Declined, voided and refunded rows never moved money. Tested inline: the
          NON_PAYMENT list lives inside portal_home's own block and is not in scope here. */
@@ -2348,7 +2348,7 @@ if (view === 'portal_share_due') {
       /* Carrier work already recorded on this row. Clearing it silently would throw away
          a carrier payment somebody entered; refusing leaves the row exactly as it is. */
       if (row.service_cost != null || row.fee_amount != null) {
-        return res.status(400).json({ ok: false, error: 'That payment already has a carrier cost recorded, so it is being audited as its own sale. Ask Tony.' });
+        return res.status(400).json({ ok: false, error: 'That payment already has a carrier cost recorded, so it is being audited as its own sale. Ask the owner.' });
       }
 
       const par = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(parentId)}&select=*`);
@@ -2369,7 +2369,7 @@ if (view === 'portal_share_due') {
       const mode = String((req.body || {}).mode || 'balance');
       if (mode === 'add') {
         if (parent.audit_status === 'complete') {
-          return res.status(400).json({ ok: false, error: 'That earlier payment is already approved, so its fee is final. Ask Tony for a correction instead.' });
+          return res.status(400).json({ ok: false, error: 'That earlier payment is already approved, so its fee is final. Ask the owner for a correction instead.' });
         }
         const sib0 = await sbGet(s, `bridge_ledger?balance_of=eq.${encodeURIComponent(parentId)}&select=amount`);
         const already0 = (sib0.rows || []).reduce((a, r) => a + Number(r.amount || 0), 0);
@@ -2421,7 +2421,7 @@ if (view === 'portal_share_due') {
          land. Inventing an over-collection is not. */
       if (amt > outstanding + 0.005) {
         return res.status(400).json({ ok: false,
-          error: `This payment is $${amt.toFixed(2)} but only $${outstanding.toFixed(2)} is still owed on that one. Ask Tony — part of this money belongs somewhere else.` });
+          error: `This payment is $${amt.toFixed(2)} but only $${outstanding.toFixed(2)} is still owed on that one. Ask the owner — part of this money belongs somewhere else.` });
       }
 
       await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
@@ -2621,7 +2621,7 @@ if (view === 'portal_share_due') {
       const me2 = String(email).toLowerCase();
       if (!(await may(me2, 'refund'))) {
         return res.status(403).json({ ok: false, error: 'not_permitted',
-          message: 'You cannot issue a refund. Tony can, and he can also give you the permission on the Staff page.' });
+          message: 'You cannot issue a refund. The owner can, and can also give you the permission on the Staff page.' });
       }
       const out = await issueRefund(s, me2, req.body || {});
       return res.status(out.status).json(out.body);
@@ -2649,7 +2649,7 @@ if (view === 'portal_share_due') {
       if ((open.rows || []).length) {
         const o = open.rows[0];
         return res.status(409).json({ ok: false, error: 'already_requested',
-          message: `A refund of this payment is already waiting for Tony — asked by ${AGENT_NAME[o.requested_by] || o.requested_by} on ${String(o.requested_at).slice(0, 10)}.` });
+          message: `A refund of this payment is already waiting for the owner — asked by ${AGENT_NAME[o.requested_by] || o.requested_by} on ${String(o.requested_at).slice(0, 10)}.` });
       }
       const reqId = randomUUID();
       const stamp = new Date().toISOString();
@@ -2663,7 +2663,7 @@ if (view === 'portal_share_due') {
           source: 'portal', payload: { request_id: reqId, payment_id: paymentId, amount: d.amount,
             method: d.method, reason: row.reason, carrier: row.carrier, notify: d.notify, note: row.note } }) });
       return res.status(200).json({ ok: true, request_id: reqId, amount: d.amount,
-        message: `Sent to Tony. Nothing has been refunded yet — you will be told when he decides.` });
+        message: `Sent to the owner. Nothing has been refunded yet — you will be told when they decide.` });
     }
 
     /* Tony's half. Approve issues the refund NOW, through the same path, as Tony, with
@@ -2857,7 +2857,7 @@ if (view === 'portal_share_due') {
       const isAdmin = ADMIN_ALLOWLIST.includes(me2);
       if (!isAdmin) {
         if (row.commission_to !== me2) return res.status(403).json({ ok: false, error: 'Only the agent who earns this can share it.' });
-        if (row.share_locked_at) return res.status(403).json({ ok: false, error: 'This split is already set. Ask Tony if it needs changing.' });
+        if (row.share_locked_at) return res.status(403).json({ ok: false, error: 'This split is already set. Ask the owner if it needs changing.' });
       }
 
       const helper = agentEmailOf(row.agent);
@@ -2909,10 +2909,10 @@ if (view === 'portal_share_due') {
           return res.status(403).json({ ok: false, error: 'You can only reassign a payment you charged or currently own.' });
         }
         if (toEmail === me && !iOwn) {
-          return res.status(403).json({ ok: false, error: 'You cannot assign a payment to yourself. Ask the owner or Tony.' });
+          return res.status(403).json({ ok: false, error: 'You cannot assign a payment to yourself. Ask the owner.' });
         }
         if (row.share_locked_at) {
-          return res.status(403).json({ ok: false, error: 'This payment is locked — its commission split has been set. Ask Tony to change it.' });
+          return res.status(403).json({ ok: false, error: 'This payment is locked — its commission split has been set. Ask the owner to change it.' });
         }
       }
 

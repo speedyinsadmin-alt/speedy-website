@@ -1259,7 +1259,7 @@ function trustMatch(items, q){
   return out;
 }
 const trustStat = s => s === 'complete' ? '<span class="pill g">audited</span>'
-  : s === 'ready_for_audit' ? '<span class="pill b">waiting for Tony</span>'
+  : s === 'ready_for_audit' ? '<span class="pill b">waiting for approval</span>'
   : s === 'balance' ? '<span class="pill g">balance paid</span>'
   : '<span class="pill a">' + esc(String(s || '').replace(/_/g, ' ')) + '</span>';
 const trustAmt = (v, colour, lit) => '<td class="amt"' + (colour ? ' style="color:' + colour + '"' : '') + '>'

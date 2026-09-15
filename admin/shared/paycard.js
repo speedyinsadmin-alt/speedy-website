@@ -47,7 +47,7 @@ function auditLineHtml(p){
   if(p.audit_status === 'invoice_open') return '<div style="font-size:11px;margin-top:3px;color:var(--mute)">No payment yet \u2014 the audit starts when the first payment comes in. Collect it from Charge \u2192 Pay this balance.</div>';
   /* Pacific, like every other stamp the agents read - the ISO slice printed UTC next to a "6 hr ago". */
   const t = ts => { try { return new Date(ts).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch(e){ return String(ts || '').slice(0, 16); } };
-  const first = n => esc(String(n || '').split(' ')[0] || 'Tony');
+  const first = n => esc(String(n || '').split(' ')[0] || 'the auditor');
   const sb = p.audit_sendback;
   if(p.audit_status === 'complete'){
     if(!p.audit_submitted_at) return '';
@@ -60,7 +60,7 @@ function auditLineHtml(p){
       + (p.audit_submitted_by_name ? ' by ' + first(p.audit_submitted_by_name) : '')
       + (p.audit_submitted_at ? ' · ' + esc(t(p.audit_submitted_at)) : '')
       + (sb ? ' · <b style="color:var(--amber-ink)">resubmitted after a send-back</b>' : '')
-      + ' · nothing is earned until Tony approves</div>'
+      + ' · nothing is earned until the auditor approves</div>'
       + (sb && sb.reply ? '<div style="font-size:11.5px;margin-top:4px;color:var(--mute);padding-left:9px;border-left:2px solid var(--line)">Your reply: “' + esc(sb.reply) + '”</div>' : '');
   }
   if(sb){
@@ -207,7 +207,7 @@ function payHistoryHtml(c, opts){
         : refundedOff > 0 ? (refundedOff + 0.004 >= Number(p.collected != null ? p.collected : p.amount) ? 'refunded' : 'part refunded')
         : isLink ? 'link sent · not paid'
         : invoiceOpen ? 'open invoice · nothing collected'
-        : isBal ? 'balance payment' : complete ? 'audited' : sentBack ? 'sent back' : waiting ? 'waiting for Tony' : 'needs proof') + '</span></div>'
+        : isBal ? 'balance payment' : complete ? 'audited' : sentBack ? 'sent back' : waiting ? 'waiting for the auditor' : 'needs proof') + '</span></div>'
       + '<div class="dim" style="font-size:11px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
       + (p.ref ? ' · ' + esc(p.ref) : '')
@@ -278,7 +278,7 @@ function payHistoryHtml(c, opts){
           ? '<div style="font-size:11px;margin-top:3px;color:var(--amber-ink)">Refund of ' + money(p.refund_request.amount)
             + ' requested by ' + esc(String(p.refund_request.requested_by_name || p.refund_request.requested_by).split(' ')[0])
             + ' on ' + esc(String(p.refund_request.requested_at || '').slice(0, 10))
-            + ' — <b>waiting for Tony</b></div>'
+            + ' — <b>waiting for the owner</b></div>'
           : '')
       /* And on the payment itself: how much of it has gone back. */
       + (!isRefund && refundedOff > 0
@@ -304,7 +304,7 @@ function payHistoryHtml(c, opts){
       + (opts.actions && !complete && !isBal && !isLink && !invoiceOpen && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ',' + Number(p.amount||0) + ')" '
             + 'style="margin-top:8px;text-align:center;background:' + (waiting ? 'transparent;border:1px solid var(--line);color:var(--blue-l)' : 'var(--amber);color:#2a1a00') + ';border-radius:9px;padding:8px;font-size:12.5px;font-weight:' + (waiting ? '600' : '700') + ';cursor:pointer">'
-            + (sentBack ? 'Fix and resubmit' : waiting ? 'Edit before Tony reviews' : 'Add proof of payment') + '</div>'
+            + (sentBack ? 'Fix and resubmit' : waiting ? 'Edit before the auditor reviews' : 'Add proof of payment') + '</div>'
           : '')
       /* Not the owner: documents only. save_carrier_leg is guarded server-side by
          mayTouchPayment, so offering the full audit here would let someone fill in a

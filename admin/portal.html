@@ -724,7 +724,7 @@ function openTodo(){
     return d === today ? 'today' : d === y ? 'yesterday' : d;
   };
   document.getElementById('todoBody').innerHTML =
-    '<div class="dim" style="font-size:12px;margin-bottom:10px">Each one needs the carrier cost and a receipt, then Tony approves it. '
+    '<div class="dim" style="font-size:12px;margin-bottom:10px">Each one needs the carrier cost and a receipt, then the auditor approves it. '
     + 'Commission is earned when he does. A row marked <span style="color:var(--red-ink)">sent back</span> has his reason on the client card.</div>'
     + UNFINISHED.map(u => {
         const started = u.audit_status === 'carrier_pending' && !u.audit_sendback;
@@ -740,7 +740,7 @@ function openTodo(){
           + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
           + esc(u.purpose || 'Payment') + ' · ' + when(u.ts) + ' · #' + u.client_no
           + (started ? ' · <span style="color:var(--amber-ink)">started, not finished</span>' : '')
-          + (waiting ? ' · <span style="color:var(--mute)">submitted · waiting for Tony</span>' : '')
+          + (waiting ? ' · <span style="color:var(--mute)">submitted · waiting for the auditor</span>' : '')
           + (back ? ' · <span style="color:var(--red-ink)">sent back — ' + esc(sendbackLabel(u.audit_sendback.code)) + '</span>' : '')
           + '</div></div>'
           + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)">'
@@ -1465,7 +1465,7 @@ function drawRefund(){
   const isVoid = isCard && isFinite(ageMin) && ageMin < 25;
 
   let h = '<div class="row" style="margin-bottom:2px">'
-    + '<b style="font-size:16px">' + (isReq ? 'Ask Tony to refund' : isVoid ? 'Void a payment' : 'Refund a payment') + '</b>'
+    + '<b style="font-size:16px">' + (isReq ? 'Ask for a refund' : isVoid ? 'Void a payment' : 'Refund a payment') + '</b>'
     + '<span class="dim" style="font-size:12px">Client ' + esc(String(RF.clientNo)) + ' · ' + esc(name) + '</span></div>';
 
   /* "Void a payment" in the header and "what you are refunding" underneath it is the
@@ -1560,11 +1560,11 @@ function drawRefund(){
   }
 
   if(isReq){
-    h += '<div class="warn">You can ask for this refund but not issue it. <b>Tony</b> approves refunds — '
+    h += '<div class="warn">You can ask for this refund but not issue it. <b>The owner</b> approves refunds — '
       + 'he can also give you the permission on the Staff page. Nothing below happens until he says yes; '
       + 'you will be told either way.</div>';
   }
-  h += '<div class="sec">' + (isReq ? 'What this will do once Tony approves' : 'What this will do') + '</div><ul class="will">'
+  h += '<div class="sec">' + (isReq ? 'What this will do once the owner approves' : 'What this will do') + '</div><ul class="will">'
     + '<li><b>' + esc(first) + ' gets ' + money(amt) + ' back</b> '
       + (isCard ? (isVoid ? '— the charge is cancelled before it settles.'
                           : 'on the card used for the original payment, usually 2 to 5 business days.')
@@ -1596,7 +1596,7 @@ function drawRefund(){
     + '</ul>';
 
   h += '<div class="sec">Reason — required</div>'
-    + '<textarea id="rfNote" rows="2" placeholder="Why is this being refunded? Tony and the next person will read this.">'
+    + '<textarea id="rfNote" rows="2" placeholder="Why is this being refunded? The owner and the next person will read this.">'
     + esc(RF.note || '') + '</textarea>'
     + '<div class="note">Stored with your name and the time, and shown wherever this refund appears.</div>';
 
@@ -1607,7 +1607,7 @@ function drawRefund(){
   h += '<div id="rfMsg" class="note" style="min-height:0"></div>'
     + '<button class="btn ' + (isReq ? 'btn-blue' : 'btn-red') + '" ' + (ready ? '' : 'disabled style="opacity:.45;cursor:not-allowed" ')
       + 'onclick="submitRefund()">'
-      + (isReq ? 'Send to Tony for approval' : (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '')) + '</button>'
+      + (isReq ? 'Send to the owner for approval' : (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '')) + '</button>'
     + (ready ? '' : '<div class="note" style="text-align:center">Answer why, the carrier, and whether to tell the client first.</div>')
     + '<button class="btn btn-ghost" onclick="closeRefund()">Cancel</button>';
 
@@ -1632,7 +1632,7 @@ async function submitRefund(){
   const isReq = !RF.c.can_refund;
   if(!isReq && !confirm('Send ' + money(RF.amount) + ' back to ' + first + '?\n\nThis cannot be undone from here.')) return;
 
-  say(isReq ? 'Sending to Tony…' : 'Refunding…');
+  say(isReq ? 'Sending for approval…' : 'Refunding…');
   const btn = document.querySelector('#refundSheet .btn-red, #refundSheet .btn-blue');
   if(btn){ btn.disabled = true; btn.style.opacity = '.45'; }
   if(!RF.notify) return say('Say whether to tell the client.', true);
@@ -1643,7 +1643,7 @@ async function submitRefund(){
     closeRefund();
     delete CLIENT_CACHE[done];
     await openClient(done);
-    alert(r.message || 'Sent to Tony.');
+    alert(r.message || 'Sent to the owner for approval.');
     return;
   }
   if(r && r.ok){
@@ -1996,7 +1996,7 @@ async function moveClient(paymentId, fromClientNo, amount){
   const to = parseInt(String(q).replace(/\D/g,''), 10);
   if(!to){ alert('Enter the client number.'); return; }
   if(to === fromClientNo){ alert('That is the same client.'); return; }
-  const why = prompt('Briefly, what happened? (Tony will see this)') || '';
+  const why = prompt('Briefly, what happened? (the owner will see this)') || '';
   if(!confirm('Move $' + Number(amount||0).toFixed(2) + ' from client #' + fromClientNo + ' to #' + to + '?\n\n'
     + 'No money moves — the card charge stays exactly as it is. Both client records get a correction note.')) return;
   const r = await apiPost({ action:'move_client', payment_id: paymentId, to_client: to, reason: why });

@@ -33,6 +33,8 @@ function normaliseAgentEmail(v) {
    wrote it (column default false), so once manual flagging stopped, test charges
    counted as revenue and commission and sat in agents' unfinished-audit queues. */
 const TEST_CLIENT_ID = 26081;
+/* the owner login: may run the refund probe from the Console without the admin key */
+const OWNER_LOGINS = ['info@speedyins.com'];
 
 /* Policy numbers were cut at 25 characters. The lookup is an EXACT string match,
    so a longer number was truncated, failed to match, and the payment filed at
@@ -723,7 +725,12 @@ export default async function handler(req, res) {
     if (!isAdmin && !userEmail && !PUBLIC_PAY.includes(action)) {
       return res.status(401).json({ ok: false, error: 'Sign in required.' });
     }
-    if (!isAdmin && userEmail && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create', 'probe_invoices', 'terminal_config', 'terminal_charge', 'invoice_open'].includes(action)) {
+    /* THE OWNER MAY RUN THE REFUND PROBE FROM THE CONSOLE (Saif, Sep 15). It spends at
+       most $1 on ZZTEST and every cap is checked inside the action itself (ZZTEST only,
+       is_test, <= $1, a card charge) - the admin key was gating money the probe already
+       refuses to touch. Only the owner login; everyone else still needs the key. */
+    const ownerProbe = !isAdmin && !!userEmail && OWNER_LOGINS.includes(String(userEmail).toLowerCase()) && action === 'probe_refund';
+    if (!isAdmin && userEmail && !ownerProbe && !['charge_lookup', 'charge_log', 'search_policy', 'charge_create_client', 'charge_full_test', 'probe_channels', 'ecomm_config', 'charge_live', 'charge_cash', 'paylink_create', 'probe_invoices', 'terminal_config', 'terminal_charge', 'invoice_open'].includes(action)) {
       return res.status(403).json({ ok: false, error: 'This action requires the admin key.' });
     }
 

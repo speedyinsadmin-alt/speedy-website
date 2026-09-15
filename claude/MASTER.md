@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 15 midday. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `f1406ff`.
+Last written Sep 15 afternoon. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `8ee67e7`.
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
 above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
@@ -131,7 +131,64 @@ live tables (attachments, bridge_ledger, events, Vercel runtime errors) for the 
 - The existing double copies in HawkSoft stay (no delete API); nothing to do on the
   platform side — the Console shows both chips, both point at the same bytes.
 
-### ⏭ TUESDAY SEP 15 — IN THIS ORDER
+### ✅ SEP 15 AFTERNOON · THE BIG-FILE TEST, THE 5 MB TRUTH, THE ROLE, THE DOCUMENT TYPE
+**The 15 MB test on ZZTEST (Saif, by hand).** `ZZTEST_big_15MB.pdf` (made by
+`make_big_pdf.mjs` in the harness folder) went to the bucket through the signed PUT:
+`26081/4587c5c1-….pdf`, 15,736,918 bytes, sha256 identical to the file on the Desktop,
+no inline copy. **HawkSoft did not take it and the page said "filed to HawkSoft"** — the
+refusal was swallowed by an empty catch. Two pushes:
+- `7b82799` add_document returns `hawksoft_status` + `hawksoft_why` and writes event
+  `document.hawksoft_refused`; the documents-only message is amber and honest. Saif
+  re-dropped the same file: the dedupe reused the row (no second copy), retried
+  HawkSoft only, and HawkSoft answered **400 "File exceeds max size of 5 MB."**
+- `e5a2795` **HawkSoft's ceiling is 5 MB, the platform's is 50.** `HS_MAX_BYTES`:
+  anything bigger stays on the platform only (status `too_big_for_hawksoft`, no POST);
+  the size hint says "over HawkSoft's 5 MB limit — stays on the platform" the moment the
+  file is picked, and the tick / documents message say it again. Under 5 MB unchanged.
+  Also: Back no longer asks "Leave without submitting?" after a successful upload (only
+  documents not yet uploaded count), and **"Note to Tony" → "Note to auditor"**.
+
+**The role, not the name (`fd8c38c`).** Every agent-facing "Tony" is now "the auditor"
+(audit: card, portal to-do, Console pill "waiting for approval") or "the owner" (refunds,
+corrections, splits, permissions — sheet, request row, the API's error messages).
+"Sent back by Tony" / "Approved by Tony" stay — facts about a person. Roster names and
+comments untouched. Eight suites re-pointed.
+
+**No silent document type (`8ee67e7`).** Saif: a single document took the dropdown's
+default "Carrier application" unless changed. Measured: 46 of 96 documents since Aug 15
+carried that type, at least four of them JPEGs. Mockup shown (`mock_doctype.html`),
+agreed, built:
+- The dropdown above the drop zone is gone. One file or ten opens the review sheet
+  with **nothing picked**: thumbnail, name, chips. The guess (file name → MIME → the
+  charge's purpose; never a type already on the payment) is a dashed amber chip with
+  "Looks like … Tap it to confirm." The button is dead and counts down ("Pick a type",
+  "Pick a type for 2 of 3", "Add 3 documents"). Chip order follows the charge
+  (`TYPE_ORDER`); a photo only gets the photo/ID kinds; "Set all to" leaves photos
+  alone; Other needs a name.
+- "Choose files" button; on a phone "Take photos…" asks once ("Photos of what?") and
+  every shot carries that kind, no sheet. On a computer the camera button is hidden
+  (`isPhone()`). Drag and drop unchanged.
+- **The tag on every row is a menu** (`.tagsel`): before upload it changes the row;
+  after upload it calls `set_doc_type` (documents only — never the receipt or the
+  proof; known types; Other needs a label; patches kind + doc_type + doc_label; event
+  `document.relabelled` with before/after). `carrier_list` now returns `documents`;
+  the page lists them under "Already on this payment" with the same menu and an amber
+  hint on a photo typed as anything else (`oddType`).
+- HawkSoft's copy keeps the description it was filed with — no rename endpoint — which
+  is the whole reason the choice is forced BEFORE upload.
+- `harnessDocType.mjs` (72), `mutateDocType` 30/30; the sheets' `.btn` buttons had no
+  rule and rendered as white browser slabs — styled. Four Chrome renders
+  (`renderDocType.mjs` → `doctype_*.png`).
+
+**Next conversation: the document center.** Saif wants to talk it through. Inputs that
+exist now: `attachments` rows with `kind`/`doc_type`/`doc_label`/`blob_url`/`sha256`/
+`filed_hawksoft`/`uploaded_by`; the review room in the Console; `set_doc_type`; the
+review sheet as the one labelling component; the 5 MB / 50 MB split. The plan sketched
+on Sep 15: same sheet for every entry point, a "needs a label" inbox for documents
+that arrive from elsewhere (never auto-typed), search by client / type / date / who,
+and the platform as the copy of record for anything HawkSoft could not take.
+
+### ⏭ TUESDAY SEP 15 — WHAT IS LEFT
 0. **Client 4600 — DONE by SQL Sep 14 night:** Laura's $0.50 placeholder row
    `d4398ea7-…` is now a real open invoice ($316 owed, $0 collected; event
    `invoice.converted_from_placeholder`). Assumed no cash was received — if 50 cents
@@ -139,16 +196,14 @@ live tables (attachments, bridge_ledger, events, Vercel runtime errors) for the 
    line by hand** (the $0.50 receipt there cannot be deleted): "The $0.50 cash receipt
    of Sep 14 was a placeholder — no cash was received; the $316 endorsement invoice is
    tracked on the Speedy platform." Then tell Laura the **Open invoice** method exists.
-1. **Try a big PDF on ZZTEST** (10–25 MB) through the carrier page — the first real
-   upload through the signed-URL path (`d36c8a0`). The harness ran against the
-   Supabase API shapes from the docs, not against the live bucket. If the PUT is refused,
-   the page says the status; `upload_url` in carrier.js is where to look. Bucket
-   `client-documents` file_size_limit was raised 5 MB → 50 MB by SQL on Sep 14.
+1. **Big PDF on ZZTEST — DONE Sep 15** (see above). Bucket path works; HawkSoft caps at
+   5 MB and the page now says so.
 2. **Tell the agents** (one message): the audit page now asks for the *proof* by purpose
    (signed application / signed endorsement / …, they pick freely), there is a *Note to
-   Tony*, the charge sheet has *Open invoice* and *Add this payment to it* (more money on
-   a sale already charged), the card has *client still owes more* (set the total after
-   the fact), and New business waits for its source before Charge.
+   auditor*, **every document now asks "what is this?" — tap the type, one tap confirms
+   the guess; on a phone "Take photos…" asks once**, files over 5 MB stay on the platform
+   (HawkSoft's limit), the charge sheet has *Open invoice* and *Add this payment to it*,
+   the card has *client still owes more*, and New business waits for its source.
 3. Everything still open from the Sep 13 list below (Tony's grants, the first real
    submission, refunds stage 4, Tuesday GBP).
 
@@ -688,7 +743,8 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessInvoice.mjs` | 42 — invoice_open end to end: server, waking, lists, Trust, card, sheet |
 | `harnessBigFiles.mjs` | 35 — signed uploads: upload_url, receipt_path on both actions, the page's File path |
 | `harnessOwesMore.mjs` | 26 — set_total_owed rules, the card link, the portal prompt flow |
-| `harnessDedupe.mjs` | 30 — same bytes on the same payment filed once (both upload paths); Submit stays off after the tick |
+| `harnessDedupe.mjs` | 55 — same bytes on the same payment filed once (both paths); Submit stays off after the tick; HawkSoft's answer carried; the 5 MB ceiling on both paths; the page wording |
+| `harnessDocType.mjs` | 72 — no dropdown; the sheet for one file; guess as a dashed chip; purpose order; photo kinds only; countdown button; Other needs a name; camera asks once; row tag menu before/after upload; existing documents + amber hint; set_doc_type rules; carrier_list documents |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

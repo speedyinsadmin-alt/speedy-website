@@ -125,6 +125,45 @@
     padding:11px 13px;font-size:12.5px;line-height:1.55;margin-top:8px}
   .loss b{color:var(--red-ink)}
   /* The last thing read before money leaves: a list of facts, deliberately unstyled. */
+  /* THE REFUND STEPPER (Sep 15): four numbered questions, one open at a time, the
+     answered ones collapsed to a line, a summary that fills in as answers arrive. */
+  .rhdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .rx{color:var(--dim);font-size:19px;cursor:pointer;padding:0 4px}
+  .rpay{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--mute);margin:10px 0 2px}
+  .rpay b{color:var(--ink);font-size:15px}
+  .rpill{background:var(--field);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11.5px}
+  .rstep{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .rstep.dim .rq{color:var(--dim)} .rstep.dim .rnum{opacity:.6}
+  .rstep.open .rq{color:var(--ink)}
+  .rnum{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--dim);font-size:12.5px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;cursor:pointer}
+  .rnum.on{border-color:var(--blue);color:var(--blue)}
+  .rnum.done{border-color:var(--green);background:var(--green);color:#fff}
+  .rbody{flex:1;min-width:0}
+  .rq{font-size:15px;font-weight:700;cursor:pointer}
+  .rq small{font-weight:400;color:var(--mute);font-size:12.5px;margin-left:6px}
+  .rdone{font-size:13.5px;margin-top:2px;color:var(--mute)} .rdone b{color:var(--ink)}
+  .rchg{color:var(--blue);font-size:12.5px;margin-left:6px;cursor:pointer}
+  .rchoice{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+  .rradio{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer;background:var(--card)}
+  .rradio.on{border-color:var(--blue);background:rgba(77,124,254,.10)}
+  .rradio .dot{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--dim);margin-top:3px}
+  .rradio.on .dot{border-color:var(--blue);background:radial-gradient(var(--blue) 45%,transparent 50%)}
+  .rradio .t{font-size:14px;font-weight:600;color:var(--ink)}
+  .rradio .m{font-size:12px;color:var(--mute);margin-top:1px}
+  .ramt{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .ramt input{width:130px;font-size:17px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);color:var(--ink);background:var(--field)}
+  .ramt input.need{border-color:var(--red)}
+  .rsub{font-size:12.5px;color:var(--mute);margin-top:7px} .rsub b{color:var(--ink)}
+  #refundSheet textarea.need{border-color:var(--red)}
+  .rsum{margin-top:14px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+  .rsumh{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:5px}
+  .rsum ul{margin:0;padding:0;list-style:none;font-size:13px;line-height:1.55}
+  .rsum li{padding:3px 0;display:flex;gap:8px} .rsum li::before{content:"\2192";color:var(--dim);flex:none}
+  .rsum b{color:var(--ink)} .rsum .neg{color:var(--red-ink);font-weight:700} .rwait{color:var(--dim);font-style:italic}
+  .rprog{text-align:center;font-size:12.5px;color:var(--mute);margin-top:8px}
+  .rbar{display:inline-block;width:110px;height:5px;border-radius:5px;background:var(--line);vertical-align:middle;margin-right:8px;overflow:hidden}
+  .rbar i{display:block;height:100%;background:var(--green)}
+  .rcancel{text-align:center;font-size:13.5px;color:var(--mute);margin-top:10px;cursor:pointer}
   .will{margin:8px 0 0;padding:0;list-style:none;font-size:12.5px;line-height:1.6}
   .will li{padding:6px 0 6px 20px;position:relative;border-bottom:1px solid var(--hair)}
   .will li:last-child{border-bottom:0}
@@ -1417,8 +1456,14 @@ function openRefund(paymentId, clientNo){
   if(!c || !p) return;
   /* notify: null until chosen. { channel:'email', to, source } or { channel:'none',
      skip_reason }. The button does not enable without it — "no silent info". */
+  /* mode: null until the agent picks All or Part - both are shown, every time (Saif,
+     Sep 15: "I don't see the partial refund - make it clear"). The email on file is
+     pre-selected; it is still recorded as chosen, like every notice. */
+  const onFile0 = ((c.contact && c.contact.emails) || []);
   RF = { id: paymentId, clientNo: clientNo, p: p, c: c, reason: null, carrier: null,
-         amount: refundable(p), mode: 'all', typedAmt: '', notify: null, typed: '', skip: '' };
+         amount: refundable(p), mode: null, typedAmt: '', step: null, note: '',
+         notify: onFile0.length ? { channel: 'email', to: String(onFile0[0]).trim().toLowerCase(), source: 'on_file' } : null,
+         typed: '', skip: '' };
   document.getElementById('refundSheet').classList.remove('hide');
   document.body.style.overflow = 'hidden';
   drawRefund();
@@ -1430,9 +1475,12 @@ function closeRefund(){
 }
 function rfPick(what, value){
   if(!RF) return;
-  RF[what] = value;
+  RF[what] = value; RF.step = null;
   drawRefund();
+  /* a reason wants its note: keep the cursor in the box */
+  if(what === 'reason'){ const t = document.getElementById('rfNote'); if(t && !String(RF.note || '').trim()) t.focus(); }
 }
+function rfStep(n){ if(!RF) return; RF.step = n; drawRefund(); }
 /* HOW MUCH (stage 4, Sep 15). "All of it" is what is still refundable - earlier partials
    already off. "Part of it" opens a box; the amount is capped here and again on the
    server and again by Clover. The box is text with a decimal keyboard so the caret
@@ -1440,8 +1488,8 @@ function rfPick(what, value){
 function rfMode(m){
   if(!RF) return;
   RF.mode = m;
-  if(m === 'all'){ RF.amount = refundable(RF.p); RF.typedAmt = ''; }
-  else { RF.amount = rfParse(RF.typedAmt); }
+  if(m === 'all'){ RF.amount = refundable(RF.p); RF.typedAmt = ''; RF.step = null; }
+  else { RF.amount = rfParse(RF.typedAmt); RF.step = 1; }
   drawRefund();
   if(m === 'part'){ const i = document.getElementById('rfAmt'); if(i){ i.focus(); } }
 }
@@ -1450,6 +1498,7 @@ function rfAmt(v){
   if(!RF) return;
   RF.typedAmt = String(v || '');
   RF.amount = rfParse(v);
+  RF.step = 1;   // stay here while typing; the number badge turns green when it is good
   drawRefund();
   const i = document.getElementById('rfAmt');
   if(i){ i.focus(); const L = i.value.length; try { i.setSelectionRange(L, L); } catch(e){} }
@@ -1464,6 +1513,7 @@ function rfNotify(kind, addr){
   if(kind === 'on_file') RF.notify = { channel:'email', to: String(addr||'').trim().toLowerCase(), source:'on_file' };
   else if(kind === 'typed') RF.notify = { channel:'email', to: String(RF.typed||'').trim().toLowerCase(), source:'typed' };
   else RF.notify = { channel:'none', skip_reason: String(RF.skip||'').trim() };
+  RF.step = (kind === 'on_file') ? null : 4;
   drawRefund();
   const f = document.getElementById('rfTyped') || document.getElementById('rfSkip');
   if(f) f.focus();
@@ -1479,202 +1529,198 @@ function drawRefund(){
   const amt = RF.amount;
   const fee = p.fee_amount != null ? Number(p.fee_amount) : null;
   const cost = p.service_cost != null ? Number(p.service_cost) : null;
+  const carrierName = p.carrier_name || 'the carrier';
   const reason = RF_REASONS.find(r => r[0] === RF.reason) || null;
-  /* REQUEST MODE: no permission to issue, so this becomes a request for Tony. Same
-     four questions, because he decides on the agent's answers. */
+  /* REQUEST MODE: no permission to issue, so this becomes a request for the owner.
+     Same four questions, because the owner decides on the agent's answers. */
   const isReq = !c.can_refund;
-
   /* Under 25 minutes Clover VOIDS instead of refunding. Different operations, different
      settlement — the client sees the charge disappear rather than a refund arrive, so
      the agent has to be told which one they are about to do. Confirmed while probing. */
   const ageMin = Math.round((Date.now() - new Date(p.ts).getTime()) / 60000);
   const isVoid = isCard && isFinite(ageMin) && ageMin < 25;
+  const verb = isVoid ? 'Void' : 'Refund';
 
-  let h = '<div class="row" style="margin-bottom:2px">'
-    + '<b style="font-size:16px">' + (isReq ? 'Ask for a refund' : isVoid ? 'Void a payment' : 'Refund a payment') + '</b>'
-    + '<span class="dim" style="font-size:12px">Client ' + esc(String(RF.clientNo)) + ' · ' + esc(name) + '</span></div>';
-
-  /* "Void a payment" in the header and "what you are refunding" underneath it is the
-     kind of half-updated wording that makes an agent doubt the whole screen. */
-  h += '<div class="sec">What you are ' + (isVoid ? 'voiding' : 'refunding') + '</div>'
-    + '<div class="kv"><span class="muted">Payment</span><span>' + money(p.amount)
-      + ' · ' + esc(p.purpose || '') + ' · ' + esc(String(p.ts||'').slice(0,10)) + '</span></div>'
-    + '<div class="kv"><span class="muted">Paid by</span><span>'
-      + (isCard ? (esc(p.ref || 'Card') + (p.txn_id ? '' : '')) : 'Cash') + '</span></div>'
-    + (p.carrier_name ? '<div class="kv"><span class="muted">Carrier</span><span>'
-        + esc(p.carrier_name) + (cost != null ? ' · ' + money(cost) : '') + '</span></div>' : '')
-    + (fee != null ? '<div class="kv" style="border-bottom:0"><span class="muted">Speedy kept</span><span>'
-        + money(fee) + '</span></div>' : '');
-
-  /* HOW MUCH. Proven on ZZTEST Sep 15: Clover takes a partial amount, a second one on
-     the same charge, and refuses one over the charge. So: all of it, or part of it. */
+  /* ---- the four answers ---- */
   const cap = refundable(p);
   const alreadyBack = Number(p.refunded) || 0;
   const collectedAmt = Number(p.collected != null ? p.collected : p.amount) || 0;
-  const amtOk = rfAmtOk();
-  const isPart = RF.mode === 'part';
-  h += '<div class="sec">How much</div><div class="chips">'
-    + '<button class="' + (RF.mode === 'all' ? 'sel' : '') + '" onclick="rfMode(\'all\')">All of it \u2014 ' + money(cap) + '</button>'
-    + '<button class="' + (isPart ? 'sel' : '') + '" onclick="rfMode(\'part\')">Part of it\u2026</button>'
-    + '</div>'
-    + (alreadyBack > 0 ? '<div class="note">' + money(alreadyBack) + ' of this payment was refunded earlier; ' + money(cap) + ' is still refundable.</div>' : '');
-  if(isPart){
-    h += '<div class="row" style="gap:8px;align-items:center;margin-top:8px"><span style="font-size:15px;font-weight:700">$</span>'
-      + '<input id="rfAmt" type="text" inputmode="decimal" placeholder="0.00" value="' + esc(RF.typedAmt) + '" oninput="rfAmt(this.value)" '
-      + 'style="flex:1;font-size:16px;font-weight:700;padding:9px 12px;border-radius:9px;border:1.5px solid ' + (amtOk ? 'var(--line)' : 'var(--red)') + ';background:var(--navy);color:var(--ink)">'
-      + '<span class="muted" style="font-size:12px">of ' + money(cap) + '</span></div>'
-      + (amtOk
-          ? '<div class="conseq good"><b>Refunding ' + money(amt) + ' of ' + money(cap) + '.</b> '
-            + (amt + 0.004 >= cap ? 'That is everything that is left' : money(cap - amt) + ' of the payment stays with Speedy')
-            + (alreadyBack > 0 ? ' (' + money(alreadyBack) + ' went back earlier)' : '') + '.</div>'
-          : '<div class="note" style="color:var(--red-ink)">Enter an amount between $0.01 and ' + money(cap) + '.</div>');
-  } else {
-    h += '<div class="kv" style="border-bottom:0"><span class="muted">' + (isVoid ? 'Voiding' : 'Refunding') + '</span>'
-      + '<b style="font-size:15px">' + money(amt) + '</b></div>'
-      + (RF.reason === 'wrong_amount' ? '<div class="note">Wrong amount usually means <b>part of it</b> \u2014 the difference, not the whole payment.</div>' : '');
-  }
-
-  h += '<div class="sec">Why</div><div class="chips">'
-    + RF_REASONS.map(r => '<button class="' + (RF.reason === r[0] ? 'sel' : '')
-        + '" onclick="rfPick(\'reason\',\'' + r[0] + '\')">' + esc(r[1]) + '</button>').join('')
-    + '</div>'
-    + (reason
-        ? '<div class="conseq' + (reason[2] ? '' : ' good') + '">' + esc(reason[1]) + ' — <b>'
-          + (reason[2] ? 'the client still owes it.' : 'this closes the obligation.') + '</b> '
-          + esc(reason[3]) + '</div>'
-        : '<div class="note">Pick one — it decides whether the client still owes the money.</div>');
-
-  h += '<div class="sec">Did the carrier give their money back?</div><div class="chips">'
-    + [['yes','Yes'],['no','No'],['pending','Not yet']].map(x =>
-        '<button class="' + (RF.carrier === x[0] ? 'sel' : '')
-        + '" onclick="rfPick(\'carrier\',\'' + x[0] + '\')">' + esc(x[1]) + '</button>').join('')
-    + '</div>';
-  /* on a partial, the carrier's share is the refunded share of its cost (Sep 15) */
-  const partialNow = isPart && amtOk && amt + 0.004 < cap;
-  const cShare = partialNow ? Math.round((cost || 0) * amt / (collectedAmt || 1) * 100) / 100 : (cost || 0);
-  const cWord = partialNow ? money(cShare) + ' of the carrier’s ' + money(cost || 0) : money(cost || 0);
-  if(RF.carrier === 'yes'){
-    h += '<div class="conseq good"><b>The carrier returns ' + cWord + '.</b> '
-      + (partialNow ? 'That share of the carrier cost and of Speedy’s fee both reverse.' : 'The carrier cost and Speedy’s share both reverse and this payment nets to nothing.') + '</div>';
-  } else if(RF.carrier === 'no'){
-    h += '<div class="loss"><b>' + cWord + ' is money Speedy has lost.</b> '
-      + first + ' is refunded ' + (partialNow ? money(amt) : 'in full') + ', the carrier keeps its premium, and the difference comes '
-      + 'out of Speedy. It shows on the Trust tab as a loss, not as profit.</div>';
-  } else if(RF.carrier === 'pending'){
-    h += '<div class="conseq">' + cWord + ' stays attributed to '
-      + esc(p.carrier_name || 'the carrier') + ' and this goes on the <b>carrier recovery</b> list '
-      + 'until somebody confirms it. Nothing chases it on its own.</div>';
-  } else {
-    h += '<div class="note">Pick one — it decides whether the carrier’s share is a loss.</div>';
-  }
-
-  if(isVoid){
-    h += '<div class="warn">This payment was taken <b>' + ageMin + ' minute'
-      + (ageMin === 1 ? '' : 's') + ' ago</b>, so Clover will <b>void</b> it rather than refund it. '
-      + 'The charge is cancelled before it settles — tell ' + esc(first)
-      + ' the charge will <b>disappear</b>, not that a refund is coming.</div>';
-  }
-
-  /* ---- TELL THE CLIENT. Saif, Sep 11: "I don't want any silent info while we do
-     that — if it did not continue or it confirms, everything." Every choice here is
-     recorded on the row: which address, from the record or typed, who chose it, and
-     what happened. Choosing NOT to tell them is allowed and is recorded with a reason.
-     Email only for now — the one SMS-capable number is a 747 area code. */
-  const onFile = ((c.contact && c.contact.emails) || []);
+  const amtOk = RF.mode === 'all' || (RF.mode === 'part' && rfAmtOk());
+  const a1 = !!RF.mode && amtOk;
+  const a2 = !!RF.reason && !!String(RF.note || '').trim();
+  const a3 = !!RF.carrier;
   const nz = RF.notify;
-  h += '<div class="sec">Tell the client</div><div class="chips">'
-    + onFile.map(e => '<button class="' + (nz && nz.channel === 'email' && nz.source === 'on_file' && nz.to === e ? 'sel' : '')
-        + '" onclick="rfNotify(\'on_file\',' + JSON.stringify(e).replace(/"/g, '&quot;') + ')">'
-        + esc(e) + '</button>').join('')
-    + '<button class="' + (nz && nz.channel === 'email' && nz.source === 'typed' ? 'sel' : '')
-        + '" onclick="rfNotify(\'typed\')">' + (onFile.length ? 'A different address…' : 'Type an address…') + '</button>'
-    + '<button class="' + (nz && nz.channel === 'none' ? 'sel' : '') + '" onclick="rfNotify(\'none\')">Don’t notify</button>'
-    + '</div>';
-  if(!onFile.length && !(nz && nz.channel)){
-    h += '<div class="warn">No email on this client’s record. Type one, or say why they are not being told.</div>';
-  }
-  if(nz && nz.channel === 'email' && nz.source === 'typed'){
-    h += '<div style="margin-top:8px"><input id="rfTyped" type="email" placeholder="name@example.com" value="' + esc(RF.typed || '') + '"'
-      + ' oninput="RF.typed=this.value;RF.notify.to=this.value.trim().toLowerCase()" onchange="drawRefund()"></div>'
-      + '<div class="warn">This address is <b>not on the client’s record</b>. It will be sent, and the refund will say it was typed by you. '
-      + 'A mistyped address sends the client’s name and the amount to a stranger — check it.</div>';
-  } else if(nz && nz.channel === 'email'){
-    h += '<div class="conseq good">An email goes to <b>' + esc(nz.to) + '</b> — from the client’s record — the moment the refund goes through. '
-      + 'If it fails to send, you will be told and it is recorded.</div>';
-  } else if(nz && nz.channel === 'none'){
-    h += '<div style="margin-top:8px"><input id="rfSkip" placeholder="Why not? (required — this is recorded)" value="' + esc(RF.skip || '') + '"'
-      + ' oninput="RF.skip=this.value;RF.notify.skip_reason=this.value.trim()" onchange="drawRefund()"></div>'
-      + '<div class="conseq">The client will <b>not</b> be told by us. The refund will record that, and why.</div>';
-  } else {
-    h += '<div class="note">Pick one — it is recorded either way.</div>';
-  }
-
-  if(isReq){
-    h += '<div class="warn">You can ask for this refund but not issue it. <b>The owner</b> approves refunds — '
-      + 'he can also give you the permission on the Staff page. Nothing below happens until he says yes; '
-      + 'you will be told either way.</div>';
-  }
-  h += '<div class="sec">' + (isReq ? 'What this will do once the owner approves' : 'What this will do') + '</div><ul class="will">'
-    + '<li><b>' + esc(first) + ' gets ' + money(amt) + ' back</b> '
-      + (isCard ? (isVoid ? '— the charge is cancelled before it settles.'
-                          : 'on the card used for the original payment, usually 2 to 5 business days.')
-                : '— hand back the cash.') + '</li>'
-    /* THE FEE, WHICH IS KNOWN — not the commission, which is NOT. The rate is per agent
-       in agent_commission and this page never reads it, so an earlier draft printed
-       "−$7.50" from a hardcoded 10%. A number that is wrong for anyone on a different
-       rate is worse than no number: say what reverses and where, and let the agent's
-       own Earnings screen show their figure. */
-    + (fee != null
-        ? '<li>' + (partialNow
-              ? 'Of Speedy’s <b>' + money(fee) + '</b> on this payment, <b>' + money(Math.round(fee * amt / (collectedAmt || 1) * 100) / 100) + '</b> \u2014 the refunded share \u2014 is <span class="neg">reversed</span>, '
-              : 'Speedy’s <b>' + money(fee) + '</b> on this payment is <span class="neg">reversed</span>, ')
-          + 'and the commission released on it comes back off <b>'
-          + esc(p.commission_to_name || 'whoever earned it') + '</b>’s total for <b>this month</b> '
-          + '— the month of the refund, not the month of the charge. A closed month never moves.</li>'
-        : '<li>This payment has never been audited, so no commission has been released on it and '
-          + 'there is none to reverse.</li>')
-    + (cost != null && RF.carrier
-        ? '<li>The ' + (partialNow ? money(cShare) + ' refunded share of the ' + money(cost) + ' carrier cost' : money(cost) + ' carrier cost') + ' is <b>'
-          + (RF.carrier === 'yes' ? 'reversed' : RF.carrier === 'no' ? 'a loss to Speedy' : 'held open for recovery')
-          + '</b>.</li>' : '')
-    + (nz && nz.channel === 'email'
-        ? '<li><b>' + esc(first) + ' gets an email</b> at ' + esc(nz.to || '(type it above)') + (nz.source === 'typed' ? ' — <span class="neg">typed, not from the record</span>' : '') + '.</li>'
-        : nz && nz.channel === 'none'
-          ? '<li><span class="neg">' + esc(first) + ' is NOT told by us</span>' + (RF.skip ? ' — ' + esc(RF.skip) : '') + '.</li>'
-          : '')
-    + '<li><b>HawkSoft keeps the original receipt.</b> A filed receipt cannot be withdrawn or '
-      + 'changed, so a note is added to the client’s file instead. The original payment stays '
-      + 'visible — nothing is erased.</li>'
-    + '</ul>';
-
-  h += '<div class="sec">Reason — required</div>'
-    + '<textarea id="rfNote" rows="2" placeholder="Why is this being refunded? The owner and the next person will read this.">'
-    + esc(RF.note || '') + '</textarea>'
-    + '<div class="note">Stored with your name and the time, and shown wherever this refund appears.</div>';
-
   const nzReady = !!(nz && (
     (nz.channel === 'email' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(nz.to || '')))
     || (nz.channel === 'none' && String(nz.skip_reason || '').trim())));
-  const ready = !!(RF.reason && RF.carrier && nzReady && amtOk);
+  const a4 = nzReady;
+  const answered = [a1, a2, a3, a4];
+  const nAnswered = answered.filter(Boolean).length;
+  const firstOpen = answered.indexOf(false) + 1;          // 0 when all answered
+  const open = RF.step || firstOpen || 0;
+  const partialNow = RF.mode === 'part' && amtOk && amt + 0.004 < cap;
+  const feeShare = fee != null ? (partialNow ? Math.round(fee * amt / (collectedAmt || 1) * 100) / 100 : fee) : null;
+  const cShare = cost != null ? (partialNow ? Math.round(cost * amt / (collectedAmt || 1) * 100) / 100 : cost) : null;
+  const onFile = ((c.contact && c.contact.emails) || []);
+
+  /* one step: number, question, and either the controls (open), the answer (done) or
+     nothing (not reached). Every header is a tap target, so any step can be reopened. */
+  const step = (n, q, hint, body, done) => {
+    const isOpen = open === n, isDone = answered[n - 1];
+    return '<div class="rstep' + (isOpen ? ' open' : '') + (!isOpen && !isDone ? ' dim' : '') + '">'
+      + '<div class="rnum' + (isDone ? ' done' : isOpen ? ' on' : '') + '" onclick="rfStep(' + n + ')">' + (isDone ? '✓' : n) + '</div>'
+      + '<div class="rbody">'
+      + '<div class="rq" onclick="rfStep(' + n + ')">' + q + (hint && isOpen ? ' <small>' + hint + '</small>' : '') + '</div>'
+      + (isOpen ? body : isDone ? '<div class="rdone">' + done + ' <span class="rchg" onclick="rfStep(' + n + ')">change</span></div>' : '')
+      + '</div></div>';
+  };
+  const radio = (on, onclick, t, m) => '<div class="rradio' + (on ? ' on' : '') + '" onclick="' + onclick + '"><div class="dot"></div><div><div class="t">' + t + '</div>' + (m ? '<div class="m">' + m + '</div>' : '') + '</div></div>';
+
+  let h = '<div class="rhdr"><div><b style="font-size:18px">' + (isReq ? 'Ask for a refund' : verb + ' a payment') + '</b>'
+    + '<div class="dim" style="font-size:12.5px">' + esc(name) + ' · client ' + esc(String(RF.clientNo)) + '</div></div>'
+    + '<span class="rx" onclick="closeRefund()">✕</span></div>'
+    + '<div class="rpay"><b>' + money(p.amount) + '</b><span>' + esc(p.purpose || '') + ' · ' + esc(String(p.ts||'').slice(0,10)) + '</span>'
+    + '<span class="rpill">' + (isCard ? esc(p.ref || 'Card') : 'Cash') + '</span>'
+    + (p.carrier_name ? '<span class="rpill">' + esc(p.carrier_name) + (cost != null ? ' ' + money(cost) : '') + (fee != null ? ' · Speedy ' + money(fee) : '') + '</span>' : '')
+    + '</div>';
+  if(isVoid){
+    h += '<div class="warn">Taken <b>' + ageMin + ' minute' + (ageMin === 1 ? '' : 's') + ' ago</b> — Clover will <b>void</b> it, not refund it. '
+      + 'Tell ' + esc(first) + ' the charge will <b>disappear</b>, not that a refund is coming.</div>';
+  }
+  if(isReq){
+    h += '<div class="warn">You can ask for this refund but not issue it. <b>The owner</b> approves refunds — nothing below happens until they say yes; you will be told either way.</div>';
+  }
+
+  /* ---- 1 · HOW MUCH. Both choices in the open, every time: all of it, or part. ---- */
+  {
+    const body = '<div class="rchoice">'
+      + radio(RF.mode === 'all', "rfMode('all')", 'All of it — ' + money(cap), alreadyBack > 0 ? money(alreadyBack) + ' went back earlier; this is what is left' : 'The whole payment')
+      + radio(RF.mode === 'part', "rfMode('part')", 'Part of it…', 'A partial refund — you enter the amount' + (RF.reason === 'wrong_amount' ? '. Wrong amount usually means part of it — the difference' : ''))
+      + '</div>'
+      + (RF.mode === 'part'
+          ? '<div class="ramt"><span style="font-size:15px;font-weight:700">$</span>'
+            + '<input id="rfAmt" type="text" inputmode="decimal" placeholder="0.00" value="' + esc(RF.typedAmt) + '" oninput="rfAmt(this.value)" class="' + (amtOk ? '' : 'need') + '">'
+            + '<span class="dim" style="font-size:12.5px">of ' + money(cap) + '</span></div>'
+            + (amtOk
+                ? '<div class="rsub"><b>Refunding ' + money(amt) + ' of ' + money(cap) + '.</b> '
+                  + (amt + 0.004 >= cap ? 'That is everything that is left' : money(cap - amt) + ' of the payment stays with Speedy')
+                  + (alreadyBack > 0 ? ' (' + money(alreadyBack) + ' went back earlier)' : '') + '.</div>'
+                : '<div class="rsub" style="color:var(--red-ink)">Enter an amount between $0.01 and ' + money(cap) + '.</div>')
+          : '');
+    const done = RF.mode === 'part'
+      ? '<b>' + money(amt) + '</b> of ' + money(cap) + (amt + 0.004 < cap ? ' — ' + money(cap - amt) + ' stays with Speedy' : '')
+      : '<b>All of it</b> — ' + money(cap);
+    h += step(1, 'How much', '', body, done);
+  }
+
+  /* ---- 2 · WHY, with the consequence under each choice and the note in the same step ---- */
+  {
+    const body = '<div class="rchoice">'
+      + RF_REASONS.map(r => radio(RF.reason === r[0], "rfPick('reason','" + r[0] + "')", esc(r[1]),
+          (r[2] ? esc(first) + ' still owes what ' + (c.client && c.client.business_name ? 'it' : 'they') + ' owed — ' : 'The obligation is gone — ') + esc(r[3]))).join('')
+      + '</div>'
+      + '<textarea id="rfNote" rows="2" class="' + (String(RF.note || '').trim() ? '' : 'need') + '" placeholder="In your words — the owner and the next person read this (required)">' + esc(RF.note || '') + '</textarea>';
+    const done = '<b>' + esc(reason ? reason[1] : '') + '</b>' + (reason ? ' — ' + (reason[2] ? esc(first) + ' still owes what they owed' : 'the obligation is gone') : '')
+      + (String(RF.note || '').trim() ? ' · “' + esc(String(RF.note).trim()) + '”' : '');
+    h += step(2, 'Why is it going back?', 'this decides whether ' + esc(first) + ' still owes the money', body, done);
+  }
+
+  /* ---- 3 · THE CARRIER'S SHARE, named and priced ---- */
+  {
+    const q = cost != null && cost > 0
+      ? 'Did ' + esc(carrierName) + ' give back its ' + money(cost) + '?'
+      : 'Did the carrier give back its share?';
+    const hint = partialNow && cost != null ? 'only the ' + money(cShare) + ' share of this refund is in play' : '';
+    const body = '<div class="rchoice">'
+      + radio(RF.carrier === 'yes', "rfPick('carrier','yes')", 'Yes, we got it back', 'The ' + money(cShare || 0) + ' carrier cost reverses too' + (partialNow ? '' : ' — this nets to nothing'))
+      + radio(RF.carrier === 'no', "rfPick('carrier','no')", 'No, they kept it', money(cShare || 0) + ' is Speedy’s loss — it shows on Trust as a loss')
+      + radio(RF.carrier === 'pending', "rfPick('carrier','pending')", 'Not yet', money(cShare || 0) + ' goes on the carrier recovery list until someone confirms')
+      + '</div>';
+    const done = RF.carrier === 'yes' ? '<b>Returned</b> — the ' + money(cShare || 0) + ' cost reverses'
+      : RF.carrier === 'no' ? '<b>Kept it</b> — ' + money(cShare || 0) + ' is Speedy’s loss'
+      : '<b>Not yet</b> — ' + money(cShare || 0) + ' on the recovery list';
+    h += step(3, q, hint, body, done);
+  }
+
+  /* ---- 4 · TELL THE CLIENT. The email on file is pre-selected (Saif, Sep 15); every
+     choice is still recorded on the row: which address, from the record or typed, who
+     chose it, and what happened. Not telling them is allowed and recorded with a reason. */
+  {
+    const isTyped = nz && nz.channel === 'email' && nz.source === 'typed';
+    const isNone = nz && nz.channel === 'none';
+    const body = '<div class="rchoice">'
+      + onFile.map(e => radio(nz && nz.channel === 'email' && nz.source === 'on_file' && nz.to === e,
+          "rfNotify('on_file'," + JSON.stringify(e).replace(/"/g, '&quot;') + ')', 'Email ' + esc(e), 'On the record · sent the moment it goes through')).join('')
+      + radio(isTyped, "rfNotify('typed')", onFile.length ? 'A different address…' : 'Type an address…', 'Recorded as typed by you, not from the record')
+      + radio(isNone, "rfNotify('none')", 'Don’t — because…', 'The reason is recorded')
+      + '</div>'
+      + (!onFile.length && !(nz && nz.channel) ? '<div class="warn">No email on this client’s record. Type one, or say why they are not being told.</div>' : '')
+      + (isTyped
+          ? '<div style="margin-top:8px"><input id="rfTyped" type="email" placeholder="name@example.com" value="' + esc(RF.typed || '') + '"'
+            + ' oninput="RF.typed=this.value;RF.notify.to=this.value.trim().toLowerCase()" onchange="drawRefund()"></div>'
+            + '<div class="warn">This address is <b>not on the client’s record</b>. A mistyped address sends the client’s name and the amount to a stranger — check it.</div>'
+          : isNone
+            ? '<div style="margin-top:8px"><input id="rfSkip" placeholder="Why not? (required — this is recorded)" value="' + esc(RF.skip || '') + '"'
+              + ' oninput="RF.skip=this.value;RF.notify.skip_reason=this.value.trim()" onchange="drawRefund()"></div>'
+            : '');
+    const done = nz && nz.channel === 'email'
+      ? '<b>Email</b> ' + esc(nz.to || '') + (nz.source === 'typed' ? ' <span class="neg">(typed, not from the record)</span>' : ' (on file)')
+      : '<b>Not told</b>' + (nz && nz.skip_reason ? ' — ' + esc(nz.skip_reason) : '');
+    h += step(4, 'Tell ' + esc(first), '', body, done);
+  }
+
+  /* ---- WHAT WILL HAPPEN. Once, in sentences, filling in as the answers arrive. ---- */
+  const wait = t => '<li><span class="rwait">' + t + '</span></li>';
+  h += '<div class="rsum"><div class="rsumh">' + (isReq ? 'What will happen once the owner approves' : 'What will happen') + '</div><ul>'
+    + (a1
+        ? '<li><span><b>' + esc(first) + ' gets ' + money(amt) + ' back</b> '
+          + (isCard ? (isVoid ? '— the charge is cancelled before it settles' : 'on the card used for the original payment, usually 2 to 5 business days') : '— hand back the cash')
+          + (a4 && nz.channel === 'email' ? ', and is <b>emailed</b> at ' + esc(nz.to) + (nz.source === 'typed' ? ' <span class="neg">(typed)</span>' : '') + ' the moment it goes through' : '') + '.</span></li>'
+        : wait('How much — answer step 1'))
+    + (fee != null
+        ? '<li><span>' + (partialNow ? '<b>' + money(feeShare) + '</b> of Speedy’s ' + money(fee) + ' fee' : 'Speedy’s <b>' + money(fee) + '</b> fee') + ' is <span class="neg">reversed</span> — it comes off <b>'
+          + esc(p.commission_to_name || 'whoever earned it') + '</b>’s commission for <b>this month</b>, not the month of the charge.</span></li>'
+        : '<li><span>This payment was never audited, so no commission has been released on it and there is none to reverse.</span></li>')
+    + (a2 && reason
+        ? '<li><span>' + esc(first) + ' <b>' + (reason[2] ? 'still owes' : 'no longer owes') + '</b> ' + (reason[2] ? 'what they owed; nothing is written off.' : 'anything on this — the obligation is closed.') + '</span></li>'
+        : wait('Why — answer step 2'))
+    + (cost != null
+        ? (a3
+            ? '<li><span>' + (RF.carrier === 'yes' ? 'The ' + money(cShare) + ' carrier cost is <b>reversed</b> too.'
+                : RF.carrier === 'no' ? '<span class="neg">' + money(cShare) + ' is a loss</span> — ' + esc(carrierName) + ' keeps its premium; it shows on Trust as a loss.'
+                : money(cShare) + ' goes on the <b>carrier recovery</b> list until someone confirms ' + esc(carrierName) + ' returned it.') + '</span></li>'
+            : wait('Carrier share — answer step 3'))
+        : '')
+    + (a4 && nz.channel === 'none' ? '<li><span><span class="neg">' + esc(first) + ' is NOT told by us</span> — ' + esc(nz.skip_reason) + '.</span></li>'
+       : !a4 ? wait('Client notice — answer step 4') : '')
+    + '<li><span>A note goes on the HawkSoft file. The original receipt stays — nothing is erased.</span></li>'
+    + '</ul></div>';
+
+  /* ---- the button, the progress, cancel ---- */
+  const ready = a1 && a2 && a3 && a4;
   h += '<div id="rfMsg" class="note" style="min-height:0"></div>'
-    + '<button class="btn ' + (isReq ? 'btn-blue' : 'btn-red') + '" ' + (ready ? '' : 'disabled style="opacity:.45;cursor:not-allowed" ')
+    + '<button class="btn ' + (isReq ? 'btn-blue' : 'btn-red') + '" ' + (ready ? '' : 'disabled style="opacity:.4;cursor:not-allowed" ')
       + 'onclick="submitRefund()">'
-      + (isReq ? 'Send to the owner for approval' : (isVoid ? 'Void ' : 'Refund ') + money(amt) + (ready ? ' to ' + esc(first) : '')) + '</button>'
-    + (ready ? '' : '<div class="note" style="text-align:center">' + (!amtOk ? 'Enter the amount first.' : 'Answer why, the carrier, and whether to tell the client first.') + '</div>')
-    + '<button class="btn btn-ghost" onclick="closeRefund()">Cancel</button>';
+      + (isReq ? 'Send to the owner for approval' : (a1 ? verb + ' ' + money(amt) + (ready ? ' to ' + esc(first) : '') : verb)) + '</button>'
+    + '<div class="rprog"><span class="rbar"><i style="width:' + (nAnswered * 25) + '%"></i></span>' + nAnswered + ' of 4 answered'
+      + (ready ? '' : ' · finish step ' + (firstOpen || open)) + '</div>'
+    + '<div class="rcancel" onclick="closeRefund()">Cancel</div>';
 
   document.getElementById('rfBody').innerHTML = h;
-  /* The typed note survives a redraw — every chip click rebuilds this markup, and losing
-     a half-typed sentence on the fourth click is the same fault the Staff editor had. */
+  /* The typed note survives a redraw — every choice rebuilds this markup, and losing
+     a half-typed sentence on the fourth click is the same fault the Staff editor had.
+     Leaving the box (change) redraws so the step can close and the next one open. */
   const t = document.getElementById('rfNote');
-  if(t) t.oninput = () => { if(RF) RF.note = t.value; };
+  if(t){ t.oninput = () => { if(RF) RF.note = t.value; }; t.onchange = () => { if(RF){ RF.note = t.value; RF.step = null; drawRefund(); } }; }
 }
 
 async function submitRefund(){
   if(!RF) return;
   const msg = document.getElementById('rfMsg');
   const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
-  const note = ((document.getElementById('rfNote')||{}).value || '').trim();
+  const noteEl = document.getElementById('rfNote');
+  const note = String((noteEl ? noteEl.value : RF.note) || '').trim();
+  if(!RF.mode) return say('Say how much: all of it, or part of it.', true);
   if(!RF.reason || !RF.carrier) return say('Answer why, and whether the carrier is returning their share.', true);
   if(!note) return say('A reason in words is required.', true);
   /* One confirm, naming the amount and the person. Everything else was shown above; this

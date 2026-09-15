@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 15 afternoon. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `8ee67e7`.
+Last written Sep 15 evening. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `e67cb90`.
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
 above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
@@ -187,6 +187,65 @@ review sheet as the one labelling component; the 5 MB / 50 MB split. The plan sk
 on Sep 15: same sheet for every entry point, a "needs a label" inbox for documents
 that arrive from elsewhere (never auto-typed), search by client / type / date / who,
 and the platform as the copy of record for anything HawkSoft could not take.
+
+### ✅ SEP 15 EVENING · THE $1 PROBE RAN, STAGE 4 SHIPPED, THE OWNER SETS THE AMOUNT
+**HawkSoft log note for over-5 MB files (`bd944e3`).** Both upload paths post a client
+log note when they skip the attachment: type, file name, size, "kept on the Speedy
+platform — over the HawkSoft API's 5 MB attachment limit", who. Once per file; a failed
+note never fails the upload. Saif's questions answered in chat: files live in the
+private Supabase bucket (RLS on, zero policies, service key only, no signed read URLs);
+photos are shrunk on the page (1600 px, JPEG 0.82 — 38 photos avg 152 KB), PDFs are
+stored as scanned (874 PDFs avg 145 KB, 129 MB total since Aug); the inline base64 copy
+in Postgres (152 MB) is the one duplicate and can go once storage reads are trusted.
+**HawkSoft's vendor API is write-only for attachments** — the platform can never list
+what was scanned into HawkSoft directly; the document center can only be the complete
+record for what passes through the platform.
+
+**The $1 probe, finally (Saif charged $1 by pay link at 2:44 PM; run at 3:10 PM from
+the Console).** `aa89107`: the OWNER login (`OWNER_LOGINS` in hawksoft.js, info@)
+may call `probe_refund` without the admin key — the probe's own caps hold (ZZTEST,
+is_test, ≤ $1, a card charge). Ran through Saif's signed-in Console tab with the Chrome
+extension. **Verdict: REFUND (26 min old); $0.40 partial succeeded; $0.60 second
+partial succeeded; $0.01 over refused "Refund bigger than original payment"; the
+dollar came back.** Clover supports partials, repeat partials, and caps itself.
+
+**STAGE 4 — partial refunds (`e67cb90`).** `issueRefund`: the amount is the agent's,
+capped at what is still refundable (earlier partials off; `over_refundable` with the
+figures); Clover is sent the cents; a distinct idempotency key per partial (the old
+per-payment key would have answered the second partial with the first one's result);
+a replayed Clover refund id is recorded once. **The fee reverses in proportion**
+(parentFee × amount / collected) and the refund that empties the payment takes whatever
+fee is left — the reversals add up to the parent's fee exactly (three one-cent partials
+then the remainder reverse $75.00, not $74.99). **The carrier share scales the same
+way** and is written on the row (`extra.partial.carrier_share`); Trust and the recovery
+queue read it instead of assuming the whole parent cost. HawkSoft note "PARTIAL REFUND
+— $X of the $Y payment … $Z stands"; email "part of a payment … $Z of your $Y payment
+stands"; event carries partial, shares, before/after. **Part-paid obligations stay
+refused** (`partly_paid_not_supported_yet`) — that is the separate arithmetic piece.
+The sheet: "All of it — $X" / "Part of it…" with a capped box, the refunded share of
+the fee and of the carrier cost in the will-do list, the confirm naming the part;
+"wrong amount" hints part of it. Requests carry the amount; the Console queue wears
+"part".
+
+**The owner sets the amount when approving (Saif: "change from Full to partial from
+the Console").** `decide_refund` takes `amount`; `refund_requests.approved_amount`
+(new column, migration `refund_requests_approved_amount`); the ledger note says
+"amount changed from $A asked to $B"; the event carries both. Console: an amount box
+on every pending request, prefilled with what was asked, capped at what is still
+refundable (`refundable` on the view, earlier refunds off), button follows it, confirm
+names the change; Decided list says "$B approved of $A asked". **The card:**
+`portal_client` carries the last decision per payment (`refund_decision`); paycard shows
+"Refund request approved for $B of the $A asked by Tony on <date> — note" / "approved
+as asked" / "declined — note"; the refund row says "Refunds $B of the $A payment"; chip
+"part refunded"; Refund / Ask offered again for what is left.
+`harnessRefund` 395, `harnessRequestUI` 70, `mutatePartial` 36/36; Chrome renders of
+the sheet (`renderRefund.mjs` now takes part + refunded), the queue and the card
+(`renderDecide.mjs`).
+
+**Open right now:** Alejandra's request on client 18496 ($559.12, "wrong amount",
+Monthly payment — Late) is still pending; the owner can now approve the difference.
+
+**Next conversation: the document center** (see the block above).
 
 ### ⏭ TUESDAY SEP 15 — WHAT IS LEFT
 0. **Client 4600 — DONE by SQL Sep 14 night:** Laura's $0.50 placeholder row
@@ -633,7 +692,7 @@ So it depends what "logged" means:
 **Pending Saif confirming which one he meant.** If it is the receipt, the honest fix is
 upstream — invoices have to exist in HawkSoft — not a code change here.
 
-### 1. THE $1 ZZTEST RUN — do this first, it gates stage 4
+### 1. ~~THE $1 ZZTEST RUN~~ DONE Sep 15 — Clover takes partials (see the Sep 15 evening record)
 The refund path has never moved real money. This is the first end-to-end exercise of
 Clover call → ledger row → HawkSoft note, and it answers the one question stage 0 could
 not: **does Clover accept a partial `amount`?**
@@ -659,7 +718,7 @@ to be charged and refunded. The money comes back.
 **What to read in the result:** `verdict.partial_refund_supported`,
 `verdict.over_refund_rejected`, `verdict.money_returned`, and `operation_tested`.
 
-### 2. STAGE 4 — partial refunds. Blocked on step 1.
+### 2. ~~STAGE 4 — partial refunds~~ DONE Sep 15 (`e67cb90`); part-paid obligations still refused
 Two refusals come out of the server once the answer is known
 (`partial_not_supported_yet` and, separately, `partly_paid_not_supported_yet`).
 **The part-paid case is the harder one and is NOT just "allow a smaller amount":**
@@ -745,6 +804,9 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessOwesMore.mjs` | 26 — set_total_owed rules, the card link, the portal prompt flow |
 | `harnessDedupe.mjs` | 55 — same bytes on the same payment filed once (both paths); Submit stays off after the tick; HawkSoft's answer carried; the 5 MB ceiling on both paths; the page wording |
 | `harnessDocType.mjs` | 72 — no dropdown; the sheet for one file; guess as a dashed chip; purpose order; photo kinds only; countdown button; Other needs a name; camera asks once; row tag menu before/after upload; existing documents + amber hint; set_doc_type rules; carrier_list documents |
+| `harnessRefund.mjs` | 395 — now also: partial amounts, proportional fee + carrier share with the remainder on the last piece, idempotency keys, replay guard, the owner changing the amount, the card's refund_decision |
+| `harnessRequestUI.mjs` | 70 — now also: the How-much chips and box, the queue's amount box, the card's decision line |
+| `harnessProbeRefund.mjs` | 126 — now also: the owner login may run the probe, nobody else without the key |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

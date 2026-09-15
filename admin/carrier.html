@@ -219,8 +219,8 @@
     </div>
 
     <div class="card" id="noteCard">
-      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Note to Tony <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional</span></div>
-      <textarea id="auditNote" maxlength="500" placeholder="Anything he should know before he approves this — a fee-only, a special case, why the cost is what it is"></textarea>
+      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Note to auditor <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional</span></div>
+      <textarea id="auditNote" maxlength="500" placeholder="Anything the auditor should know before approving this — a fee-only, a special case, why the cost is what it is"></textarea>
     </div>
     <div class="btns" id="auditBtns">
       <button class="save" onclick="submit(false)">Save &amp; finish later</button>
@@ -245,6 +245,7 @@ let TOKEN = null, FILE_B64 = null, FILE_NAME = null, FILE_MIME = null, FILE_THUM
    path, never the bytes. Up to 50 MB. Photos are still shrunk first, so a phone photo
    almost never takes this road. */
 const BIG_MIN = 3 * 1024 * 1024, BIG_MAX = 50 * 1024 * 1024;
+const HS_MAX = 5 * 1024 * 1024;   // HawkSoft's own attachment ceiling (measured Sep 15): bigger stays on the platform only
 let FILE_BIG = null;
 function hasProofFile(){ return !!FILE_B64 || !!FILE_BIG; }
 async function uploadBig(file, name, mime, say){
@@ -345,7 +346,7 @@ function purposeFamily(){
 const PROOF_GUIDE = {
   new_business:  { usual: 'carrier_application', text: 'For a <b>{purpose}</b> the proof is usually the <b>signed application</b>: the amount paid to the carrier is printed on it, the carrier issued it, the client signed it. One document. A carrier receipt works just as well.' },
   endorsement:   { usual: 'carrier_endo', text: 'For an <b>Endorsement</b> the proof is usually the <b>signed endorsement</b> \u2014 it shows what changed, what the carrier charged, and that the client agreed. A carrier receipt works too.',
-                   fee: 'For an <b>Endorsement</b> with no carrier payment, the proof is the <b>signed endorsement</b> \u2014 it shows what changed and that the client agreed. If nothing was signed, pick <b>Other</b> and say what you are attaching, or tell Tony in the note below.' },
+                   fee: 'For an <b>Endorsement</b> with no carrier payment, the proof is the <b>signed endorsement</b> \u2014 it shows what changed and that the client agreed. If nothing was signed, pick <b>Other</b> and say what you are attaching, or tell the auditor in the note below.' },
   cancellation:  { usual: 'cancellation', text: 'For a <b>Cancellation</b> the proof is the <b>signed cancellation request</b>. If the carrier charged anything, a carrier receipt works too.' },
   dmv:           { usual: 'dmv_receipt', text: 'For a <b>DMV</b> service the proof is the <b>DMV receipt</b>.' },
   monthly:       { usual: 'carrier_receipt', text: 'For a <b>{purpose}</b> the proof is the <b>carrier receipt</b> \u2014 there is no signed paper for a payment on an existing policy.' },
@@ -354,7 +355,7 @@ const PROOF_GUIDE = {
   reinstatement: { usual: 'carrier_receipt', text: 'For a <b>Reinstatement</b> the proof is usually the <b>carrier receipt</b>; a signed reinstatement paper from the carrier works too.' },
   other:         { usual: 'carrier_receipt', text: 'Attach whatever proves the payment to the carrier \u2014 a receipt, a signed application or endorsement \u2014 and pick what it is.' },
 };
-const FEE_GUIDE = 'No carrier payment on this one. Attach anything that shows what the fee was for if you have it \u2014 a signed paper, a screenshot \u2014 or tell Tony in the note below.';
+const FEE_GUIDE = 'No carrier payment on this one. Attach anything that shows what the fee was for if you have it \u2014 a signed paper, a screenshot \u2014 or tell the auditor in the note below.';
 let PROOF = null;   // the chosen type; null = the usual one for this purpose
 function proofUsual(){ return (PROOF_GUIDE[purposeFamily()] || PROOF_GUIDE.other).usual; }
 function proofType(){ return PROOF || proofUsual(); }
@@ -594,7 +595,8 @@ async function prepareFile(file){
 function sizeNote(p){
   const kb = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b/1024) + ' KB' : (b/1048576).toFixed(1) + ' MB';
   if(p.tooBig) return kb(p.bytes) + ' \u00b7 over the 50 MB limit';
-  return (p.shrunk ? kb(p.originalBytes) + ' \u2192 ' + kb(p.bytes) : kb(p.bytes)) + (p.big ? ' \u00b7 uploads at submit' : '');
+  return (p.shrunk ? kb(p.originalBytes) + ' \u2192 ' + kb(p.bytes) : kb(p.bytes)) + (p.big ? ' \u00b7 uploads at submit' : '')
+    + (p.bytes > HS_MAX ? ' \u00b7 over HawkSoft\'s 5 MB limit \u2014 stays on the platform' : '');
 }
 
 /* ---------- Drag and drop ----------
@@ -848,7 +850,9 @@ function hasUnsavedWork(){
   const typed = !!(amt && String(amt.value || '').trim() && Number(amt.value) !== 0);
   const chose = !!(card && card.value);
   const filed = hasProofFile();
-  const docs  = !!(typeof DOCS !== 'undefined' && DOCS && DOCS.length);
+  /* only documents NOT yet uploaded - after "Upload documents" the list still shows
+     them, ticked, and Back asked "leave without submitting?" (Saif, Sep 15) */
+  const docs  = !!(typeof DOCS !== 'undefined' && DOCS && DOCS.some(d => !d.uploaded));
   const staged = !!(typeof REVIEW_FILES !== 'undefined' && REVIEW_FILES && REVIEW_FILES.length);
   return typed || chose || filed || docs || staged;
 }
@@ -1039,7 +1043,7 @@ async function submitDocsOnly(){
     } else if(!res.ok){
       try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; }
     }
-    if(res.ok){ d.uploaded = true; ok++; if(!res.hs) notFiled.push(d.name + (res.hsStatus ? ' (HawkSoft said ' + res.hsStatus + (res.hsWhy ? ': ' + res.hsWhy : '') + ')' : '')); }
+    if(res.ok){ d.uploaded = true; ok++; if(!res.hs) notFiled.push(d.name + (res.hsStatus === 'too_big_for_hawksoft' ? ' (over HawkSoft\'s 5 MB limit)' : res.hsStatus ? ' (HawkSoft said ' + res.hsStatus + (res.hsWhy ? ': ' + res.hsWhy : '') + ')' : '')); }
     else failed.push(d.name + ' (' + (res.error || (res.status === 413 ? 'file too large' : 'upload failed')) + ')');
   }
   renderDocs();
@@ -1048,7 +1052,7 @@ async function submitDocsOnly(){
     /* TRUE, NOT GREEN (Sep 15): the file is on the platform and Tony sees it in the
        review room, but HawkSoft did not take it - say so, with HawkSoft's own answer. */
     msg.className='warn';
-    msg.textContent = ok + ' document' + (ok>1?'s':'') + ' added and kept on the platform \u2014 Tony sees ' + (ok>1?'them':'it') + ' in the review room. HawkSoft did NOT take: ' + notFiled.join(', ') + '. The audit and commission are unchanged.';
+    msg.textContent = ok + ' document' + (ok>1?'s':'') + ' added and kept on the platform \u2014 the auditor sees ' + (ok>1?'them':'it') + ' in the review room. HawkSoft did NOT take: ' + notFiled.join(', ') + '. The audit and commission are unchanged.';
   } else if(ok && !failed.length){
     msg.className='ok';
     msg.textContent = ok + ' document' + (ok>1?'s':'') + ' added and filed to HawkSoft. The audit and commission are unchanged.';
@@ -1340,7 +1344,7 @@ function showReviewState(r){
   }
   if(r.audit_status === 'ready_for_audit'){
     el.className = 'review wait';
-    el.innerHTML = '<b>Submitted' + (r.audit_submitted_at ? ' ' + escAttr(when(r.audit_submitted_at)) : '') + ' — waiting for Tony.</b> '
+    el.innerHTML = '<b>Submitted' + (r.audit_submitted_at ? ' ' + escAttr(when(r.audit_submitted_at)) : '') + ' — waiting for the auditor.</b> '
       + 'You can still change it; submitting again replaces what he will see. Nothing is earned until he approves.'
       + (sb && sb.reply ? '<div style="margin-top:6px;opacity:.85">Your reply to ' + who(sb.by) + ': “' + escAttr(sb.reply) + '”</div>' : '');
     if(btn) btn.textContent = 'Submit again';
@@ -1471,7 +1475,7 @@ async function submit(complete){
       if(complete) SUBMITTED = true;   // before anything below can call updateSubmit()
       TOTAL_OWED_ANSWER = null;   // answered and written; never carry it to another audit
       mainMsg = complete
-        ? '✓ Submitted for approval — ' + (j.duplicate ? 'that file was already on this payment, so it was not filed twice' : 'receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':''))+'. Tony approves it next; your commission is earned when he does.'
+        ? '✓ Submitted for approval — ' + (j.duplicate ? 'that file was already on this payment, so it was not filed twice' : 'receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft': j.hawksoft_status === 'too_big_for_hawksoft' ? ' (over HawkSoft\'s 5 MB limit, so it stays on the platform)':''))+'. The auditor approves it next; your commission is earned when they do.'
         /* NOT a tick. Melisa saved three audits on Sep 3 and pressed save three times
            in seven seconds on one of them - Submit was disabled because the carrier
            cost was missing, so the only button available was this one, and it replied
@@ -1483,7 +1487,7 @@ async function submit(complete){
       // saved but response didn't parse — treat as success (data landed)
       mainOk = true;
       if(complete) SUBMITTED = true;
-      mainMsg = complete ? '✓ Submitted for approval — receipt stored. Tony approves it next.' : pendingMsg();
+      mainMsg = complete ? '✓ Submitted for approval — receipt stored. The auditor approves it next.' : pendingMsg();
     } else if(j && (j.error === 'total_owed_required' || j.error === 'total_owed_too_low')){
       /* Not a failure — the server abstained and asked a question. Nothing was written
          and nothing reached HawkSoft, so re-submitting after the answer files the
@@ -1495,7 +1499,7 @@ async function submit(complete){
     } else if(j && j.error === 'already_approved'){
       mainMsg = j.message || 'This audit has already been approved, so the carrier cost is final.';
     } else if(j && j.error === 'reply_required'){
-      mainMsg = j.message || 'Tell Tony why it is right as it is - the reply box is under his reason.';
+      mainMsg = j.message || 'Tell the auditor why it is right as it is - the reply box is under the reason.';
       const ta = $('#reviewReply'); if(ta){ ta.focus(); ta.style.borderColor = 'var(--red)'; }
     } else {
       mainMsg = (j && j.error) ? j.error : friendlyError(r.status, complete);

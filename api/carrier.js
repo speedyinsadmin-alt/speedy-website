@@ -248,6 +248,12 @@ function migrateObjectPath(attId, clientNo, filename, mime) {
    STRAIGHT to the bucket (up to its 50 MB limit); this function only ever sees the
    object path. The signed token lives two minutes and opens one path only. */
 const BIG_MAX_BYTES = 50 * 1024 * 1024;
+/* HAWKSOFT'S OWN CEILING (measured Sep 15 on ZZTEST with a 15 MB PDF): the attachment
+   API answers 400 "File exceeds max size of 5 MB." Anything bigger stays on the
+   platform only - the bucket holds up to 50 MB and the review room shows it - and the
+   page says so up front instead of a certain refusal being reported afterwards. */
+const HS_MAX_BYTES = 5 * 1024 * 1024;
+const HS_TOO_BIG = 'too_big_for_hawksoft';
 async function storageSignedUpload(objectPath) {
   const st = docStorage();
   if (!st) return { ok: false, error: 'no_supabase_env' };
@@ -648,8 +654,9 @@ export default async function handler(req, res) {
        swallowed by an empty catch and nothing recorded the status. Now the status and
        the first line of HawkSoft's answer come back to the page and go on the trail. */
     let hsStatus = hsFiled ? 'duplicate' : null, hsWhy = null;
+    if (!hsFiled && buf.length > HS_MAX_BYTES) { hsStatus = HS_TOO_BIG; hsWhy = 'over HawkSoft\'s 5 MB limit - kept on the platform'; }
     const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
-    if (ID && SECRET && !hsFiled) {
+    if (ID && SECRET && !hsFiled && hsStatus !== HS_TOO_BIG) {
       const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
       hsRefId = crypto.randomUUID();
       const fname = niceName.replace(/\.[^.]+$/, '').slice(0, 60);
@@ -670,19 +677,25 @@ export default async function handler(req, res) {
         hsFiled = (r2.status === 200 || r2.status === 202);
         if (!hsFiled) hsWhy = String(await r2.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200) || null;
       } catch (e) { hsStatus = 'error'; hsWhy = String(e && e.message || e).slice(0, 200); }
-      if (!hsFiled) {
-        try {
-          await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-            body: JSON.stringify([{ actor: email, kind: 'document.hawksoft_refused', client_no, source: 'carrier_capture',
-              payload: { attachment_id: attachment && attachment.id, payment_id: payment_id || null, doc_type: dtype, bytes: buf.length, status: hsStatus, why: hsWhy } }]) });
-        } catch { /* the trail never blocks the upload */ }
-      }
       if (attachment && hsFiled) {
         await fetch(`${s.base}/rest/v1/attachments?id=eq.${attachment.id}`, {
           method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
           body: JSON.stringify({ filed_hawksoft: true, hawksoft_refid: hsRefId }),
         });
       }
+    }
+    if (!hsFiled && !dup) {
+      try {
+        await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify([{ actor: email, kind: 'document.hawksoft_refused', client_no, source: 'carrier_capture',
+            payload: { attachment_id: attachment && attachment.id, payment_id: payment_id || null, doc_type: dtype, bytes: buf.length, status: hsStatus, why: hsWhy } }]) });
+      } catch { /* the trail never blocks the upload */ }
+    } else if (!hsFiled && dup && hsStatus !== HS_TOO_BIG) {
+      try {
+        await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+          body: JSON.stringify([{ actor: email, kind: 'document.hawksoft_refused', client_no, source: 'carrier_capture',
+            payload: { attachment_id: attachment && attachment.id, payment_id: payment_id || null, doc_type: dtype, bytes: buf.length, status: hsStatus, why: hsWhy, retry: true } }]) });
+      } catch { /* the trail never blocks the upload */ }
     }
     return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_why: hsWhy, bytes: buf.length, duplicate: !!dup });
   }
@@ -759,7 +772,7 @@ export default async function handler(req, res) {
       const sameCarrier = String(carrier || '').trim() === String(priorRow.carrier_name || '').trim();
       if (sameCost && sameCarrier) {
         return res.status(400).json({ ok: false, error: 'reply_required',
-          message: 'You are resubmitting this exactly as it was. Tell Tony why it is right as it is - he reads your reply on the row.' });
+          message: 'You are resubmitting this exactly as it was. Tell the auditor why it is right as it is - they read your reply on the row.' });
       }
     }
 
@@ -901,8 +914,9 @@ export default async function handler(req, res) {
       // File the carrier receipt to HawkSoft too (write-only POST — RefId is our proof of handoff)
       // - unless this exact file already went there with the first copy
       if (dup && dup.filed_hawksoft) { hsFiled = true; hsRefId = dup.hawksoft_refid || null; hsStatus = 'duplicate'; }
+      else if (buf.length > HS_MAX_BYTES) { hsStatus = HS_TOO_BIG; }
       const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
-      if (ID && SECRET && !hsFiled) {
+      if (ID && SECRET && !hsFiled && hsStatus !== HS_TOO_BIG) {
         const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
         const refId = crypto.randomUUID();
         const fname = (receipt_name || `carrier_receipt_${carrier}`).replace(/\.[^.]+$/, '').slice(0, 60);

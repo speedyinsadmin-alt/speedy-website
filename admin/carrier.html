@@ -66,6 +66,29 @@
   #msg{margin-top:12px;font-size:13px;text-align:center;min-height:18px}
   .ok{color:var(--green)} .err{color:var(--red)} .warn{color:var(--amber)}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
+  /* the document-type picker (Sep 15): chips in the sheet, a pill-shaped menu on the row */
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .chip{font-size:12px;padding:5px 10px;border-radius:999px;border:1.5px solid var(--line);color:var(--ink);background:var(--navy);cursor:pointer;user-select:none}
+  .chip.guess{border-style:dashed;border-color:var(--amber);color:var(--amber)}
+  .chip.on{background:rgba(47,191,113,.16);border-color:var(--green);color:#7ee2a8}
+  .chip.on::before{content:"\2713\00a0"}
+  .looks{font-size:11px;color:var(--amber);margin-top:6px}
+  .tagsel{-webkit-appearance:none;appearance:none;width:auto;display:inline-block;padding:2px 20px 2px 9px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid rgba(77,124,254,.35);background:rgba(77,124,254,.15) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6'%3E%3Cpath d='M0 0h8L4 6z' fill='%239db4ff'/%3E%3C/svg%3E") no-repeat right 7px center;color:#9db4ff;cursor:pointer;margin:0;line-height:1.4}
+  .tagsel.done{background-color:rgba(47,191,113,.15);border-color:rgba(47,191,113,.35);color:var(--green)}
+  .tagsel.odd{background-color:rgba(245,166,35,.15);border-color:rgba(245,166,35,.4);color:var(--amber)}
+  /* the sheets' own buttons (review, camera) sit outside .btns and were browser-default white slabs */
+  .btn{padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:0;background:var(--blue);color:#fff;font-family:inherit}
+  .btn.btn-ghost{background:transparent;border:1.5px solid var(--line);color:var(--mute)}
+  .btn[disabled]{opacity:.45;cursor:default}
+  .revrow{position:relative}
+  .docbtns{display:flex;gap:8px;margin-top:8px}
+  .docbtns button{flex:1;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;color:var(--ink);padding:9px 4px;font-size:12.5px;cursor:pointer}
+  .camgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .tile{background:var(--navy);border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center;font-size:13px;font-weight:700;cursor:pointer}
+  .tile small{display:block;font-weight:400;color:var(--mute);font-size:11px;margin-top:2px}
+  .tile.on{border-color:var(--green);background:rgba(47,191,113,.12)}
+  .rthumb{width:64px;height:80px;border-radius:7px;object-fit:cover;display:block;flex:none;background:#fff}
+  .rthumb.pdf{background:#f4f4f6;display:flex;align-items:center;justify-content:center;font-size:22px;color:#556}
   .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
   .hint{color:var(--mute);font-size:11px;margin-top:4px}
 </style>
@@ -174,24 +197,23 @@
 
     <div class="card">
       <div class="eyebrow"><span style="color:var(--blue)">◆</span> Documents <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional — application, photos, license</span></div>
-      <label>Document type</label>
-      <select id="dtype" onchange="onDtypePick()">
-        <option value="carrier_application">Carrier application</option>
-        <option value="vehicle_photo">Vehicle photo</option>
-        <option value="property_photo">Property photo</option>
-        <option value="driver_license">Driver license</option>
-        <option value="dec_page">Dec page</option>
-        <option value="other">Other</option>
-      </select>
-      <input id="dtypeOther" class="hide" placeholder="What is this document?" autocomplete="off" maxlength="41" oninput="onDtypeText()" style="margin-top:8px">
-      <div id="dtypeCount" class="hide hint" style="margin-top:5px"></div>
-      <div class="drop" id="docdrop" onclick="document.getElementById('docfile').click()" style="margin-top:10px">
+      <!-- NO SILENT DEFAULT (Saif, Sep 15). The "Document type" dropdown that sat here
+           labelled 48% of documents "carrier application" - whatever they were - because
+           it was set before the file was seen and rarely changed. Now every file is
+           labelled AFTER the drop, in the sheet below, by a tap the agent makes. -->
+      <div class="drop" id="docdrop" onclick="document.getElementById('docfile').click()" style="margin-top:4px">
         <div class="ic" style="color:var(--blue)">+</div>
         <div style="font-size:13px;margin-top:6px">Drag documents here, or tap to choose</div>
-        <div class="hint">PDF or photos · you can add several</div>
+        <div class="hint">PDF or photos · you can add several · you say what each one is next</div>
+      </div>
+      <div class="docbtns">
+        <button type="button" id="camBtn" class="hide" onclick="askPhotoKind()">&#128247; Take photos&hellip;</button>
+        <button type="button" onclick="document.getElementById('docfile').click()">&#128193; Choose files</button>
       </div>
       <input type="file" id="docfile" accept="application/pdf,image/*" multiple style="display:none">
+      <input type="file" id="camfile" accept="image/*" capture="environment" multiple style="display:none">
       <div id="doclist" style="margin-top:10px"></div>
+      <div id="havelist"></div>
     </div>
 
     <div id="reviewSheet" class="hide" style="display:none;position:fixed;inset:0;background:rgba(6,9,24,.92);z-index:70;overflow-y:auto;padding:16px">
@@ -204,7 +226,7 @@
             </div>
             <div onclick="cancelReview()" style="cursor:pointer;color:var(--mute);font-size:19px;padding:0 4px">&#10005;</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)">
+          <div id="revAllRow" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)">
             <span class="muted" style="font-size:11.5px">Set all to</span>
             <select id="revAll" onchange="setAllTypes(this.value)" style="margin:0;flex:1"></select>
           </div>
@@ -213,6 +235,27 @@
           <div style="display:flex;gap:8px;margin-top:12px">
             <button class="btn btn-ghost" style="margin:0;flex:1" onclick="cancelReview()">Cancel</button>
             <button class="btn" style="margin:0;flex:1.5" id="revAdd" onclick="confirmReview()">Add documents</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CAMERA: ask once, not per shot. Every photo taken in this session carries the
+         kind chosen here and skips the sheet - the type was chosen, not guessed. -->
+    <div id="camSheet" class="hide" style="display:none;position:fixed;inset:0;background:rgba(6,9,24,.92);z-index:70;overflow-y:auto;padding:16px">
+      <div style="max-width:520px;margin:0 auto">
+        <div class="card" style="border-color:var(--blue)">
+          <div style="font-size:15px;font-weight:800">Photos of what?</div>
+          <div class="muted" style="font-size:11.5px;margin-top:2px">Every shot you take now gets this label.</div>
+          <div class="camgrid">
+            <div class="tile" data-kind="vehicle_photo" onclick="pickPhotoKind('vehicle_photo')">&#128663; Vehicle<small>all sides, VIN, odometer</small></div>
+            <div class="tile" data-kind="property_photo" onclick="pickPhotoKind('property_photo')">&#127968; Property<small>roof, exterior, rooms</small></div>
+            <div class="tile" data-kind="driver_license" onclick="pickPhotoKind('driver_license')">&#129706; Driver license<small>front and back</small></div>
+            <div class="tile" data-kind="id_card" onclick="pickPhotoKind('id_card')">&#129706; ID card<small>proof of insurance</small></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-ghost" style="margin:0;flex:1" onclick="closeCamSheet()">Cancel</button>
+            <button class="btn" style="margin:0;flex:1.5" id="camGo" disabled onclick="openCamera()">Open camera</button>
           </div>
         </div>
       </div>
@@ -449,7 +492,6 @@ function fillCtx(){
   $('#cmeth').textContent = CTX.method;
   recalcFee();
   loadCarriers();   // both sign-in paths land here, and TOKEN is set by now
-  onDtypePick();
   applyDocsOnly();  // hides the money half when the audit is already closed
   updateSubmit();
 }
@@ -664,8 +706,28 @@ const DOC_TYPES = [
   ['property_photo','Property photo'], ['driver_license','Driver license'],
   ['id_card','ID card'], ['dec_page','Dec page'],
   ['hawksoft_endo','HawkSoft endorsement'], ['carrier_endo','Carrier endorsement'],
-  ['cancellation','Cancellation'], ['other','Other'],
+  ['cancellation','Cancellation'], ['other','Other\u2026'],
 ];
+const PHOTO_TYPES = ['vehicle_photo', 'property_photo', 'driver_license', 'id_card'];
+/* the chip order follows the charge (Saif, Sep 15): what this charge most likely
+   comes with is first. A photo only ever gets the photo and ID kinds. */
+const TYPE_ORDER = {
+  new_business:  ['carrier_application', 'dec_page', 'driver_license', 'id_card', 'vehicle_photo', 'property_photo', 'carrier_endo', 'hawksoft_endo', 'cancellation', 'other'],
+  endorsement:   ['carrier_endo', 'hawksoft_endo', 'carrier_application', 'dec_page', 'vehicle_photo', 'property_photo', 'driver_license', 'id_card', 'cancellation', 'other'],
+  cancellation:  ['cancellation', 'carrier_endo', 'hawksoft_endo', 'dec_page', 'carrier_application', 'driver_license', 'id_card', 'vehicle_photo', 'property_photo', 'other'],
+  other:         ['dec_page', 'carrier_application', 'carrier_endo', 'hawksoft_endo', 'driver_license', 'id_card', 'vehicle_photo', 'property_photo', 'cancellation', 'other'],
+};
+function typeLabel(t){ const x = DOC_TYPES.find(d => d[0] === t); return x ? x[1].replace('\u2026', '') : String(t || '').replace(/_/g, ' '); }
+function isPhotoMime(m){ return /^image\//i.test(String(m || '')); }
+function typesFor(p){
+  const fam = purposeFamily();
+  const order = TYPE_ORDER[fam] || TYPE_ORDER.other;
+  if(isPhotoMime(p && p.mime)) return PHOTO_TYPES.slice().sort((a, b) => order.indexOf(a) - order.indexOf(b)).concat(['other']);
+  return order.slice();
+}
+/* what is already on the payment, from carrier_list - a second "application" is
+   unlikely, so the guess does not repeat a type that is there */
+let HAVE_DOCS = [];
 let REVIEW_FILES = [];
 
 function guessType(name){
@@ -677,7 +739,7 @@ function guessType(name){
   if(/id[_ -]?card|\bidcard\b/.test(n))                return 'id_card';
   if(/licen[cs]e|dl[_-]/.test(n))                      return 'driver_license';
   if(/applicat|signed[_-]?app|\bapp\b/.test(n))       return 'carrier_application';
-  if(/dec[_-]?page|declarat/.test(n))                  return 'dec_page';
+  if(/dec[_ -]?page|declarat/.test(n))                 return 'dec_page';
   if(/cancel/.test(n))                                 return 'cancellation';
   /* HawkSoft endorsement vs carrier endorsement: whichever system is named wins,
      and a bare "endo" is left unguessed rather than guessed wrong - the review sheet
@@ -691,19 +753,37 @@ function guessType(name){
   if(/vehicle|vin|bumper|odom|damage|car[_-]/.test(n))    return 'vehicle_photo';
   return null;
 }
-function typeOptions(sel){
-  return DOC_TYPES.map(t => '<option value="' + t[0] + '"' + (t[0] === sel ? ' selected' : '') + '>' + t[1] + '</option>').join('');
+/* the guess for a prepared file: the filename first; a photo with no clue stays
+   unguessed (vehicle or property is the agent's call); a PDF follows the charge's
+   purpose unless that type is already on the payment */
+function guessFor(p){
+  const byName = guessType(p.name);
+  if(byName) return (isPhotoMime(p.mime) && !PHOTO_TYPES.includes(byName)) ? null : byName;
+  if(isPhotoMime(p.mime)) return null;
+  const fam = purposeFamily();
+  const want = fam === 'new_business' ? 'carrier_application' : fam === 'endorsement' ? 'carrier_endo' : fam === 'cancellation' ? 'cancellation' : null;
+  if(want && HAVE_DOCS.some(d => d.doc_type === want) && !REVIEW_FILES.some(r => r.type === want)) return null;
+  return want;
+}
+function looksLine(p, g){
+  if(g) return 'Looks like a <b>' + escHtml(typeLabel(g).toLowerCase()) + '</b> \u2014 ' + (guessType(p.name) ? 'from the file name' : isPhotoMime(p.mime) ? 'a photo' : 'a PDF on a ' + escHtml(String(CTX.purpose || 'this').toLowerCase()) + ' charge') + '. Tap it to confirm.';
+  if(isPhotoMime(p.mime)) return 'A photo \u2014 <b>vehicle</b> or <b>property</b>? Tap one.';
+  return 'Tap what this is.';
 }
 function openReview(prepared){
-  const fallback = $('#dtype').value;
+  /* NOTHING IS PICKED. The guess is shown as a dashed chip the agent taps; there is
+     no path where the system's guess becomes the value. */
+  REVIEW_FILES = [];
   REVIEW_FILES = prepared.map((p, i) => {
-    const g = guessType(p.name);
-    return { i, p, type: g || fallback, guessed: !!g, confirmed: !g };
+    const g = guessFor(p);
+    return { i, p, type: null, guess: g, guessed: !!g, confirmed: false };
   });
-  $('#revAll').innerHTML = typeOptions(fallback);
-  $('#revSub').textContent = prepared.length + ' files · '
-    + Math.round(prepared.reduce((a, p) => a + p.bytes, 0) / 1024) + ' KB after resizing · nothing uploaded yet';
-  $('#revTitle').textContent = prepared.length + ' files — what is each one?';
+  $('#revAll').innerHTML = '<option value="">Choose\u2026</option>' + typesFor({}).map(t => '<option value="' + t + '">' + escHtml(typeLabel(t)) + '</option>').join('');
+  $('#revAll').value = '';
+  $('#revAllRow').style.display = prepared.length > 1 ? '' : 'none';
+  const kb = Math.round(prepared.reduce((a, p) => a + p.bytes, 0) / 1024);
+  $('#revSub').textContent = prepared.length + ' file' + (prepared.length === 1 ? '' : 's') + ' · ' + (kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB') + (prepared.some(p => p.shrunk) ? ' after resizing' : '') + ' · nothing uploaded yet';
+  $('#revTitle').textContent = prepared.length === 1 ? 'What is this?' : prepared.length + ' files \u2014 what is each one?';
   renderReview();
   const sheet = $('#reviewSheet');
   sheet.classList.remove('hide'); sheet.style.display = 'block';
@@ -713,34 +793,35 @@ function renderReview(){
   $('#revBody').innerHTML = REVIEW_FILES.map(r => {
     const p = r.p;
     const thumb = p.thumb
-      ? '<img src="' + p.thumb + '" alt="" style="width:46px;height:36px;object-fit:cover;border-radius:6px;display:block">'
-      : '<div style="width:46px;height:36px;background:var(--field);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px">📄</div>';
-    const needs = r.guessed && !r.confirmed;
+      ? '<img src="' + p.thumb + '" alt="" class="rthumb">'
+      : '<div class="rthumb pdf">\uD83D\uDCC4</div>';
+    const needs = !r.type;
+    const chips = '<div class="chips">' + typesFor(p).map(t =>
+      '<span class="chip' + (r.type === t ? ' on' : (!r.type && r.guess === t) ? ' guess' : '') + '" data-t="' + t + '" onclick="setType(' + r.i + ',\'' + t + '\')">' + escHtml(typeLabel(t)) + (t === 'other' ? '\u2026' : '') + '</span>').join('') + '</div>'
+      + (needs ? '<div class="looks">' + looksLine(p, r.guess) + '</div>' : '');
     /* "Other" needs to say WHAT. The single-file path has always had this box; the
        review sheet never did, so an agent dragging several files could pick Other and
        had no way to describe any of them. Laura hit exactly this. */
     const otherRow = r.type === 'other'
-      ? '<div style="padding:0 0 9px 55px;border-bottom:1px solid var(--line)">'
+      ? '<div style="padding:0 0 9px 73px;border-bottom:1px solid var(--line)">'
         + '<input type="text" maxlength="41" placeholder="What is this document?" '
         + 'value="' + escAttr(r.label || '') + '" oninput="setLabel(' + r.i + ',this.value)" '
-        + 'style="margin:0;font-size:12px;padding:6px 9px' + (!(r.label || '').trim() ? ';border-color:var(--amber)' : '') + '">'
+        + 'style="margin:0;font-size:12px;padding:6px 9px' + (!(r.label || '').trim() ? ';border-color:var(--red)' : '') + '">'
         + '<div class="muted" style="font-size:10px;margin-top:3px">'
         + ((r.label || '').length) + '/41 — becomes the description in HawkSoft</div></div>'
       : '';
-    return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;'
+    return '<div class="revrow" style="display:flex;align-items:flex-start;gap:9px;padding:11px 0;'
       + (r.type === 'other' ? '' : 'border-bottom:1px solid var(--line)') + '">'
       + thumb
       + '<div style="flex:1;min-width:0">'
-      + '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.name) + '</div>'
-      + '<div class="muted" style="font-size:10.5px">' + escHtml(sizeNote(p)) + '</div>'
-      + (needs ? '<div style="color:var(--amber);font-size:10.5px;margin-top:2px;cursor:pointer" onclick="confirmGuess(' + r.i + ')">guessed — tap to confirm</div>' : '')
+      + '<div style="font-size:12.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.name) + '</div>'
+      + '<div class="muted" style="font-size:10.5px">' + escHtml(sizeNote(p)) + (needs ? ' \u00b7 tap the type:' : '') + '</div>'
+      + chips
       + '</div>'
-      + '<select onchange="setType(' + r.i + ',this.value)" style="margin:0;width:auto;min-width:130px;'
-      + (needs ? 'border-color:var(--amber)' : '') + '">' + typeOptions(r.type) + '</select>'
-      + '<span onclick="dropFile(' + r.i + ')" style="cursor:pointer;color:var(--mute);font-size:15px">✕</span>'
+      + '<span onclick="dropFile(' + r.i + ')" style="cursor:pointer;color:var(--mute);font-size:15px">\u2715</span>'
       + '</div>' + otherRow;
   }).join('');
-  const pending = REVIEW_FILES.filter(r => r.guessed && !r.confirmed).length;
+  const pending = REVIEW_FILES.filter(r => !r.type).length;
   /* An unlabelled "Other" is as unusable as an unconfirmed guess - it arrives in
      HawkSoft described as nothing. */
   const unlabelled = REVIEW_FILES.filter(r => r.type === 'other' && !String(r.label || '').trim()).length;
@@ -751,13 +832,16 @@ function renderReview(){
     add.disabled = true;
   } else if(pending){
     warn.classList.remove('hide');
-    warn.textContent = pending + ' file' + (pending > 1 ? 's were' : ' was') + ' labelled from the filename. Confirm or change ' + (pending > 1 ? 'them' : 'it') + ' before adding.';
+    warn.textContent = (REVIEW_FILES.length === 1 ? 'Pick a type before adding. ' : pending + ' of ' + REVIEW_FILES.length + ' still need a type. ')
+      + 'The label is what the auditor and HawkSoft see, and HawkSoft\'s copy cannot be renamed afterwards.';
     add.disabled = true; add.style.opacity = '.5';
   } else {
     warn.classList.add('hide');
     add.disabled = false; add.style.opacity = '';
   }
-  add.textContent = 'Add ' + REVIEW_FILES.length + ' document' + (REVIEW_FILES.length === 1 ? '' : 's');
+  add.textContent = pending
+    ? (REVIEW_FILES.length === 1 ? 'Pick a type' : 'Pick a type for ' + pending + ' of ' + REVIEW_FILES.length)
+    : 'Add ' + REVIEW_FILES.length + ' document' + (REVIEW_FILES.length === 1 ? '' : 's');
 }
 function setLabel(i, v){
   const r = REVIEW_FILES.find(x => x.i === i);
@@ -771,14 +855,13 @@ function setLabel(i, v){
 
 function setType(i, v){
   const r = REVIEW_FILES.find(x => x.i === i); if(!r) return;
-  r.type = v; r.confirmed = true; renderReview();
-}
-function confirmGuess(i){
-  const r = REVIEW_FILES.find(x => x.i === i); if(!r) return;
-  r.confirmed = true; renderReview();
+  r.type = v || null; r.confirmed = !!v; renderReview();
+  if(v === 'other'){ const inp = $('#revBody').querySelector('input[type=text]'); if(inp) inp.focus(); }
 }
 function setAllTypes(v){
-  REVIEW_FILES.forEach(r => { r.type = v; r.confirmed = true; });
+  if(!v) return;
+  /* a photo can only be a photo kind: "set all to Dec page" leaves the photos alone */
+  REVIEW_FILES.forEach(r => { if(typesFor(r.p).includes(v)){ r.type = v; r.confirmed = true; } });
   renderReview();
 }
 function dropFile(i){
@@ -793,7 +876,8 @@ function cancelReview(){
   document.body.style.overflow = '';
 }
 function confirmReview(){
-  if(REVIEW_FILES.some(r => r.guessed && !r.confirmed)) return;
+  if(REVIEW_FILES.some(r => !r.type)) return;
+  if(REVIEW_FILES.some(r => r.type === 'other' && !String(r.label || '').trim())) return;
   for(const r of REVIEW_FILES){
     if(r.p.tooBig){ msgLine(r.p.name + ' is over 50 MB and was not added.'); continue; }
     DOCS.push({ doc_type: r.type, doc_label: (r.label || '').trim() || null, name: r.p.name, mime: r.p.mime, b64: r.p.b64, big: r.p.big || null, thumb: r.p.thumb, note: sizeNote(r.p) });
@@ -803,17 +887,86 @@ function confirmReview(){
 }
 
 async function acceptDocFiles(files){
-  // one file: no interruption, use the type already chosen
-  if(files.length === 1){
-    const p = await prepareFile(files[0]);
-    if(p.tooBig){ msgLine(p.name + ' is over 50 MB and was not added.'); return; }
-    DOCS.push({ doc_type: $('#dtype').value, doc_label: effDocLabel(), name: p.name, mime: p.mime, b64: p.b64, big: p.big || null, thumb: p.thumb, note: sizeNote(p) });
-    renderDocs();
-    return;
-  }
+  /* one file or ten: the same sheet. A single file used to take the dropdown's
+     value silently - that is where "carrier application" on a photo came from. */
   const prepared = [];
   for(const f of files) prepared.push(await prepareFile(f));   // resize first, so sizes shown are real
-  openReview(prepared);
+  const usable = prepared.filter(p => { if(p.tooBig) msgLine(p.name + ' is over 50 MB and was not added.'); return !p.tooBig; });
+  if(!usable.length) return;
+  openReview(usable);
+}
+
+/* ---------- Camera: ask once, then every shot carries the kind ---------- */
+let CAM_KIND = null;
+function isPhone(){ return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth < 900); }
+function askPhotoKind(){
+  CAM_KIND = null;
+  document.querySelectorAll('#camSheet .tile').forEach(t => t.classList.remove('on'));
+  const go = $('#camGo'); if(go){ go.disabled = true; go.textContent = 'Open camera'; }
+  const sh = $('#camSheet'); sh.classList.remove('hide'); sh.style.display = 'block'; document.body.style.overflow = 'hidden';
+}
+function pickPhotoKind(k){
+  CAM_KIND = k;
+  document.querySelectorAll('#camSheet .tile').forEach(t => t.classList.toggle('on', t.dataset.kind === k));
+  const go = $('#camGo'); if(go){ go.disabled = false; go.textContent = 'Open camera \u00b7 ' + ({ vehicle_photo: 'vehicle', property_photo: 'property', driver_license: 'license', id_card: 'ID card' }[k] || typeLabel(k).toLowerCase()); }
+}
+function closeCamSheet(){ const sh = $('#camSheet'); sh.classList.add('hide'); sh.style.display = 'none'; document.body.style.overflow = ''; }
+function openCamera(){ if(!CAM_KIND) return; closeCamSheet(); $('#camfile').click(); }
+async function acceptCameraFiles(files){
+  const kind = CAM_KIND; if(!kind){ return acceptDocFiles(files); }
+  for(const f of files){
+    const p = await prepareFile(f);
+    if(p.tooBig){ msgLine(p.name + ' is over 50 MB and was not added.'); continue; }
+    DOCS.push({ doc_type: kind, doc_label: null, name: p.name, mime: p.mime, b64: p.b64, big: p.big || null, thumb: p.thumb, note: sizeNote(p) });
+  }
+  renderDocs();
+}
+
+/* ---------- The tag on a row is a menu: before upload it changes the row, after
+   upload it changes the platform's label (set_doc_type). ---------- */
+function tagMenu(sel, onchange, extra){
+  return '<select class="tagsel' + (extra || '') + '" onchange="' + onchange + '">'
+    + typesFor({ mime: '' }).map(t => '<option value="' + t + '"' + (t === sel ? ' selected' : '') + '>' + escHtml(typeLabel(t)) + '</option>').join('')
+    + (DOC_TYPES.some(d => d[0] === sel) ? '' : '<option value="' + escAttr(sel) + '" selected>' + escHtml(typeLabel(sel)) + '</option>')
+    + '</select>';
+}
+function retypeDoc(i, v){
+  const d = DOCS[i]; if(!d) return;
+  if(v === 'other'){ const l = prompt('What is this document? (becomes the description in HawkSoft)', d.doc_label || ''); if(l == null) { renderDocs(); return; } d.doc_label = String(l).trim().slice(0, 41) || null; if(!d.doc_label){ renderDocs(); return; } }
+  else d.doc_label = null;
+  if(d.uploaded && d.attachment_id){ relabelOnPlatform(d.attachment_id, v, d.doc_label, () => { d.doc_type = v; renderDocs(); }, () => renderDocs()); return; }
+  d.doc_type = v; renderDocs();
+}
+async function relabelOnPlatform(id, v, label, onOk, onFail){
+  try{
+    const r = await fetch('/api/carrier', { method:'POST', headers:{'x-id-token':TOKEN,'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'set_doc_type', attachment_id: id, doc_type: v, doc_label: label || null }) });
+    const j = await r.json().catch(() => null);
+    if(r.ok && j && j.ok){ onOk(); msgLine('Type changed to ' + typeLabel(v).toLowerCase() + ' on the platform. HawkSoft keeps the name it was filed with.'); }
+    else { alert((j && (j.message || j.error)) || 'Could not change it.'); onFail(); }
+  }catch(e){ alert('Could not change it.'); onFail(); }
+}
+function retypeHave(id, v){
+  const d = HAVE_DOCS.find(x => x.id === id); if(!d) return;
+  let label = null;
+  if(v === 'other'){ const l = prompt('What is this document? (becomes the description in HawkSoft)', d.doc_label || ''); if(l == null){ renderHave(); return; } label = String(l).trim().slice(0, 41) || null; if(!label){ renderHave(); return; } }
+  relabelOnPlatform(id, v, label, () => { d.doc_type = v; d.doc_label = label; renderHave(); }, () => renderHave());
+}
+/* a photo filed as anything but a photo kind is almost certainly the old default */
+function oddType(d){ return isPhotoMime(d.mime) && !PHOTO_TYPES.includes(d.doc_type) && d.doc_type !== 'other'; }
+function renderHave(){
+  const el = $('#havelist'); if(!el) return;
+  const docs = HAVE_DOCS.filter(d => !['proof', 'carrier_receipt', 'client_receipt'].includes(String(d.kind || '')) && !/_no_payment$/.test(String(d.doc_type || '')));
+  if(!docs.length){ el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="font-size:11px;color:var(--mute);margin:12px 0 6px">Already on this payment \u00b7 tap a tag to change it</div>'
+    + docs.map(d =>
+      '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
+      + tagMenu(d.doc_type, 'retypeHave(\'' + d.id + '\',this.value)', oddType(d) ? ' odd' : '')
+      + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(d.doc_label ? d.doc_label + ' \u00b7 ' : '') + escHtml(d.filename || '') + '</span>'
+      + '<span style="color:var(--mute);font-size:11px">' + escHtml(String(d.created_at || '').slice(5, 10).replace('-', '/')) + (d.uploaded_by ? ' \u00b7 ' + escHtml(String(d.uploaded_by).split('@')[0]) : '') + (d.filed_hawksoft ? ' \u00b7 in HawkSoft' : '') + '</span>'
+      + '</div>'
+      + (oddType(d) ? '<div class="hint" style="margin:-2px 0 8px 10px;color:var(--amber)">\u21b3 a photo filed as ' + escHtml(typeLabel(d.doc_type).toLowerCase()) + '? tap the tag to fix it</div>' : '')
+    ).join('');
 }
 function msgLine(t){ const m = $('#msg'); if(m){ m.className = ''; m.textContent = t; } }
 
@@ -915,6 +1068,8 @@ async function loadCarriers(){
   OWED = (r.owed_amount != null) ? Number(r.owed_amount) : null;
   recalcFee();
   showReviewState(r);
+  HAVE_DOCS = Array.isArray(r.documents) ? r.documents : [];
+  renderHave();
   renderProof();
   const an = $('#auditNote'); if(an && r.audit_note && !an.value) an.value = r.audit_note;
 
@@ -962,31 +1117,19 @@ async function loadCarriers(){
   onCarrierPick();
 }
 
-/* ---- Document type "Other": say what it is ----
-   The text becomes the description in HawkSoft, which caps at 41 characters.
-   The counter stops the agent rather than letting it be cut silently on upload. */
-function onDtypePick(){
-  const d = $('#dtype'); if(!d) return;
-  const isOther = d.value === 'other';
-  $('#dtypeOther').classList.toggle('hide', !isOther);
-  $('#dtypeCount').classList.toggle('hide', !isOther);
-  if(isOther){ $('#dtypeOther').focus(); onDtypeText(); }
-}
-function onDtypeText(){
-  const v = ($('#dtypeOther').value || '');
-  $('#dtypeCount').textContent = v.length + '/41 characters';
-}
-function effDocLabel(){
-  const d = $('#dtype');
-  if(!d || d.value !== 'other') return null;
-  return ($('#dtypeOther').value || '').trim() || null;
-}
-
 $('#docfile').addEventListener('change', async e => {
   const files = [...e.target.files];
   e.target.value = '';
   await acceptDocFiles(files);
 });
+$('#camfile').addEventListener('change', async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  await acceptCameraFiles(files);
+});
+/* the camera button only where there is a camera: on a phone the file input with
+   capture opens the rear camera; on a computer it would just be another file picker */
+(function(){ const b = $('#camBtn'); if(b && isPhone()) b.classList.remove('hide'); })();
 /* ---------- Documents-only mode ----------
    An agent submits to audit, then realises a document is missing. Before this the
    audit was closed and the "Add proof of payment" button was gone, so there was no
@@ -1025,6 +1168,7 @@ async function submitDocsOnly(){
         doc_type:d.doc_type, doc_label:d.doc_label || null,
         receipt_b64:d.big ? null : d.b64, receipt_path:d.path || null, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
+    if(j && j.attachment_id) d.attachment_id = j.attachment_id;
     return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error, hs: !!(j && j.hawksoft_filed), hsStatus: j && j.hawksoft_status, hsWhy: j && j.hawksoft_why };
   };
 
@@ -1069,8 +1213,8 @@ async function submitDocsOnly(){
 function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
     '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
-    + '<span class="pill" style="background:' + (d.uploaded ? 'rgba(47,191,113,.15);color:var(--green)' : 'rgba(77,124,254,.15);color:var(--blue)') + '">'
-    + (d.uploaded ? '\u2713 ' : '') + escAttr(d.doc_label || d.doc_type.replace(/_/g,' ')) + '</span>'
+    + tagMenu(d.doc_type, 'retypeDoc(' + i + ',this.value)', d.uploaded ? ' done' : '')
+    + (d.doc_label ? '<span style="color:var(--mute);font-size:11px">' + escHtml(d.doc_label) + '</span>' : '')
     + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + d.name + '</span>'
     + (d.note ? '<span style="color:var(--mute);font-size:11px">' + d.note + '</span>' : '')
     + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
@@ -1523,6 +1667,7 @@ async function submit(complete){
         policy_id:CTX.policy_id||null, policy_guid:CTX.policy_guid||null, policy_num:CTX.policy_num||null, payment_id:CTX.payment_id||null,
         doc_type:d.doc_type, doc_label:d.doc_label || null, receipt_b64:d.big ? null : d.b64, receipt_path:d.path || null, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
+    if(j && j.attachment_id) d.attachment_id = j.attachment_id;
     return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };
   };
   for(let i=0;i<DOCS.length;i++){

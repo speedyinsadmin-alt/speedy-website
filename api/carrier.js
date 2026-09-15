@@ -253,6 +253,8 @@ const BIG_MAX_BYTES = 50 * 1024 * 1024;
    platform only - the bucket holds up to 50 MB and the review room shows it - and the
    page says so up front instead of a certain refusal being reported afterwards. */
 const HS_MAX_BYTES = 5 * 1024 * 1024;
+/* the document types the page offers; set_doc_type accepts nothing else */
+const DOC_TYPES_OK = ['carrier_application', 'dec_page', 'carrier_endo', 'hawksoft_endo', 'cancellation', 'driver_license', 'id_card', 'vehicle_photo', 'property_photo', 'other'];
 const HS_TOO_BIG = 'too_big_for_hawksoft';
 async function storageSignedUpload(objectPath) {
   const st = docStorage();
@@ -446,7 +448,19 @@ export default async function handler(req, res) {
       .map(r => ({ name: String(r.name || '').trim(), policies: r.policies }))
       .filter(x => x.name && mine.indexOf(x.name) === -1);
 
-    return res.status(200).json({ ok: true, suggested, program, purpose, existing_receipt: existing,
+    /* every document on the payment (not the client receipt): the page lists them
+       under the Documents card with a tag that can be changed (Sep 15) */
+    let documents = [];
+    if (body.payment_id) {
+      try {
+        const d = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(body.payment_id)}&kind=neq.client_receipt`
+          + `&select=id,kind,doc_type,doc_label,filename,mime,bytes,filed_hawksoft,uploaded_by,created_at&order=created_at.asc&limit=60`);
+        documents = (d.rows || []).map(r => ({ id: r.id, kind: r.kind, doc_type: r.doc_type, doc_label: r.doc_label || null, filename: r.filename,
+          mime: r.mime || null, bytes: r.bytes || null, filed_hawksoft: r.filed_hawksoft === true, uploaded_by: r.uploaded_by || null, created_at: r.created_at }));
+      } catch { documents = []; }
+    }
+
+    return res.status(200).json({ ok: true, suggested, program, purpose, existing_receipt: existing, documents,
       charge_amount: chargeAmount, total_owed: totalOwed, owed_amount: owedAmount,
       audit_status: auditStatus, audit_sendback: sendback, audit_submitted_at: submittedAt, audit_note: auditNote,
       onThisClient: mine, carriers: ranked });
@@ -567,6 +581,37 @@ export default async function handler(req, res) {
     const signed = await storageSignedUpload(path);
     if (!signed.ok) return res.status(502).json({ ok: false, error: signed.error, message: 'Could not prepare the upload. Try again in a moment.' });
     return res.status(200).json({ ok: true, path: signed.path, put_url: signed.put_url, max_bytes: BIG_MAX_BYTES });
+  }
+
+  /* WRONG TYPE? CHANGE IT (Sep 15). The label on a document can be corrected on the
+     platform after upload - the tag on the row is a menu. HawkSoft's copy keeps the
+     description it was filed with (no rename endpoint), which is why the page makes
+     the agent choose BEFORE upload; this is the way back for the ones that slipped.
+     Documents only: a client receipt or the proof of payment are not relabelled here.
+     Any agent may do it, and the event says who. */
+  if (action === 'set_doc_type') {
+    const id = String(body.attachment_id || '');
+    const dtype = String(body.doc_type || '');
+    const label = String(body.doc_label || '').trim().slice(0, 41) || null;
+    if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: 'attachment_id required' });
+    if (!DOC_TYPES_OK.includes(dtype)) return res.status(400).json({ ok: false, error: 'unknown_type', message: 'That is not a document type.' });
+    if (dtype === 'other' && !label) return res.status(400).json({ ok: false, error: 'label_required', message: 'Say what the document is.' });
+    const cur = await sbGet(s, `attachments?id=eq.${id}&select=id,kind,doc_type,doc_label,client_no,payment_id,filename`);
+    const row = (cur.rows || [])[0];
+    if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (['client_receipt', 'proof', 'carrier_receipt'].includes(String(row.kind || '')) || /_no_payment$/.test(String(row.doc_type || ''))) {
+      return res.status(400).json({ ok: false, error: 'not_a_document', message: 'That is the receipt or the proof of payment, not a document - its type is set at the audit.' });
+    }
+    const before = { doc_type: row.doc_type, doc_label: row.doc_label || null };
+    if (before.doc_type === dtype && (before.doc_label || null) === label) return res.status(200).json({ ok: true, unchanged: true, doc_type: dtype, doc_label: label });
+    await fetch(`${s.base}/rest/v1/attachments?id=eq.${id}`, { method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify({ kind: dtype, doc_type: dtype, doc_label: label }) });
+    try {
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify([{ actor: email, kind: 'document.relabelled', client_no: row.client_no, source: 'carrier_capture',
+          payload: { attachment_id: id, payment_id: row.payment_id || null, filename: row.filename, before, after: { doc_type: dtype, doc_label: label } } }]) });
+    } catch { /* the trail never blocks the fix */ }
+    return res.status(200).json({ ok: true, doc_type: dtype, doc_label: label, before });
   }
 
   if (action === 'add_document') {

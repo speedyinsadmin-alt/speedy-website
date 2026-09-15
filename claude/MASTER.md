@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 14 night. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `1acd29d`.
+Last written Sep 15 midday. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `f1406ff`.
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
 above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
@@ -97,6 +97,39 @@ sessions (the scratchpad does not). Run from there: `npm i` once, then
 files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` load in
 every session and carry the traps. Copy new harnesses back into that folder before
 stopping for the day.
+
+### ✅ SEP 15 MIDDAY · FIRST REAL DAY OF THE PROOF-BY-PURPOSE PAGE
+Saif: "some agents start upload images and signed applications, check." Checked the
+live tables (attachments, bridge_ledger, events, Vercel runtime errors) for the morning:
+
+- **Working as designed.** Twelve audits submitted between 9 AM and noon by Yasmin,
+  Daisy, Melisa, Jorge, Sammy. Proofs filed as `kind=proof` with the real type:
+  signed application (Sammy, 26023, $178.18 National General on a $430 new business),
+  signed endorsement (Yasmin ×3: 25144, 21937, 14577), carrier receipts (Daisy, Melisa,
+  Jorge, Yasmin). Every one `filed_hawksoft=true`, every one in the bucket. Daisy used
+  the *Note to Tony* (21577: "void the 09/12 receipt, same amount"). Yasmin answered
+  Tony's send-back on 14577 with the reply box, twice ("waiting on photos" → "and
+  photos"), plus five vehicle photos. Fee-only + signed endo (14577, $0 to carrier)
+  went through. Largest file 1.57 MB — the >3 MB signed-upload path is still untried.
+  No runtime errors (only the old `url.parse` deprecation warning).
+- **One bug found and fixed (`f1406ff`): the same proof filed twice.** 14577 and
+  25144 each carried the same PDF (same sha256) twice, minutes apart — and the query
+  showed THIRTY payments like that since Sep 5, mostly 5–15 seconds apart. Cause: after
+  a green tick, `submit()` ends with `renderDocs()` → `updateSubmit()`, and every gate
+  still passed (the file was still in the slot), so **Submit came back on** and a
+  second press filed the same bytes again. HawkSoft cannot delete an attachment, so each
+  is a permanent second copy over there. Fixed both ends: `updateSubmit()` keeps Submit
+  off once `SUBMITTED`; and carrier.js `sameFileOnPayment()` — `save_carrier_leg` and
+  `add_document` look the bytes up by payment + sha256 first. A duplicate reuses the
+  row (no storagePut, no insert, no HawkSoft POST if the first copy was filed; a
+  HawkSoft retry if it was not); a plain document re-sent as the proof is promoted in
+  place; the answer says `duplicate:true` and the tick reads "that file was already on
+  this payment, so it was not filed twice". Save-then-Submit with the file still in the
+  slot is covered by the server half. `harnessDedupe.mjs` (30), `mutateDedupe` 17/17,
+  full suite unchanged (harnessStaff 19 failures and harness.mjs missing `mod_NEW.mjs`
+  are old and fail identically on HEAD — superseded by harnessStaff2).
+- The existing double copies in HawkSoft stay (no delete API); nothing to do on the
+  platform side — the Console shows both chips, both point at the same bytes.
 
 ### ⏭ TUESDAY SEP 15 — IN THIS ORDER
 0. **Client 4600 — DONE by SQL Sep 14 night:** Laura's $0.50 placeholder row
@@ -655,6 +688,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessInvoice.mjs` | 42 — invoice_open end to end: server, waking, lists, Trust, card, sheet |
 | `harnessBigFiles.mjs` | 35 — signed uploads: upload_url, receipt_path on both actions, the page's File path |
 | `harnessOwesMore.mjs` | 26 — set_total_owed rules, the card link, the portal prompt flow |
+| `harnessDedupe.mjs` | 30 — same bytes on the same payment filed once (both upload paths); Submit stays off after the tick |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 15 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `e67cb90`.
+Last written Sep 15 night. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `7a51a66`.
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
 above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
@@ -242,10 +242,47 @@ as asked" / "declined — note"; the refund row says "Refunds $B of the $A payme
 the sheet (`renderRefund.mjs` now takes part + refunded), the queue and the card
 (`renderDecide.mjs`).
 
-**Open right now:** Alejandra's request on client 18496 ($559.12, "wrong amount",
-Monthly payment — Late) is still pending; the owner can now approve the difference.
+**The first real partial refund (Sep 15, 4:02 PM).** Tony approved Alejandra's request on
+client 18496 (Veronica Serna) at **$100.00 of the $559.12 asked** from the Console.
+Clover refund `GGT37053TVGFA` succeeded; row `5e213dde-…`, fee reversed $26.83
+(150 × 100/559.12), carrier share $73.17 of Onward's $409.12 with carrier=yes, HawkSoft
+note filed, events complete. **The client was not emailed** — Alejandra's request said
+"don't notify — agent error" because the record has no email, and the Console approved
+with the agent's answers. A refund confirmation PDF was made for Saif to send by hand:
+`Desktop\Refund_confirmation_Veronica_Serna_2026-09-15.pdf` (`make_refund_proof.mjs`).
 
-**Next conversation: the document center** (see the block above).
+**The refund sheet, redesigned (`99880cd`).** Saif: "I don't like this form, it's
+confusing." Mockup (`mock_refund.html`) agreed, then built as a stepper: four numbered
+questions, one open at a time, answered ones collapsed to a line with "change", the
+not-reached ones dimmed, any header reopens. **1 How much — BOTH choices shown every
+time, nothing pre-picked** ("All of it — $X" / "Part of it…" with the capped box). 2 Why
+— radio list with the consequence under each choice, the required note in the same
+step. 3 "Did Infinity give back its $112.00?" — carrier named, figure in the question,
+three plain answers; on a partial the share in play. 4 Tell <name> — the email on file
+pre-selected (recorded as chosen), a different address, or don't-because. One summary
+that fills in as sentences; one button naming amount and person; "2 of 4 answered ·
+finish step 2"; Cancel as text; a void is one amber line and the button says Void.
+Same handlers, same payload. `harnessRequestUI` rewritten for the stepper (92 then);
+`renderStep.mjs` / `renderRefund.mjs` render open / part / done.
+
+**The owner sets the notice when approving; email a client after the fact (`7a51a66`).**
+Console pending card: "Tell the client" chips (record addresses / typed with the
+stranger warning / don't-because), the agent's choice as default, a change marked;
+`decide_refund` takes `notify` (validated by the refund code; on_file checked against
+the record); the row's client_notice names the owner as chooser; event carries
+`notify_changed`/`notify_used`. New action `notify_refund` (refund permission):
+sends the refund email from the row's own facts, patches client_notice (sent/failed,
+typed/on-file, by whom, `late`, `earlier`), HawkSoft note, event
+`refund.client_notified`; a failed send answers 502 and records failed. Console decided
+list shows the notice and "Email the client…" while unsent. `harnessRefund` 414,
+`harnessRequestUI` 101, `mutatePartial` 60/60. **The refund_requests view now returns
+`client_emails` and `client_notice`.**
+
+**Next conversation: the document center** (see the block above). Saif's questions to
+answer first: who uses it and what they do first; honest-and-partial (platform documents
+only) vs. making the platform the front door; the day-one set (search, review room,
+fix the type, "needs a label", upload with the same sheet, counts and gaps); not yet
+(OCR, e-sign, client sharing, retention).
 
 ### ⏭ TUESDAY SEP 15 — WHAT IS LEFT
 0. **Client 4600 — DONE by SQL Sep 14 night:** Laura's $0.50 placeholder row
@@ -807,6 +844,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessRefund.mjs` | 395 — now also: partial amounts, proportional fee + carrier share with the remainder on the last piece, idempotency keys, replay guard, the owner changing the amount, the card's refund_decision |
 | `harnessRequestUI.mjs` | 70 — now also: the How-much chips and box, the queue's amount box, the card's decision line |
 | `harnessProbeRefund.mjs` | 126 — now also: the owner login may run the probe, nobody else without the key |
+| (updated) `harnessRefund.mjs` 414 · `harnessRequestUI.mjs` 101 · `mutatePartial.mjs` 60 | the stepper sheet, the owner's notice, notify_refund |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

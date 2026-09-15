@@ -88,11 +88,15 @@ Last written Sep 14 night. Everything below is pushed and live unless it says
 otherwise; `git status` is clean at `1acd29d`.
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
-above. The harnesses named in the table further down live in the OLD session's
-scratchpad (`C:\Users\speed\AppData\Local\Temp\claude\...\83745d03-...\scratchpad`) -
-copy that folder's `*.mjs` + `gbp_rows.json` + `trust_fixture.json` into the new
-session's scratchpad before running anything (they need `npm i jsdom puppeteer-core`
-there). `memory/verification-discipline.md` has the traps.
+above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
+`shoot.mjs`, the helpers and fixtures) is saved in
+`C:\Users\speed\Claude\Projects\speedy-harness\`** — a folder that outlives chat
+sessions (the scratchpad does not). Run from there: `npm i` once, then
+`node --import ./mock_mail.mjs harnessX.mjs` (Receipt/Proof/Invoice also need
+`--import ./resolve_local.mjs`; harnessGbp takes `gbp_rows.json`). The auto-memory
+files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` load in
+every session and carry the traps. Copy new harnesses back into that folder before
+stopping for the day.
 
 ### ⏭ TUESDAY SEP 15 — IN THIS ORDER
 0. **Client 4600 — DONE by SQL Sep 14 night:** Laura's $0.50 placeholder row

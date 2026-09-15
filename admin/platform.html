@@ -210,6 +210,11 @@
   .sbgo{background:var(--red);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;flex:1}
   .sbgo:disabled{opacity:.5;cursor:default}
   .lbl{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
+  .rqnz{margin-top:10px}
+  .rqchips{display:flex;flex-wrap:wrap;gap:6px}
+  .rqchip{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:12px;font-weight:600;padding:6px 11px;border-radius:8px;cursor:pointer}
+  .rqchip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .rqin{display:block;width:100%;margin-top:6px;font-size:13px;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--navy);color:var(--ink)}
   .rqamt{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
   .rqamt input{width:110px;font-size:15px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--navy);color:var(--ink)}
   .lbl.amber{background:rgba(245,166,35,.15);color:var(--amber)}
@@ -2974,6 +2979,9 @@ function refundsHtml() {
       + '<input id="rqamt_' + esc(q.id) + '" type="text" inputmode="decimal" value="' + esc(Number(q.amount).toFixed(2)) + '" oninput="rqAmtChanged(\'' + esc(q.id) + '\', this.value)">'
       + '<span class="muted" style="font-size:12px">of ' + money(q.refundable != null ? q.refundable : p.amount) + ' refundable</span>'
       + '<span id="rqamtnote_' + esc(q.id) + '" class="muted" style="font-size:11.5px"></span></div>'
+      /* THE NOTICE (Saif, Sep 15): the agent's choice is the default; the owner may pick
+         an address on the record, type one, or say why not. Same shape the sheet sends. */
+      + '<div class="rqnz" id="rqnz_' + esc(q.id) + '">' + rqNoticeHtml(q) + '</div>'
       + '<div class="rqacts">'
       + '<button class="rqok" id="rqok_' + esc(q.id) + '" onclick="decideRefund(\'' + esc(q.id) + '\', true)">Approve &amp; refund ' + money(q.amount) + '</button>'
       + '<button class="rqno" onclick="declineRefund(\'' + esc(q.id) + '\')">Decline…</button>'
@@ -3006,12 +3014,21 @@ function refundsHtml() {
     h += '<div class="sgrp" style="margin-top:22px">Decided · last ' + done.length + '</div>';
     for (const q of done) {
       const changed = q.status === 'approved' && q.approved_amount != null && Math.abs(q.approved_amount - q.amount) > 0.004;
-      h += '<div class="rq" style="opacity:.8">'
+      const nzd = q.client_notice || null;
+      const canMail = q.status === 'approved' && q.refund_id && (!nzd || nzd.result !== 'sent');
+      h += '<div class="rq" style="opacity:.8" id="rqd_' + esc(q.id) + '">'
         + '<div class="row"><div>' + (changed ? money(q.approved_amount) + ' <span class="muted" style="font-size:12px">approved of ' + money(q.amount) + ' asked</span>' : money(q.amount)) + ' <span class="muted" style="font-size:12px">· client ' + esc(String(q.client_no || ''))
         + (q.client_name ? ' ' + esc(q.client_name) : '') + ' · asked by ' + esc(q.requested_by_name || q.requested_by) + '</span></div>'
         + '<span class="lbl ' + (q.status === 'approved' ? 'green' : 'red') + '">' + esc(q.status) + '</span></div>'
         + '<div class="muted" style="font-size:11.5px;margin-top:3px">' + esc(q.status) + ' by ' + esc(q.decided_by_name || q.decided_by || '')
         + ' on ' + esc(String(q.decided_at || '').slice(0, 10)) + (q.decision_note ? ' — “' + esc(q.decision_note) + '”' : '') + '</div>'
+        + (q.status === 'approved' && nzd
+            ? '<div class="muted" style="font-size:11.5px;margin-top:3px">' + (nzd.result === 'sent'
+                ? 'Client emailed at <b style="color:var(--ink)">' + esc(nzd.to) + '</b>' + (nzd.late ? ' (sent afterwards by ' + esc(String(nzd.chosen_by || '').split('@')[0]) + ')' : '')
+                : nzd.result === 'failed' ? '<span style="color:var(--red)">Email to ' + esc(nzd.to || '') + ' FAILED</span>' + (nzd.detail ? ' — ' + esc(nzd.detail) : '')
+                : '<span style="color:var(--amber)">Client not told</span>' + (nzd.skip_reason ? ' — ' + esc(nzd.skip_reason) : '')) + '</div>'
+            : '')
+        + (canMail ? '<div id="rqdmsg_' + esc(q.id) + '" class="shint" style="margin-top:6px;min-height:0"></div><div class="rqacts"><button class="rqok" style="background:var(--blue)" onclick="notifyRefund(\'' + esc(q.id) + '\')">Email the client…</button></div>' : '')
         + '</div>';
     }
   }
@@ -3022,6 +3039,51 @@ function refundsHtml() {
    card itself. A request whose approval FAILED stays in the queue, because the money
    did not move, and the message says so. */
 function rqParse(v){ const n = Math.round(Number(String(v || '').replace(/[^0-9.]/g, '')) * 100) / 100; return Number.isFinite(n) ? n : 0; }
+/* the notice picker on a pending request: chips for the addresses on the record, a
+   typed address, or "don't - because". RQ_NZ holds the owner's choice per request;
+   absent means "as the agent asked". */
+const RQ_NZ = {};
+function rqNoticeOf(q){ return RQ_NZ[q.id] || q.notify || { channel: 'none', skip_reason: '' }; }
+function rqNoticeHtml(q){
+  const nz = rqNoticeOf(q); const emails = q.client_emails || [];
+  const chip = (on, onclick, label) => '<button class="rqchip' + (on ? ' on' : '') + '" onclick="' + onclick + '">' + label + '</button>';
+  let h = '<div class="muted" style="font-size:12px;margin-bottom:4px">Tell the client' + (RQ_NZ[q.id] ? ' <span style="color:var(--amber)">(changed from what ' + esc(String(q.requested_by_name || q.requested_by).split(' ')[0]) + ' asked)</span>' : '') + '</div><div class="rqchips">'
+    + emails.map(e => chip(nz.channel === 'email' && nz.source === 'on_file' && nz.to === String(e).toLowerCase(), "rqNotify('" + esc(q.id) + "','on_file'," + JSON.stringify(String(e).toLowerCase()).replace(/"/g, '&quot;') + ")", 'Email ' + esc(e))).join('')
+    + chip(nz.channel === 'email' && nz.source === 'typed', "rqNotify('" + esc(q.id) + "','typed')", emails.length ? 'A different address…' : 'Type an address…')
+    + chip(nz.channel === 'none', "rqNotify('" + esc(q.id) + "','none')", 'Don’t notify')
+    + '</div>';
+  if (nz.channel === 'email' && nz.source === 'typed') h += '<input class="rqin" id="rqto_' + esc(q.id) + '" type="email" placeholder="name@example.com" value="' + esc(nz.to || '') + '" oninput="rqNotifyTo(\'' + esc(q.id) + '\', this.value)">'
+    + '<div class="muted" style="font-size:11px;margin-top:3px">Not on the record — the refund will say it was typed by you. Check it: a wrong address sends the client’s name and the amount to a stranger.</div>';
+  else if (nz.channel === 'none') h += '<input class="rqin" id="rqskip_' + esc(q.id) + '" placeholder="Why not? (recorded)" value="' + esc(nz.skip_reason || '') + '" oninput="rqNotifySkip(\'' + esc(q.id) + '\', this.value)">';
+  else if (!emails.length && nz.channel !== 'email') h += '<div class="muted" style="font-size:11px;margin-top:3px">No email on this client’s record.</div>';
+  return h;
+}
+function rqNotify(id, kind, addr){
+  const q = (RQ_DATA.pending || []).find(x => x.id === id); if (!q) return;
+  const cur = rqNoticeOf(q);
+  if (kind === 'on_file') RQ_NZ[id] = { channel: 'email', to: addr, source: 'on_file' };
+  else if (kind === 'typed') RQ_NZ[id] = { channel: 'email', to: cur.source === 'typed' ? (cur.to || '') : '', source: 'typed' };
+  else RQ_NZ[id] = { channel: 'none', skip_reason: cur.channel === 'none' ? (cur.skip_reason || '') : '' };
+  const el = $('#rqnz_' + id); if (el) el.innerHTML = rqNoticeHtml(q);
+  const f = $('#rqto_' + id) || $('#rqskip_' + id); if (f) f.focus();
+}
+function rqNotifyTo(id, v){ if (RQ_NZ[id]) RQ_NZ[id].to = String(v || '').trim().toLowerCase(); }
+function rqNotifySkip(id, v){ if (RQ_NZ[id]) RQ_NZ[id].skip_reason = String(v || '').trim(); }
+function rqNoticeOk(nz){ return !!(nz && ((nz.channel === 'email' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(nz.to || ''))) || (nz.channel === 'none' && String(nz.skip_reason || '').trim()))); }
+/* email the client about a refund that already went out without one */
+async function notifyRefund(id){
+  const q = (RQ_DATA.decided || []).find(x => x.id === id); if (!q || !q.refund_id) return;
+  const msg = $('#rqdmsg_' + id);
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const guess = (q.client_emails || [])[0] || '';
+  const to = prompt('Email the client about this refund of ' + money(q.approved_amount != null ? q.approved_amount : q.amount) + '.\n\nSend to:', guess);
+  if (to == null) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(to).trim())) return say('That is not an email address.', true);
+  say('Sending…');
+  const r = await apiPostBody({ action: 'notify_refund', refund_id: q.refund_id, to: String(to).trim().toLowerCase() });
+  if (r && r.ok) { say('Sent to ' + r.client_notice.to + '.' + (r.hawksoft_note ? '' : ' (The HawkSoft note did not file.)')); await renderRefunds($('#view')); return; }
+  say((r && (r.error || r.message)) || 'Could not send it.', true);
+}
 function rqAmtChanged(id, v) {
   const q = (RQ_DATA.pending || []).find(x => x.id === id); if (!q) return;
   const cap = q.refundable != null ? q.refundable : Number((q.payment || {}).amount || 0);
@@ -3042,9 +3104,12 @@ async function decideRefund(id, approve, note) {
     if (!(amt >= 0.01 && amt <= cap + 0.004)) return say('Enter an amount between $0.01 and ' + money(cap) + '.', true);
   }
   const changed = approve && Math.abs(amt - Number(q.amount)) > 0.004;
+  const nzUse = approve ? rqNoticeOf(q) : null;
+  if (approve && RQ_NZ[id] && !rqNoticeOk(nzUse)) return say(nzUse.channel === 'email' ? 'Enter the client’s email address.' : 'Say why the client is not being told.', true);
   if (approve && !confirm('Refund ' + money(amt) + ' to client ' + q.client_no + ' now' + (changed ? ' (' + (q.requested_by_name || q.requested_by) + ' asked for ' + money(q.amount) + ')' : ', as ' + (q.requested_by_name || q.requested_by) + ' asked') + '?\n\nThis cannot be undone from here.')) return;
   say(approve ? 'Refunding…' : 'Declining…');
-  const r = await apiPostBody({ action: 'decide_refund', request_id: id, approve: !!approve, note: note || '', ...(approve ? { amount: amt } : {}) });
+  const r = await apiPostBody({ action: 'decide_refund', request_id: id, approve: !!approve, note: note || '', ...(approve ? { amount: amt } : {}), ...(approve && RQ_NZ[id] ? { notify: nzUse } : {}) });
+  if (r && r.ok) delete RQ_NZ[id];
   if (r && r.ok) {
     if (approve) {
       const cn = r.client_notice || {};

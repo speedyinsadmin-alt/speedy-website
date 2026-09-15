@@ -2750,13 +2750,21 @@ if (view === 'portal_share_due') {
         approvedAmt = w;
       }
       const amountChanged = approve && Math.abs(approvedAmt - requestedAmt) > 0.004;
+      /* THE OWNER MAY CHANGE THE NOTICE TOO (Saif, Sep 15): the agent's request said
+         "don't notify - agent error" because the record had no email; the owner has
+         the address. The same shape as the sheet's notify; validated by the refund
+         code like the agent's would be (on_file checked against the record). */
+      const nzIn = (approve && b3.notify && typeof b3.notify === 'object') ? b3.notify : null;
+      const notifyUsed = nzIn || rq.notify;
+      const notifyChanged = !!nzIn && JSON.stringify({ c: nzIn.channel, t: nzIn.to || null, s: nzIn.skip_reason || null })
+        !== JSON.stringify({ c: (rq.notify || {}).channel, t: (rq.notify || {}).to || null, s: (rq.notify || {}).skip_reason || null });
       let refundOut = null;
       if (approve) {
         /* The agent's answers, verbatim, plus who asked — so the ledger row, the
            HawkSoft note and the event all say this was Sammy's request that Tony
            approved, not something Tony did on his own. */
         refundOut = await issueRefund(s, me2, {
-          payment_id: rq.payment_id, reason: rq.reason, carrier: rq.carrier, notify: rq.notify,
+          payment_id: rq.payment_id, reason: rq.reason, carrier: rq.carrier, notify: notifyUsed,
           note: rq.note + ` (requested by ${rq.requested_by}, approved by ${me2}` + (decisionNote ? ': ' + decisionNote : '')
             + (amountChanged ? `; amount changed from $${requestedAmt.toFixed(2)} asked to $${approvedAmt.toFixed(2)}` : '') + ')',
           amount: approvedAmt });
@@ -2775,10 +2783,11 @@ if (view === 'portal_share_due') {
         body: JSON.stringify({ ts: stamp, actor: me2, kind: 'refund.decided', client_no: rq.client_id,
           source: 'console', payload: { request_id: reqId, payment_id: rq.payment_id, requested_by: rq.requested_by,
             amount: requestedAmt, approved_amount: approve ? approvedAmt : null, amount_changed: amountChanged,
+            notify_changed: notifyChanged, notify_used: approve ? notifyUsed : null,
             approved: approve, note: decisionNote || null,
             refund_id: approve ? refundOut.body.refund_id : null } }) });
       return res.status(200).json({ ok: true, approved: approve, request_id: reqId,
-        requested_amount: requestedAmt, approved_amount: approve ? approvedAmt : null, amount_changed: amountChanged,
+        requested_amount: requestedAmt, approved_amount: approve ? approvedAmt : null, amount_changed: amountChanged, notify_changed: notifyChanged,
         ...(approve ? refundOut.body : {}) });
     }
 
@@ -2858,6 +2867,63 @@ if (view === 'portal_share_due') {
       if (action === 'approve_audits') return res.status(200).json({ ok: okN > 0, approved: okN, failed: results.length - okN, results });
       const one = results[0];
       return res.status(one.ok ? 200 : 409).json(one.ok ? { ok: true, ...one } : { ok: false, error: one.error });
+    }
+
+    /* EMAIL THE CLIENT AFTER THE FACT (Saif, Sep 15). A refund went out with "don't
+       notify" or a failed send; the owner now has an address. Sends the same refund
+       email from the row's own facts, records the outcome on the row's client_notice
+       (with who sent it and when), a HawkSoft note, and an event. Owner / refund
+       permission, like the refund itself. */
+    if (action === 'notify_refund') {
+      const me2 = String(email).toLowerCase();
+      if (!(await may(me2, 'refund'))) return res.status(403).json({ ok: false, error: 'You do not have permission to do that.' });
+      const b3 = req.body || {};
+      const refundId = String(b3.refund_id || '').trim();
+      const to = String(b3.to || '').trim().toLowerCase();
+      if (!refundId) return res.status(400).json({ ok: false, error: 'refund_id required' });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ ok: false, error: 'That is not an email address.' });
+      const rr = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(refundId)}&kind=eq.charge_refund&select=*`);
+      const rf = (rr.rows || [])[0];
+      if (!rf) return res.status(404).json({ ok: false, error: 'No such refund.' });
+      const pr = rf.refund_of ? await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(rf.refund_of)}&select=id,ts,amount,ref,kind`) : { rows: [] };
+      const parent = (pr.rows || [])[0] || null;
+      const cr = await sbGet(s, `clients?client_no=eq.${encodeURIComponent(rf.client_id)}&select=first_name,business_name,email,extras`);
+      const cn = (cr.rows || [])[0] || {};
+      const onFile = [cn.email, ...(((cn.extras || {}).emails) || [])].filter(Boolean).map(e => String(e).trim().toLowerCase());
+      const REASON_LABEL = { charged_twice: 'charged twice', wrong_amount: 'wrong amount taken', policy_cancelled: 'policy cancelled', never_bound: 'never bound', other: 'other' };
+      const amount = Math.abs(Number(rf.amount || 0));
+      const part = (rf.extra || {}).partial;
+      const isCard = !!rf.txn_id && rf.ref !== 'Cash returned';
+      const r = await sendRefundEmail({
+        to, name: cn.business_name || cn.first_name || '',
+        amount, method: isCard ? 'card' : 'cash', voided: false,
+        original: parent ? `$${Number(parent.amount || 0).toFixed(2)} on ${String(parent.ts || '').slice(0, 10)}${parent.ref ? ' · ' + parent.ref : ''}` : 'your earlier payment',
+        partial: part && part.is_partial ? { of: part.of, remaining: part.refundable_after } : null,
+        reason: REASON_LABEL[rf.refund_reason] || rf.refund_reason || 'refund', confirmation: rf.txn_id || null,
+        stamp: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) });
+      const sent = r.startsWith('sent to');
+      const stamp = new Date().toISOString();
+      const before = (rf.extra || {}).client_notice || null;
+      const notice = { channel: 'email', to, source: onFile.includes(to) ? 'on_file' : 'typed', chosen_by: me2, at: stamp,
+        skip_reason: null, result: sent ? 'sent' : 'failed', detail: sent ? null : r, late: true,
+        earlier: before ? { result: before.result, to: before.to || null, skip_reason: before.skip_reason || null, at: before.at || null } : null };
+      await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(refundId)}`, {
+        method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ extra: { ...(rf.extra || {}), client_notice: notice } }) });
+      let noteOk = false;
+      if (sent) {
+        try {
+          const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${rf.client_id}/log?version=4.0`, {
+            method: 'POST', body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+              note: `Client notified by email at ${to}${onFile.includes(to) ? '' : ' (address typed by ' + me2 + ', not from the record)'} about the refund of $${amount.toFixed(2)} of ${String(rf.ts || '').slice(0, 10)}${rf.txn_id ? ' (Clover refund ' + rf.txn_id + ')' : ''}. Sent by ${me2}.` }) });
+          noteOk = (hr.status === 200 || hr.status === 202);
+        } catch { noteOk = false; }
+      }
+      await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'refund.client_notified', client_no: rf.client_id, source: 'console',
+          payload: { refund_id: refundId, payment_id: rf.refund_of || null, to, source: notice.source, result: notice.result, detail: notice.detail, amount, earlier: notice.earlier, hawksoft_note: noteOk } }) });
+      if (!sent) return res.status(502).json({ ok: false, error: `The email did not send (${r}). Nothing was recorded as sent.`, client_notice: notice });
+      return res.status(200).json({ ok: true, client_notice: notice, hawksoft_note: noteOk });
     }
 
     if (action === 'settle_carrier') {
@@ -3125,8 +3191,14 @@ if (view === 'portal_share_due') {
       for (const b of (backs.rows || [])) backOff[b.refund_of] = +((backOff[b.refund_of] || 0) + Math.abs(Number(b.amount || 0))).toFixed(2);
     }
     const cids = [...new Set([...(pend.rows || []), ...(carr.rows || []), ...(done.rows || [])].map(r => r.client_id).filter(Boolean))];
-    const cls = cids.length ? await sbGet(s, `clients?client_no=in.(${cids.join(',')})&select=client_no,first_name,last_name,business_name`) : { rows: [] };
+    const cls = cids.length ? await sbGet(s, `clients?client_no=in.(${cids.join(',')})&select=client_no,first_name,last_name,business_name,email,extras`) : { rows: [] };
     const cname = Object.fromEntries((cls.rows || []).map(c => [c.client_no, c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ')]));
+    /* the addresses on the record, so the owner can pick one when approving (Sep 15) */
+    const cemails = Object.fromEntries((cls.rows || []).map(c => [c.client_no, [c.email, ...(((c.extras || {}).emails) || [])].filter(Boolean).map(e => String(e).trim()).filter((e, i, a) => a.indexOf(e) === i)]));
+    /* the notice on each decided refund, so a skipped or failed one can be sent now */
+    const rfIds = (done.rows || []).map(r => r.refund_id).filter(Boolean);
+    const rfRows = rfIds.length ? await sbGet(s, `bridge_ledger?id=in.(${rfIds.map(encodeURIComponent).join(',')})&select=id,extra`) : { rows: [] };
+    const noticeOf = Object.fromEntries((rfRows.rows || []).map(r => [r.id, ((r.extra || {}).client_notice) || null]));
     const nameOf = e => AGENT_NAME[e] || (e ? String(e).split('@')[0] : null);
     const shape = r => { const p = pay[r.payment_id] || {}; return {
       id: r.id, payment_id: r.payment_id, client_no: r.client_id, client_name: cname[r.client_id] || null,
@@ -3136,6 +3208,8 @@ if (view === 'portal_share_due') {
       decision_note: r.decision_note, refund_id: r.refund_id,
       approved_amount: r.approved_amount != null ? Number(r.approved_amount) : null,
       refundable: p.amount != null ? +(Number(p.amount) - Number(backOff[r.payment_id] || 0)).toFixed(2) : null,
+      client_emails: cemails[r.client_id] || [],
+      client_notice: r.refund_id ? (noticeOf[r.refund_id] || null) : null,
       payment: { ts: p.ts, amount: p.amount != null ? Number(p.amount) : null, purpose: p.purpose, kind: p.kind, ref: p.ref,
         carrier_name: p.carrier_name, service_cost: p.service_cost != null ? Number(p.service_cost) : null,
         fee_amount: p.fee_amount != null ? Number(p.fee_amount) : null, audit_status: p.audit_status,

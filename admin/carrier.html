@@ -1097,6 +1097,11 @@ function updateSubmit(){
     if(b) b.disabled = !DOCS.length;
     return;
   }
+  /* DONE STAYS DONE (Sep 15). After a green tick, renderDocs() at the end of submit()
+     called back in here and re-enabled Submit, because every gate still passed - the
+     file was still in the slot. Thirty payments since Sep 5 got the same proof filed
+     twice, seconds apart, by an agent pressing the live button once more. */
+  if(SUBMITTED){ $('#submitBtn').disabled = true; return; }
   const amt = carrierAmt(), ack = zeroAcked();
   const amtOk  = (amt != null) && (amt > 0 || (amt === 0 && ack));
   const cardOk = amt === 0 && ack ? true : !!$('#card').value;
@@ -1457,9 +1462,10 @@ async function submit(complete){
     let j = null; try { j = await r.json(); } catch(e){ j = null; }
     if(r.ok && j && j.ok){
       mainOk = true;
+      if(complete) SUBMITTED = true;   // before anything below can call updateSubmit()
       TOTAL_OWED_ANSWER = null;   // answered and written; never carry it to another audit
       mainMsg = complete
-        ? '✓ Submitted for approval — receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':'')+'. Tony approves it next; your commission is earned when he does.'
+        ? '✓ Submitted for approval — ' + (j.duplicate ? 'that file was already on this payment, so it was not filed twice' : 'receipt stored'+(j.hawksoft_filed?' + filed to HawkSoft':''))+'. Tony approves it next; your commission is earned when he does.'
         /* NOT a tick. Melisa saved three audits on Sep 3 and pressed save three times
            in seven seconds on one of them - Submit was disabled because the carrier
            cost was missing, so the only button available was this one, and it replied
@@ -1470,6 +1476,7 @@ async function submit(complete){
     } else if(r.ok && !j){
       // saved but response didn't parse — treat as success (data landed)
       mainOk = true;
+      if(complete) SUBMITTED = true;
       mainMsg = complete ? '✓ Submitted for approval — receipt stored. Tony approves it next.' : pendingMsg();
     } else if(j && (j.error === 'total_owed_required' || j.error === 'total_owed_too_low')){
       /* Not a failure — the server abstained and asked a question. Nothing was written

@@ -280,6 +280,22 @@ function docObjectPath(clientNo, filename, mime) {
   return `${cn}/${crypto.randomUUID()}.${safe}`;
 }
 
+/* SAME FILE, SAME PAYMENT, ALREADY THERE (Sep 15). Since Sep 5 thirty payments carried
+   the same proof twice - the same sha256 seconds apart - because the page re-enabled
+   Submit after a success (fixed on the page too) or the agent pressed Save and then
+   Submit with the file still in the slot. HawkSoft has no attachment-delete, so every
+   one of those is a permanent second copy over there. Both upload paths now look the
+   bytes up first: a duplicate reuses the row it already has, and only goes to HawkSoft
+   if the first attempt never got filed there. */
+async function sameFileOnPayment(s, paymentId, hash) {
+  if (!paymentId || !hash) return null;
+  try {
+    const d = await sbGet(s, `attachments?payment_id=eq.${encodeURIComponent(paymentId)}&sha256=eq.${encodeURIComponent(hash)}`
+      + `&select=id,kind,doc_type,filed_hawksoft,hawksoft_refid,blob_url&order=created_at.asc&limit=1`);
+    return (d.rows || [])[0] || null;
+  } catch { return null; }
+}
+
 async function sha256hex(buf) {
   const h = await crypto.subtle.digest('SHA-256', buf);
   return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -589,6 +605,7 @@ export default async function handler(req, res) {
     const buf = receiptPath ? await storageGetBuf(receiptPath) : b64ToBuf(receipt_b64);
     if (!buf || !buf.length) return res.status(400).json({ ok: false, error: 'upload_missing', message: 'The file did not reach storage. Try the upload again.' });
     const hash = await sha256hex(buf);
+    const dup = await sameFileOnPayment(s, payment_id, hash);
     const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
     const dtype = doc_type || 'other';
     const today = new Date().toISOString().slice(0,10);
@@ -598,6 +615,10 @@ export default async function handler(req, res) {
     /* This path stored bytes ONLY in Postgres - the storage helper was never
        called here at all, only from save_carrier_leg. Both now write to the same
        private bucket. */
+    let attachment = null;
+    if (dup) {
+      attachment = dup;   // the same bytes are already a row on this payment - no second copy
+    } else {
     const putDoc = receiptPath ? { path: receiptPath, status: 'direct' } : await storagePut(docObjectPath(client_no, niceName, receipt_mime), buf, receipt_mime || 'application/pdf');
 
     const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
@@ -617,12 +638,13 @@ export default async function handler(req, res) {
         uploaded_by: email,
       }]),
     });
-    const attachment = (await attIns.json().catch(() => []))[0] || null;
+    attachment = (await attIns.json().catch(() => []))[0] || null;
+    }
 
-    // File to HawkSoft too (gzip, same as receipts)
-    let hsFiled = false, hsRefId = null;
+    // File to HawkSoft too (gzip, same as receipts) - unless this exact file is already there
+    let hsFiled = !!(dup && dup.filed_hawksoft), hsRefId = dup ? (dup.hawksoft_refid || null) : null;
     const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
-    if (ID && SECRET) {
+    if (ID && SECRET && !hsFiled) {
       const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
       hsRefId = crypto.randomUUID();
       const fname = niceName.replace(/\.[^.]+$/, '').slice(0, 60);
@@ -648,7 +670,7 @@ export default async function handler(req, res) {
         });
       }
     }
-    return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled });
+    return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled, duplicate: !!dup });
   }
 
   if (action === 'save_carrier_leg') {
@@ -815,13 +837,26 @@ export default async function handler(req, res) {
       const buf = receiptPath ? await storageGetBuf(receiptPath) : b64ToBuf(receipt_b64);
       if (!buf || !buf.length) return res.status(400).json({ ok: false, error: 'upload_missing', message: 'The file did not reach storage. Try the upload again.' });
       const hash = await sha256hex(buf);
+      const dup = await sameFileOnPayment(s, payment_id, hash);
       const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
       const path = `carrier-receipts/${client_no}/${Date.now()}_${(carrier || 'carrier').replace(/[^a-z0-9]/gi, '').slice(0, 20)}.${ext}`;
+      const dtype = (body.doc_type || 'carrier_receipt');
+      if (dup) {
+        /* the same bytes are already on this payment: reuse that row. If it came in as
+           a plain document and is now presented as THE proof, promote it - one row,
+           one copy in HawkSoft. */
+        attachment = dup; blobUrl = dup.blob_url; blobStatus = 'duplicate';
+        if (body.proof && dup.kind !== 'proof') {
+          await fetch(`${s.base}/rest/v1/attachments?id=eq.${dup.id}`, {
+            method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify({ kind: 'proof', doc_type: dtype, carrier: carrier || null, amount: carrier_amount != null ? Number(carrier_amount) : null }),
+          });
+        }
+      } else {
       const blobRes = receiptPath ? { path: receiptPath, status: 'direct' } : await storagePut(docObjectPath(client_no, receipt_name, receipt_mime), buf, receipt_mime || 'application/octet-stream');
       blobUrl = blobRes.path; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
 
       // Store attachment row in our vault — file bytes stored INLINE in Supabase (guaranteed, no Blob dependency)
-      const dtype = (body.doc_type || 'carrier_receipt');
       const today = new Date().toISOString().slice(0,10);
       const amtPart = carrier_amount != null ? ('_$' + Number(carrier_amount).toFixed(2)) : '';
       const looksUuid = /^[0-9a-f-]{30,}\.[a-z]+$/i.test(receipt_name || '');
@@ -847,10 +882,13 @@ export default async function handler(req, res) {
         }]),
       });
       attachment = (await attIns.json().catch(() => []))[0] || null;
+      }
 
       // File the carrier receipt to HawkSoft too (write-only POST — RefId is our proof of handoff)
+      // - unless this exact file already went there with the first copy
+      if (dup && dup.filed_hawksoft) { hsFiled = true; hsRefId = dup.hawksoft_refid || null; hsStatus = 'duplicate'; }
       const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
-      if (ID && SECRET) {
+      if (ID && SECRET && !hsFiled) {
         const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
         const refId = crypto.randomUUID();
         const fname = (receipt_name || `carrier_receipt_${carrier}`).replace(/\.[^.]+$/, '').slice(0, 60);
@@ -1003,6 +1041,7 @@ export default async function handler(req, res) {
       blob_url: blobUrl,
       blob_status: blobStatus,
       hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_refid: hsRefId,
+      duplicate: blobStatus === 'duplicate',
     });
   }
 

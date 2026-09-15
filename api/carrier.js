@@ -643,6 +643,11 @@ export default async function handler(req, res) {
 
     // File to HawkSoft too (gzip, same as receipts) - unless this exact file is already there
     let hsFiled = !!(dup && dup.filed_hawksoft), hsRefId = dup ? (dup.hawksoft_refid || null) : null;
+    /* WHY NOT (Sep 15): the 15 MB ZZTEST file landed in the bucket and the page said
+       "filed to HawkSoft" while the row said filed_hawksoft=false - the refusal was
+       swallowed by an empty catch and nothing recorded the status. Now the status and
+       the first line of HawkSoft's answer come back to the page and go on the trail. */
+    let hsStatus = hsFiled ? 'duplicate' : null, hsWhy = null;
     const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
     if (ID && SECRET && !hsFiled) {
       const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
@@ -661,8 +666,17 @@ export default async function handler(req, res) {
           },
           body: gzipSync(buf),
         });
+        hsStatus = r2.status;
         hsFiled = (r2.status === 200 || r2.status === 202);
-      } catch {}
+        if (!hsFiled) hsWhy = String(await r2.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200) || null;
+      } catch (e) { hsStatus = 'error'; hsWhy = String(e && e.message || e).slice(0, 200); }
+      if (!hsFiled) {
+        try {
+          await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+            body: JSON.stringify([{ actor: email, kind: 'document.hawksoft_refused', client_no, source: 'carrier_capture',
+              payload: { attachment_id: attachment && attachment.id, payment_id: payment_id || null, doc_type: dtype, bytes: buf.length, status: hsStatus, why: hsWhy } }]) });
+        } catch { /* the trail never blocks the upload */ }
+      }
       if (attachment && hsFiled) {
         await fetch(`${s.base}/rest/v1/attachments?id=eq.${attachment.id}`, {
           method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
@@ -670,7 +684,7 @@ export default async function handler(req, res) {
         });
       }
     }
-    return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled, duplicate: !!dup });
+    return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_why: hsWhy, bytes: buf.length, duplicate: !!dup });
   }
 
   if (action === 'save_carrier_leg') {

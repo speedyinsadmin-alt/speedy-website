@@ -64,7 +64,7 @@
   .submit{background:var(--green);color:#04220f;flex:1.4}
   .submit:disabled{opacity:.4;cursor:not-allowed}
   #msg{margin-top:12px;font-size:13px;text-align:center;min-height:18px}
-  .ok{color:var(--green)} .err{color:var(--red)}
+  .ok{color:var(--green)} .err{color:var(--red)} .warn{color:var(--amber)}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
   .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
   .hint{color:var(--mute);font-size:11px;margin-top:4px}
@@ -1021,9 +1021,10 @@ async function submitDocsOnly(){
         doc_type:d.doc_type, doc_label:d.doc_label || null,
         receipt_b64:d.big ? null : d.b64, receipt_path:d.path || null, receipt_name:d.name, receipt_mime:d.mime, thumb_b64:d.thumb }) });
     let j=null; try{ j = await r.json(); }catch(e){}
-    return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error };
+    return { ok: r.ok && (!j || j.ok), status: r.status, error: j && j.error, hs: !!(j && j.hawksoft_filed), hsStatus: j && j.hawksoft_status, hsWhy: j && j.hawksoft_why };
   };
 
+  const notFiled = [];   // stored on the platform, refused by HawkSoft
   for(let i=0;i<DOCS.length;i++){
     const d = DOCS[i];
     if(d.uploaded){ ok++; continue; }
@@ -1038,12 +1039,17 @@ async function submitDocsOnly(){
     } else if(!res.ok){
       try{ res = await postDoc(d); }catch(e){ res = { ok:false, status:0 }; }
     }
-    if(res.ok){ d.uploaded = true; ok++; }
+    if(res.ok){ d.uploaded = true; ok++; if(!res.hs) notFiled.push(d.name + (res.hsStatus ? ' (HawkSoft said ' + res.hsStatus + (res.hsWhy ? ': ' + res.hsWhy : '') + ')' : '')); }
     else failed.push(d.name + ' (' + (res.error || (res.status === 413 ? 'file too large' : 'upload failed')) + ')');
   }
   renderDocs();
 
-  if(ok && !failed.length){
+  if(ok && !failed.length && notFiled.length){
+    /* TRUE, NOT GREEN (Sep 15): the file is on the platform and Tony sees it in the
+       review room, but HawkSoft did not take it - say so, with HawkSoft's own answer. */
+    msg.className='warn';
+    msg.textContent = ok + ' document' + (ok>1?'s':'') + ' added and kept on the platform \u2014 Tony sees ' + (ok>1?'them':'it') + ' in the review room. HawkSoft did NOT take: ' + notFiled.join(', ') + '. The audit and commission are unchanged.';
+  } else if(ok && !failed.length){
     msg.className='ok';
     msg.textContent = ok + ' document' + (ok>1?'s':'') + ' added and filed to HawkSoft. The audit and commission are unchanged.';
   } else if(ok){

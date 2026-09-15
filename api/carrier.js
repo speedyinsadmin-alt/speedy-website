@@ -256,6 +256,23 @@ const HS_MAX_BYTES = 5 * 1024 * 1024;
 /* the document types the page offers; set_doc_type accepts nothing else */
 const DOC_TYPES_OK = ['carrier_application', 'dec_page', 'carrier_endo', 'hawksoft_endo', 'cancellation', 'driver_license', 'id_card', 'vehicle_photo', 'property_photo', 'other'];
 const HS_TOO_BIG = 'too_big_for_hawksoft';
+/* A file HawkSoft could not take still leaves a trail THERE (Saif, Sep 15): a log note
+   on the client saying what the document is, how big, and that the Speedy platform
+   holds it. Someone looking in HawkSoft then knows it exists and where. Best effort -
+   the note failing never fails the upload. */
+async function hsTooBigNote(client_no, what, bytes, email, polGuid) {
+  const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
+  if (!ID || !SECRET || !client_no) return false;
+  const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
+  const mb = (Number(bytes || 0) / 1048576).toFixed(1);
+  try {
+    const r = await fetch(`${HS_BASE}/vendor/agency/${AGENCY_ID}/client/${client_no}/log?version=4.0`, {
+      method: 'POST', headers: { Authorization: AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refId: crypto.randomUUID(), ts: new Date().toISOString(), channel: 32, ...(polGuid ? { policyId: polGuid } : {}),
+        note: `${what} (${mb} MB) kept on the Speedy platform - over the HawkSoft API's 5 MB attachment limit. Open the client on the platform to view it. Uploaded by ${email}.` }) });
+    return r.status === 200 || r.status === 202;
+  } catch { return false; }
+}
 async function storageSignedUpload(objectPath) {
   const st = docStorage();
   if (!st) return { ok: false, error: 'no_supabase_env' };
@@ -699,7 +716,11 @@ export default async function handler(req, res) {
        swallowed by an empty catch and nothing recorded the status. Now the status and
        the first line of HawkSoft's answer come back to the page and go on the trail. */
     let hsStatus = hsFiled ? 'duplicate' : null, hsWhy = null;
-    if (!hsFiled && buf.length > HS_MAX_BYTES) { hsStatus = HS_TOO_BIG; hsWhy = 'over HawkSoft\'s 5 MB limit - kept on the platform'; }
+    let hsNote = false;
+    if (!hsFiled && buf.length > HS_MAX_BYTES) {
+      hsStatus = HS_TOO_BIG; hsWhy = 'over HawkSoft\'s 5 MB limit - kept on the platform';
+      if (!dup) hsNote = await hsTooBigNote(client_no, (label || dtype.replace(/_/g, ' ')) + ' "' + niceName + '"', buf.length, email, pol.guid);
+    }
     const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
     if (ID && SECRET && !hsFiled && hsStatus !== HS_TOO_BIG) {
       const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
@@ -742,7 +763,7 @@ export default async function handler(req, res) {
             payload: { attachment_id: attachment && attachment.id, payment_id: payment_id || null, doc_type: dtype, bytes: buf.length, status: hsStatus, why: hsWhy, retry: true } }]) });
       } catch { /* the trail never blocks the upload */ }
     }
-    return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_why: hsWhy, bytes: buf.length, duplicate: !!dup });
+    return res.status(200).json({ ok: true, attachment_id: attachment && attachment.id, hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_why: hsWhy, hawksoft_note: hsNote, bytes: buf.length, duplicate: !!dup });
   }
 
   if (action === 'save_carrier_leg') {
@@ -903,7 +924,7 @@ export default async function handler(req, res) {
 
     let attachment = null;
     let blobUrl = null;   // hoisted — the response below reads it outside the upload block
-    let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'optional';
+    let hsFiled = false, hsRefId = null, hsStatus = null, blobStatus = 'optional', hsNoteBig = false;
 
     if (receipt_b64 || receiptPath) {
       const buf = receiptPath ? await storageGetBuf(receiptPath) : b64ToBuf(receipt_b64);
@@ -913,6 +934,12 @@ export default async function handler(req, res) {
       const ext = (receipt_name || '').split('.').pop() || (String(receipt_mime).includes('pdf') ? 'pdf' : 'png');
       const path = `carrier-receipts/${client_no}/${Date.now()}_${(carrier || 'carrier').replace(/[^a-z0-9]/gi, '').slice(0, 20)}.${ext}`;
       const dtype = (body.doc_type || 'carrier_receipt');
+      const today = new Date().toISOString().slice(0,10);
+      const amtPart = carrier_amount != null ? ('_$' + Number(carrier_amount).toFixed(2)) : '';
+      const looksUuid = /^[0-9a-f-]{30,}\.[a-z]+$/i.test(receipt_name || '');
+      const niceName = (receipt_name && !looksUuid)
+        ? receipt_name
+        : `${dtype}_${(carrier || ('client'+client_no)).replace(/[^a-z0-9]/gi,'')}${amtPart}_${today}.${ext}`;
       if (dup) {
         /* the same bytes are already on this payment: reuse that row. If it came in as
            a plain document and is now presented as THE proof, promote it - one row,
@@ -929,12 +956,6 @@ export default async function handler(req, res) {
       blobUrl = blobRes.path; blobStatus = blobRes.status + (blobRes.err ? ' ('+blobRes.err+')' : '');
 
       // Store attachment row in our vault — file bytes stored INLINE in Supabase (guaranteed, no Blob dependency)
-      const today = new Date().toISOString().slice(0,10);
-      const amtPart = carrier_amount != null ? ('_$' + Number(carrier_amount).toFixed(2)) : '';
-      const looksUuid = /^[0-9a-f-]{30,}\.[a-z]+$/i.test(receipt_name || '');
-      const niceName = (receipt_name && !looksUuid)
-        ? receipt_name
-        : `${dtype}_${(carrier || ('client'+client_no)).replace(/[^a-z0-9]/gi,'')}${amtPart}_${today}.${ext}`;
       const attIns = await fetch(`${s.base}/rest/v1/attachments`, {
         method: 'POST', headers: { ...s.hdrs, Prefer: 'return=representation' },
         body: JSON.stringify([{
@@ -959,7 +980,11 @@ export default async function handler(req, res) {
       // File the carrier receipt to HawkSoft too (write-only POST — RefId is our proof of handoff)
       // - unless this exact file already went there with the first copy
       if (dup && dup.filed_hawksoft) { hsFiled = true; hsRefId = dup.hawksoft_refid || null; hsStatus = 'duplicate'; }
-      else if (buf.length > HS_MAX_BYTES) { hsStatus = HS_TOO_BIG; }
+      else if (buf.length > HS_MAX_BYTES) {
+        hsStatus = HS_TOO_BIG;
+        const PW = { carrier_application: 'Signed application', carrier_endo: 'Signed endorsement', cancellation: 'Cancellation request', dmv_receipt: 'DMV receipt', carrier_receipt: 'Carrier receipt' };
+        hsNoteBig = await hsTooBigNote(client_no, 'Proof of payment - ' + (body.proof_label ? String(body.proof_label) : (PW[dtype] || dtype.replace(/_/g, ' '))) + ' "' + niceName + '"', buf.length, email, polLeg.guid);
+      }
       const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
       if (ID && SECRET && !hsFiled && hsStatus !== HS_TOO_BIG) {
         const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
@@ -1113,7 +1138,7 @@ export default async function handler(req, res) {
       attachment_id: attachment && attachment.id,
       blob_url: blobUrl,
       blob_status: blobStatus,
-      hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_refid: hsRefId,
+      hawksoft_filed: hsFiled, hawksoft_status: hsStatus, hawksoft_refid: hsRefId, hawksoft_note: hsNoteBig,
       duplicate: blobStatus === 'duplicate',
     });
   }

@@ -84,17 +84,24 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 14 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `d36c8a0`.
+Last written Sep 14 night. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `1acd29d`.
+
+**If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
+above. The harnesses named in the table further down live in the OLD session's
+scratchpad (`C:\Users\speed\AppData\Local\Temp\claude\...\83745d03-...\scratchpad`) -
+copy that folder's `*.mjs` + `gbp_rows.json` + `trust_fixture.json` into the new
+session's scratchpad before running anything (they need `npm i jsdom puppeteer-core`
+there). `memory/verification-discipline.md` has the traps.
 
 ### ⏭ TUESDAY SEP 15 — IN THIS ORDER
-0. **Client 4600, Laura's $0.50 "invoice".** Sep 14 4:13 PM she charged $0.50 cash,
-   purpose "Other: INVOICE DUE FOR ENDORSEMENT", total $316 — a workaround for the open
-   invoice we did not have. Row `d4398ea7-df8f-45e0-95ca-c128e6e984be`. Once Saif
-   confirms no 50 cents was taken: convert it to a real open invoice (kind
-   `invoice_open`, amount 0, total_owed 316, audit_status `invoice_open`, ref cleared)
-   and post a HawkSoft log note saying the $0.50 receipt was a placeholder (the receipt
-   itself cannot be deleted). Then tell Laura the **Open invoice** method exists.
+0. **Client 4600 — DONE by SQL Sep 14 night:** Laura's $0.50 placeholder row
+   `d4398ea7-…` is now a real open invoice ($316 owed, $0 collected; event
+   `invoice.converted_from_placeholder`). Assumed no cash was received — if 50 cents
+   WAS taken, put it back as a $0.50 part payment. **Saif still owes HawkSoft one log
+   line by hand** (the $0.50 receipt there cannot be deleted): "The $0.50 cash receipt
+   of Sep 14 was a placeholder — no cash was received; the $316 endorsement invoice is
+   tracked on the Speedy platform." Then tell Laura the **Open invoice** method exists.
 1. **Try a big PDF on ZZTEST** (10–25 MB) through the carrier page — the first real
    upload through the signed-URL path (`d36c8a0`). The harness ran against the
    Supabase API shapes from the docs, not against the live bucket. If the PUT is refused,
@@ -103,7 +110,8 @@ otherwise; `git status` is clean at `d36c8a0`.
 2. **Tell the agents** (one message): the audit page now asks for the *proof* by purpose
    (signed application / signed endorsement / …, they pick freely), there is a *Note to
    Tony*, the charge sheet has *Open invoice* and *Add this payment to it* (more money on
-   a sale already charged), and New business waits for its source before Charge.
+   a sale already charged), the card has *client still owes more* (set the total after
+   the fact), and New business waits for its source before Charge.
 3. Everything still open from the Sep 13 list below (Tony's grants, the first real
    submission, refunds stage 4, Tuesday GBP).
 
@@ -162,6 +170,20 @@ the bytes back, points the attachment at the path with no inline copy, files Haw
 Path must be `<client>/<uuid>.<ext>`; up to 50 MB; refused types and sizes say why.
 `harnessBigFiles.mjs` (35), 22/22. **Not yet exercised against the live bucket** — item 1
 above.
+
+**Client still owes more (`1acd29d`).** Saif: can the agent attach the balance to a
+payment charged as paid in full? On the card, on a payment of theirs that is not
+approved / a balance row / a refund / an invoice: **"client still owes more"** (or
+"change the total owed"). Prompt → confirm → platform.js `set_total_owed` (owner,
+charger or roster admin; never below what is collected, counting balance rows; HawkSoft
+log note; event `payment.total_set`). From then on it is a part payment. Added to
+`AGENT_ACTIONS` so agents may call it. `harnessOwesMore.mjs` (26), 14/14. The refund
+suite's regex guard now expects FIVE deliberate `/declin|fail|void|refund/` sites.
+
+**Two mistakes, two paths, now covered:** *Add this payment to it* when the second
+payment is being taken; *client still owes more* when nothing more has been collected
+yet but the first charge understated the sale. *Open invoice* when nothing has been
+collected at all.
 
 ### ⏭ ~~MONDAY SEP 14~~ — carried forward (still true)
 0. **Agents will notice five things Monday morning — tell them in one message:** the
@@ -628,6 +650,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessGate.mjs` | 15 — the purpose gate on the charge sheet |
 | `harnessInvoice.mjs` | 42 — invoice_open end to end: server, waking, lists, Trust, card, sheet |
 | `harnessBigFiles.mjs` | 35 — signed uploads: upload_url, receipt_path on both actions, the page's File path |
+| `harnessOwesMore.mjs` | 26 — set_total_owed rules, the card link, the portal prompt flow |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

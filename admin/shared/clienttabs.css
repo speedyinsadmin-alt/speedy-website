@@ -71,8 +71,54 @@
 .ctlog .lrow{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
 .ctlog .when{flex:none;width:58px;font-size:11px;color:var(--dim);padding-top:2px;text-align:right}
 .ctlog .dot{flex:none;width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--dim)}
-.ctlog .dot.other{background:var(--dim)} .ctlog .dot.money{background:var(--green)} .ctlog .dot.doc{background:var(--blue-l)} .ctlog .dot.mail{background:var(--amber)} .ctlog .dot.review{background:#b98cff} .ctlog .dot.note{background:#5cc8d8} .ctlog .dot.red{background:var(--red, #d32f2f)}
+/* d- prefixed: the pages have their own .note / .other classes (Console), and a dot named .note grew into a box */
+.ctlog .dot.d-other{background:var(--dim)} .ctlog .dot.d-money{background:var(--green)} .ctlog .dot.d-doc{background:var(--blue-l)} .ctlog .dot.d-mail{background:var(--amber)} .ctlog .dot.d-review{background:#b98cff} .ctlog .dot.d-note{background:#5cc8d8} .ctlog .dot.red{background:var(--red, #d32f2f)}
 .ctlog .w{flex:1;min-width:0;font-size:12.5px;line-height:1.5;color:var(--ink);word-break:break-word}
 .ctlog .w b{font-weight:700} .ctlog .w .m{font-size:11px;color:var(--mute);display:block}
 .ctlog .w .ctwarn{color:var(--amber-ink)}
 .ctlog .lnote{font-size:11px;color:var(--dim);margin-top:10px;line-height:1.5}
+/* notes: the card, its chips and attachments, replies, the box's tools (Sep 16) */
+.ctlog .ncard{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-top:6px}
+.ctlog .ncard.flash{border-color:var(--blue-l)}
+.ctlog .nt{font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.nchips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.nchip{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(0,0,0,.25);border:1px solid var(--line);color:var(--blue-l)}
+.nchip.file{color:var(--mute)} .nchip i{font-style:normal;color:var(--dim);cursor:pointer;margin-left:4px}
+.ctlog .natts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.ctlog .natt{width:56px;cursor:pointer;text-align:center} .ctlog .natt .dthumb{width:52px;height:64px;margin:0 auto}
+.ctlog .natt span{display:block;font-size:10px;color:var(--mute);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctlog .natt .dthumb,.ctlog .dthumb{flex:none;width:52px;height:64px;border-radius:6px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--mute);letter-spacing:.04em;background:rgba(255,255,255,.03);overflow:hidden}
+.ctlog .dthumb.pdf{color:#ff8787;border-color:rgba(255,135,135,.45)} .ctlog .dthumb.img{color:var(--blue-l);border-color:rgba(120,160,255,.45)} .ctlog .dthumb.has{background:#fff;border-color:var(--line)}
+.ctlog .dthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.ctlog .nacts{display:flex;gap:12px;margin-top:8px;font-size:11.5px} .ctlog .nacts span{color:var(--blue-l);font-weight:600;cursor:pointer}
+.ctlog .nreplies{margin:8px 0 0 14px;border-left:2px solid var(--line);padding-left:10px}
+.ctlog .nreply{margin-top:6px;font-size:12.5px} .ctlog .nreply .rwhen{font-size:11px;color:var(--dim);margin-right:6px}
+.ctlog .nreply .ncard{margin-top:4px}
+.ctlog .nreplying{font-size:11.5px;color:var(--mute);margin-bottom:6px} .ctlog .nreplying .dlink{margin-left:6px}
+.ctlog .ntools{display:flex;gap:10px;align-items:center;margin-left:auto}
+.ctlog .nlink{font-size:11.5px;font-weight:600;color:var(--blue-l);cursor:pointer;white-space:nowrap}
+.ctpanel .nlist{max-height:50vh;overflow:auto;padding:6px 8px}
+.ctpanel .nopt{display:flex;gap:8px;align-items:center;padding:8px 8px;border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--ink)}
+.ctpanel .nopt:hover{background:var(--field)} .ctpanel .nopt.on{background:rgba(127,168,255,.15);outline:1px solid var(--blue-l)}
+.ctpanel .nopt .nk{flex:none;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);width:66px}
+/* the activity report (activity.js): tiles, range, the Console table (Sep 16) */
+.ctpanel.act{height:min(92vh,980px)} .ctpanel .abody{flex:1;min-height:0;overflow:auto;padding:12px 14px}
+.ctpanel .hd .sub{font-size:12px;color:var(--mute);font-weight:400;margin-top:2px}
+.act .arange .dates{margin-left:auto;color:var(--dim);border:0;background:transparent;padding:5px 0;cursor:default}
+.act .adates{display:flex;gap:8px;align-items:center;margin:-4px 0 10px;font-size:12px}
+.act .adates input{background:var(--field);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:6px 8px;font-size:12px}
+.act .atiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.act .atile{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.act .atile b{display:block;font-size:18px;font-weight:800} .act .atile span{font-size:11px;color:var(--mute)}
+.act .atile.warn b{color:var(--amber-ink)}
+.act .afoot{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.act .afoot div{border-radius:9px;padding:10px;text-align:center;font-size:13px;font-weight:600;background:var(--field);border:1px solid var(--line);color:var(--blue-l);cursor:pointer}
+.act .who{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:11px;color:var(--mute);margin-right:4px}
+.act .abar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px} .act .abar .lfil{margin:0}
+.act .abtn{background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--blue-l);font-size:12.5px;font-weight:700;padding:7px 12px;cursor:pointer}
+.act .atable{overflow-x:auto} .act table{width:100%;border-collapse:collapse;font-size:12.5px}
+.act th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);font-weight:600;white-space:nowrap}
+.act th:first-child,.act td:first-child{text-align:left}
+.act td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;color:var(--ink)}
+.act td.warn,.act .warn{color:var(--amber-ink)} .act td.red{color:var(--red-ink)} .act tr.tot td{font-weight:800;border-top:2px solid var(--line)}
+@media print { .ctlight{position:static;background:#fff;padding:0} .ctpanel{height:auto;border:0;color:#000} .ctpanel .abody{overflow:visible} .act .afoot,.act .abar .abtn,.ctpanel .hd .x{display:none} }

@@ -243,7 +243,7 @@
         </div>
         <div style="text-align:right">
           <div style="background:var(--field);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600" id="officeLabel">—</div>
-          <div class="dim" style="font-size:10px;margin-top:3px">sign out to change office · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span> · <span id="themeBtn" onclick="toggleTheme()" style="color:var(--blue-l);cursor:pointer" title="Switch light / dark">&#9789; Light</span></div>
+          <div class="dim" style="font-size:10px;margin-top:3px"><span style="color:var(--blue-l);cursor:pointer;font-weight:600" onclick="Activity.open()" title="What you did, today / this week / a range">My activity</span> · sign out to change office · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span> · <span id="themeBtn" onclick="toggleTheme()" style="color:var(--blue-l);cursor:pointer" title="Switch light / dark">&#9789; Light</span></div>
         </div>
       </div>
     </div>
@@ -502,6 +502,7 @@
 <script src="/admin/shared/paycard.js"></script>
 <link rel="stylesheet" href="/admin/shared/clienttabs.css">
 <script src="/admin/shared/clienttabs.js"></script>
+<script src="/admin/shared/activity.js"></script>
 <script>
 /* Theme, applied before anything renders so the page never flashes dark then light.
    Stored per DEVICE, not per agent: branch machines are shared, and a preference

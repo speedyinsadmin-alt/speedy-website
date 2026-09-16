@@ -1726,7 +1726,7 @@ const OPS_PLATFORM_MAP = [
   { k: 'E · Compliance', v: 'Audit trail in events. CCPA. Call recording pending attorney review' },
 ];
 
-const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients'];
+const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients', 'activity'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     /* Declared HERE, at the top of the portal block. portal_share_due and portal_news
@@ -1864,6 +1864,61 @@ if (view === 'portal_share_due') {
           helper_email: h.email, helper_why: h.why,
           helper_name: AGENT_NAME[h.email] || h.email }));
       return res.status(200).json({ ok: true, rate: pct, due });
+    }
+
+    /* THE ACTIVITY REPORT (Sep 16). The same Log, sliced by PERSON instead of by client:
+       "My activity" for an agent, "Activity" across everyone for the owner and admins.
+       Returns the rows grouped by client, in the shapes the client tabs already read, so
+       the page builds the same sentences. An agent is always held to their own rows,
+       whatever they ask for; the range is capped at 92 days. */
+    if (view === 'activity') {
+      const isAdminHere = (await rosterAdmins()).has(me);
+      const day = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+      let to = day(req.query.to) || today, from = day(req.query.from) || to;
+      if (from > to) { const x = from; from = to; to = x; }
+      const span = (new Date(to) - new Date(from)) / 86400000;
+      if (span > 92) return res.status(400).json({ ok: false, error: 'Pick a range of 92 days or less.' });
+      /* Pacific midnight edges, expressed in UTC for the row filters */
+      const edge = (d, endOfDay) => { const utcOff = 7; const dt = new Date(d + 'T00:00:00Z'); dt.setUTCHours(dt.getUTCHours() + utcOff + (endOfDay ? 24 : 0)); return dt.toISOString(); };
+      const t0 = edge(from, false), t1 = edge(to, true);
+      const askedAgent = String(req.query.agent || '').toLowerCase().trim();
+      const agent = isAdminHere ? (askedAgent && askedAgent !== 'all' ? askedAgent : null) : me;
+      const enc = encodeURIComponent;
+      const evQ = `events?ts=gte.${enc(t0)}&ts=lt.${enc(t1)}&client_no=not.is.null&select=id,ts,actor,kind,client_no,source,payload&order=ts.desc&limit=3000`
+        + (agent ? `&or=(actor.eq.${enc(agent)},payload->>submitted_by.eq.${enc(agent)},payload->>owner.eq.${enc(agent)},payload->>requested_by.eq.${enc(agent)})` : '');
+      const payQ = `bridge_ledger?ts=gte.${enc(t0)}&ts=lt.${enc(t1)}&is_test=is.false&select=id,ts,amount,purpose,kind,ref,agent,client_id,audit_status,refund_of,refund_reason,refund_carrier,carrier_name,extra&order=ts.desc&limit=3000`
+        + (agent ? `&agent=ilike.${enc('*' + agent + '*')}` : '');
+      const docQ = `attachments?created_at=gte.${enc(t0)}&created_at=lt.${enc(t1)}&select=id,client_no,payment_id,kind,doc_type,doc_label,filename,bytes,mime,amount,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=3000`
+        + (agent ? `&uploaded_by=ilike.${enc('*' + agent + '*')}` : '');
+      const [ev, pay, doc] = await Promise.all([sbGet(s, evQ), sbGet(s, payQ), sbGet(s, docQ)]);
+      const rows = x => Array.isArray(x.rows) ? x.rows : [];
+      const byClient = {};
+      const bucket = no => (byClient[no] = byClient[no] || { client_no: Number(no), payments: [], documents: [], events: [] });
+      for (const r of rows(pay)) if (r.client_id != null) bucket(r.client_id).payments.push({
+        id: r.id, ts: r.ts, amount: r.amount, purpose: r.purpose, kind: r.kind, ref: r.ref, audit_status: r.audit_status,
+        charged_by: AGENT_NAME[agentEmailOf(r.agent)] || agentEmailOf(r.agent) || null, charged_by_email: agentEmailOf(r.agent) || null,
+        carrier_name: r.carrier_name, refund_of: r.refund_of || null, refund_reason: r.refund_reason || null, refund_carrier: r.refund_carrier || null,
+        voided: r.refund_of ? ((r.extra || {}).voided === true) : false, client_notice: clientNoticeOf(r) });
+      for (const d of rows(doc)) if (d.client_no != null) { const { client_no, ...rest } = d; bucket(client_no).documents.push(rest); }
+      for (const e of rows(ev)) if (e.client_no != null) { const { client_no, ...rest } = e; bucket(client_no).events.push(rest); }
+      const nos = Object.keys(byClient);
+      const names = {};
+      for (let i = 0; i < nos.length; i += 200) {
+        const cr = await sbGet(s, `clients?client_no=in.(${nos.slice(i, i + 200).join(',')})&select=client_no,first_name,last_name,business_name`);
+        for (const c of rows(cr)) names[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || ('Client #' + c.client_no);
+      }
+      /* the roster and when each person was last seen on the platform (any client), so a
+         quiet agent is shown rather than missing */
+      let roster = [], lastSeen = {};
+      if (isAdminHere) {
+        const rr = await sbGet(s, 'agents?select=email,full_name,branch,active,role&active=is.true&order=full_name.asc');
+        roster = rows(rr).map(a => ({ email: String(a.email || '').toLowerCase(), full_name: a.full_name, branch: a.branch || null, role: a.role || null }));
+        const ls = await sbGet(s, 'events?select=actor,ts&client_no=not.is.null&order=ts.desc&limit=4000');
+        for (const e of rows(ls)) { const a = String(e.actor || '').toLowerCase(); if (a.includes('@') && !lastSeen[a]) lastSeen[a] = e.ts; }
+      }
+      return res.status(200).json({ ok: true, from, to, me, is_admin: isAdminHere, agent: agent || null, agent_names: AGENT_NAME, roster, last_seen: lastSeen,
+        clients: nos.map(no => ({ ...byClient[no], name: names[no] || ('Client #' + no) })) });
     }
 
     if (view === 'portal_news') {
@@ -3126,19 +3181,49 @@ if (view === 'portal_share_due') {
       if (text.length < 2) return res.status(400).json({ ok: false, error: 'Write the note first.' });
       const cl = await sbGet(s, `clients?client_no=eq.${clientNo}&select=client_no`);
       if (!(cl.rows || []).length) return res.status(404).json({ ok: false, error: 'No such client.' });
+      /* WHAT THE NOTE IS ABOUT and WHAT IT CARRIES (Sep 16). Attachments are documents
+         already uploaded to THIS client (the page uploads them first); a note may not
+         point at another client's file. A reply names an earlier note on this client.
+         Each link is checked here - a note that claims things is a note nobody trusts. */
+      const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const attIds = [...new Set((Array.isArray(b3.attachments) ? b3.attachments : []).map(x => String(x)).filter(x => UUID.test(x)))].slice(0, 12);
+      let attachments = [], attNames = [];
+      if (attIds.length) {
+        const ar = await sbGet(s, `attachments?id=in.(${attIds.join(',')})&client_no=eq.${clientNo}&select=id,filename,doc_label`);
+        const found = ar.rows || [];
+        if (found.length !== attIds.length) return res.status(400).json({ ok: false, error: 'An attachment is not on this client.' });
+        attachments = found.map(a => a.id); attNames = found.map(a => a.filename || a.doc_label || 'file');
+      }
+      const ABOUT_TYPES = ['payment', 'document', 'policy', 'note'];
+      const about = (Array.isArray(b3.about) ? b3.about : []).slice(0, 12)
+        .map(a => ({ type: String((a || {}).type || ''), id: String((a || {}).id || '').slice(0, 80), label: String((a || {}).label || '').replace(/\s+/g, ' ').trim().slice(0, 120) }))
+        .filter(a => ABOUT_TYPES.includes(a.type) && a.id);
+      let replyTo = null, replyLabel = null;
+      if (b3.reply_to) {
+        if (!UUID.test(String(b3.reply_to))) return res.status(400).json({ ok: false, error: 'That is not a note.' });
+        const pr = await sbGet(s, `events?id=eq.${b3.reply_to}&kind=eq.note.added&client_no=eq.${clientNo}&select=id,actor,ts`);
+        const parent = (pr.rows || [])[0];
+        if (!parent) return res.status(404).json({ ok: false, error: 'The note being answered is not on this client.' });
+        replyTo = parent.id;
+        replyLabel = `${(AGENT_NAME[String(parent.actor || '').toLowerCase()] || String(parent.actor || '').split('@')[0]).split(' ')[0]}\u2019s note of ${String(parent.ts || '').slice(0, 10)}`;
+      }
       const stamp = new Date().toISOString();
       const whoName = AGENT_NAME[me2] || me2;
+      const aboutLine = about.filter(a => a.type !== 'policy' || a.id !== policyNumber).map(a => a.label || (a.type + ' ' + a.id)).join('; ');
       let noteOk = false;
       try {
         const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${clientNo}/log?version=4.0`, {
           method: 'POST', body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
-            note: `NOTE by ${whoName}${policyNumber ? ' (policy ' + policyNumber + ')' : ''}: ${text} — written on the Speedy platform.` }) });
+            note: `NOTE by ${whoName}${policyNumber ? ' (policy ' + policyNumber + ')' : ''}${replyTo ? ' [reply to ' + replyLabel + ']' : ''}: ${text}`
+              + (aboutLine ? ` [about: ${aboutLine}]` : '') + (attachments.length ? ` [${attachments.length} attachment${attachments.length === 1 ? '' : 's'}: ${attNames.join(', ')}]` : '')
+              + ' — written on the Speedy platform.' }) });
         noteOk = (hr.status === 200 || hr.status === 202);
       } catch { noteOk = false; }
-      const ins = await sbInsert(s, 'events', [{ ts: stamp, actor: me2, kind: 'note.added', client_no: Number(clientNo), source: b3.source === 'console' ? 'console' : 'portal',
-        payload: { text, policy_number: policyNumber || null, hawksoft_note: noteOk } }]);
+      const id = randomUUID();
+      const ins = await sbInsert(s, 'events', [{ id, ts: stamp, actor: me2, kind: 'note.added', client_no: Number(clientNo), source: b3.source === 'console' ? 'console' : 'portal',
+        payload: { text, policy_number: policyNumber || null, about, attachments, reply_to: replyTo, reply_to_label: replyLabel, hawksoft_note: noteOk } }]);
       if (!ins.ok) return res.status(500).json({ ok: false, error: 'The note could not be saved.' + (noteOk ? ' (It did reach HawkSoft.)' : '') });
-      return res.status(200).json({ ok: true, ts: stamp, hawksoft_note: noteOk, by: whoName });
+      return res.status(200).json({ ok: true, id, ts: stamp, hawksoft_note: noteOk, by: whoName, attachments, about, reply_to: replyTo, reply_to_label: replyLabel });
     }
 
     if (action === 'refund_slip') {

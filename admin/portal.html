@@ -283,8 +283,8 @@
         <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em" id="earnedLabel">Earned this month &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--green)" id="earned">$0.00</div>
       </div>
-      <div style="background:var(--field);border:1px solid var(--line);border-radius:12px;padding:13px">
-        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Pending</div>
+      <div onclick="openPending()" style="background:linear-gradient(135deg,rgba(245,166,35,.14),rgba(77,124,254,.06));border:1px solid rgba(245,166,35,.35);border-radius:12px;padding:13px;cursor:pointer">
+        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Pending &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--amber-ink)" id="pending">$0.00</div>
       </div>
     </div>
@@ -352,7 +352,7 @@
     <div class="card" style="border-color:var(--green)">
       <div class="row" style="align-items:flex-start;margin-bottom:12px">
         <div>
-          <div style="font-size:16px;font-weight:800">Where this came from</div>
+          <div style="font-size:16px;font-weight:800" id="earnTitle">Where this came from</div>
           <div class="muted" style="font-size:12px;margin-top:2px" id="earnSub">&mdash;</div>
         </div>
         <div onclick="closeEarnings()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
@@ -738,6 +738,7 @@ async function loadHome(){
   if(el) el.innerHTML = (EARN_PERIOD === 'last' ? 'Earned ' + esc(r.period || 'last month')
                                                 : 'Earned this month') + ' &rsaquo;';
   HELPED_LINES = r.helped_lines || [];
+  PENDING_LINES = r.pending_lines || [];
   const hb = document.getElementById('helpBox');
   if(HELP_OPEN.length){
     document.getElementById('helpText').textContent =
@@ -782,7 +783,7 @@ async function loadHome(){
    never has to sign in again. */
 let UNFINISHED = [];
 let HELP_OPEN = [];   // other agents' open audits this agent could help with
-let EARN_LINES = [], HELPED_LINES = [];
+let EARN_LINES = [], HELPED_LINES = [], PENDING_LINES = [];
 function openTodo(){
   if(!UNFINISHED.length){ return; }
   const sheet = document.getElementById('todoSheet');
@@ -840,7 +841,7 @@ let EARN_PERIOD = 'this';
    agent's real work is last month's. The picker makes the period explicit. */
 function setEarnPeriod(p){
   EARN_PERIOD = p;
-  loadHome().then(() => openEarnings());
+  loadHome().then(() => EARN_SHEET === 'pending' ? openPending() : openEarnings());
 }
 function earnPickerHtml(){
   const btn = (val, label) =>
@@ -853,7 +854,42 @@ function earnPickerHtml(){
   return '<div style="display:flex;gap:6px;margin-bottom:12px">'
     + btn('this', 'This month') + btn('last', 'Last month') + '</div>';
 }
+/* WHAT IS PENDING (Sep 16, Saif: "the agent can't watch the pending commission"). The
+   same sheet, a line per dollar that is not earned yet, each with the reason and - when
+   the agent can do something about it - a way in. */
+function openPending(){
+  const m = a => '$' + Number(a || 0).toFixed(2);
+  const d = ts => String(ts || '').slice(0, 10);
+  const tone = st => st === 'sent_back' ? 'var(--red)' : st === 'needs_proof' ? 'var(--amber-ink)' : st === 'balance' ? 'var(--blue-l)' : 'var(--dim)';
+  const total = PENDING_LINES.reduce((a, x) => a + Number(x.pending || 0), 0);
+  const unknown = PENDING_LINES.filter(x => x.pending == null).length;
+  let h = earnPickerHtml();
+  if(!PENDING_LINES.length) h += '<div class="dim" style="font-size:12.5px">Nothing pending in '
+      + (EARN_PERIOD === 'last' ? 'that month' : 'this period') + '. Everything you earned is approved.</div>';
+  else h += '<div class="dim" style="font-size:11.5px;margin-bottom:8px">Not earned yet. Each line says what it is waiting for'
+      + (unknown ? '; ' + unknown + ' cannot be priced until the carrier cost is entered' : '') + '.</div>'
+    + PENDING_LINES.map(x =>
+      '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px'
+        + (x.state === 'needs_proof' || x.state === 'sent_back' ? ';cursor:pointer" onclick="closeEarnings();openClient(' + Number(x.client_no) + ')"' : '"') + '>'
+      + '<div style="display:flex;justify-content:space-between;gap:10px">'
+      + '<span style="font-size:13px;font-weight:600">#' + x.client_no + (x.role === 'helper' ? ' <span class="dim" style="font-weight:400;font-size:11px">\u00b7 ' + esc(x.owner_name || '') + '\u2019s</span>' : '') + '</span>'
+      + '<span style="font-size:13.5px;font-weight:800;color:' + (x.pending == null ? 'var(--dim)' : 'var(--amber-ink)') + '">' + (x.pending == null ? '?' : m(x.pending)) + '</span></div>'
+      + '<div style="font-size:11.5px;margin-top:3px;color:' + tone(x.state) + '">' + esc(x.why) + (x.state === 'needs_proof' || x.state === 'sent_back' ? ' \u2192' : '') + '</div>'
+      + '<div class="dim" style="font-size:11px;margin-top:2px">' + m(x.amount) + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '')
+        + (x.shared_with ? ' \u00b7 you shared ' + x.shared_pct + '% with ' + esc(x.shared_with) : '')
+        + ' \u00b7 ' + d(x.ts) + '</div>'
+      + '</div>').join('');
+  document.getElementById('earnTitle').textContent = 'What is pending';
+  document.getElementById('earnBody').innerHTML = h;
+  document.getElementById('earnSub').textContent = m(total) + ' waiting' + (unknown ? ' + ' + unknown + ' not priced yet' : '') + ' \u00b7 ' + PENDING_LINES.length + ' payment' + (PENDING_LINES.length === 1 ? '' : 's');
+  document.getElementById('earnSheet').classList.remove('hide');
+  document.body.style.overflow = 'hidden';
+  EARN_SHEET = 'pending';
+}
+let EARN_SHEET = 'earned';
 function openEarnings(){
+  EARN_SHEET = 'earned';
+  document.getElementById('earnTitle').textContent = 'Where this came from';
   const m = a => '$' + Number(a || 0).toFixed(2);
   const d = ts => String(ts || '').slice(0, 10);
   let h = earnPickerHtml();

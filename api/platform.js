@@ -2357,6 +2357,12 @@ if (view === 'portal_share_due') {
          owner earns it unless they chose to share - and that is exactly why it
          should be visible. Effort with no trace looks like effort nobody noticed. */
       let helped_lines = [];
+      /* THE LINES BEHIND "PENDING" (Sep 16, Saif: "the agent can't watch the pending
+         commission"). Every dollar added to `pending` below also gets a line here, with
+         the reason it is not earned yet; a row whose commission cannot be known yet
+         (no fee, no carrier cost) gets a line with no dollars so the total is honest. */
+      let pending_lines = [];
+      const pendLine = (r, o) => pending_lines.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), carrier: r.carrier_name || null, ...o });
       for (const r of mine) {
         const dateStr = String(r.ts || '').slice(0, 10);
         if (dateStr < AUDIT_CUTOFF) continue; // pre-audit: no commission expected
@@ -2383,11 +2389,16 @@ if (view === 'portal_share_due') {
             const share = Number(r.helper_share_pct || 0);
             earned  += full * ratio * (1 - share / 100);
             pending += full * (1 - ratio) * (1 - share / 100);   // waiting on the balance
+            if (ratio < 1) pendLine(r, { role: 'owner', state: 'balance', pending: +(full * (1 - ratio) * (1 - share / 100)).toFixed(2), collected_ratio: ratio, shared_pct: share || 0,
+              why: 'approved, ' + Math.round(ratio * 100) + '% collected so far - the rest comes with the balance' });
           }
           if (!isOwner && r.helper_email === me && inPeriod(earnedAt(r))) {
             const share = Number(r.helper_share_pct || 0) / 100;
             earned  += full * ratio * share;
             pending += full * (1 - ratio) * share;
+            if (ratio < 1 && share > 0) pendLine(r, { role: 'helper', state: 'balance', pending: +(full * (1 - ratio) * share).toFixed(2), collected_ratio: ratio, shared_pct: share * 100,
+              owner_name: AGENT_NAME[r.commission_to || agentEmailOf(r.agent)] || (r.commission_to || agentEmailOf(r.agent) || '').split('@')[0],
+              why: 'your share - approved, ' + Math.round(ratio * 100) + '% collected so far' });
           }
           if (isOwner && inPeriod(earnedAt(r))) {
             const share = Number(r.helper_share_pct || 0);
@@ -2441,12 +2452,24 @@ if (view === 'portal_share_due') {
           const ownerEmail = r.commission_to || agentEmailOf(r.agent);
           const feeGuess = fee != null ? fee * rateOf(ownerEmail) / 100 : null;
           const shareG = Number(r.helper_share_pct || 0);
-          if (isOwner && inPeriod(earnedAt(r)) && feeGuess != null) pending += feeGuess * (1 - shareG / 100);
+          const stateOf = () => r.audit_sendback ? 'sent_back' : r.audit_status === 'ready_for_audit' ? 'waiting_approval' : 'needs_proof';
+          const whyOf = () => r.audit_sendback ? 'sent back by ' + (AGENT_NAME[r.audit_sendback.by] || 'the auditor') + (r.audit_sendback.reason ? ': \u201c' + r.audit_sendback.reason + '\u201d' : '') + ' - fix it and resubmit'
+                            : r.audit_status === 'ready_for_audit' ? 'submitted, waiting for the auditor to approve it'
+                            : 'needs your proof of payment before it can be audited';
+          if (isOwner && inPeriod(earnedAt(r))) {
+            if (feeGuess != null) pending += feeGuess * (1 - shareG / 100);
+            pendLine(r, { role: 'owner', state: stateOf(), pending: feeGuess != null ? +(feeGuess * (1 - shareG / 100)).toFixed(2) : null, shared_pct: shareG || 0,
+              shared_with: shareG > 0 && r.helper_email ? (AGENT_NAME[r.helper_email] || r.helper_email) : null,
+              why: feeGuess == null ? 'commission not known yet - the carrier cost is entered at the audit' : whyOf() });
+          }
           /* A share set before the audit (Sep 16: Sammy -> Jorge on 26424). Saif: "the
              share will show in pending and move to earned after approval" - so the
              helper's slice is pending now, with a line that says it is waiting. */
           if (!isOwner && r.helper_email === me && shareG > 0 && inPeriod(earnedAt(r))) {
             if (feeGuess != null) pending += feeGuess * shareG / 100;
+            pendLine(r, { role: 'helper', state: stateOf(), pending: feeGuess != null ? +(feeGuess * shareG / 100).toFixed(2) : null, shared_pct: shareG,
+              owner_name: AGENT_NAME[ownerEmail] || (ownerEmail || '').split('@')[0],
+              why: 'your ' + shareG + '% share - ' + (feeGuess == null ? 'commission not known yet (carrier cost comes at the audit)' : whyOf().replace(/^needs your proof/, 'needs ' + (AGENT_NAME[ownerEmail] || 'the owner') + '\u2019s proof')) });
             helped_lines.push({
               id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), carrier: r.carrier_name || null,
               what: ((r.extra || {}).share || {}).why || 'was given a share',
@@ -2492,6 +2515,7 @@ if (view === 'portal_share_due') {
         waiting_count: unfinished.filter(u => u.audit_status === 'ready_for_audit' && !u.audit_sendback).length,
         earned_lines: earned_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60),
         helped_lines: helped_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 40),
+        pending_lines: pending_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60),
         /* Open audits belonging to OTHER agents that this one could help finish.
            Built from `all`, which is already in memory - no extra query. Deliberately
            carries NO money: no fee, no service_cost, no commission. Everyone sees

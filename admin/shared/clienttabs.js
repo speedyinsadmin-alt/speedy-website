@@ -210,10 +210,15 @@ async function relabel(id){
     if(CUR.opts.rerender) CUR.opts.rerender(CUR.opts.clientNo || (c.client && c.client.client_no));
   };
 }
+/* THE PAGE'S TOKEN. Both pages declare `let TOKEN` at top level - a lexical global,
+   NOT window.TOKEN - so reading window.TOKEN sent every carrier call out empty and the
+   server said "Not authorized" (found live, Sep 16). A classic script shares the global
+   lexical scope, so the bare name is the one that works; window.TOKEN is the fallback. */
+function pageToken(){ try{ if(typeof TOKEN !== 'undefined' && TOKEN) return TOKEN; }catch(e){} return (typeof window.TOKEN !== 'undefined' && window.TOKEN) || ''; }
 /* the two pages talk to /api/carrier the same way */
 async function carrierPost(body){
   try{
-    const tok = (typeof window.TOKEN !== 'undefined' && window.TOKEN) || '';
+    const tok = pageToken();
     const r = await fetch('/api/carrier', { method: 'POST', headers: { 'x-id-token': tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     return await r.json();
   }catch(e){ return null; }
@@ -222,7 +227,7 @@ function uploadUrl(no){
   const c = CUR && CUR.c; const cl = (c && c.client) || {};
   const name = cl.business_name || [cl.first_name, cl.last_name].filter(Boolean).join(' ');
   const p = new URLSearchParams({ client: no, name, docs: '1', nopay: '1' });
-  const tok = (typeof window.TOKEN !== 'undefined' && window.TOKEN) || '';
+  const tok = pageToken();
   return '/admin/carrier.html?' + p.toString() + (tok ? '#tok=' + encodeURIComponent(tok) : '');
 }
 function upload(no){
@@ -276,7 +281,10 @@ async function pdfFirstPage(b64){
   const scale = 240 / Math.max(v0.width, v0.height);
   const vp = page.getViewport({ scale });
   const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
-  await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+  /* intent 'print': the display intent paints on requestAnimationFrame, which never
+     fires in a background tab - the render hung forever while the agent was on another
+     tab (found live, Sep 16). Print intent paints straight away. */
+  await page.render({ canvasContext: cv.getContext('2d'), viewport: vp, intent: 'print' }).promise;
   return cv.toDataURL('image/jpeg', 0.6);
 }
 

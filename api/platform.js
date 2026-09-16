@@ -2436,6 +2436,12 @@ if (view === 'portal_share_due') {
         commission: { rate: pct, earned_month: +earned.toFixed(2), pending_month: +pending.toFixed(2) },
         period: period.label, period_from: monthStart, period_to: period.to,
         unfinished_count: unfinished.length, unfinished,
+        /* THE BANNER'S TWO NUMBERS (Sep 16). Saif watched Sammy upload the proof and the
+           amber "N payments need proof" stayed - because unfinished_count counted rows
+           already SUBMITTED and waiting for the auditor. Those need nothing from the
+           agent. needs_action = still no proof, or sent back; waiting = submitted. */
+        needs_action_count: unfinished.filter(u => u.audit_status !== 'ready_for_audit' || u.audit_sendback).length,
+        waiting_count: unfinished.filter(u => u.audit_status === 'ready_for_audit' && !u.audit_sendback).length,
         earned_lines: earned_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 60),
         helped_lines: helped_lines.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 40),
         /* Open audits belonging to OTHER agents that this one could help finish.

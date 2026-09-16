@@ -735,17 +735,33 @@ async function loadHome(){
   } else hb.classList.add('hide');
   restoreEarningsPref();
   loadNews();
-  const n = r.unfinished_count || 0;
+  /* Two numbers, not one (Sep 16): what still needs THIS agent (no proof yet, or sent
+     back) is the amber banner; what is submitted and waiting for the auditor is a quiet
+     line - it used to stay amber after the agent had done everything. */
+  const needAct = (u) => u.audit_status !== 'ready_for_audit' || !!u.audit_sendback;
+  const n = r.needs_action_count != null ? r.needs_action_count : (UNFINISHED || []).filter(needAct).length;
+  const waiting = r.waiting_count != null ? r.waiting_count : (UNFINISHED || []).filter(u => !needAct(u)).length;
+  const todoEl = $('#todo'), todoSub = todoEl ? todoEl.querySelector('div:nth-child(2)') : null;
   if(n){
-    $('#todo').classList.remove('hide');
-    const notMine = (UNFINISHED || []).filter(u => !u.mine).length;
+    todoEl.classList.remove('hide');
+    todoEl.style.background = 'rgba(245,166,35,.12)'; todoEl.style.borderColor = 'rgba(245,166,35,.4)';
+    const notMine = (UNFINISHED || []).filter(u => !u.mine && needAct(u)).length;
     /* The count includes payments this agent CHARGED but does not earn. Calling all
        of them "your proof of payment" told Tony a payment was his when Sammy owns it. */
     $('#todoText').textContent = '⚠ ' + n + ' payment' + (n>1?'s':'') + ' need'
       + (n>1?'':'s') + ' proof of payment'
       + (notMine ? ' · ' + notMine + ' for another agent' : '');
+    $('#todoText').style.color = 'var(--amber-ink)';
+    if(todoSub) todoSub.textContent = 'Finish them to release your commission →' + (waiting ? ' · ' + waiting + ' more submitted, waiting for the auditor' : '');
+  } else if(waiting){
+    /* everything is in: say so, softly, and keep the list one tap away */
+    todoEl.classList.remove('hide');
+    todoEl.style.background = 'var(--field)'; todoEl.style.borderColor = 'var(--line)';
+    $('#todoText').textContent = '✓ ' + waiting + ' payment' + (waiting>1?'s':'') + ' submitted · waiting for the auditor';
+    $('#todoText').style.color = 'var(--green)';
+    if(todoSub) todoSub.textContent = 'Nothing to do until the auditor approves →';
   } else {
-    $('#todo').classList.add('hide');
+    todoEl.classList.add('hide');
   }
 }
 

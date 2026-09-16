@@ -227,7 +227,7 @@ export default async function handler(req, res) {
     const phone = digits10(b.phone); if (phone) patch.visitor_phone = phone;
     if (clean(b.name)) patch.visitor_name = clean(b.name, 80);
     if (clean(b.email)) patch.visitor_email = clean(b.email, 120);
-    if (!(phone || conv.visitor_phone) && !(clean(b.email) || conv.visitor_email)) return res.status(400).json({ ok: false, error: 'A phone number or email is needed' });
+    if (!(phone || conv.visitor_phone) && !(clean(b.email) || conv.visitor_email)) return res.status(400).json({ ok: false, error: 'A 10-digit phone number or an email is needed', code: 'need_phone' });
     const message = clean(b.message, 2000);
     if (message) await sbPost(s, 'messages', { conversation_id: conv.id, sender_kind: 'visitor', audience: 'visitor', channel: 'web', body: message, is_test: conv.is_test });
     if (phone && !conv.client_no) { const m = await sbGet(s, `client_phone_index?phone10=eq.${phone}&select=client_number&limit=1`); if (m.rows[0]) patch.client_no = m.rows[0].client_number; }

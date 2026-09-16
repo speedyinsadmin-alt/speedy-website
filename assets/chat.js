@@ -23,7 +23,7 @@
       missMsg: 'This is taking longer than usual. Leave your number and we\'ll text you as soon as an agent is free.',
       what: 'What do you need?', sendBtn: 'Send — we\'ll text you', sentTitle: 'Got it — we\'ll text you.', sent: 'Your message is with our team. Need it faster? Call (951) 695-1500.',
       urgent: 'Urgent? Moreno Valley is open Sundays 10–5 · (951) 472-0927', foot: 'No bots selling anything — a licensed agent answers.', footOff: 'Your message becomes a lead in our system — nothing gets lost.',
-      joined: ' joined the chat', closed: 'This chat has ended. Start a new one any time.', type: 'Type a message…', you: 'You', needPhone: 'Please leave a phone number or email.', err: 'Something went wrong — please call (951) 695-1500.', newChat: 'New chat' },
+      joined: ' joined the chat', closed: 'This chat has ended. Start a new one any time.', type: 'Type a message…', you: 'You', needPhone: 'Please enter a 10-digit phone number (or an email) so we can reach you.', err: 'Something went wrong — please call (951) 695-1500.', newChat: 'New chat' },
     es: { tip: 'Hable con un agente', title: 'Speedy Insurance', subLive: 'Respondemos en un minuto · Hablamos Español', subOff: 'Cerrado ahora', subWait: 'Conectándolo con un agente…', subWith: 'Chateando con ',
       branch: 'Sucursal:', change: 'Cambiar', pick: '¿Qué sucursal le queda más cerca?', topics: ['Cotización', 'SR-22', 'Servicios DMV', 'Hacer un pago', 'Grúas / comercial', 'Otra cosa'],
       ask: 'Para que un agente le pueda escribir si se corta — ¿su nombre y mejor número?', name: 'Su nombre', phone: '(951) 555-0100', startBtn: 'Iniciar chat', skip: 'Omitir por ahora',
@@ -32,7 +32,7 @@
       missMsg: 'Está tardando más de lo normal. Deje su número y le escribimos en cuanto un agente esté libre.',
       what: '¿Qué necesita?', sendBtn: 'Enviar — le escribimos', sentTitle: 'Listo — le escribimos.', sent: 'Su mensaje ya está con nuestro equipo. ¿Urge? Llame al (951) 695-1500.',
       urgent: '¿Urgente? Moreno Valley abre los domingos 10–5 · (951) 472-0927', foot: 'Sin bots — le responde un agente con licencia.', footOff: 'Su mensaje se convierte en un lead en nuestro sistema — nada se pierde.',
-      joined: ' se unió al chat', closed: 'Este chat terminó. Inicie otro cuando guste.', type: 'Escriba un mensaje…', you: 'Usted', needPhone: 'Deje un teléfono o correo, por favor.', err: 'Algo salió mal — llame al (951) 695-1500.', newChat: 'Nuevo chat' },
+      joined: ' se unió al chat', closed: 'Este chat terminó. Inicie otro cuando guste.', type: 'Escriba un mensaje…', you: 'Usted', needPhone: 'Escriba un teléfono de 10 dígitos (o un correo) para poder contactarle.', err: 'Algo salió mal — llame al (951) 695-1500.', newChat: 'Nuevo chat' },
   }[LANG];
 
   /* ---------- state ---------- */
@@ -179,11 +179,14 @@
   function leave(form) {
     var name = form.querySelector('[name=name]').value.trim(), phone = form.querySelector('[name=phone]').value.trim(), message = form.querySelector('[name=message]').value.trim();
     var err = form.querySelector('.sc-err'); err.style.display = 'none';
-    if (!phone.replace(/\D/g, '').length && !/@/.test(name)) { err.textContent = T.needPhone; err.style.display = 'block'; return; }
+    var d = phone.replace(/\D/g, ''); if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+    var hasEmail = /\S+@\S+\.\S+/.test(name) || /\S+@\S+\.\S+/.test(phone);
+    if (d.length !== 10 && !hasEmail) { err.textContent = T.needPhone; err.style.display = 'block'; return; }
     var btn = form.querySelector('.sc-btn'); btn.disabled = true;
-    post({ action: 'leave', token: st.token, name: name, phone: phone, message: message })
-      .then(function (j) { if (!j.ok) throw new Error(j.error); st.lead_id = j.lead_id; st.status = 'closed'; st.name = name; st.phone = phone; if (message) st.msgs.push({ from: 'visitor', body: message, ts: new Date().toISOString() }); save(); stopPolling(); render(); })
-      .catch(function () { btn.disabled = false; err.textContent = T.err; err.style.display = 'block'; });
+    var email = (name.match(/\S+@\S+\.\S+/) || phone.match(/\S+@\S+\.\S+/) || [''])[0];
+    post({ action: 'leave', token: st.token, name: name, phone: phone, email: email, message: message })
+      .then(function (j) { if (!j.ok) { var e = new Error(j.error); e.code = j.code; throw e; } st.lead_id = j.lead_id; st.status = 'closed'; st.name = name; st.phone = phone; if (message) st.msgs.push({ from: 'visitor', body: message, ts: new Date().toISOString() }); save(); stopPolling(); render(); })
+      .catch(function (e) { btn.disabled = false; err.textContent = e && e.code === 'need_phone' ? T.needPhone : T.err; err.style.display = 'block'; });
   }
 
   /* ---------- boot ---------- */

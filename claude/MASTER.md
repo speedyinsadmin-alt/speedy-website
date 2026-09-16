@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 16 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `c8793b5` (another session pushes the public
+otherwise; `git status` is clean at `b64499c` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -613,8 +613,22 @@ both skip locked rows. Checking it exposed a money bug (`c8793b5`): portal_home 
 walked rows the agent OWNS or CHARGED, so a helper who did neither - exactly the case
 the button exists for - never had the half counted and had no "You helped on" line.
 Rows where `helper_email` is me now join the walk; the line reads the owner's reason.
-harnessShare S6 (41), mutateShare 35/35. Jorge's My commission will show $186.94 for
-26424 once Tony completes the audit (50% of Sammy's 50% of the $747.75 fee).
+Then Saif asked the real questions (`b64499c`): "the share will show in pending and
+move to earned after approval? does the agent understand where it is coming from? is he
+notified?" Now: the helper's slice is **pending** before the audit and earned on approval
+(the owner's pending is net of it); "You helped on" carries the line in amber - "Pending ·
+waiting for approval" / "waiting for proof of payment and the audit" / "sent back to
+<owner> - nothing until it is fixed and approved" - with the reason and who earns it;
+both halves use the **owner's** rate (the helper's own rate had been used, so the halves
+did not add up to the sheet); a named helper is NOT put on the todo list; the bell says
+"50% of Samuel Rodriguez's commission on the $747.75 payment - about $X — “why”" and
+"Pending now under You helped on; earned once the audit is approved", and whoever a share
+is moved off is told. harnessShare 57 (S6–S8, H1), mutateShare 49/49, Chrome shots
+(`pending_earn.png`, `pending_news.png`).
+
+⚠️ **`agent_commission` is EMPTY** (checked Sep 16): every agent is on the code default
+of 10%. On 26424 that is $74.78 of commission, $37.39 each for Sammy and Jorge. If the
+real rates are different, Tony sets them from the Console (action at platform.js ~2621).
 
 **Sort on every list (`2c25809`).** Saif: "each tab should have sort option" — one
 control per list, remembered for the session: Documents tab (newest / oldest / by type /
@@ -1197,7 +1211,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessTabs.mjs` 98 · `mutateTabs.mjs` 55 · `fixtureTabs.mjs` · `renderTabs.mjs` · `renderConsoleTabs.mjs` · `mock_tabs.mjs` | the client's tabs (Documents, Log, notes, thumbnails, sort) |
 | `harnessActivity.mjs` 36 · `mutateActivity.mjs` 38 · `renderActivity.mjs` · `mock_activity.html` | the activity report (My activity, Console Activity) |
 | `harnessDocCenter.mjs` 40 · `mutateDocCenter.mjs` 33 · `renderDocCenter.mjs` · `mock_doccenter.html` | the document center |
-| `harnessShare.mjs` 41 · `mutateShare.mjs` 35 · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
+| `harnessShare.mjs` 57 · `mutateShare.mjs` 49 · `renderPending.mjs` · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
 | `mutateSort.mjs` 8 · `mutateTodo.mjs` 4 · (updated) `harnessAuditReview.mjs` 162 | sort on every list; the todo banner's two numbers |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |

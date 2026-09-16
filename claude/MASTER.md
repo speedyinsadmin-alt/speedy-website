@@ -84,8 +84,9 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 16 morning. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `cf1d6e4`.
+Last written Sep 16 evening. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `c8831cb` (another session pushes the public
+site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
 above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
@@ -379,11 +380,38 @@ Chrome** (the Console tab lost its sign-in on reload): the pdf.js import from cd
 inside the real page and the first `set_thumb` — Saif signs in, then open client
 18496 → Documents and watch the carrier receipt get its first-page thumbnail.
 
-**Next: the activity report** (Saif, Sep 16): the same Log sliced by PERSON — "My
-activity" in the portal (today / this week / a range; charged, uploaded, asked,
-submitted, notes; print / download) and "Activity" on the Console across everyone,
-by agent / branch / dates, with export. Mock first. Saif also asked for thumbnails
-(done above) and whether an agent can log while on a client's policy (the note box).
+**Notes with attachments, links and replies + the activity report (`c8831cb`, Sep 16
+evening).** Saif: "the note need to have attachments also, it should be able to be linked
+to other notes too" and "the agent can see and generate a report of his activity and
+Tony or Admin can see the full activity report". Mocked (`mock_activity.html`), then:
+**Notes** — Attach (photos shrink to 1600px + 240px thumb, PDFs page 1; each file is
+uploaded FIRST as a document on the client with no payment, label "Note <name> <date>",
+and the note names them by id; a failed upload stops the note; >3 MB → "Add documents
+to this client"), **Link to…** (payments, documents, policies, earlier notes → "about"
+chips), **Reply** (nested under the note it answers). `add_note` checks every attachment
+is on this client and the parent note too, writes the event with its own id (returned),
+HawkSoft note reads "NOTE by X (policy P) [reply to Y's note of D]: text [about: …]
+[2 attachments: a.jpg, b.pdf]". Note attachments are shown on the card, never as a second
+"uploaded" line. **Activity** — view `activity&from&to[&agent]` (in portalViews): rows
+grouped by client in the card shapes; an agent is always held to their own rows (events
+by actor OR payload.submitted_by/owner/requested_by; charges by agent ilike; documents by
+uploaded_by ilike); admins see everyone, `roster` + `last_seen`; 92 days max; Pacific
+edges (07:00Z). `admin/shared/activity.js` reuses `ClientTabs.logEntries` — every entry
+now carries `who` (email) and `k` (charge / upload / submit / sent_back(to) / refund_ask
+/ note / not_told / told / …). Portal: "My activity" in the header (Today / This week /
+This month / Pick dates; six tiles; rows with the client's name first; Print; Download
+CSV). Console: "Activity" tab (agent + branch pickers; a row per roster agent with
+charged / payments / docs / submitted / sent back / refunds asked / notes / NOT TOLD /
+last active — quiet 7+ days in amber, never hidden; Everyone total; the stream tagged
+with who; Export CSV; Print). Dot classes are `d-<cat>` (the Console's own `.note`
+class swallowed the note dot). harnessTabs 92, harnessActivity 35, mutateActivity 38/38.
+**Still not verified live** (the Console tab loses its sign-in on every reload, and a
+reload was needed for the new code): pdf.js thumbnails on the real site, the first
+`set_thumb`, a note with an attachment, the Activity tab. Saif signs in on the Claude
+tab, then: client 18496 → Documents; ZZTEST → Log → a note with a photo; Activity tab.
+
+**Next (Saif's list):** the document center proper (cross-client search, "what's
+missing"); My activity could gain a Reply on notes from the report itself.
 
 **Next conversation: the document center** (see the block above). Saif's questions to
 answer first: who uses it and what they do first; honest-and-partial (platform documents

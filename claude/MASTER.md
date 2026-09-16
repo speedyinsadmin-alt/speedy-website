@@ -99,6 +99,56 @@ files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` lo
 every session and carry the traps. Copy new harnesses back into that folder before
 stopping for the day.
 
+### ✅ SEP 16 NIGHT · SPEEDY CHAT STAGE 2 — THE AGENT INBOX (`a631cb1`)
+Saif's stage-1 test: three chats from his phone/PC, all became leads (5, 6, 7) — the
+first two only after a fix: the leave form was refused server-side on the 10-digit
+phone rule and showed the generic error (`7da540d`: the API returns `code`, the widget
+mirrors the rule and says why). Then "go, start stage 2".
+
+- **`api/chat.js` agent side** (same file, dispatched before the visitor block; every
+  name checked at module depth 0 with `scopecheck.mjs`): `verifyAgent` = tokeninfo
+  (aud, verified, @speedyins.com, cached per token) + an ACTIVE `agents` row; admin =
+  role admin|owner. Actions: `inbox` (heartbeat = presence; waiting/mine/team/closed
+  today with last message, unread, waited_s, client_no, roster on duty; settings only
+  for admin), `inbox_count` (portal badge), `thread` (all audiences + client card from
+  clients/policies/bridge_ledger + earlier threads by phone; marks agent_seen_at),
+  `claim` (ONE atomic PATCH `status=eq.waiting&claimed_by=is.null`; loser gets 409
+  "<name> got it"), `unclaim`, `reply` (whisper = audience agents, admin only; visitor
+  away > 2 min with a phone → the reply also goes out as a TEXT via /api/sms with
+  `ADMIN_KEY`, channel sms), `handoff`, `takeover` (admin), `close` (lead → leads row
+  | logged → `chat.logged` event on the client with the transcript | spam (+block
+  phone/ip, admin) | abandoned), `duty` (on needs a mobile, kept for next time),
+  `set_setting` (admin; validated keys).
+- **The SMS chain** `alertChain` runs inside the VISITOR's poll while waiting: first
+  on-duty agent texted at once (link `admin/chat.html#c=<id>`), the next after the
+  claim window, escalation phones once (15-min throttle across all chats), then the
+  widget's own 3× window → missed → lead. Nobody on duty during hours at `start` →
+  escalation text (throttled). Every alert is on `conversations.alerts` + a
+  `chat.alert` event. is_test chats never text anyone.
+- **`admin/chat.html`** — portal tokens, 640 wrap, phone-first. Sign-in: `#tok=` from
+  the portal (scrubbed from the URL), sessionStorage copy, the portal's
+  `speedy_handoff_tok`, or the Google button; 401 → gate. Queue with segments and
+  counters, amber timer rows, Claim; thread with client card, whisper bubbles (dashed
+  amber), "sent as text" tag, canned strip (EN/ES), Hand to (on-duty list), Back to
+  queue, Close sheet (Log on client / Make a lead / Abandoned / Spam[+block]), Take
+  over for admins, duty pill that asks for the mobile once. Beep + title count on a
+  new waiting chat. Deep link `#c=<id>` from the SMS opens the thread.
+- **Portal**: a Chat card under the top bar (`chatBox`), counts via `inbox_count`
+  every 30 s, click hands the token to chat.html.
+- **Verified:** harnessChatAgent 59/59 (mutations caught: claim not atomic, agents
+  may whisper, ownership check removed, inactive agents in, claim window ignored),
+  harnessChatInbox 35/35 (whisper toggle for all, claim click opening the row),
+  harnessChat 51/51, harnessChatWidget 44/44; Chrome shots of queue + thread at 420.
+  **Not yet proven live:** an agent signing in and the real text arriving — needs
+  Saif on duty; and `ADMIN_KEY` must exist in Vercel for /api/sms server-to-server
+  (sms.js reads `ADMIN_KEY`, other files read `ADMIN_API_KEY` — two names).
+
+**Next:** Saif's live test (duty on → chat from the tow page → text → claim → reply →
+close); escalation phones into `chat_settings` (SQL or set_setting); Stage 3 Console
+Inbox tab (live chats, whisper, duty roster, block list, settings) — the same
+chat.html role-gated, linked from a Console tab; Stage 4 cutover from Tawk; the
+server-side sweep for silent agents / auto off-duty at close (item 67).
+
 ### ✅ SEP 16 EVENING · SPEEDY CHAT STAGE 1 — TAWK IS BEING REPLACED
 Saif: replace Tawk.to with a chat built in the platform ("we will use it for other
 incoming things"). Decisions: **one central rotation for all five branches** (the

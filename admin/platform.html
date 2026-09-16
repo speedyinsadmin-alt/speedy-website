@@ -181,6 +181,7 @@
   .rqnote{font-size:12.5px;color:var(--mute);margin-top:7px;padding-left:9px;border-left:2px solid rgba(255,255,255,.14)}
   .rqacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   .rqok{background:var(--green);color:#04220f;border:0;border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700;cursor:pointer;width:auto;flex:1;min-width:150px}
+  .rqok.rqslip{background:var(--field);color:var(--blue);border:1px solid var(--line);flex:0 0 auto;min-width:0}
   .rqno{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:600;cursor:pointer;width:auto;flex:1;min-width:110px}
   /* AUDIT REVIEW (Sep 12). Row actions are small and never stretch; the bulk bar is
      the one loud element and appears only once something is ticked. */
@@ -3028,7 +3029,14 @@ function refundsHtml() {
                 : nzd.result === 'failed' ? '<span style="color:var(--red)">Email to ' + esc(nzd.to || '') + ' FAILED</span>' + (nzd.detail ? ' — ' + esc(nzd.detail) : '')
                 : '<span style="color:var(--amber)">Client not told</span>' + (nzd.skip_reason ? ' — ' + esc(nzd.skip_reason) : '')) + '</div>'
             : '')
-        + (canMail ? '<div id="rqdmsg_' + esc(q.id) + '" class="shint" style="margin-top:6px;min-height:0"></div><div class="rqacts"><button class="rqok" style="background:var(--blue)" onclick="notifyRefund(\'' + esc(q.id) + '\')">Email the client…</button></div>' : '')
+        + ((canMail || (q.status === 'approved' && q.refund_id))
+            ? '<div id="rqdmsg_' + esc(q.id) + '" class="shint" style="margin-top:6px;min-height:0"></div><div class="rqacts">'
+              + (canMail ? '<button class="rqok" style="background:var(--blue)" onclick="notifyRefund(\'' + esc(q.id) + '\')">Email the client…</button>' : '')
+              /* the slip the client can be handed - the same PDF the platform filed with the refund (Sep 15) */
+              + (q.refund_id ? '<button class="rqok rqslip" onclick="openRefundSlip(\'' + esc(q.refund_id) + '\',\'en\')">Refund confirmation</button>'
+                  + '<button class="rqok rqslip" onclick="openRefundSlip(\'' + esc(q.refund_id) + '\',\'es\')">Español</button>' : '')
+              + '</div>'
+            : '')
         + '</div>';
     }
   }

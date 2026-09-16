@@ -130,7 +130,10 @@ function payHistoryHtml(c, opts){
        returns is_admin); an identity compared in the browser is only a claim. */
     const iAdmin = !!c.is_admin;
     const canCorrect = opts.actions && (mine || iCharged || iAdmin);
-    const dl = byPay[p.id] || [];
+    /* THE CONFIRMATION SLIPS live on the refund row in their own line (Sep 15), never
+       as "refund confirmation en · 5 KB · Info" chips among the proofs. */
+    const slips = (byPay[p.id] || []).filter(d => d.kind === 'refund_confirmation');
+    const dl = (byPay[p.id] || []).filter(d => d.kind !== 'refund_confirmation');
     const complete = p.audit_status === 'complete';
     /* A balance payment pays down an earlier charge and carries NO audit of its own —
        the original holds the carrier cost and the single fee. Without this the card
@@ -295,6 +298,10 @@ function payHistoryHtml(c, opts){
             + ' on ' + esc(String(p.refund_decision.decided_at || '').slice(0, 10))
             + (p.refund_decision.note ? ' — “' + esc(p.refund_decision.note) + '”' : '') + '</div>'
           : '')
+      /* THE SLIP THE CLIENT CAN BE HANDED (Sep 15). English is filed with the refund;
+         Spanish is made from the same facts on first click. A refund from before the
+         slip existed says "not made yet" and the click makes and files it. */
+      + (isRefund ? slipLineHtml(p, slips) : '')
       /* And on the payment itself: how much of it has gone back. */
       + (!isRefund && refundedOff > 0
           ? '<div style="font-size:11px;margin-top:3px;color:var(--red-ink)">'
@@ -370,20 +377,51 @@ function payHistoryHtml(c, opts){
   }
   return h + '</div>';
 }
-async function openPortalDoc(id){
+function slipLineHtml(p, slips){
+  const en = slips.find(d => d.doc_type === 'refund_confirmation_en');
+  const es = slips.find(d => d.doc_type === 'refund_confirmation_es');
+  const what = p.voided ? 'Cancellation confirmation' : 'Refund confirmation';
+  const t = ts => { try { return new Date(ts).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch(e){ return String(ts || '').slice(0, 16); } };
+  const lang = (code, label, have) => '<span class="sliplang' + (have ? ' have' : '') + '" onclick="event.stopPropagation();openRefundSlip(\'' + p.id + '\',\'' + code + '\')" title="'
+    + (have ? 'Open the filed ' + label + ' slip' : 'Make and file the ' + label + ' slip from the refund record') + '">' + label + '</span>';
+  return '<div class="slipline" data-rf="' + p.id + '"><span class="slipchip" onclick="event.stopPropagation();openRefundSlip(\'' + p.id + '\',\'en\')"><i class="slipico"></i>' + what + '</span>'
+    + ' <span class="dim">·</span> ' + lang('en', 'English', !!en) + ' <span class="dim">/</span> ' + lang('es', 'Español', !!es) + '</div>'
+    + (en
+        ? '<div class="slipfiled' + (en.filed_hawksoft ? '' : ' slipwarn') + '">' + (en.filed_hawksoft ? 'Filed to HawkSoft and the platform' : 'On the platform — HawkSoft did not take it') + ' · ' + esc(t(en.created_at)) + '</div>'
+        : '<div class="slipfiled slipwarn">Not made yet — opens and files on first click</div>');
+}
+/* Open the slip in a tab. The tab is opened INSIDE the click, before any await, or the
+   browser's popup rule closes the door while the server is still rendering. */
+async function openRefundSlip(refundId, lang){
+  const post = window.apiPostBody || window.apiPost;
+  if(typeof post !== 'function'){ alert('This page cannot request the confirmation.'); return; }
+  const win = window.open('', '_blank');
+  if(win){ try{ win.document.write('<title>Refund confirmation</title><p style="font:14px system-ui;padding:24px;color:#555">Preparing the confirmation…</p>'); }catch(e){} }
+  const r = await post({ action: 'refund_slip', refund_id: refundId, lang: lang || 'en', source: window.apiPostBody ? 'console' : 'portal' });
+  if(!r || !r.ok){ if(win) win.close(); alert((r && r.error) || 'The confirmation could not be made.'); return; }
+  await openPortalDoc(r.id, win);
+  if(r.existing === false){
+    /* first time made: the card's "filed" line is stale until the next load — say so where the agent looks */
+    const el = document.querySelector('.slipline[data-rf="' + refundId + '"]');
+    if(el && el.nextElementSibling) el.nextElementSibling.textContent = (r.filed_hawksoft ? 'Filed to HawkSoft and the platform' : 'On the platform — HawkSoft did not take it') + ' · just now';
+    if(typeof window.refreshClientCard === 'function') window.refreshClientCard();
+  }
+}
+async function openPortalDoc(id, win){
   const r = await api('portal_doc&id=' + encodeURIComponent(id));
-  if(!r || !r.ok || (!r.file_b64 && !r.blob_url)){ alert('No file is stored for this document.'); return; }
-  if(r.blob_url){ window.open(r.blob_url, '_blank'); return; }
+  if(!r || !r.ok || (!r.file_b64 && !r.blob_url)){ if(win) win.close(); alert('No file is stored for this document.'); return; }
+  if(r.blob_url){ if(win) win.location = r.blob_url; else window.open(r.blob_url, '_blank'); return; }
   try{
     let b64 = r.file_b64; if(b64.startsWith('data:')) b64 = b64.split(',')[1] || '';
     const bin = atob(b64), arr = new Uint8Array(bin.length);
     for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
     const url = URL.createObjectURL(new Blob([arr], { type: r.mime || 'application/pdf' }));
-    window.open(url, '_blank');
+    if(win) win.location = url; else window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }catch(e){ alert('That document could not be opened.'); }
+  }catch(e){ if(win) win.close(); alert('That document could not be opened.'); }
 }
 
-window.PayCard = { html: payHistoryHtml, noticeLineHtml, auditLineHtml, sendbackLabel, docType, docTypeLabel, bytesLabel, uploaderShort, refundable, canRefundRow, openBalances, openDoc: openPortalDoc, money };
+window.openRefundSlip = openRefundSlip;
+window.PayCard = { html: payHistoryHtml, noticeLineHtml, slipLineHtml, auditLineHtml, sendbackLabel, docType, docTypeLabel, bytesLabel, uploaderShort, refundable, canRefundRow, openBalances, openDoc: openPortalDoc, money };
 window.openPortalDoc = openPortalDoc;
 })();

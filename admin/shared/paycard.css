@@ -7,6 +7,14 @@
 .paycard .row{display:flex;justify-content:space-between;align-items:center}
 .paycard .dim{color:var(--dim)} .paycard .muted{color:var(--mute)}
 .paycard .beta{background:var(--amber);color:#2a1a00;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;vertical-align:middle;letter-spacing:.03em}
+.paycard .slipline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:7px;font-size:11.5px}
+.paycard .slipchip{display:inline-flex;align-items:center;gap:6px;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--ink);cursor:pointer}
+.paycard .slipico{width:10px;height:13px;border:1.5px solid var(--red-ink);border-radius:2px;display:inline-block;position:relative}
+.paycard .slipico:after{content:"";position:absolute;left:2px;right:2px;top:3px;height:1.5px;background:var(--red-ink);box-shadow:0 3px 0 var(--red-ink),0 6px 0 var(--red-ink)}
+.paycard .sliplang{color:var(--blue-l);font-weight:700;cursor:pointer;text-decoration:underline dotted}
+.paycard .sliplang.have{text-decoration:none}
+.paycard .slipfiled{font-size:11px;margin-top:3px;color:var(--green)}
+.paycard .slipfiled.slipwarn{color:var(--amber-ink)}
 .paycard .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
 .paycard .rowacts{display:flex;gap:7px;margin-top:8px} .paycard .rowacts > *{flex:1}
 .paycard .actghost{text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer}

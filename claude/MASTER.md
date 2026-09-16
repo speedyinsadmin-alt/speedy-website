@@ -1,5 +1,5 @@
 # Speedy Insurance Agency — Master Project
-**Last updated: September 9, 2026 · maintained by Saif + Claude**
+**Last updated: September 16, 2026 · maintained by Saif + Claude**
 **Standing rule: Claude keeps this file current as work happens, so any new chat can pick up seamlessly.**
 
 ---
@@ -97,6 +97,56 @@ sessions (the scratchpad does not). Run from there: `npm i` once, then
 files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` load in
 every session and carry the traps. Copy new harnesses back into that folder before
 stopping for the day.
+
+### ✅ SEP 16 AFTERNOON · COMMERCIAL LINES ON THE WEBSITE, LEADS TABLE, LICENCE NUMBER
+Saif: "add Towing Insurance and Non-Emergency Transportation Insurance" — the agency
+brokers every commercial line already, so no market gap. Rules from Saif: **no carrier
+names on the website, service only**; leads go to **our platform, not email**; agents
+will **claim/lock a lead in the portal like ITC**; blog posts about the lines to follow.
+
+- **Site audit first** (`328e17f`): favicon was `images/icon.png`, a 404 on all four
+  public pages (now `/assets/pwa/icon-192.png` + apple-touch-icon); quote.html still
+  said "4 Locations" twice (`4a5ac66` fixed EN/ES home and missed it); footer carried
+  `CA License #XXXXXXX` for months — **OK72267** now (Saif, Sep 16). Still open:
+  no robots.txt / sitemap.xml, no JSON-LD for the 5 branches, no GA4, hreflang only on
+  quote/cotizar, a few English strings on es.html (hero headline, "Get a Quote", "Blog").
+- **Six landing pages** (`fee6ef2`), built by `build_commercial.mjs` (scratchpad,
+  copy in the harness folder) from the homepage's own head/nav/footer so the styling is
+  the real stylesheet: `towing-insurance.html` / `seguro-gruas.html`,
+  `nemt-insurance.html` / `seguro-transporte-medico.html`,
+  `trucking-insurance.html` / `seguro-camiones.html`. Hero → six coverage cards →
+  California requirements (MCP/CA#, MC-65 M, CHP rotation; DHCS PAVE, VSSI, broker
+  certificates; USDOT/MC, MCS-90) → intake form → branch band. Canonical + hreflang
+  twins; the nav language toggle goes to the twin. Three cards on both homepages after
+  Commercial Insurance (grid is 12 now, four full rows) + three footer links.
+- **`leads` table** (Supabase migration `create_leads`, RLS on, no policies — service
+  role only): line, lang, page, src, business, contact, phone, email, city, branch,
+  notes, `fields` jsonb for everything else, ip, ua, **status / claimed_by /
+  claimed_at / contacted_at / closed_at / outcome** ready for the portal tab, is_test.
+- **`api/lead.js`** — PUBLIC (no key). Honeypot `website` answers ok:true and writes
+  nothing; per-instance 10/min per IP; every string capped; unknown keys → `fields`
+  (max 40); needs a phone (10 digits) or an email, and a name; writes `events`
+  `lead.new`. Function count is now 15 — Vercel took it.
+- **Verified:** harnessLead 26/26 (mutations: honeypot removed, rate limit off — both
+  caught); harnessLeadForm 94/94 on jsdom against the six built pages + both homepages
+  (mutation: checkbox array flattened — caught); shoot.mjs on all six at 1280 and 390:
+  no unstyled class, no sideways scroll. Live: lead **id 1** (`is_test=true`, "TEST
+  Towing (delete me)") from curl landed with fields + the events row. **Saif has not yet
+  submitted the live form himself.**
+- **jsdom lesson:** `form.fieldName` (browser shorthand) is undefined on jsdom. The
+  page script uses `querySelector('[name=…]')` — fine in both.
+- **The chat:** the visible widget is **Tawk.to** and works; `sendChat()` /
+  `branchChatBox` in index.html is hidden dead code (never shown) that fakes a reply —
+  remove it. Plan agreed with Saif: Tawk **webhooks → `/api/tawk` → `leads`
+  (line=chat, transcript in fields)** so chats enter the claim queue automatically.
+
+**Next, in order (Saif, Sep 16):** (2) Tawk webhook → leads + delete the dead chat box;
+(3) **portal Leads tab** — queue, Claim (atomic `where claimed_by is null`), status
+steps, auto-release after N hours (Tony sets N), owner reassign, events on each step —
+waits until the other session's portal work is committed; (4) blog as real pages under
+`/blog/` (the five modal articles migrated, six tow/NEMT/trucking articles EN+ES);
+(5) SEO files: sitemap, robots, JSON-LD, hreflang on index/es. Who receives a lead
+(email/SMS on new) is deliberately undecided — "we will discuss later".
 
 ### ✅ SEP 15 MIDDAY · FIRST REAL DAY OF THE PROOF-BY-PURPOSE PAGE
 Saif: "some agents start upload images and signed applications, check." Checked the
@@ -3392,6 +3442,13 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 55. **Attach the repos when starting a task** — read works, `git push` is refused by the session's git proxy
 56. **Update the project instructions** — still say 4 branches and a HawkLink pre-phase. Only Saif can edit that field
 57. **Refresh the Drive backup** — the mirror is still the Aug 27 snapshot
+58. **Portal Leads tab** — claim/lock like ITC; table columns already exist (Sep 16)
+59. **Tawk webhook → leads** + remove dead `sendChat`/`branchChatBox` in index.html/es.html
+60. **Blog as real pages** under `/blog/` — the 5 modal articles are not indexable today
+61. **SEO files** — sitemap.xml, robots.txt, JSON-LD for 5 branches, hreflang on index/es, GA4
+62. **Lead notifications** — who gets told on a new lead; Saif: decide later
+63. **Delete test lead id 1** once Saif has submitted a real one from the live form
+64. **`refund_requests` has RLS disabled** (Supabase advisory, Sep 16) — enable + no policies like the other tables
 
 ---
 

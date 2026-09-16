@@ -885,14 +885,17 @@ function openEarnings(){
   if(HELPED_LINES.length){
     h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px">'
       + 'You helped on ' + HELPED_LINES.length + '</div>'
-      + '<div class="dim" style="font-size:11.5px;margin-bottom:8px">Someone else earns these. '
-      + 'Shown because you did the work.</div>'
+      + '<div class="dim" style="font-size:11.5px;margin-bottom:8px">'
+      /* honest when a share is on the list: the owner still earns it, but part is yours */
+      + (HELPED_LINES.some(x => x.your_share) ? 'Someone else earns these; where they shared it with you, your part is on the right - pending until the audit is approved.'
+                                              : 'Someone else earns these. Shown because you did the work.') + '</div>'
       + HELPED_LINES.map(x =>
         '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px">'
         + '<div style="display:flex;justify-content:space-between;gap:10px">'
         + '<span style="font-size:13px;font-weight:600">#' + x.client_no + '</span>'
-        + '<span style="font-size:12.5px;' + (x.your_share ? 'font-weight:800;color:var(--green)' : 'color:var(--dim)') + '">'
+        + '<span style="font-size:12.5px;' + (x.your_share ? (x.waiting ? 'font-weight:800;color:var(--amber-ink)' : 'font-weight:800;color:var(--green)') : 'color:var(--dim)') + '">'
         + (x.your_share ? m(x.your_share) : '\u2014') + '</span></div>'
+        + (x.waiting ? '<div style="color:var(--amber-ink);font-size:11px;margin-top:2px">Pending \u00b7 ' + esc(x.waiting) + '</div>' : '')
         + '<div class="dim" style="font-size:11.5px;margin-top:3px">'
         + esc(x.what) + ' \u00b7 ' + m(x.amount)
         + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '') + '</div>'

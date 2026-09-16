@@ -2000,6 +2000,8 @@ if (view === 'portal_share_due') {
       const seenAt = (seenRow.rows && seenRow.rows[0]) ? seenRow.rows[0].news_seen_at : null;
 
       const nameOf = e => AGENT_NAME[e] || (e ? String(e).split('@')[0] : 'someone');
+      const RATE_CACHE = {};
+      const ownerRateOf = async e => { const k = String(e || '').toLowerCase(); if (RATE_CACHE[k] == null) { const r = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(k)}&select=percentage`); RATE_CACHE[k] = (r.rows && r.rows[0]) ? Number(r.rows[0].percentage) : 10; } return RATE_CACHE[k]; };
       const items = [];
       for (const e of (ev.rows || [])) {
         const p = e.payload || {};
@@ -2036,9 +2038,19 @@ if (view === 'portal_share_due') {
               + (p.after_sendback ? ' (after a send-back)' : ''),
             action: 'Commission earned this month.' });
         } else if (e.kind === 'commission.shared' && p.helper === me) {
-          items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no,
-            title: nameOf(p.owner) + ' shared commission with you',
-            detail: p.pct + '% of $' + Number(p.fee || 0).toFixed(2) });
+          /* Sep 16, Saif: "does he understand where it is coming from?" - so: whose
+             commission, how many dollars, why, and when it lands. */
+          const ownerRate = await ownerRateOf(p.owner);
+          const dollars = +(Number(p.fee || 0) * ownerRate / 100 * Number(p.pct || 0) / 100).toFixed(2);
+          items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no, payment_id: p.payment_id,
+            title: nameOf(p.owner) + ' shared commission with you' + (p.changed ? ' (changed)' : ''),
+            detail: p.pct + '% of ' + nameOf(p.owner) + '\u2019s commission on the $' + Number(p.amount || p.fee || 0).toFixed(2) + ' payment - about $' + dollars.toFixed(2)
+              + (p.why ? ' \u2014 \u201c' + p.why + '\u201d' : ''),
+            action: 'Pending now under "You helped on"; earned once the audit is approved' });
+        } else if (e.kind === 'commission.shared' && p.helper !== me && (p.before || {}).helper === me && actor !== me) {
+          items.push({ id: e.id, ts: e.ts, tone: 'grey', client_no: e.client_no,
+            title: nameOf(actor) + ' moved a share off you',
+            detail: 'The share on the $' + Number(p.amount || p.fee || 0).toFixed(2) + ' payment on client #' + e.client_no + ' now goes to ' + (p.pct > 0 ? nameOf(p.helper) : nameOf(p.owner)) });
         } else if (e.kind === 'client.corrected') {
           // tell whoever asked for it, once someone else acted on it
           if ((p.requested_by === me || p.owner === me) && actor !== me) {
@@ -2256,8 +2268,13 @@ if (view === 'portal_share_due') {
          wrong month rather than just dropping a name. */
       const all = await sbGet(s, 'bridge_ledger?is_test=is.false&select=id,ts,client_id,amount,purpose,agent,audit_status,fee_amount,service_cost,txn_id,kind,extra,commission_to,helper_email,helper_share_pct,correction_status,total_owed,balance_of,audit_completed_by,audit_completed_at,audit_submitted_at,audit_sendback&order=ts.desc&limit=500');
       const AUDIT_CUTOFF = '2026-07-29';
-      const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
-      const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
+      /* Every rate, not just mine (Sep 16). A share is a slice of the OWNER's
+         commission, so the helper's dollars must come from the owner's rate - the
+         same number the owner saw on the sheet - or the two halves do not add up. */
+      const rateRows = await sbGet(s, 'agent_commission?select=agent_email,percentage');
+      const RATE = {}; for (const x of (Array.isArray(rateRows.rows) ? rateRows.rows : [])) RATE[String(x.agent_email || '').toLowerCase()] = Number(x.percentage);
+      const rateOf = e => (e && RATE[String(e).toLowerCase()] != null) ? RATE[String(e).toLowerCase()] : 10;
+      const pct = rateOf(me);
 
       /* Own it, ran it, or were NAMED for a share of it (Sep 16: Jorge on 26424 did
          neither of the first two - the row never reached this loop, so his half was
@@ -2361,7 +2378,7 @@ if (view === 'portal_share_due') {
           // only the commission owner earns; a helper who ran the charge earns nothing
           // unless the owner shared, which is applied below
           const ratio = collectedRatio(r, all.rows || []);
-          const full = fee * pct / 100;
+          const full = fee * rateOf(r.commission_to || agentEmailOf(r.agent)) / 100;
           if (isOwner && inPeriod(earnedAt(r))) {
             const share = Number(r.helper_share_pct || 0);
             earned  += full * ratio * (1 - share / 100);
@@ -2421,9 +2438,25 @@ if (view === 'portal_share_due') {
           }
         } else if (r.kind !== 'charge_captured' || r.audit_status) {
           // needs proof of payment / audit
-          const feeGuess = fee != null ? fee * pct / 100 : null;
-          if (isOwner && inPeriod(earnedAt(r)) && feeGuess != null) pending += feeGuess;
-          unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount),
+          const ownerEmail = r.commission_to || agentEmailOf(r.agent);
+          const feeGuess = fee != null ? fee * rateOf(ownerEmail) / 100 : null;
+          const shareG = Number(r.helper_share_pct || 0);
+          if (isOwner && inPeriod(earnedAt(r)) && feeGuess != null) pending += feeGuess * (1 - shareG / 100);
+          /* A share set before the audit (Sep 16: Sammy -> Jorge on 26424). Saif: "the
+             share will show in pending and move to earned after approval" - so the
+             helper's slice is pending now, with a line that says it is waiting. */
+          if (!isOwner && r.helper_email === me && shareG > 0 && inPeriod(earnedAt(r))) {
+            if (feeGuess != null) pending += feeGuess * shareG / 100;
+            helped_lines.push({
+              id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount), carrier: r.carrier_name || null,
+              what: ((r.extra || {}).share || {}).why || 'was given a share',
+              owner_name: AGENT_NAME[ownerEmail] || (ownerEmail || '').split('@')[0],
+              your_share: feeGuess != null ? +(feeGuess * shareG / 100).toFixed(2) : 0,
+              waiting: r.audit_sendback ? 'sent back to ' + (AGENT_NAME[ownerEmail] || 'the owner') + ' - nothing until it is fixed and approved'
+                     : r.audit_status === 'ready_for_audit' ? 'waiting for approval' : 'waiting for proof of payment and the audit' });
+          }
+          /* the todo list is for whoever must act: the owner, or the one who charged it */
+          if (isOwner || String(r.agent || '').toLowerCase().includes(me)) unfinished.push({ id: r.id, ts: r.ts, client_no: r.client_id, amount: Number(r.amount),
             purpose: r.purpose, audit_status: r.audit_status || 'client_paid',
             /* waiting for an approver, or sent back with a reason - the home list says
                which, so "unfinished" never hides a row the agent cannot act on, or one

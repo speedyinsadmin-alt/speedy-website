@@ -259,9 +259,6 @@ function payHistoryHtml(c, opts){
       /* SHARE WITH… (Sep 16): the commission owner, or an admin, names who gets part of
          this commission - before or after the audit. Sammy could not share 26424 with
          Jorge because the old flow only knew a helper it could see on the record. */
-      + (canShare
-          ? ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline;font-weight:700" onclick="event.stopPropagation();openShareWith(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ')">' + (p.share && p.share.helper ? 'change the share…' : 'share with…') + '</span>'
-          : '')
       + '</div>'
       + (p.share && p.share.helper
           ? '<div class="sharedline">&#10003; Shared: <b>' + esc(p.share.helper_name || p.share.helper) + ' ' + Number(p.share.pct || 0) + '%</b>'
@@ -371,14 +368,21 @@ function payHistoryHtml(c, opts){
          four questions and shows every consequence before anything moves. Offered only
          when the SERVER said this person may refund (c.can_refund, from may()) and only
          where it can actually succeed — the server re-checks all of it regardless. */
-      + (opts.actions && (complete || isBal || canRefundRow(c, p))
+      /* SHARE COMMISSION is a BUTTON in this row (Saif, Sep 16: the text link was missed).
+         It shows for the commission owner and admins even on the Console's read-only card
+         (opts.share), so the row can carry it without the other actions. */
+      + ((opts.actions && (complete || isBal || canRefundRow(c, p))) || canShare
           ? '<div class="rowacts">'
             /* a refund row proves nothing and carries no audit: no document button on it (Sep 16) */
-            + ((complete || isBal) && !isRefund
+            + (opts.actions && (complete || isBal) && !isRefund
                 ? '<div class="actghost" onclick="event.stopPropagation();addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ',' + Number(p.amount||0) + ')">'
                   + (isBal ? '+ Add documents' : '+ Add more documents') + '</div>'
                 : '')
-            + (canRefundRow(c, p)
+            + (canShare
+                ? '<div class="actshare" onclick="event.stopPropagation();openShareWith(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ')">'
+                  + (p.share && p.share.helper ? 'Change the share&hellip;' : 'Share commission&hellip;') + '</div>'
+                : '')
+            + (opts.actions && canRefundRow(c, p)
                 ? '<div class="actrefund" onclick="event.stopPropagation();openRefund(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ')">'
                   + (c.can_refund ? 'Refund&hellip;' : 'Ask for a refund&hellip;') + '</div>'
                 : '')

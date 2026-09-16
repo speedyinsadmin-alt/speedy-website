@@ -2259,7 +2259,10 @@ if (view === 'portal_share_due') {
       const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
 
-      const mine = (all.rows || []).filter(r => owns(r, me) || String(r.agent || '').toLowerCase().includes(me));
+      /* Own it, ran it, or were NAMED for a share of it (Sep 16: Jorge on 26424 did
+         neither of the first two - the row never reached this loop, so his half was
+         never counted). */
+      const mine = (all.rows || []).filter(r => owns(r, me) || String(r.agent || '').toLowerCase().includes(me) || String(r.helper_email || '').toLowerCase() === me);
       // month boundary (America/Los_Angeles approx via UTC month is fine for display)
       const now = new Date();
       /* PACIFIC month boundary, not UTC. Computed in UTC this flipped to the next
@@ -2394,7 +2397,11 @@ if (view === 'portal_share_due') {
           if (!isOwner && inPeriod(earnedAt(r))) {
             const iCharged = agentEmailOf(r.agent) === me;
             const iFinished = agentEmailOf(r.audit_completed_by) === me;
-            if (iCharged || iFinished) {
+            /* A share the owner named me for (Sep 16: Sammy -> Jorge on 26424, where Jorge
+               neither charged nor finished). Without this the money lands in the total
+               with no line under it. */
+            const iWasNamed = r.helper_email === me && Number(r.helper_share_pct || 0) > 0;
+            if (iCharged || iFinished || iWasNamed) {
               const share = Number(r.helper_share_pct || 0);
               const ownerEmail = r.commission_to || agentEmailOf(r.agent);
               helped_lines.push({
@@ -2402,7 +2409,8 @@ if (view === 'portal_share_due') {
                 amount: Number(r.amount),
                 carrier: r.carrier_name || null,
                 what: iFinished ? (iCharged ? 'charged it and finished the audit' : 'finished the audit')
-                                : 'ran the charge',
+                    : iCharged ? 'ran the charge'
+                    : (((r.extra || {}).share || {}).why || 'was given a share'),
                 owner_name: AGENT_NAME[ownerEmail] || (ownerEmail || '').split('@')[0],
                 /* Only a share they were actually given. No fee, no commission -
                    somebody else's money stays somebody else's. */

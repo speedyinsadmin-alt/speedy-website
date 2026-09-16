@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 16 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `c8831cb` (another session pushes the public
+otherwise; `git status` is clean at `0d29fb8` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -405,10 +405,22 @@ charged / payments / docs / submitted / sent back / refunds asked / notes / NOT 
 last active — quiet 7+ days in amber, never hidden; Everyone total; the stream tagged
 with who; Export CSV; Print). Dot classes are `d-<cat>` (the Console's own `.note`
 class swallowed the note dot). harnessTabs 92, harnessActivity 35, mutateActivity 38/38.
-**Still not verified live** (the Console tab loses its sign-in on every reload, and a
-reload was needed for the new code): pdf.js thumbnails on the real site, the first
-`set_thumb`, a note with an attachment, the Activity tab. Saif signs in on the Claude
-tab, then: client 18496 → Documents; ZZTEST → Log → a note with a photo; Activity tab.
+**Verified live, Sep 16 noon, and two bugs it found (`0d29fb8`):** (1) both pages
+declare `let TOKEN` — a lexical global, NOT window.TOKEN — so every /api/carrier call
+from the shared code (relabel, set_thumb, note attachments, the upload link) went out
+with no token → "Not authorized". `pageToken()` reads the bare global first; the
+harness now declares TOKEN the way the pages do (vm context), so reading window.TOKEN
+fails it. (2) pdf.js's display render paints on requestAnimationFrame, which never
+fires in a background tab — thumbnails hung forever while the agent was on another
+tab. Both renders use `intent: 'print'` now. Proven on the live site from the Claude
+tab (signed in by Saif; a reload signs the Console out, so verify without reloading):
+carrier receipt 02c6764e on client 18496 rendered (72 KB PDF, 126 ms) and `set_thumb`
+stored it (`portal_thumbs` returns it); `activity` this week = 70 clients, 381 entries,
+$34,466.84 in 86 payments, 22 "not told"; a note with a photo on ZZTEST (event
+`note.added` with the attachment id, the file filed to HawkSoft, thumb stored, HawkSoft
+✓, shown on the card with its thumbnail). Seen but not done: the Console re-fetches the
+whole client on every note-box change (attach a file → a full reload of the card;
+works, slow); `audit.submitted_by_other` has no sentence yet (generic line).
 
 **Next (Saif's list):** the document center proper (cross-client search, "what's
 missing"); My activity could gain a Reply on notes from the report itself.

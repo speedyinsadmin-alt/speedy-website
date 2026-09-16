@@ -2005,7 +2005,10 @@ if (view === 'portal_share_due') {
       const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,audit_submitted_by,audit_submitted_at,audit_sendback,audit_completed_by,audit_completed_at,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
-      const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,filename,bytes,mime,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
+      const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,doc_label,filename,bytes,mime,amount,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
+      /* THE LOG TAB (Sep 16): every event on the client. Payload included - the tab
+         writes the sentence from it. 300 is more than any client has yet. */
+      const evs = await sbGet(s, `events?client_no=eq.${no}&select=id,ts,actor,kind,source,payload&order=ts.desc&limit=300`);
       /* Open refund requests on this client, so the card can say "waiting for Tony"
          instead of offering the button again. */
       const rqs = await sbGet(s, `refund_requests?client_id=eq.${no}&status=eq.pending&select=id,payment_id,requested_by,requested_at,amount,reason`);
@@ -2051,7 +2054,8 @@ if (view === 'portal_share_due') {
           refund_of: r.refund_of || null,
           refund_reason: r.refund_reason || null,
           refund_carrier: r.refund_carrier || null,
-          refund_note: r.refund_note || null,
+          /* older notes carry raw emails ("requested by alejandra@…"); the card shows names (Sep 16) */
+          refund_note: r.refund_note ? String(r.refund_note).replace(/[a-z0-9._-]+@speedyins\.com/gi, m => AGENT_NAME[m.toLowerCase()] || m) : null,
           /* a void and a refund read differently on the slip and the row (Sep 15) */
           voided: r.refund_of ? ((r.extra || {}).voided === true) : false,
           refunded: +Math.abs((pay.rows || [])
@@ -2109,6 +2113,9 @@ if (view === 'portal_share_due') {
         producer_code: client && client.extras ? (client.extras.producer || null) : null,
         producer_name: client && client.extras ? (AGENT_NAME[PRODUCER_MAP[client.extras.producer]] || null) : null,
         documents: docs.rows || [],
+        events: (Array.isArray(evs.rows) ? evs.rows : []).filter(e => showTest || !(e.payload && e.payload.is_test === true)),
+        /* the roster, so the tabs print names and never an email */
+        agent_names: AGENT_NAME,
       });
     }
 
@@ -2351,7 +2358,9 @@ if (view === 'portal_share_due') {
   const AGENT_ACTIONS = ['reassign_commission', 'news_seen', 'set_share', 'move_client',
                          'link_balance', 'unlink_balance', 'refund_payment', 'request_refund', 'set_total_owed',
                          /* the confirmation slip: an agent hands it to a client at the counter (Sep 15) */
-                         'refund_slip'];
+                         'refund_slip',
+                         /* a note on the client, from the Log tab (Sep 16) */
+                         'add_note'];
   const bodyAction = (req.method === 'POST' && req.body && req.body.action) ? String(req.body.action) : '';
   let email = await verifyGoogle(req.headers['x-id-token']);
   if (!email && AGENT_ACTIONS.includes(bodyAction)) {
@@ -2989,7 +2998,8 @@ if (view === 'portal_share_due') {
            approved, not something Tony did on his own. */
         refundOut = await issueRefund(s, me2, {
           payment_id: rq.payment_id, reason: rq.reason, carrier: rq.carrier, notify: notifyUsed,
-          note: rq.note + ` (requested by ${rq.requested_by}, approved by ${me2}` + (decisionNote ? ': ' + decisionNote : '')
+          /* names, not emails: the note prints on the card and in HawkSoft (Sep 16) */
+          note: rq.note + ` (requested by ${AGENT_NAME[String(rq.requested_by || '').toLowerCase()] || rq.requested_by}, approved by ${AGENT_NAME[me2] || me2}` + (decisionNote ? ': ' + decisionNote : '')
             + (amountChanged ? `; amount changed from $${requestedAmt.toFixed(2)} asked to $${approvedAmt.toFixed(2)}` : '') + ')',
           amount: approvedAmt });
         if (refundOut.status !== 200) {
@@ -3102,6 +3112,35 @@ if (view === 'portal_share_due') {
        the vault row already there, or renders and files one — which is how Spanish is
        made, and how a refund from before the slip existed gets its back-fill. Anyone
        signed in may ask: it moves no money and says nothing the ledger does not. */
+    /* A NOTE ON THE CLIENT (Sep 16). Saif: can an agent log while on the client's
+       policy? An event (kind note.added) the Log tab shows at once, and the same words on
+       the HawkSoft client log (channel 32) where the office already reads notes. The
+       HawkSoft write is fail-soft and its result is recorded on the event. */
+    if (action === 'add_note') {
+      const me2 = String(email).toLowerCase();
+      const b3 = req.body || {};
+      const clientNo = String(b3.client_no || '').replace(/\D/g, '');
+      const text = String(b3.text || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+      const policyNumber = String(b3.policy_number || '').trim().slice(0, 40);
+      if (!clientNo) return res.status(400).json({ ok: false, error: 'client_no required' });
+      if (text.length < 2) return res.status(400).json({ ok: false, error: 'Write the note first.' });
+      const cl = await sbGet(s, `clients?client_no=eq.${clientNo}&select=client_no`);
+      if (!(cl.rows || []).length) return res.status(404).json({ ok: false, error: 'No such client.' });
+      const stamp = new Date().toISOString();
+      const whoName = AGENT_NAME[me2] || me2;
+      let noteOk = false;
+      try {
+        const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${clientNo}/log?version=4.0`, {
+          method: 'POST', body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+            note: `NOTE by ${whoName}${policyNumber ? ' (policy ' + policyNumber + ')' : ''}: ${text} — written on the Speedy platform.` }) });
+        noteOk = (hr.status === 200 || hr.status === 202);
+      } catch { noteOk = false; }
+      const ins = await sbInsert(s, 'events', [{ ts: stamp, actor: me2, kind: 'note.added', client_no: Number(clientNo), source: b3.source === 'console' ? 'console' : 'portal',
+        payload: { text, policy_number: policyNumber || null, hawksoft_note: noteOk } }]);
+      if (!ins.ok) return res.status(500).json({ ok: false, error: 'The note could not be saved.' + (noteOk ? ' (It did reach HawkSoft.)' : '') });
+      return res.status(200).json({ ok: true, ts: stamp, hawksoft_note: noteOk, by: whoName });
+    }
+
     if (action === 'refund_slip') {
       const me2 = String(email).toLowerCase();
       const b3 = req.body || {};

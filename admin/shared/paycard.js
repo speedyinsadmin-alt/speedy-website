@@ -354,7 +354,8 @@ function payHistoryHtml(c, opts){
          where it can actually succeed — the server re-checks all of it regardless. */
       + (opts.actions && (complete || isBal || canRefundRow(c, p))
           ? '<div class="rowacts">'
-            + ((complete || isBal)
+            /* a refund row proves nothing and carries no audit: no document button on it (Sep 16) */
+            + ((complete || isBal) && !isRefund
                 ? '<div class="actghost" onclick="event.stopPropagation();addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ',' + Number(p.amount||0) + ')">'
                   + (isBal ? '+ Add documents' : '+ Add more documents') + '</div>'
                 : '')

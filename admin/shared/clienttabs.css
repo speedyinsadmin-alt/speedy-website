@@ -1,0 +1,78 @@
+/* The client's tabs (Payments · Documents · Log), scoped. Tokens come from each page's
+   :root, same as paycard.css — never define a fallback here by referencing the token
+   from the same rule (CSS treats it as a cycle and the colour goes to initial). */
+.ctabs{display:flex;align-items:stretch;gap:2px;border-bottom:1px solid var(--line);margin:14px 0 12px}
+.ctab{display:flex;align-items:center;padding:9px 10px 10px;font-size:13px;font-weight:600;color:var(--mute);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;user-select:none}
+.ctab.on{color:var(--blue-l);border-bottom-color:var(--blue-l)}
+.ctab .n{display:inline-block;min-width:18px;text-align:center;background:var(--field);border-radius:999px;font-size:11px;padding:1px 6px;margin-left:5px;color:var(--mute)}
+.ctab .n.nwarn{background:rgba(245,166,35,.18);color:var(--amber-ink)}
+.ctabbody{min-height:40px}
+/* documents */
+.ctdocs .dgrp{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
+.ctdocs .drow{display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid transparent;border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;position:relative}
+.ctdocs .drow:hover{border-color:var(--line)}
+.ctdocs .dthumb{flex:none;width:52px;height:64px;border-radius:6px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--mute);letter-spacing:.04em;background:rgba(255,255,255,.03);overflow:hidden}
+.ctdocs .dthumb.pdf{color:#ff8787;border-color:rgba(255,135,135,.45)} .ctdocs .dthumb.img{color:var(--blue-l);border-color:rgba(120,160,255,.45)}
+.ctdocs .dthumb.has{border-color:var(--line);background:#fff}
+.ctdocs .dthumb img{width:100%;height:100%;object-fit:cover;display:block}
+/* the drawn mini-slip for the PDFs the platform makes: same words as the document */
+.ctdocs .dthumb.slip{flex-direction:column;gap:2px;background:#fff;border-color:#d9dde8;color:#1a2244}
+.ctdocs .dthumb.slip i{font-style:italic;font-weight:900;font-size:7px;color:#1a2457;letter-spacing:.02em}
+.ctdocs .dthumb.slip b{font-size:6px;letter-spacing:.06em;color:#1a2457;border-top:1px dashed #cfd4e2;padding-top:3px;margin-top:1px}
+.ctdocs .dthumb.slip em{font-style:normal;font-weight:900;font-size:10px;color:#111}
+.ctdocs .dthumb.slip.refund b{color:#b3221f}
+.ctdocs .drow .b{flex:1;min-width:0} .ctdocs .drow .t{font-size:13px;font-weight:700} .ctdocs .drow .s{font-size:11px;color:var(--mute);margin-top:2px;line-height:1.5;word-break:break-word}
+.ctdocs .drow .s b{color:var(--ink);font-weight:600}
+.ctdocs .drow .t .nl{font-size:11px;color:var(--amber-ink);font-weight:600}
+.ctdocs .hs{color:var(--green)} .ctdocs .hs.no{color:var(--amber-ink)}
+.ctdocs .drow .more{flex:none;color:var(--dim);font-size:18px;padding:0 4px;line-height:1}
+.ctdocs .dlink,.ctlog .dlink{color:var(--blue-l);cursor:pointer;text-decoration:none}
+.ctdocs .shelf{background:rgba(245,166,35,.10);border:1px solid rgba(245,166,35,.45);border-radius:10px;padding:10px 12px;margin-bottom:6px}
+.ctdocs .shelf .h{font-size:12px;font-weight:700;color:var(--amber-ink);margin-bottom:8px}
+.ctdocs .shelf .drow{background:rgba(0,0,0,.18);margin-bottom:0}
+.ctdocs .shelf .acts{display:flex;gap:6px;margin:8px 0 10px}
+.ctdocs .shelf .acts span{font-size:12px;font-weight:700;padding:6px 11px;border-radius:8px;cursor:pointer}
+.ctdocs .shelf .acts .chg{background:var(--field);color:var(--blue-l);border:1px solid var(--line)}
+.ctdocs .dnone,.ctlog .dnone{font-size:12px;color:var(--dim);padding:2px 0 4px}
+.ctdocs .dfoot{margin-top:12px}
+.ctdocs .dfoot div,.ctdocs .dfoot .up{border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:600;cursor:pointer;background:var(--field);border:1px solid var(--line);color:var(--blue-l)}
+.ctdocs .honest{font-size:11px;color:var(--dim);margin-top:10px;line-height:1.5}
+.dmenu{position:absolute;right:8px;top:40px;z-index:30;background:var(--card, #131a33);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4);min-width:190px;padding:4px 0;font-size:13px}
+.dmenu div{padding:9px 14px;cursor:pointer;color:var(--ink)} .dmenu div:hover{background:var(--field)}
+.dmenu div.dim{color:var(--dim);font-size:11px;cursor:default;border-top:1px solid var(--line);margin-top:4px;word-break:break-all}
+/* preview + relabel */
+.ctlight{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+.ctpanel{background:var(--card, #131a33);border:1px solid var(--line);border-radius:14px;width:min(960px,100%);height:min(92vh,900px);display:flex;flex-direction:column;overflow:hidden;color:var(--ink)}
+.ctpanel.small{height:auto;width:min(480px,100%);padding:0 0 14px}
+.ctpanel .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px}
+.ctpanel .hd .acts{display:flex;align-items:center;gap:14px;font-size:13px} .ctpanel .hd a{color:var(--blue-l);cursor:pointer}
+.ctpanel .hd .x{color:var(--dim);cursor:pointer;font-size:16px}
+.ctpanel .body{flex:1;min-height:0;background:#0b1024;display:flex;align-items:center;justify-content:center}
+.ctpanel .body img{max-width:100%;max-height:100%;object-fit:contain} .ctpanel .body iframe{width:100%;height:100%;border:0;background:#fff}
+.ctpanel .chips{display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px 4px}
+.ctpanel .chip{font-size:12.5px;font-weight:600;padding:7px 11px;border-radius:999px;background:var(--field);border:1.5px solid var(--line);color:var(--mute);cursor:pointer}
+.ctpanel .chip.on{color:var(--blue-l);border-color:var(--blue-l)}
+.ctpanel .ctin{margin:8px 14px 0;width:calc(100% - 28px)}
+.ctpanel .msg{font-size:12px;color:var(--amber-ink);padding:6px 14px 0;min-height:18px}
+.ctpanel .btns{padding:6px 14px 0;display:flex;justify-content:flex-end}
+.ctpanel .ok{background:var(--green);color:#04220f;font-weight:700;font-size:13px;padding:9px 16px;border-radius:9px;cursor:pointer}
+.ctin{box-sizing:border-box;width:100%;background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--ink);font:13px/1.45 inherit;padding:9px 11px;resize:vertical}
+.ctsel{background:var(--field);border:1px solid var(--line);border-radius:9px;color:var(--ink);font-size:12.5px;padding:7px 9px;max-width:60%}
+/* log */
+.ctlog .notebox{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:12px}
+.ctlog .notebox .ctin{background:rgba(0,0,0,.18)}
+.ctlog .noterow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px}
+.ctlog .noteok{background:var(--blue-l);color:#fff;font-weight:700;font-size:12.5px;padding:8px 14px;border-radius:9px;cursor:pointer;white-space:nowrap}
+.ctlog .msg{font-size:12px;color:var(--amber-ink);min-height:0;margin-top:4px}
+.ctlog .lfil{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.ctlog .lfil span{font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:999px;background:var(--field);border:1px solid var(--line);color:var(--mute);cursor:pointer}
+.ctlog .lfil span.on{color:var(--blue-l);border-color:var(--blue-l)}
+.ctlog .lday{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px}
+.ctlog .lrow{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.ctlog .when{flex:none;width:58px;font-size:11px;color:var(--dim);padding-top:2px;text-align:right}
+.ctlog .dot{flex:none;width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--dim)}
+.ctlog .dot.other{background:var(--dim)} .ctlog .dot.money{background:var(--green)} .ctlog .dot.doc{background:var(--blue-l)} .ctlog .dot.mail{background:var(--amber)} .ctlog .dot.review{background:#b98cff} .ctlog .dot.note{background:#5cc8d8} .ctlog .dot.red{background:var(--red, #d32f2f)}
+.ctlog .w{flex:1;min-width:0;font-size:12.5px;line-height:1.5;color:var(--ink);word-break:break-word}
+.ctlog .w b{font-weight:700} .ctlog .w .m{font-size:11px;color:var(--mute);display:block}
+.ctlog .w .ctwarn{color:var(--amber-ink)}
+.ctlog .lnote{font-size:11px;color:var(--dim);margin-top:10px;line-height:1.5}

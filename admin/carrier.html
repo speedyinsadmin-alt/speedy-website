@@ -598,13 +598,36 @@ function b64Bytes(dataUrl){
 }
 
 // Returns { b64, thumb, name, mime, bytes, originalBytes, shrunk }
+/* A PDF's FIRST PAGE AS A THUMBNAIL (Sep 16). Photos have had one since July; PDFs
+   showed a grey "PDF" box, so an agent had to open the file to know which carrier
+   receipt it was. pdf.js draws page 1 at 240px in this browser; the JPEG rides on the
+   same thumb_b64 the photos use. Fail-soft: no thumbnail is a placeholder, never a
+   refused upload. */
+let PDFJS_LIB = null;
+async function pdfThumb(file){
+  try{
+    if(!PDFJS_LIB){
+      PDFJS_LIB = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.mjs');
+      PDFJS_LIB.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs';
+    }
+    const doc = await PDFJS_LIB.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const page = await doc.getPage(1);
+    const v0 = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: THUMB_EDGE / Math.max(v0.width, v0.height) });
+    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    return c.toDataURL('image/jpeg', 0.6);
+  }catch(e){ return null; }
+}
 async function prepareFile(file){
   const original = file.size;
   if(!/^image\//i.test(file.type)){
+    const isPdf = /pdf/i.test(file.type) || /\.pdf$/i.test(file.name || '');
+    const thumb = isPdf && original <= BIG_MAX ? await pdfThumb(file) : null;
     /* a big PDF: no base64 - it will go straight to the bucket at submit */
-    if(original > BIG_MIN) return { b64: null, big: file, thumb: null, name: file.name,
+    if(original > BIG_MIN) return { b64: null, big: file, thumb, name: file.name,
              mime: file.type || 'application/pdf', bytes: original, originalBytes: original, shrunk: false, tooBig: original > BIG_MAX };
-    return { b64: await readAsDataUrl(file), thumb: null, name: file.name,
+    return { b64: await readAsDataUrl(file), thumb, name: file.name,
              mime: file.type || 'application/pdf', bytes: original, originalBytes: original, shrunk: false };
   }
   try {

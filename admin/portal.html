@@ -500,6 +500,8 @@
 
 <link rel="stylesheet" href="/admin/shared/paycard.css">
 <script src="/admin/shared/paycard.js"></script>
+<link rel="stylesheet" href="/admin/shared/clienttabs.css">
+<script src="/admin/shared/clienttabs.js"></script>
 <script>
 /* Theme, applied before anything renders so the page never flashes dark then light.
    Stored per DEVICE, not per agent: branch machines are shared, and a preference
@@ -1241,8 +1243,6 @@ async function renderPanel(){
   const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ');
   const pols = (r.policies || []).filter(p => p.record_type !== 'dmv_service');
   const dmv = (r.policies || []).filter(p => p.record_type === 'dmv_service');
-  const full = FULL_OPEN[ACTIVE_TAB];
-
   let h = '<div class="card" style="border-color:var(--blue)">';
   // header
   h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
@@ -1307,25 +1307,15 @@ async function renderPanel(){
       + '</div>';
   }
 
-  // recent activity
-  h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px">Recent activity</div>';
-  const rec = r.recent || [];
-  if(!rec.length) h += '<div class="dim" style="font-size:12px">No recent activity in our system yet</div>';
-  else h += '<div style="font-size:12px;color:#c9d2f0;line-height:1.9">'
-    + rec.map(x => '• $'+Number(x.amount||0).toFixed(2)+' — '+esc(x.purpose||'payment')+' <span class="dim">· '+String(x.ts||'').slice(0,10)+'</span>').join('<br>') + '</div>';
-
-  // Payments and documents keep their own toggle. The old button did two unrelated
-  // jobs - expand every policy AND show payment history - and only one of them
-  // needed to move into the rows above.
-  if(full){
-    h += '<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">';
-    h += payHistoryHtml(r);
-    h += '</div>';
-  }
+  /* THE TABS (Sep 16): Payments · Documents · Log, in the slot "Recent activity" had.
+     That three-line list was a baby log; the Log tab is what it grew into. The old
+     bottom toggle hid the payment card - it is the default tab now. Shared renderer,
+     /admin/shared/clienttabs.js, same as the Console. */
+  h += ClientTabs.html(r, { me: EMAIL, clientNo: ACTIVE_TAB, actions: true, page: 'portal',
+    payHtml: payHistoryHtml(r), rerender: () => renderPanel() });
 
   // actions
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">'
-    + '<div onclick="toggleFull('+ACTIVE_TAB+')" style="background:var(--field);border:1px solid var(--line);border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:600;color:var(--blue-l);cursor:pointer">'+(full?'Hide payments ▴':'Payments &amp; documents ▾')+'</div>'
+  h += '<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px">'
     + '<div onclick="openCharge('+ACTIVE_TAB+')" style="background:var(--red);color:#fff;border-radius:9px;padding:11px;text-align:center;font-size:13px;font-weight:700;cursor:pointer">Charge this client</div>'
     + '</div>'
     + '<div id="cardRefresh" onclick="refreshHawkSoft(\'cardRefresh\','+ACTIVE_TAB+',\'card\')" '
@@ -2250,7 +2240,7 @@ function restoreEarningsPref(){
   if(hidden) toggleEarnings(true);
 }
 
-function toggleFull(no){ FULL_OPEN[no] = !FULL_OPEN[no]; renderPanel(); }
+function toggleFull(no){ ClientTabs.set(no, 'payments'); }   // kept for old links; the tabs own this now
 /* One open at a time. Tapping the open row closes it; the index is per client, so
    switching tabs does not carry a selection across to another client's list. */
 function togglePolicy(i){

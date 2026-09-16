@@ -606,6 +606,24 @@ export default async function handler(req, res) {
      the agent choose BEFORE upload; this is the way back for the ones that slipped.
      Documents only: a client receipt or the proof of payment are not relabelled here.
      Any agent may do it, and the event says who. */
+  /* A THUMBNAIL, AFTER THE FACT (Sep 16). PDFs never had one - the browser cannot draw
+     a PDF page without a library. The Documents tab now draws page 1 with pdf.js in the
+     agent's browser and hands it here, once, so the next agent gets it for free. Only
+     fills an EMPTY thumb_b64; small JPEG only; the file itself is never touched. */
+  if (action === 'set_thumb') {
+    const id = String(body.attachment_id || '');
+    const thumb = String(body.thumb_b64 || '');
+    if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: 'attachment_id required' });
+    if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(thumb) || thumb.length > 80000) return res.status(400).json({ ok: false, error: 'a small JPEG data URL is required' });
+    const cur = await sbGet(s, `attachments?id=eq.${id}&select=id,thumb_b64`);
+    const row = (cur.rows || [])[0];
+    if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (row.thumb_b64) return res.status(200).json({ ok: true, unchanged: true });
+    const r = await fetch(`${s.base}/rest/v1/attachments?id=eq.${id}&thumb_b64=is.null`, { method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify({ thumb_b64: thumb }) });
+    return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
+  }
+
   if (action === 'set_doc_type') {
     const id = String(body.attachment_id || '');
     const dtype = String(body.doc_type || '');

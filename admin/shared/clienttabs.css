@@ -7,6 +7,9 @@
 .ctab .n{display:inline-block;min-width:18px;text-align:center;background:var(--field);border-radius:999px;font-size:11px;padding:1px 6px;margin-left:5px;color:var(--mute)}
 .ctab .n.nwarn{background:rgba(245,166,35,.18);color:var(--amber-ink)}
 .ctabbody{min-height:40px}
+.ctsortrow{display:flex;justify-content:flex-end;margin-bottom:6px}
+.ctsort{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mute);margin-left:auto} .ctsort .ctsel{padding:4px 8px;font-size:11.5px}
+.lfil .ctsort{margin-left:auto}
 /* documents */
 .ctdocs .dgrp{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
 .ctdocs .drow{display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid transparent;border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;position:relative}
@@ -146,3 +149,16 @@
 .dc .dcside .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 0;border-top:1px solid var(--line)} .dc .dcside .row .m{color:var(--mute);white-space:nowrap}
 .dc .dcside .box.warn{border-color:rgba(245,166,35,.45);background:rgba(245,166,35,.08)} .dc .dcside .box.red{border-color:rgba(224,49,49,.4);background:rgba(224,49,49,.07)}
 @media print { .dc .dctop,.dc .arange,.dc .dctypes{display:none} }
+/* the share sheet (share.js) (Sep 16) */
+.ctpanel.share{width:min(560px,100%)} .ctpanel .green{color:var(--green)}
+.ctpanel .sstep{padding:12px 14px 4px;border-top:1px solid var(--line)} .ctpanel .sstep .q{font-size:13.5px;font-weight:700;margin-bottom:8px}
+.ctpanel .speople{display:flex;flex-wrap:wrap;gap:6px}
+.ctpanel .sp{font-size:12.5px;font-weight:600;padding:7px 11px;border-radius:999px;background:var(--field);border:1.5px solid var(--line);color:var(--mute);cursor:pointer}
+.ctpanel .sp.on{color:var(--blue-l);border-color:var(--blue-l)}
+.ctpanel .spcts{display:flex;gap:6px} .ctpanel .spct{flex:1;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 6px;text-align:center;cursor:pointer}
+.ctpanel .spct.on{border-color:var(--green);background:rgba(47,191,113,.12)} .ctpanel .spct b{display:block;font-size:15px;color:var(--green)} .ctpanel .spct span{font-size:11px;color:var(--dim)}
+.ctpanel .ssum{background:var(--field);border-radius:10px;padding:10px 12px;font-size:12.5px;margin:12px 14px 0;line-height:1.6}
+.ctpanel .sbtn{margin:12px 14px 0;background:var(--green);color:#04220f;font-weight:800;font-size:14px;text-align:center;padding:12px;border-radius:10px;cursor:pointer}
+.ctpanel .sbtn.off{opacity:.45;cursor:default}
+.ctpanel .scancel{text-align:center;color:var(--dim);font-size:12.5px;margin-top:8px;cursor:pointer}
+.ctpanel .share .msg{text-align:center}

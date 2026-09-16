@@ -24,7 +24,11 @@ function rangeFor(preset){
   const dow = new Date(to + 'T12:00:00Z').getUTCDay(); const back = (dow + 6) % 7;
   return { from: shift(to, -back), to };
 }
-const RANGE = { preset: 'week', from: null, to: null };
+const RANGE = { preset: 'week', from: null, to: null, sort: 'newest' };
+const SORT_KEYS = [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['client', 'By client'], ['who', 'By who']];
+const SORT_FIELDS = { newest: e => e.ts || '', oldest: e => e.ts || '', client: e => String(e.client_name || '').toLowerCase(), who: e => String(e.who || '').toLowerCase() };
+function sorted(list){ return window.ClientTabs.sortRows(list, RANGE.sort, SORT_FIELDS); }
+function sort(_list, k){ RANGE.sort = k || 'newest'; const body = document.getElementById('actBody'); if(body && DATA){ body.innerHTML = myHtml(DATA, ME); } else if(typeof window.renderActivity === 'function') window.renderActivity(); }
 function current(){ if(RANGE.preset === 'custom' && RANGE.from && RANGE.to) return { from: RANGE.from, to: RANGE.to }; return rangeFor(RANGE.preset); }
 
 /* ---------- entries: every client's log, flattened, tagged with the client ---------- */
@@ -53,9 +57,10 @@ const strip = h => String(h || '').replace(/<[^>]+>/g, '').replace(/&#10003;/g, 
 function rowsHtml(list, opts){
   if(!list.length) return '<div class="dnone">Nothing in this range.</div>';
   let h = '', day = null;
-  for(const e of list){
-    const dk = dayKey(e.ts);
-    if(dk !== day){ day = dk; h += '<div class="lday">' + esc(dayLabel(e.ts)) + '</div>'; }
+  const byDay = RANGE.sort === 'newest' || RANGE.sort === 'oldest';
+  for(const e of sorted(list)){
+    const dk = byDay ? dayKey(e.ts) : (RANGE.sort === 'client' ? e.client_name : String(window.ClientTabs.nameOf(e.who, e.card) || '—'));
+    if(dk !== day){ day = dk; h += '<div class="lday">' + esc(byDay ? dayLabel(e.ts) : dk) + '</div>'; }
     const client = '<a class="dlink" onclick="' + (opts.openClient || 'openClient') + '(' + Number(e.client_no) + ')">' + esc(e.client_name) + '</a>';
     const who = opts.everyone && e.who ? '<span class="who">' + esc(String(window.ClientTabs.nameOf(e.who, e.card)).split(' ')[0]) + '</span> ' : '';
     h += '<div class="lrow"><div class="when">' + esc(timeOnly(e.ts)) + '</div><div class="dot ' + (e.red ? 'red' : 'd-' + e.cat) + '"></div><div class="w">' + who + client + ' · ' + e.text + (e.meta ? '<span class="m">' + e.meta + '</span>' : '') + '</div></div>';
@@ -66,7 +71,7 @@ function chipsHtml(fn){
   const P = [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['custom', 'Pick dates…']];
   const r = current();
   return '<div class="lfil arange">' + P.map(([k, l]) => '<span class="' + (RANGE.preset === k ? 'on' : '') + '" onclick="' + fn + '(\'' + k + '\')">' + l + '</span>').join('')
-    + '<span class="dates">' + esc(fmtRange(r)) + '</span></div>'
+    + '<span class="dates">' + esc(fmtRange(r)) + '</span>' + window.ClientTabs.sortHtml('act', SORT_KEYS, 'Activity.sort') + '</div>'
     + (RANGE.preset === 'custom' ? '<div class="adates"><input type="date" id="actFrom" value="' + esc(RANGE.from || r.from) + '"> <span class="dim">to</span> <input type="date" id="actTo" value="' + esc(RANGE.to || r.to) + '"> <span class="noteok" onclick="Activity.applyDates()">Show</span></div>' : '');
 }
 function fmtRange(r){ const f = t(r.from + 'T12:00:00Z', { month: 'short', day: 'numeric' }), g = t(r.to + 'T12:00:00Z', { month: 'short', day: 'numeric' }); return f === g ? f : f + ' – ' + g; }
@@ -168,5 +173,5 @@ async function consoleLoad(el){
 function setAgent(v){ CF.agent = v || 'all'; if(typeof window.renderActivity === 'function') window.renderActivity(); }
 function setBranch(v){ CF.branch = v || 'all'; if(typeof window.renderActivity === 'function') window.renderActivity(); }
 
-window.Activity = { entries, mine, tiles, myHtml, consoleHtml, consoleLoad, open, load, preset, applyDates, goClient, print, download, csv, setAgent, setBranch, rangeFor, current, RANGE, CF, strip };
+window.Activity = { entries, mine, tiles, myHtml, consoleHtml, consoleLoad, open, load, preset, applyDates, goClient, print, download, csv, setAgent, setBranch, rangeFor, current, RANGE, CF, strip, sort, sorted };
 })();

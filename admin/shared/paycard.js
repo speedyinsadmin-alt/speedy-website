@@ -107,6 +107,8 @@ function openBalances(cache){
 }
 function payHistoryHtml(c, opts){
   opts = Object.assign({ me: null, clientNo: null, actions: true }, opts || {});
+  /* the share sheet (share.js) finds the card it was opened from here - the Console has no CLIENT_CACHE */
+  window.__shareCard = c; window.__shareMe = opts.me;
   const pays = c.payments || [];
   const docs = c.documents || [];
   if(!pays.length && !docs.length) return '<div class="paycard"><div class="dim" style="font-size:11px">No payments recorded for this client yet.</div></div>';
@@ -130,6 +132,9 @@ function payHistoryHtml(c, opts){
        returns is_admin); an identity compared in the browser is only a claim. */
     const iAdmin = !!c.is_admin;
     const canCorrect = opts.actions && (mine || iCharged || iAdmin);
+    /* the Console's card is read-only (actions:false) but Tony shares from there: opts.share
+       says so explicitly; the portal inherits opts.actions. Set once the row is known below. */
+    let canShare = false;
     /* THE CONFIRMATION SLIPS live on the refund row in their own line (Sep 15), never
        as "refund confirmation en · 5 KB · Info" chips among the proofs. */
     const slips = (byPay[p.id] || []).filter(d => d.kind === 'refund_confirmation');
@@ -155,6 +160,8 @@ function payHistoryHtml(c, opts){
        exactly how the balance payments read before item 76, when Saif had to ask what
        the $34 line was. */
     const isRefund = !!p.refund_of;
+    canShare = (opts.share != null ? opts.share : opts.actions) && !isRefund && !isBal && !/paylink|declin|fail|void/.test(String(p.kind || '')) && p.audit_status !== 'invoice_open'
+      && (mine || iAdmin) && (!(p.share && p.share.helper) || iAdmin);
     const refundedOff = Number(p.refunded) || 0;
     /* A pay link that was only SENT is not a payment. It showed as "needs proof" with
        "Add documents to help" and "Sammy still confirms the carrier cost" — three
@@ -249,7 +256,19 @@ function payHistoryHtml(c, opts){
                 ? ' · <span style="color:var(--mute);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();unlinkBalance(\'' + p.id + '\',' + Number(p.amount||0) + ')">not a balance payment</span>'
                 : '')
           : '')
+      /* SHARE WITH… (Sep 16): the commission owner, or an admin, names who gets part of
+         this commission - before or after the audit. Sammy could not share 26424 with
+         Jorge because the old flow only knew a helper it could see on the record. */
+      + (canShare
+          ? ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline;font-weight:700" onclick="event.stopPropagation();openShareWith(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ')">' + (p.share && p.share.helper ? 'change the share…' : 'share with…') + '</span>'
+          : '')
       + '</div>'
+      + (p.share && p.share.helper
+          ? '<div class="sharedline">&#10003; Shared: <b>' + esc(p.share.helper_name || p.share.helper) + ' ' + Number(p.share.pct || 0) + '%</b>'
+            + (p.share.set_by_name ? ' · set by ' + esc(String(p.share.set_by_name).split(' ')[0]) : '') + (p.share.at ? ', ' + esc(String(p.share.at).slice(0, 10)) : '')
+            + (p.share.why ? ' · \u201c' + esc(p.share.why) + '\u201d' : '')
+            + ' <span class="dim">· locked — ' + (iAdmin ? 'you can change it' : 'the owner can change it') + '</span></div>'
+          : '')
       /* Says which charge it pays down, so a $34 line beside a $130.50 line is not a
          mystery second sale. The original may be outside this client's 50-row window,
          in which case the id alone would mean nothing — so say only what is known. */

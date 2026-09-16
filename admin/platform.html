@@ -444,6 +444,7 @@
 <script src="/admin/shared/clienttabs.js"></script>
 <script src="/admin/shared/activity.js"></script>
 <script src="/admin/shared/doccenter.js"></script>
+<script src="/admin/shared/share.js"></script>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, TAB = 'clients';
@@ -1079,7 +1080,7 @@ async function renderOurClient(el, no, _bg) {
     /* the same three tabs the agent has (Sep 16): the card, the documents grouped by what
        they are, and the log in sentences. Read-only card; notes may be added here too. */
     if (pc && pc.ok) cardHtml = ClientTabs.html(pc, { me: r.email || null, clientNo: no, actions: false, page: 'console',
-      payHtml: PayCard.html(pc, { me: r.email || null, clientNo: no, actions: false }), rerender: () => { if (OPEN_CLIENT === no) renderOurClient(el, no, true); } });
+      payHtml: PayCard.html(pc, { me: r.email || null, clientNo: no, actions: false, share: !!pc.is_admin }), rerender: () => { if (OPEN_CLIENT === no) renderOurClient(el, no, true); } });
     else cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded' + (pc && pc.error ? ': ' + esc(pc.error) : '') + '.</div>';
   } catch (e) { cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded.</div>'; }
   const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th class="hidemob">Office</th><th>Ref</th></tr>'

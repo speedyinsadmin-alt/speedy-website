@@ -2122,7 +2122,9 @@ if (view === 'portal_share_due') {
          ADMIN_ALLOWLIST, so the code list said he was not an admin. Item 70's rule. */
       const isAdminHere = (await rosterAdmins()).has(me);
       const showTest = (Number(no) === TEST_CLIENT && isAdminHere);
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,audit_submitted_by,audit_submitted_at,audit_sendback,audit_completed_by,audit_completed_at,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
+      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,audit_submitted_by,audit_submitted_at,audit_sendback,audit_completed_by,audit_completed_at,helper_email,helper_share_pct,share_locked_at,share_set_by,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
+      /* the caller's own commission rate, so the share sheet can show dollars (Sep 16) */
+      const myRate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
       const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,doc_label,filename,bytes,mime,amount,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
@@ -2178,6 +2180,10 @@ if (view === 'portal_share_due') {
           refund_note: r.refund_note ? String(r.refund_note).replace(/[a-z0-9._-]+@speedyins\.com/gi, m => AGENT_NAME[m.toLowerCase()] || m) : null,
           /* a void and a refund read differently on the slip and the row (Sep 15) */
           voided: r.refund_of ? ((r.extra || {}).voided === true) : false,
+          /* THE SHARE (Sep 16): who gets part of this commission, set by whom, why */
+          share: r.share_locked_at ? { helper: r.helper_email || null, helper_name: r.helper_email ? (AGENT_NAME[r.helper_email] || r.helper_email) : null,
+            pct: Number(r.helper_share_pct || 0), set_by: r.share_set_by || null, set_by_name: r.share_set_by ? (AGENT_NAME[r.share_set_by] || r.share_set_by) : null,
+            at: r.share_locked_at, why: ((r.extra || {}).share || {}).why || null } : null,
           refunded: +Math.abs((pay.rows || [])
             .filter(x => x.refund_of === r.id)
             .reduce((a, x) => a + Number(x.amount || 0), 0)).toFixed(2),
@@ -2234,6 +2240,7 @@ if (view === 'portal_share_due') {
         producer_name: client && client.extras ? (AGENT_NAME[PRODUCER_MAP[client.extras.producer]] || null) : null,
         documents: docs.rows || [],
         events: (Array.isArray(evs.rows) ? evs.rows : []).filter(e => showTest || !(e.payload && e.payload.is_test === true)),
+        my_rate: Number(((Array.isArray(myRate.rows) ? myRate.rows : [])[0] || {}).percentage || 0),
         /* the roster, so the tabs print names and never an email */
         agent_names: AGENT_NAME,
       });
@@ -3422,35 +3429,66 @@ if (view === 'portal_share_due') {
          override a locked split from the Audit tab. */
       const paymentId = String((req.body || {}).payment_id || '');
       const pctRaw = Number((req.body || {}).pct);
-      const pct = Number.isFinite(pctRaw) ? Math.max(0, Math.min(100, pctRaw)) : 0;
+      const pct = Number.isFinite(pctRaw) ? Math.max(0, Math.min(100, Math.round(pctRaw * 100) / 100)) : 0;
       if (!paymentId) return res.status(400).json({ ok: false, error: 'payment_id required' });
 
-      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=id,agent,commission_to,share_locked_at,fee_amount,client_id`);
+      const cur = await sbGet(s, `bridge_ledger?id=eq.${encodeURIComponent(paymentId)}&select=id,ts,agent,commission_to,share_locked_at,helper_email,helper_share_pct,fee_amount,amount,purpose,client_id,kind,refund_of,extra`);
       const row = (cur.rows || [])[0];
       if (!row) return res.status(404).json({ ok: false, error: 'Payment not found' });
 
       const me2 = String(email).toLowerCase();
-      const isAdmin = ADMIN_ALLOWLIST.includes(me2);
+      /* the TABLE's admins (Tony is an owner via the table, not the code list) */
+      const isAdmin = (await rosterAdmins()).has(me2);
       if (!isAdmin) {
         if (row.commission_to !== me2) return res.status(403).json({ ok: false, error: 'Only the agent who earns this can share it.' });
         if (row.share_locked_at) return res.status(403).json({ ok: false, error: 'This split is already set. Ask the owner if it needs changing.' });
       }
+      if (row.refund_of || /refund|paylink|declin|fail|void/i.test(String(row.kind || ''))) return res.status(400).json({ ok: false, error: 'There is no commission on this row to share.' });
 
-      const helper = agentEmailOf(row.agent);
-      const patch = { helper_share_pct: pct, share_locked_at: new Date().toISOString(), share_set_by: me2,
-                      helper_email: pct > 0 ? helper : null };
+      /* WHO GETS THE SHARE (Sep 16). Named by the agent - Saif: Sammy could not share
+         26424 with Jorge because Jorge was nowhere on the record. Checked against the
+         roster and never the owner themself. Without a name the old rule stands: the
+         person who ran the charge (the automatic prompt at audit time still uses it). */
+      const asked = String((req.body || {}).helper || '').toLowerCase().trim();
+      let helper = agentEmailOf(row.agent);
+      if (asked) {
+        if (!(await rosterAgents()).has(asked) && !(await rosterAdmins()).has(asked)) return res.status(400).json({ ok: false, error: 'That person is not on the roster.' });
+        helper = asked;
+      }
+      const owner = row.commission_to || agentEmailOf(row.agent);
+      if (pct > 0 && (!helper || helper === owner)) return res.status(400).json({ ok: false, error: 'Pick someone other than the person who earns it.' });
+      const why = String((req.body || {}).why || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (pct > 0 && asked && why.length < 3) return res.status(400).json({ ok: false, error: 'Say why, in a few words - it goes on the client\'s log.' });
+
+      const stamp = new Date().toISOString();
+      const before = { helper: row.helper_email || null, pct: Number(row.helper_share_pct || 0) };
+      const changed = !!row.share_locked_at;
+      const patch = { helper_share_pct: pct, share_locked_at: stamp, share_set_by: me2,
+                      helper_email: pct > 0 ? helper : null,
+                      extra: { ...(row.extra || {}), share: pct > 0 ? { why: why || null, set_by: me2, at: stamp, helper, pct } : null } };
       const up = await fetch(`${s.base}/rest/v1/bridge_ledger?id=eq.${encodeURIComponent(paymentId)}`, {
         method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
       if (up.status >= 300) return res.status(502).json({ ok: false, error: 'Could not save it.' });
 
+      const helperName = AGENT_NAME[helper] || helper, ownerName = AGENT_NAME[owner] || owner, meName = AGENT_NAME[me2] || me2;
+      /* on the client's HawkSoft log, like every decision that moves money between people */
+      let noteOk = false;
+      try {
+        const hr = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${row.client_id}/log?version=4.0`, {
+          method: 'POST', body: JSON.stringify({ refId: randomUUID(), ts: stamp, channel: 32,
+            note: pct > 0
+              ? `COMMISSION SHARE — ${ownerName} shares ${pct}% of the commission on the $${Number(row.amount || 0).toFixed(2)} payment of ${String(row.ts || '').slice(0, 10)} (${row.purpose || 'payment'}) with ${helperName}${why ? ': ' + why : ''}.${changed ? ' (changed)' : ''} Set by ${meName} on the Speedy platform.`
+              : `COMMISSION SHARE REMOVED — ${ownerName} keeps all of the commission on the $${Number(row.amount || 0).toFixed(2)} payment of ${String(row.ts || '').slice(0, 10)}${before.helper ? ' (was ' + (AGENT_NAME[before.helper] || before.helper) + ' ' + before.pct + '%)' : ''}. Set by ${meName} on the Speedy platform.` }) });
+        noteOk = (hr.status === 200 || hr.status === 202);
+      } catch { noteOk = false; }
       await fetch(`${s.base}/rest/v1/events`, {
         method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
-        body: JSON.stringify({ ts: new Date().toISOString(), actor: me2, kind: 'commission.shared',
-          client_no: row.client_id, source: 'portal',
-          payload: { payment_id: paymentId, owner: row.commission_to, helper, pct,
-                     fee: row.fee_amount, by: me2, admin_override: isAdmin } }),
+        body: JSON.stringify({ ts: stamp, actor: me2, kind: 'commission.shared',
+          client_no: row.client_id, source: (req.body || {}).source === 'console' ? 'console' : 'portal',
+          payload: { payment_id: paymentId, owner, helper: pct > 0 ? helper : null, pct, why: why || null, amount: Number(row.amount || 0),
+                     fee: row.fee_amount, by: me2, admin_override: isAdmin, changed, before: changed ? before : null, hawksoft_note: noteOk } }),
       });
-      return res.status(200).json({ ok: true, pct, helper_name: AGENT_NAME[helper] || helper });
+      return res.status(200).json({ ok: true, pct, helper: pct > 0 ? helper : null, helper_name: pct > 0 ? helperName : null, why: why || null, changed, hawksoft_note: noteOk });
     }
 
     if (action === 'news_seen') {

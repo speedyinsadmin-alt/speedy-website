@@ -70,6 +70,23 @@ function needsLabel(d){
   if(k === 'other' && !String(d.doc_label || '').trim()) return true;
   return false;
 }
+/* SORT (Sep 16). One control per list, remembered per list for the session. Each list
+   names the keys it can sort by; the key reads the field off the row. */
+const SORTS = {};
+function sortKey(list){ return SORTS[list] || 'newest'; }
+function sortHtml(list, keys, fn){
+  return '<span class="ctsort"><span class="dim">Sort</span> <select class="ctsel" onchange="' + fn + '(\'' + list + '\', this.value)">'
+    + keys.map(([k, l]) => '<option value="' + k + '"' + (sortKey(list) === k ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></span>';
+}
+function sortRows(rows, key, fields){
+  const f = fields[key] || fields.newest;
+  const cmp = (a, b) => { const x = f(a), y = f(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y)); };
+  const out = rows.slice().sort(cmp);
+  return key === 'newest' || key === 'biggest' ? out.reverse() : out;
+}
+function setSort(list, key){ SORTS[list] = key; if(CUR && CUR.opts && typeof CUR.opts.rerender === 'function') CUR.opts.rerender(CUR.opts.clientNo || (CUR.c && CUR.c.client && CUR.c.client.client_no)); }
+const DOC_SORT_KEYS = [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['type', 'By type'], ['who', 'By who uploaded'], ['biggest', 'Biggest first']];
+const DOC_SORT_FIELDS = { newest: d => d.created_at || '', oldest: d => d.created_at || '', type: d => typeLabel(d).toLowerCase(), who: d => String(d.uploaded_by || '').toLowerCase(), biggest: d => Number(d.bytes || 0) };
 const canRelabel = d => !(['client_receipt', 'proof', 'carrier_receipt', 'refund_confirmation'].includes(String(d.kind || '')) || /_no_payment$/.test(String(d.doc_type || '')));
 const isPdf = d => /pdf/i.test(String(d.mime || '')) || /\.pdf$/i.test(String(d.filename || ''));
 const isImg = d => /^image\//i.test(String(d.mime || ''));
@@ -146,9 +163,10 @@ function docRow(d, c, opts){
     + '</div>';
 }
 function docsHtml(c, opts){
-  const docs = (c.documents || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const docs = sortRows(c.documents || [], sortKey('docs'), DOC_SORT_FIELDS);
   const no = opts.clientNo || (c.client && c.client.client_no);
   let h = '<div class="ctdocs">';
+  if((c.documents || []).length > 1) h += '<div class="ctsortrow">' + sortHtml('docs', DOC_SORT_KEYS, 'ClientTabs.sort') + '</div>';
   const nl = docs.filter(needsLabel);
   if(nl.length){
     h += '<div class="shelf"><div class="h">Needs a label · ' + nl.length + '</div>'
@@ -382,7 +400,10 @@ function logEntries(c){
       case 'audit.completed_by_other': row = { cat: 'review', text: who + ' completed the audit on ' + first(p.owner, c) + '’s ' + money(p.amount) + ' payment', meta: p.carrier ? esc(p.carrier) + ' ' + money(p.carrier_amount) : '' }; break;
       case 'audit.repaired': row = { cat: 'review', text: 'The audit on the ' + money(p.carrier_amount) + ' carrier payment was repaired', meta: esc(p.reason || '') }; break;
       case 'commission.reassigned': row = { cat: 'money', text: N(p.by) + ' moved the commission on the ' + money(p.amount) + ' payment from ' + first(p.from, c) + ' to ' + first(p.to, c), meta: '' }; break;
-      case 'commission.shared': row = { cat: 'money', text: N(p.by) + ' shared the commission on the ' + money(p.fee) + ' fee with ' + first(p.helper, c) + ' (' + Number(p.pct || 0) + '%)', meta: '' }; break;
+      case 'commission.shared': row = { cat: 'money', k: 'share', text: p.pct > 0
+          ? N(p.by) + ' shared the commission on the ' + money(p.amount != null ? p.amount : p.fee) + (p.amount != null ? ' payment' : ' fee') + ' with <b>' + esc(first(p.helper, c)) + ' (' + Number(p.pct || 0) + '%)</b>' + (p.changed ? ' — changed' : '')
+          : N(p.by) + ' removed the share on the ' + money(p.amount != null ? p.amount : p.fee) + ' payment' + (p.before && p.before.helper ? ' (was ' + esc(first(p.before.helper, c)) + ' ' + Number(p.before.pct || 0) + '%)' : ''),
+        meta: [p.why ? '“' + esc(p.why) + '”' : '', p.by && p.owner && emailOf(p.by) !== emailOf(p.owner) ? 'on ' + esc(first(p.owner, c)) + '’s commission' : '', p.hawksoft_note ? 'HawkSoft note &#10003;' : ''].filter(Boolean).join(' · ') }; break;
       case 'client.correction_requested': row = { cat: 'money', text: who + ' asked to move the ' + money(p.amount) + ' payment from client #' + esc(p.from) + ' to #' + esc(p.to), meta: p.reason ? '“' + esc(p.reason) + '”' : '' }; break;
       case 'client.corrected': row = { cat: 'money', text: who + ' moved the ' + money(p.amount) + ' payment from client #' + esc(p.from) + ' to #' + esc(p.to), meta: [p.reason ? '“' + esc(p.reason) + '”' : '', p.hawksoft_notes ? 'HawkSoft notes on both clients &#10003;' : ''].filter(Boolean).join(' · ') }; break;
       case 'document.relabelled': row = { cat: 'doc', text: who + ' relabelled a document: ' + esc(labelOfType(p.before)) + ' &#8594; ' + esc(labelOfType(p.after)), meta: esc(p.filename || '') }; break;
@@ -444,7 +465,8 @@ function logHtml(c, opts){
   const no = opts.clientNo || (c.client && c.client.client_no);
   const f = LOGF[no] || 'all';
   const all = logEntries(c);
-  const list = f === 'all' ? all : all.filter(e => e.cat === f);
+  const list0 = f === 'all' ? all : all.filter(e => e.cat === f);
+  const list = sortKey('log') === 'oldest' ? list0.slice().reverse() : list0;
   let h = '<div class="ctlog">';
   if(opts.notes !== false){
     const nb = NOTEBOX[no] || (NOTEBOX[no] = { about: [], files: [], reply_to: null, reply_label: '' });
@@ -463,7 +485,8 @@ function logHtml(c, opts){
       + '<span class="noteok" onclick="ClientTabs.addNote(' + Number(no) + ')">' + (nb.reply_to ? 'Reply' : 'Add note') + '</span></span></div><div class="msg" id="ctNoteMsg">' + esc(nb.msg || '') + '</div></div>';
     nb.msg = '';
   }
-  h += '<div class="lfil">' + FILTERS.map(([k, l]) => '<span class="' + (f === k ? 'on' : '') + '" onclick="ClientTabs.filter(' + Number(no) + ',\'' + k + '\')">' + l + '</span>').join('') + '</div>';
+  h += '<div class="lfil">' + FILTERS.map(([k, l]) => '<span class="' + (f === k ? 'on' : '') + '" onclick="ClientTabs.filter(' + Number(no) + ',\'' + k + '\')">' + l + '</span>').join('')
+    + sortHtml('log', [['newest', 'Newest first'], ['oldest', 'Oldest first']], 'ClientTabs.sort') + '</div>';
   if(!list.length) h += '<div class="dnone">Nothing here yet.</div>';
   let day = null;
   const rowHtml = e => '<div class="lrow"><div class="when">' + esc(timeOnly(e.ts)) + '</div><div class="dot ' + (e.red ? 'red' : 'd-' + e.cat) + '"></div><div class="w">' + e.text + (e.meta ? '<span class="m">' + e.meta + '</span>' : '')
@@ -567,5 +590,5 @@ async function addNote(no){
   if(CUR && CUR.opts.rerender) CUR.opts.rerender(no);
 }
 
-window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, thumbBox, setThumb, carrierPost, pageToken, forLine, bytesLabel, canRelabel, RELABEL, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage };
+window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, thumbBox, setThumb, carrierPost, pageToken, forLine, bytesLabel, canRelabel, RELABEL, sort: setSort, sortRows, sortHtml, sortKey, SORTS, DOC_SORT_KEYS, DOC_SORT_FIELDS, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage };
 })();

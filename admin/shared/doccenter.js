@@ -26,7 +26,10 @@ function rangeFor(preset){
 const HS_MAX = 5 * 1024 * 1024;
 const GROUPS = [['receipts', 'Receipts & slips'], ['carrier', 'Carrier receipts'], ['signed', 'Signed paperwork'], ['id', 'ID & photos'], ['other', 'Other']];
 /* the state of the page: range, filters, the last data */
-const F = { preset: 'month', from: null, to: null, q: '', type: 'all', who: 'all', branch: 'all', only: null /* 'nohs' | 'label' */, shown: 60 };
+const F = { preset: 'month', from: null, to: null, q: '', type: 'all', who: 'all', branch: 'all', only: null /* 'nohs' | 'label' */, shown: 60, sort: 'newest' };
+const SORT_KEYS = [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['client', 'By client'], ['type', 'By type'], ['who', 'By who uploaded'], ['biggest', 'Biggest first']];
+const SORT_FIELDS = { newest: d => d.created_at || '', oldest: d => d.created_at || '', client: d => String(d.client_name || '').toLowerCase(), type: d => window.ClientTabs.typeLabel(d).toLowerCase(), who: d => String(d.uploaded_by || '').toLowerCase(), biggest: d => Number(d.bytes || 0) };
+function sorted(list){ return window.ClientTabs.sortRows(list, F.sort, SORT_FIELDS); }
 let DATA = null;
 const range = () => (F.preset === 'custom' && F.from && F.to) ? { from: F.from, to: F.to } : rangeFor(F.preset);
 function fmtRange(r){ const f = t(r.from + 'T12:00:00Z', { month: 'short', day: 'numeric' }), g = t(r.to + 'T12:00:00Z', { month: 'short', day: 'numeric' }); return f === g ? f : f + ' – ' + g; }
@@ -119,13 +122,14 @@ function queuesHtml(all, data){
 function listHtml(list, opts){
   if(!list.length) return '<div class="dnone">No documents match.</div>';
   let h = '', day = null, n = 0;
-  for(const d of list){
+  const byDay = F.sort === 'newest' || F.sort === 'oldest';   // other orders read better as one grid
+  if(!byDay) h += '<div class="dcgrid">';
+  for(const d of sorted(list)){
     if(n++ >= F.shown) break;
-    const dk = dayKey(d.created_at);
-    if(dk !== day){ h += (day ? '</div>' : '') + '<div class="lday">' + esc(dayLabel(d.created_at)) + '</div><div class="dcgrid">'; day = dk; }
+    if(byDay){ const dk = dayKey(d.created_at); if(dk !== day){ h += (day ? '</div>' : '') + '<div class="lday">' + esc(dayLabel(d.created_at)) + '</div><div class="dcgrid">'; day = dk; } }
     h += cardHtml(d, opts);
   }
-  if(day) h += '</div>';
+  if(day || !byDay) h += '</div>';
   if(list.length > F.shown) h += '<div class="dcmore"><span class="dlink" onclick="DocCenter.more()">Show more</span> · ' + Math.min(F.shown, list.length) + ' of ' + list.length + '</div>';
   return h;
 }
@@ -139,7 +143,7 @@ function html(data, opts){
     + (data.is_admin ? '<select class="ctsel" onchange="DocCenter.who(this.value)"><option value="all">Anyone</option>' + roster.map(a => '<option value="' + esc(a.email) + '"' + (F.who === a.email ? ' selected' : '') + '>' + esc(a.full_name || a.email) + '</option>').join('') + '</select>'
       + '<select class="ctsel" onchange="DocCenter.branch(this.value)"><option value="all">All branches</option>' + branches.map(b => '<option' + (F.branch === b ? ' selected' : '') + '>' + esc(b) + '</option>').join('') + '</select>' : '')
     + '<span class="abtn" onclick="DocCenter.download()">&#11015; Export list (CSV)</span></div>';
-  h += chipsHtml(all) + typeChips(all) + tilesHtml(all, data);
+  h += chipsHtml(all) + typeChips(all).replace('</div>', '<span class="gap"></span>' + window.ClientTabs.sortHtml('dc', SORT_KEYS, 'DocCenter.sort') + '</div>') + tilesHtml(all, data);
   h += '<div class="dccols"><div>' + (F.q ? '<div class="lday">Results for “' + esc(F.q) + '” · ' + list.length + '</div>' : '') + listHtml(list, opts) + '</div>' + queuesHtml(all, data) + '</div>';
   h += '<div class="lnote">Every document the platform holds, since Sep 5 2026. Documents from before that live in HawkSoft only — HawkSoft cannot be read back from here. Not here yet: reading a document’s text (OCR), e-signature, sharing with clients, retention.</div></div>';
   setTimeout(() => fillThumbs(list.slice(0, F.shown)), 0);
@@ -172,6 +176,7 @@ let RERENDER = null;
 function rerender(){ if(typeof RERENDER === 'function') RERENDER(); }
 function search(v){ F.q = String(v || ''); F.shown = 60; const root = document.getElementById('dcRoot'); if(!root) return; /* re-draw the list only, so the box keeps focus */ const list = filtered(docsOf(DATA)); const cols = root.querySelector('.dccols > div'); if(cols) cols.innerHTML = (F.q ? '<div class="lday">Results for “' + esc(F.q) + '” · ' + list.length + '</div>' : '') + listHtml(list, { actions: DATA.is_admin || true }); setTimeout(() => fillThumbs(list.slice(0, F.shown)), 0); }
 function type(g){ F.type = g; F.only = null; F.shown = 60; rerender(); }
+function sort(_list, k){ F.sort = k || 'newest'; rerender(); }
 function only(k){ F.only = F.only === k ? null : k; F.type = 'all'; F.shown = 60; rerender(); }
 function who(v){ F.who = v || 'all'; rerender(); }
 function branch(v){ F.branch = v || 'all'; rerender(); }
@@ -234,5 +239,5 @@ async function open(){
   MODE = { kind: 'portal' }; await load();
 }
 
-window.DocCenter = { html, docsOf, filtered, matches, rangeFor, range, csv, consoleLoad, open, load, search, type, only, who, branch, more, preset, applyDates, preview, goClient, retry, relabel, download, fillThumbs, F, GROUPS };
+window.DocCenter = { html, docsOf, filtered, matches, rangeFor, range, csv, consoleLoad, open, load, search, type, only, who, branch, more, preset, applyDates, preview, goClient, retry, relabel, download, fillThumbs, sort, sorted, F, GROUPS };
 })();

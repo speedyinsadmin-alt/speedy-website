@@ -431,6 +431,7 @@
       <button data-tab="refunds">Refunds</button>
       <button data-tab="staff">Staff</button>
       <button data-tab="activity">Activity</button>
+      <button data-tab="documents">Documents</button>
       <button data-tab="health">Health</button>
     </nav>
     <div id="view" class="card"><div class="load">Loading…</div></div>
@@ -442,6 +443,7 @@
 <link rel="stylesheet" href="/admin/shared/clienttabs.css">
 <script src="/admin/shared/clienttabs.js"></script>
 <script src="/admin/shared/activity.js"></script>
+<script src="/admin/shared/doccenter.js"></script>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, TAB = 'clients';
@@ -607,6 +609,7 @@ async function render() {
   if (TAB === 'refunds') return renderRefunds(el);
   if (TAB === 'staff') return renderStaff(el);
   if (TAB === 'activity') return renderActivity(el);
+  if (TAB === 'documents') return renderDocuments(el);
 }
 /* ---------- IN-APP HISTORY (Sep 12) ----------
    A client opened from the Audit tab used to close to "All clients" - the main list,
@@ -2568,6 +2571,11 @@ const CAP_HELP = {
 };
 const capHelp = c => CAP_HELP[c] || 'No description recorded for this permission yet.';
 
+/* THE DOCUMENT CENTER (Sep 16): every document across clients - /admin/shared/doccenter.js */
+async function renderDocuments(el){
+  el = el || document.getElementById('view');
+  await DocCenter.consoleLoad(el);
+}
 /* THE ACTIVITY TAB (Sep 16): everyone, by agent, then the stream - /admin/shared/activity.js */
 async function renderActivity(el){
   el = el || document.getElementById('view');

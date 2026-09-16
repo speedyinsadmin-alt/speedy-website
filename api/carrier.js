@@ -610,6 +610,44 @@ export default async function handler(req, res) {
      a PDF page without a library. The Documents tab now draws page 1 with pdf.js in the
      agent's browser and hands it here, once, so the next agent gets it for free. Only
      fills an EMPTY thumb_b64; small JPEG only; the file itself is never touched. */
+  /* RETRY HAWKSOFT (Sep 16): a stored document HawkSoft did not take (a refusal, an
+     outage) is posted again from the bytes we hold - never one over the 5 MB limit,
+     never one already filed. The document center's "retry". */
+  if (action === 'retry_hawksoft') {
+    const id = String(body.attachment_id || '');
+    if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: 'attachment_id required' });
+    const cur = await sbGet(s, `attachments?id=eq.${id}&select=id,client_no,policy_id,kind,doc_type,doc_label,filename,mime,bytes,filed_hawksoft,file_b64,blob_url`);
+    const row = (cur.rows || [])[0];
+    if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (row.filed_hawksoft) return res.status(200).json({ ok: true, unchanged: true, filed_hawksoft: true });
+    if (Number(row.bytes || 0) > HS_MAX_BYTES) return res.status(400).json({ ok: false, error: HS_TOO_BIG, message: 'Over HawkSoft\'s 5 MB limit - it stays on the platform.' });
+    const buf = row.blob_url ? await storageGetBuf(row.blob_url) : (row.file_b64 ? b64ToBuf(row.file_b64) : null);
+    if (!buf || !buf.length) return res.status(404).json({ ok: false, error: 'no_bytes', message: 'The file bytes are not stored.' });
+    const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
+    if (!ID || !SECRET) return res.status(500).json({ ok: false, error: 'HawkSoft env vars missing' });
+    const AUTH = 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
+    const refId = crypto.randomUUID();
+    const dtype = String(row.doc_type || row.kind || 'document');
+    const fname = String(row.filename || dtype).replace(/\.[^.]+$/, '').slice(0, 60);
+    const ext = (String(row.filename || '').match(/\.([a-z0-9]+)$/i) || [])[1] || (/pdf/i.test(String(row.mime || '')) ? 'pdf' : 'jpg');
+    let status = null, why = null, filed = false;
+    try {
+      const r2 = await fetch(`${HS_BASE}/vendor/agency/${AGENCY_ID}/client/${row.client_no}/attachment?version=4.0`, {
+        method: 'POST',
+        headers: { Authorization: AUTH, 'Content-Type': 'application/octet-stream', RefId: refId, TS: new Date().toISOString(),
+          Desc: b64h((row.doc_label || dtype.replace(/_/g, ' ')).slice(0, 41)), LogNote: b64h(`${dtype} filed by Speedy platform (retry). Requested by ${email}.`),
+          FileName: b64h(fname), FileExt: ext, Channel: '32', ...(row.policy_id ? { PolicyId: row.policy_id } : {}) },
+        body: gzipSync(buf) });
+      status = r2.status; filed = (r2.status === 200 || r2.status === 202);
+      if (!filed) why = String(await r2.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200) || null;
+    } catch (e) { status = 'error'; why = String(e && e.message || e).slice(0, 200); }
+    if (filed) await fetch(`${s.base}/rest/v1/attachments?id=eq.${id}`, { method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=minimal' }, body: JSON.stringify({ filed_hawksoft: true, hawksoft_refid: refId }) });
+    try { await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify([{ actor: email, kind: filed ? 'document.hawksoft_retried' : 'document.hawksoft_refused', client_no: row.client_no, source: 'document_center',
+        payload: { attachment_id: id, doc_type: dtype, bytes: buf.length, status, why, retry: true } }]) }); } catch {}
+    return res.status(filed ? 200 : 502).json({ ok: filed, filed_hawksoft: filed, hawksoft_status: status, hawksoft_why: why });
+  }
+
   if (action === 'set_thumb') {
     const id = String(body.attachment_id || '');
     const thumb = String(body.thumb_b64 || '');

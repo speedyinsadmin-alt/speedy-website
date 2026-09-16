@@ -289,9 +289,9 @@ async function pdfFirstPage(b64){
 }
 
 /* ---------------- preview ---------------- */
-async function preview(id){
+async function preview(id, doc){
   closeMenu();
-  const c = CUR && CUR.c; const d = ((c && c.documents) || []).find(x => x.id === id);
+  const c = CUR && CUR.c; const d = doc || ((c && c.documents) || []).find(x => x.id === id);
   const old = document.getElementById('ctPreview'); if(old) old.remove();
   const box = document.createElement('div'); box.className = 'ctlight'; box.id = 'ctPreview';
   box.innerHTML = '<div class="ctpanel"><div class="hd"><b>' + esc(d ? typeLabel(d) : 'Document') + '</b>'
@@ -567,5 +567,5 @@ async function addNote(no){
   if(CUR && CUR.opts.rerender) CUR.opts.rerender(no);
 }
 
-window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage };
+window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, thumbBox, setThumb, carrierPost, pageToken, forLine, bytesLabel, canRelabel, RELABEL, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage };
 })();

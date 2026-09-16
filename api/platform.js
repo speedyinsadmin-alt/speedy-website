@@ -1726,7 +1726,7 @@ const OPS_PLATFORM_MAP = [
   { k: 'E · Compliance', v: 'Audit trail in events. CCPA. Call recording pending attorney review' },
 ];
 
-const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients', 'activity'];
+const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients', 'activity', 'documents', 'doc_thumbs'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     /* Declared HERE, at the top of the portal block. portal_share_due and portal_news
@@ -1919,6 +1919,71 @@ if (view === 'portal_share_due') {
       }
       return res.status(200).json({ ok: true, from, to, me, is_admin: isAdminHere, agent: agent || null, agent_names: AGENT_NAME, roster, last_seen: lastSeen,
         clients: nos.map(no => ({ ...byClient[no], name: names[no] || ('Client #' + no) })) });
+    }
+
+    /* THE DOCUMENT CENTER (Sep 16): every document the platform holds, across clients,
+       for a date range - metadata only (no bytes), grouped nowhere: the page groups,
+       searches and counts, because a month is a few hundred rows and the page already
+       knows how to draw them. An agent gets their own uploads; admins get everyone's.
+       With queues=1 (admins) the three queues come too: payments with no proof yet,
+       and the two HawkSoft gaps (over 5 MB, refused). */
+    if (view === 'documents') {
+      const isAdminHere = (await rosterAdmins()).has(me);
+      const day = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null;
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+      let to = day(req.query.to) || today, from = day(req.query.from) || (to.slice(0, 8) + '01');
+      if (from > to) { const x = from; from = to; to = x; }
+      if ((new Date(to) - new Date(from)) / 86400000 > 92) return res.status(400).json({ ok: false, error: 'Pick a range of 92 days or less.' });
+      const edge = (d, endOfDay) => { const dt = new Date(d + 'T00:00:00Z'); dt.setUTCHours(dt.getUTCHours() + 7 + (endOfDay ? 24 : 0)); return dt.toISOString(); };
+      const t0 = edge(from, false), t1 = edge(to, true);
+      const enc = encodeURIComponent;
+      const askedWho = String(req.query.who || '').toLowerCase().trim();
+      const who = isAdminHere ? (askedWho && askedWho !== 'all' ? askedWho : null) : me;
+      const dr = await sbGet(s, `attachments?created_at=gte.${enc(t0)}&created_at=lt.${enc(t1)}&select=id,client_no,payment_id,kind,doc_type,doc_label,filename,bytes,mime,amount,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=3000`
+        + (who ? `&uploaded_by=ilike.${enc('*' + who + '*')}` : ''));
+      const docs = Array.isArray(dr.rows) ? dr.rows : [];
+      /* the payment each document proves, and the client names, for the cards */
+      const payIds = [...new Set(docs.map(d => d.payment_id).filter(Boolean))];
+      const pays = {};
+      for (let i = 0; i < payIds.length; i += 200) {
+        const pr = await sbGet(s, `bridge_ledger?id=in.(${payIds.slice(i, i + 200).join(',')})&select=id,ts,amount,purpose,refund_of,extra`);
+        for (const p of (Array.isArray(pr.rows) ? pr.rows : [])) pays[p.id] = { id: p.id, ts: p.ts, amount: p.amount, purpose: p.purpose, refund_of: p.refund_of || null, voided: p.refund_of ? ((p.extra || {}).voided === true) : false };
+      }
+      const nos = [...new Set(docs.map(d => d.client_no).filter(n => n != null))];
+      const names = {};
+      for (let i = 0; i < nos.length; i += 200) {
+        const cr = await sbGet(s, `clients?client_no=in.(${nos.slice(i, i + 200).join(',')})&select=client_no,first_name,last_name,business_name`);
+        for (const c of (Array.isArray(cr.rows) ? cr.rows : [])) names[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || ('Client #' + c.client_no);
+      }
+      let roster = [], queues = null;
+      if (isAdminHere) {
+        const rr = await sbGet(s, 'agents?select=email,full_name,branch,active&active=is.true&order=full_name.asc');
+        roster = (Array.isArray(rr.rows) ? rr.rows : []).map(a => ({ email: String(a.email || '').toLowerCase(), full_name: a.full_name, branch: a.branch || null }));
+      }
+      if (String(req.query.queues || '') === '1') {
+        /* payments with no proof yet: money in, audit not started or waiting on the
+           carrier receipt, in the last 60 days - the agent's, or everyone's */
+        const since = new Date(Date.now() - 60 * 86400000).toISOString();
+        const qr = await sbGet(s, `bridge_ledger?ts=gte.${enc(since)}&is_test=is.false&audit_status=in.(client_paid,carrier_pending)&kind=like.charge*&refund_of=is.null&select=id,ts,amount,purpose,agent,client_id,audit_status&order=ts.desc&limit=500`
+          + (who ? `&agent=ilike.${enc('*' + who + '*')}` : ''));
+        const noProof = (Array.isArray(qr.rows) ? qr.rows : []).map(p => ({ id: p.id, ts: p.ts, amount: p.amount, purpose: p.purpose, client_no: p.client_id, agent: agentEmailOf(p.agent), agent_name: AGENT_NAME[agentEmailOf(p.agent)] || agentEmailOf(p.agent) || null, audit_status: p.audit_status }));
+        const extra = noProof.map(p => p.client_no).filter(n => n != null && !names[n]);
+        for (let i = 0; i < extra.length; i += 200) {
+          const cr = await sbGet(s, `clients?client_no=in.(${[...new Set(extra.slice(i, i + 200))].join(',')})&select=client_no,first_name,last_name,business_name`);
+          for (const c of (Array.isArray(cr.rows) ? cr.rows : [])) names[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || ('Client #' + c.client_no);
+        }
+        queues = { no_proof: noProof };
+      }
+      return res.status(200).json({ ok: true, from, to, me, is_admin: isAdminHere, who: who || null, agent_names: AGENT_NAME, roster,
+        documents: docs, payments: pays, client_names: names, queues });
+    }
+
+    /* thumbnails for a set of document ids (the center shows documents from many clients) */
+    if (view === 'doc_thumbs') {
+      const ids = String(req.query.ids || '').split(',').map(x => x.trim()).filter(x => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 60);
+      if (!ids.length) return res.status(200).json({ ok: true, thumbs: [] });
+      const r = await sbGet(s, `attachments?id=in.(${ids.join(',')})&select=id,thumb_b64`);
+      return res.status(200).json({ ok: true, thumbs: (Array.isArray(r.rows) ? r.rows : []).filter(x => x.thumb_b64) });
     }
 
     if (view === 'portal_news') {

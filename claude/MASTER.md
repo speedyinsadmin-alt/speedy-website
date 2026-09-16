@@ -422,8 +422,34 @@ $34,466.84 in 86 payments, 22 "not told"; a note with a photo on ZZTEST (event
 whole client on every note-box change (attach a file → a full reload of the card;
 works, slow); `audit.submitted_by_other` has no sentence yet (generic line).
 
-**Next (Saif's list):** the document center proper (cross-client search, "what's
-missing"); My activity could gain a Reply on notes from the report itself.
+**Commission sharing — why Sammy could not share client 26424 with Jorge (Sep 16).**
+The share flow (`portal_share_due` → the share sheet → `set_share`) is asked ONCE, only
+when the audit COMPLETES, and only when the platform can see a helper: someone other
+than the commission owner charged or audited the payment. The helper is inferred, never
+chosen. Client 26424 ($747.75 cash, New business — Referral): Sammy charged it himself,
+commission_to Sammy, audit_status ready_for_audit → nothing is ever offered, and Jorge is
+nowhere on the record. `set_share` even for an admin takes the helper from row.agent,
+so Tony cannot fix it either. The "change" link on the card is reassign_commission — the
+WHOLE commission to one person, not a split. **Proposed (mock before building):** a
+"Share with…" on the payment card for the commission owner (and admins): pick anyone on
+the roster + a percentage, allowed before or after the audit, locked once set, Tony can
+change; `set_share` takes `helper` explicitly and validates it against the roster; the
+Log and HawkSoft get a line. Until then, 26424 can only be fixed by hand.
+
+**The document center — mocked (`mock_doccenter.html`, Desktop
+`Mock_doccenter_console.png` / `_portal.png`).** Console → Documents: search across
+clients (client, policy #, file name, note words), type / who / branch / range pickers,
+type chips with counts, tiles (this month, this week, needs a label, not in HawkSoft
+split over-5MB vs refused, payments with no proof yet), results as cards with the same
+thumbnails, the queues on the right (no proof yet, needs a label, not in HawkSoft with
+retry, by type, who uploads), CSV export; honest footer (pre-Sep 5 in HawkSoft only; OCR
+/ e-sign / client sharing / retention not here). Portal → "My documents": the same held
+to the agent (my uploads, my needs-a-label, my payments with no proof, fix links).
+Server side needs one view (`documents` with filters + the three queue queries) — every
+renderer already exists in clienttabs.js.
+
+**Next (Saif's list):** build the document center (after his OK on the mock); "Share
+with…" on the card (after its mock); My activity could gain a Reply on notes.
 
 **Next conversation: the document center** (see the block above). Saif's questions to
 answer first: who uses it and what they do first; honest-and-partial (platform documents

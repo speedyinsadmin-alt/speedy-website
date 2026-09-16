@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 16 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `b64499c` (another session pushes the public
+otherwise; `git status` is clean at `45a67bb` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -625,6 +625,18 @@ did not add up to the sheet); a named helper is NOT put on the todo list; the be
 "Pending now under You helped on; earned once the audit is approved", and whoever a share
 is moved off is told. harnessShare 57 (S6–S8, H1), mutateShare 49/49, Chrome shots
 (`pending_earn.png`, `pending_news.png`).
+
+**The Pending tile opens a list (`45a67bb`).** Saif: "the agent can't watch the pending
+commission" - the tile was a bare number. `portal_home` returns `pending_lines`: every
+dollar added to pending has a line with the reason it is not earned (needs your proof /
+submitted, waiting for the auditor / sent back by X: "reason" / approved, N% collected so
+far - the rest comes with the balance); a helper's line says "your 50% share - …" and
+names the owner; a charge with no fee and no carrier cost gets a line with `pending:
+null` and "?" so the total says "+ 1 not priced yet" instead of lying. `openPending()`
+reuses the earnings sheet (`#earnTitle`, `EARN_SHEET` remembers which one the period
+picker should reopen). Send-back and needs-proof lines open the client. harnessShare 77,
+mutateShare 65/65 (the run found one miss - the picker flipping back to Earned - closed
+with a real `setEarnPeriod` check; `mutateOne.mjs "<name>"` reruns a single mutation).
 
 ⚠️ **`agent_commission` is EMPTY** (checked Sep 16): every agent is on the code default
 of 10%. On 26424 that is $74.78 of commission, $37.39 each for Sammy and Jorge. If the
@@ -1211,7 +1223,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessTabs.mjs` 98 · `mutateTabs.mjs` 55 · `fixtureTabs.mjs` · `renderTabs.mjs` · `renderConsoleTabs.mjs` · `mock_tabs.mjs` | the client's tabs (Documents, Log, notes, thumbnails, sort) |
 | `harnessActivity.mjs` 36 · `mutateActivity.mjs` 38 · `renderActivity.mjs` · `mock_activity.html` | the activity report (My activity, Console Activity) |
 | `harnessDocCenter.mjs` 40 · `mutateDocCenter.mjs` 33 · `renderDocCenter.mjs` · `mock_doccenter.html` | the document center |
-| `harnessShare.mjs` 57 · `mutateShare.mjs` 49 · `renderPending.mjs` · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
+| `harnessShare.mjs` 77 · `mutateShare.mjs` 65 · `mutateOne.mjs` · `renderPending.mjs` · `renderPendingList.mjs` · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
 | `mutateSort.mjs` 8 · `mutateTodo.mjs` 4 · (updated) `harnessAuditReview.mjs` 162 | sort on every list; the todo banner's two numbers |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |

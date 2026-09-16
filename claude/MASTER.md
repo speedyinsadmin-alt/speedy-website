@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 15 late night. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `504b1b0`.
+Last written Sep 16 morning. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `cf1d6e4`.
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
 above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
@@ -301,6 +301,39 @@ list: "Refund confirmation" / "Español" beside "Email the client…". Veronica 
 slip was back-filled from the Console at 5:05 PM (`5eade5a6-…`, HawkSoft took it).
 harnessRefund 451 (section 15 reads the PDF text back out of the streams),
 harnessPayCard 41, harnessRequestUI 104, mutateSlip 36/36.
+
+**The client's tabs — Payments · Documents · Log (`cf1d6e4`, Sep 16).** Saif: "a log tab
+maybe, and an attachment tab for each client page". Mocked on the real page first, then
+built as one shared renderer, `admin/shared/clienttabs.js` + `.css`, used by the portal
+and the Console like paycard.js. The strip sits where "Recent activity" was; the old
+"Payments & documents ▾" toggle is gone (Payments is the default tab; `toggleFull` just
+opens it). **Documents:** grouped receipts & refund slips / carrier receipts / signed
+paperwork / ID & photos / other, newest first, every row says what it is FOR ("Proves
+the $559.12 payment of Sep 15"), who, when, size, HawkSoft ✓; a "Needs a label" shelf
+(no type, or "other" with nothing said) with the carrier page's type picker
+(`set_doc_type`); thumbnails = the row's own, a drawn mini-slip for platform-made
+receipts/slips, and for other PDFs page 1 drawn in the browser with pdf.js
+(cdnjs 4.8.69) and saved once through the new carrier action `set_thumb` (fills only
+an empty thumb_b64, small JPEG only); tap = preview in place, ⋯ = menu; "Add documents
+to this client" = carrier.html?docs=1&nopay=1. The carrier page now draws a PDF's
+first page at upload too (`pdfThumb`). **Log:** every event as a sentence, plus
+charges and documents with no event of their own, by day, names never emails
+(`agent_names` from the card), filters, the "not told" lines red; review events find
+their payment through the attachment they name. **Add a note:** `add_note` (agents
+too) → event `note.added` + HawkSoft client log note (channel 32), fail-soft.
+`portal_client` returns `events` (300), `agent_names`, `doc_label`/`amount`, and the
+refund note with names; `decide_refund` writes names from now on. Fixes: no "Add more
+documents" on a refund row; names in the refund note. harnessTabs 74, mutateTabs
+53/53, Chrome screenshots of all three tabs on both pages. **Not yet verified live in
+Chrome** (the Console tab lost its sign-in on reload): the pdf.js import from cdnjs
+inside the real page and the first `set_thumb` — Saif signs in, then open client
+18496 → Documents and watch the carrier receipt get its first-page thumbnail.
+
+**Next: the activity report** (Saif, Sep 16): the same Log sliced by PERSON — "My
+activity" in the portal (today / this week / a range; charged, uploaded, asked,
+submitted, notes; print / download) and "Activity" on the Console across everyone,
+by agent / branch / dates, with export. Mock first. Saif also asked for thumbnails
+(done above) and whether an agent can log while on a client's policy (the note box).
 
 **Next conversation: the document center** (see the block above). Saif's questions to
 answer first: who uses it and what they do first; honest-and-partial (platform documents
@@ -870,6 +903,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessProbeRefund.mjs` | 126 — now also: the owner login may run the probe, nobody else without the key |
 | (updated) `harnessRefund.mjs` 414 · `harnessRequestUI.mjs` 101 · `mutatePartial.mjs` 60 | the stepper sheet, the owner's notice, notify_refund |
 | `mutateSlip.mjs` 36 · (updated) `harnessRefund.mjs` 451 · `harnessPayCard.mjs` 41 · `harnessRequestUI.mjs` 104 · `renderSlipCard.mjs` · `mock_refundpdf.mjs/.html` | the refund confirmation slip |
+| `harnessTabs.mjs` 74 · `mutateTabs.mjs` 53 · `fixtureTabs.mjs` · `renderTabs.mjs` · `renderConsoleTabs.mjs` · `mock_tabs.mjs` | the client's tabs (Documents, Log, notes, thumbnails) |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

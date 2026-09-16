@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 15 night. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `7a51a66`.
+Last written Sep 15 late night. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `504b1b0`.
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
 above. **The harness set (every `harness*.mjs`, `mutate*.mjs`, `render*.mjs`,
@@ -277,6 +277,30 @@ typed/on-file, by whom, `late`, `earlier`), HawkSoft note, event
 list shows the notice and "Email the client…" while unsent. `harnessRefund` 414,
 `harnessRequestUI` 101, `mutatePartial` 60/60. **The refund_requests view now returns
 `client_emails` and `client_notice`.**
+
+**The refund confirmation slip (`504b1b0`).** Saif: agents should be able to generate a
+refund confirmation — clients with no email, and the audit. Built as the refund's
+counterpart of the payment receipt: same 306x590 slip and brand, drawn from the refund
+row's own facts (amount, which payment, card ending, Clover reference, reason; full /
+partial / cash / void wording), never from anything typed. `buildRefundSlipPdf` /
+`slipFactsOf` / `fileRefundSlip` in platform.js. English is filed the moment
+`issueRefund` succeeds — HawkSoft attachment (gzipped, the receipt's headers), vault
+row (`kind refund_confirmation`, `doc_type refund_confirmation_<lang>`, on the REFUND
+row's payment_id), event `refund.confirmation_filed` — and rides on the client email,
+at refund time and on `notify_refund`. Idempotent per refund + language; fail-soft; a
+HawkSoft refusal is recorded as `filed_hawksoft false`, never claimed. New action
+`refund_slip {refund_id, lang}` (agents too, in AGENT_ACTIONS): returns the row already
+there or renders and files one — how Spanish is made and how earlier refunds get theirs;
+made more than an hour after the refund it says "generated afterwards from the refund
+record" in the footer. `extra.voided` now stored on the refund row (card, inside 25
+min); older rows judged the same way; `portal_client` returns `voided`. Card: the slip
+line on every refund row — "Refund confirmation · English / Español", the filed line,
+"Not made yet — opens and files on first click", "Cancellation confirmation" on a void;
+never a generic chip; the tab opens BEFORE the request (popup rule). Console decided
+list: "Refund confirmation" / "Español" beside "Email the client…". Veronica Serna's
+slip was back-filled from the Console at 5:05 PM (`5eade5a6-…`, HawkSoft took it).
+harnessRefund 451 (section 15 reads the PDF text back out of the streams),
+harnessPayCard 41, harnessRequestUI 104, mutateSlip 36/36.
 
 **Next conversation: the document center** (see the block above). Saif's questions to
 answer first: who uses it and what they do first; honest-and-partial (platform documents
@@ -845,6 +869,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessRequestUI.mjs` | 70 — now also: the How-much chips and box, the queue's amount box, the card's decision line |
 | `harnessProbeRefund.mjs` | 126 — now also: the owner login may run the probe, nobody else without the key |
 | (updated) `harnessRefund.mjs` 414 · `harnessRequestUI.mjs` 101 · `mutatePartial.mjs` 60 | the stepper sheet, the owner's notice, notify_refund |
+| `mutateSlip.mjs` 36 · (updated) `harnessRefund.mjs` 451 · `harnessPayCard.mjs` 41 · `harnessRequestUI.mjs` 104 · `renderSlipCard.mjs` · `mock_refundpdf.mjs/.html` | the refund confirmation slip |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |
 | `harnessPortalMe.mjs` | 59 — sign-in, the branch, the commission dropdown |

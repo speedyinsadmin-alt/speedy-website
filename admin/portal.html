@@ -248,6 +248,16 @@
       </div>
     </div>
 
+    <!-- Speedy Chat: the entry to admin/chat.html, with the live counts (Sep 16) -->
+    <div id="chatBox" class="hide" onclick="openChat()" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none">&#128172;</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--blue-l)">Chat <span id="chatDuty" class="dim" style="font-weight:600;font-size:11px">· off duty</span></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:1px" id="chatLine">Website visitors waiting for an agent &rarr;</div>
+      </div>
+      <span id="chatCount" class="hide" style="background:var(--red);color:#fff;font-size:11px;font-weight:800;border-radius:99px;padding:2px 8px">0</span>
+    </div>
+
     <!-- to-do -->
     <div id="newsBell" class="hide" onclick="openNews()" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-bottom:8px;cursor:pointer">
       <span style="color:var(--blue-l);font-size:12.5px">What's new</span>
@@ -3127,6 +3137,23 @@ window.addEventListener('load', () => {
     google.accounts.id.renderButton($('#gsibtn'), { theme:'filled_blue', size:'large', shape:'pill', text:'signin_with' });
   }, 150);
 });
+</script>
+<script>
+/* Speedy Chat card: counts every 30s while signed in; TOKEN is the portal's own (top-level let, visible here) */
+function openChat(){ try{ if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); }catch(e){} location.href = '/admin/chat.html' + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : ''); }
+async function chatCounts(){
+  if(typeof TOKEN === 'undefined' || !TOKEN) return;
+  try{
+    const r = await fetch('/api/chat', { method:'POST', headers:{ 'Content-Type':'application/json', 'x-id-token': TOKEN }, body: JSON.stringify({ action:'inbox_count' }) });
+    const j = await r.json(); if(!j.ok) return;
+    const box = document.getElementById('chatBox'); box.classList.remove('hide');
+    document.getElementById('chatDuty').textContent = j.on_duty ? '· on duty' : '· off duty';
+    document.getElementById('chatDuty').style.color = j.on_duty ? 'var(--green)' : '';
+    const n = document.getElementById('chatCount'); n.textContent = j.waiting; n.classList.toggle('hide', !j.waiting);
+    document.getElementById('chatLine').textContent = j.waiting ? (j.waiting + ' waiting' + (j.mine ? ' · ' + j.mine + ' yours' : '') + ' →') : (j.mine ? j.mine + ' chat' + (j.mine > 1 ? 's' : '') + ' open with you →' : 'Website visitors waiting for an agent →');
+  }catch(e){}
+}
+setInterval(chatCounts, 30000); setTimeout(chatCounts, 2500);
 </script>
 <script>
 if ('serviceWorker' in navigator) {

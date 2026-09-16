@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Speedy Chat</title>
+<link rel="icon" type="image/png" href="/assets/pwa/icon-192.png">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  /* the portal's tokens, so this page IS the portal to an agent's eye */
+  :root{ --navy:#0b1029; --card:#0e1533; --ink:#e8ecff; --mute:#8f9ac4; --dim:#5c6690; --line:rgba(255,255,255,.10);
+    --blue:#4d7cfe; --blue-l:#7fa8ff; --green:#2fbf71; --amber:#f5a623; --amber-ink:#f5a623; --red:#e03131; --red-ink:#ff7b7b; --field:#161f45; --hair:rgba(255,255,255,.06) }
+  [data-theme="light"]{ --navy:#f4f6fb; --card:#ffffff; --ink:#101632; --mute:#5c6690; --dim:#8790ab; --line:rgba(16,22,50,.12); --blue:#2f5fe0; --blue-l:#2f5fe0; --green:#16874a; --amber:#f5a623; --amber-ink:#a35c00; --red:#d32f2f; --red-ink:#b3221f; --field:#eef1f8; --hair:rgba(16,22,50,.08) }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--navy);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+  .wrap{max-width:640px;margin:0 auto;padding:14px 14px 90px}
+  .hide{display:none!important}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+  .muted{color:var(--mute)} .dim{color:var(--dim)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .brand{font-size:20px;font-weight:800;letter-spacing:-.3px} .brand .s{color:var(--red)} .brand .i{color:var(--blue-l)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--ink);background:var(--field)}
+  .btn-blue{background:var(--blue);color:#fff} .btn-red{background:var(--red);color:#fff} .btn-green{background:var(--green);color:#fff}
+  .btn-ghost{background:transparent;color:var(--mute);border:1.5px solid var(--line);font-weight:600}
+  .btn[disabled]{opacity:.5;cursor:default}
+  input,select,textarea{width:100%;background:var(--field);border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--ink);font-size:14px;outline:none;font-family:inherit}
+  input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+  textarea{min-height:48px;resize:vertical;line-height:1.45}
+  label{font-size:12px;color:var(--mute);display:block;margin-bottom:5px}
+  /* header */
+  .hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .hdr .back{color:var(--mute);text-decoration:none;font-size:20px;padding:4px 8px}
+  .duty{margin-left:auto;display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:7px 12px 7px 9px;font-size:12.5px;font-weight:700;background:var(--field);border:1.5px solid var(--line);cursor:pointer;user-select:none}
+  .duty i{width:10px;height:10px;border-radius:50%;background:var(--dim)} .duty.on{border-color:var(--green)} .duty.on i{background:var(--green);box-shadow:0 0 0 3px rgba(47,191,113,.25)}
+  /* segments + rows */
+  .seg{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px}
+  .seg span{flex:none;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:99px;border:1px solid var(--line);color:var(--mute);cursor:pointer;white-space:nowrap}
+  .seg span.on{background:var(--field);color:var(--ink);border-color:var(--blue)}
+  .seg b{background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:99px;margin-left:5px;vertical-align:middle}
+  .conv{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+  .conv.wait{border-color:var(--amber)} .conv.dimmed{opacity:.6}
+  .av{width:36px;height:36px;border-radius:50%;background:var(--field);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:var(--blue-l);flex:none}
+  .conv .t{flex:1;min-width:0}
+  .conv .n{font-weight:700;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap} .conv .n small{font-weight:600;color:var(--mute);font-size:11px}
+  .conv .p{font-size:12.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .conv .r{text-align:right;font-size:11px;color:var(--dim);flex:none} .conv .r b{display:block;color:var(--amber-ink);font-size:12px}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+  .chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;background:var(--field);color:var(--mute);border:1px solid var(--line);white-space:nowrap}
+  .chip.br{color:var(--blue-l)} .chip.me{background:var(--green);color:#fff;border-color:var(--green)} .chip.cl{color:var(--green);border-color:var(--green)} .chip.un{background:var(--red);color:#fff;border-color:var(--red)}
+  .claim{background:var(--blue);color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;border:0;flex:none;align-self:center;cursor:pointer;font-family:inherit}
+  .empty{text-align:center;color:var(--dim);padding:28px 10px;font-size:13.5px}
+  /* thread */
+  .thead{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+  .thead .n{font-weight:800;font-size:17px;line-height:1.15} .thead .s{font-size:12px;color:var(--mute);margin-top:2px;line-height:1.5}
+  .thead a{color:var(--blue-l);text-decoration:none}
+  .match{background:var(--card);border:1px solid var(--green);border-radius:12px;padding:11px 12px;margin-bottom:10px;font-size:12.5px}
+  .match .h{font-weight:800;color:var(--green);font-size:12px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
+  .match .k{display:flex;justify-content:space-between;gap:8px;margin-top:3px} .match .k span:first-child{color:var(--mute)}
+  .thread{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px;max-height:52vh;overflow-y:auto}
+  .m{max-width:86%;font-size:13.5px;line-height:1.45;padding:9px 12px;border-radius:12px;white-space:pre-wrap;word-break:break-word}
+  .m.v{align-self:flex-start;background:var(--field);color:var(--ink);border-bottom-left-radius:4px}
+  .m.a{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:4px}
+  .m.w{align-self:flex-end;background:rgba(245,166,35,.15);border:1px dashed var(--amber);color:var(--ink);border-bottom-right-radius:4px}
+  .m.sys{align-self:center;background:transparent;color:var(--dim);font-size:11px;padding:2px;text-align:center}
+  .m small{display:block;font-size:10px;opacity:.65;margin-top:3px}
+  .canned{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px}
+  .canned span{flex:none;font-size:12px;padding:6px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute);background:var(--card);cursor:pointer;white-space:nowrap}
+  .reply{display:flex;gap:8px;align-items:flex-end}
+  .reply button{background:var(--blue);color:#fff;border:0;border-radius:10px;width:46px;height:46px;font-size:18px;flex:none;cursor:pointer}
+  .reply.whisper textarea{border-color:var(--amber);background:rgba(245,166,35,.08)} .reply.whisper button{background:var(--amber);color:#2a1a00}
+  .acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap} .acts .btn{flex:1;padding:10px;font-size:13px;min-width:120px}
+  .wtoggle{font-size:12px;color:var(--amber-ink);cursor:pointer;user-select:none;margin:6px 0 0;display:inline-flex;gap:6px;align-items:center}
+  .note{font-size:12.5px;color:var(--mute);background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:10px;line-height:1.5}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--navy);padding:10px 16px;border-radius:99px;font-size:13px;font-weight:700;display:none;z-index:50;max-width:90vw}
+  .sheet{position:fixed;inset:0;background:rgba(6,9,24,.7);display:none;align-items:flex-end;justify-content:center;z-index:40} .sheet.on{display:flex}
+  .sheet .card{width:100%;max-width:640px;border-radius:16px 16px 0 0;margin:0;padding:18px 16px 26px}
+  .prev{font-size:12px;color:var(--mute);margin-bottom:10px} .prev a{color:var(--blue-l);text-decoration:none;margin-right:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- gate -->
+  <div id="gate">
+    <div class="card" style="text-align:center;padding:30px 20px">
+      <div class="brand" style="margin-bottom:6px"><span class="s">SPEEDY</span> <span class="i">CHAT</span></div>
+      <div class="muted" style="margin-bottom:18px">Sign in with your @speedyins.com account</div>
+      <div id="gsibtn" style="display:inline-block"></div>
+      <div id="gateerr" class="hide" style="color:var(--red-ink);font-size:13px;margin-top:14px">That account isn't set up for the portal yet.</div>
+    </div>
+  </div>
+
+  <!-- app -->
+  <div id="app" class="hide">
+    <div class="hdr">
+      <a class="back" href="/admin/portal.html" id="backPortal" title="Portal">&larr;</a>
+      <div><div class="brand" style="font-size:17px"><span class="s">SPEEDY</span> <span class="i">CHAT</span></div><div class="dim" style="font-size:11px" id="meLine">—</div></div>
+      <div class="duty" id="duty" onclick="toggleDuty()"><i></i><span id="dutyText">Off duty</span></div>
+    </div>
+
+    <!-- queue -->
+    <div id="queue">
+      <div class="seg" id="seg">
+        <span data-seg="waiting" class="on">Waiting<b id="nW">0</b></span><span data-seg="mine">Mine<b id="nM">0</b></span><span data-seg="team">Team<b id="nT">0</b></span><span data-seg="closed">Closed today<b id="nC">0</b></span>
+      </div>
+      <div id="list"></div>
+      <div class="note" id="dutyNote">—</div>
+    </div>
+
+    <!-- thread -->
+    <div id="view" class="hide">
+      <div class="thead">
+        <a href="#" class="back" onclick="showQueue();return false" style="text-decoration:none;color:var(--mute);font-size:20px">&larr;</a>
+        <div style="flex:1;min-width:0"><div class="n" id="tName">—</div><div class="s" id="tSub">—</div></div>
+        <div style="display:flex;gap:6px;flex:none" id="tLinks"></div>
+      </div>
+      <div class="prev hide" id="tPrev"></div>
+      <div id="tClient"></div>
+      <div class="thread" id="tThread"></div>
+      <div id="tCanned" class="canned"></div>
+      <div class="reply" id="replyBox"><textarea id="rText" placeholder="Reply…" rows="1"></textarea><button onclick="sendReply()" id="rBtn">&#10148;</button></div>
+      <div class="wtoggle hide" id="wToggle" onclick="toggleWhisper()">&#128065; Whisper (agents only): <b id="wState">off</b></div>
+      <div class="acts" id="tActs"></div>
+    </div>
+  </div>
+</div>
+
+<!-- sheets -->
+<div class="sheet" id="mobileSheet"><div class="card">
+  <div style="font-weight:800;font-size:16px;margin-bottom:4px">Your mobile number</div>
+  <div class="muted" style="font-size:13px;margin-bottom:12px">When a chat comes in while you're on duty, this number gets the text with the link.</div>
+  <label>Mobile</label><input id="mobileIn" type="tel" placeholder="(951) 555-0100">
+  <div id="mobileErr" style="color:var(--red-ink);font-size:12.5px;margin-top:6px" class="hide"></div>
+  <div class="acts"><button class="btn btn-ghost" onclick="closeSheet('mobileSheet')">Cancel</button><button class="btn btn-green" onclick="saveMobileAndGoOn()">Go on duty</button></div>
+</div></div>
+<div class="sheet" id="handSheet"><div class="card">
+  <div style="font-weight:800;font-size:16px;margin-bottom:10px">Hand this chat to</div>
+  <label>Agent</label><select id="handSel"></select>
+  <div class="acts"><button class="btn btn-ghost" onclick="closeSheet('handSheet')">Cancel</button><button class="btn btn-blue" onclick="doHandoff()">Hand off</button></div>
+</div></div>
+<div class="sheet" id="closeSheet"><div class="card">
+  <div style="font-weight:800;font-size:16px;margin-bottom:4px">Close this chat</div>
+  <div class="muted" style="font-size:13px;margin-bottom:12px" id="closeHint">—</div>
+  <label>Note (optional)</label><textarea id="closeNote" placeholder="What was agreed, what's next…"></textarea>
+  <div class="acts" id="closeActs"></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
+const API = '/api/chat';
+let TOKEN = null, ME = null, INBOX = null, SEG = 'waiting', OPEN = null, THREAD = null, WHISPER = false, pollQ = null, pollT = null, lastWaitingIds = new Set(), firstInbox = true;
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pretty = p => (p && p.length === 10) ? `(${p.slice(0, 3)}) ${p.slice(3, 6)}-${p.slice(6)}` : (p || '');
+const hhmm = ts => ts ? new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const initials = n => String(n || '?').split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
+function toast(t) { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(e._t); e._t = setTimeout(() => e.style.display = 'none', 2600); }
+function openSheet(id) { $('#' + id).classList.add('on'); } function closeSheet(id) { $('#' + id).classList.remove('on'); }
+
+/* ---------- identity: the portal's handoff token, a session copy, or Google ---------- */
+function jwtEmail(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email.toLowerCase(); } catch { return null; } }
+function jwtAlive(t) { try { const c = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); return !!c.exp && c.exp * 1000 > Date.now() + 30000; } catch { return false; } }
+function hashParam(k) { const m = location.hash.match(new RegExp('[#&]' + k + '=([^&]+)')); return m ? decodeURIComponent(m[1]) : null; }
+async function api(body) {
+  const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-id-token': TOKEN || '' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ ok: false, error: 'bad reply' }));
+  if (r.status === 401) { signedOut(); throw new Error('Signed out'); }
+  return j;
+}
+function onCred(resp) { TOKEN = resp.credential; try { sessionStorage.setItem('speedy_chat_tok', TOKEN); } catch (e) {} boot(); }
+function signedOut() { TOKEN = null; ME = null; stopPolls(); $('#app').classList.add('hide'); $('#gate').classList.remove('hide'); if (window.google) google.accounts.id.prompt(); }
+function stopPolls() { clearInterval(pollQ); clearInterval(pollT); pollQ = pollT = null; }
+async function boot() {
+  try {
+    const j = await api({ action: 'inbox' });
+    if (!j.ok) { $('#gateerr').classList.remove('hide'); return; }
+    $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
+    applyInbox(j);
+    $('#backPortal').addEventListener('click', () => { try { localStorage.setItem('speedy_handoff_tok', TOKEN); } catch (e) {} });
+    pollQ = setInterval(refreshInbox, 5000);
+    const c = hashParam('c'); if (c) openThread(Number(c));
+  } catch (e) { /* signedOut handled */ }
+}
+window.addEventListener('load', () => {
+  const t = hashParam('tok'); let tok = t;
+  if (!tok) { try { tok = sessionStorage.getItem('speedy_chat_tok'); } catch (e) {} }
+  if (!tok) { try { tok = localStorage.getItem('speedy_handoff_tok'); } catch (e) {} }
+  if (t) history.replaceState(null, '', location.pathname + (hashParam('c') ? '#c=' + hashParam('c') : ''));
+  if (tok && jwtAlive(tok) && jwtEmail(tok)) onCred({ credential: tok });
+  const iv = setInterval(() => { if (!window.google) return; clearInterval(iv);
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
+    google.accounts.id.renderButton($('#gsibtn'), { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'signin_with' }); }, 150);
+  $('#seg').addEventListener('click', e => { const s = e.target.closest('[data-seg]'); if (!s) return; SEG = s.dataset.seg; renderList(); });
+  $('#rText').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && TOKEN) refreshInbox(); });
+});
+
+/* ---------- the queue ---------- */
+async function refreshInbox() { try { const j = await api({ action: 'inbox' }); if (j.ok) applyInbox(j); } catch (e) {} }
+function applyInbox(j) {
+  INBOX = j; ME = j.me;
+  $('#meLine').textContent = ME.name + (ME.admin ? ' · admin' : '');
+  $('#duty').classList.toggle('on', ME.on_duty); $('#dutyText').textContent = ME.on_duty ? 'On duty' : 'Off duty';
+  $('#nW').textContent = j.waiting.length; $('#nM').textContent = j.mine.length; $('#nT').textContent = j.team.length; $('#nC').textContent = j.closed.length;
+  const on = j.on_duty.map(a => a.name).join(', ');
+  $('#dutyNote').innerHTML = `<b style="color:var(--ink)">On duty now:</b> ${on ? esc(on) : '<span style="color:var(--amber-ink)">nobody — chats go straight to leads</span>'}. New chats text the on-duty agents in turn; unclaimed after ${esc(j.settings.claim_window_s)}s they text the next in line.`;
+  /* a new waiting chat: sound + title */
+  const ids = new Set(j.waiting.map(c => c.id));
+  if (!firstInbox && [...ids].some(id => !lastWaitingIds.has(id))) beep();
+  lastWaitingIds = ids; firstInbox = false;
+  document.title = (j.waiting.length ? `(${j.waiting.length}) ` : '') + 'Speedy Chat';
+  if (!OPEN) renderList();
+}
+function renderList() {
+  document.querySelectorAll('#seg [data-seg]').forEach(s => s.classList.toggle('on', s.dataset.seg === SEG));
+  const rows = INBOX[SEG] || [];
+  if (!rows.length) { $('#list').innerHTML = `<div class="empty">${SEG === 'waiting' ? 'Nobody waiting.' : SEG === 'mine' ? 'No chats claimed by you.' : SEG === 'team' ? 'No other agent has a chat open.' : 'Nothing closed today.'}</div>`; return; }
+  $('#list').innerHTML = rows.map(c => `
+    <div class="conv ${c.status === 'waiting' ? 'wait' : ''} ${SEG === 'closed' ? 'dimmed' : ''}" onclick="openThread(${c.id})">
+      <div class="av">${esc(initials(c.name || (c.lang === 'es' ? 'ES' : 'V')))}</div>
+      <div class="t">
+        <div class="n">${esc(c.name || 'Visitor')} <small>${c.phone ? esc(pretty(c.phone)) : (c.status === 'waiting' ? 'no phone yet' : '')}</small>${c.unread ? `<span class="chip un">${c.unread} new</span>` : ''}</div>
+        <div class="p">${c.last ? (c.last.from === 'agent' ? '<span class="dim">You:</span> ' : '') + esc(c.last.body) : ''}</div>
+        <div class="chips"><span class="chip br">&#128205; ${esc(c.branch_name)}</span>${c.topic ? `<span class="chip">${esc(c.topic)}</span>` : ''}${c.lang === 'es' ? '<span class="chip">ES</span>' : ''}${c.client_no ? `<span class="chip cl">Client ${c.client_no}</span>` : '<span class="chip">New</span>'}${c.claimed_name ? `<span class="chip me">${esc(c.claimed_name)}</span>` : ''}${c.outcome ? `<span class="chip cl">&rarr; ${esc(c.outcome)}${c.lead_id ? ' #' + c.lead_id : ''}</span>` : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}</div>
+      </div>
+      <div class="r">${c.status === 'waiting' ? `<b>${mmss(c.waited_s)}</b>waiting` : hhmm(c.claimed_at || c.created_at)}</div>
+      ${c.status === 'waiting' ? `<button class="claim" onclick="event.stopPropagation();claim(${c.id})">Claim</button>` : ''}
+    </div>`).join('');
+}
+async function claim(id) {
+  const j = await api({ action: 'claim', id });
+  if (j.ok) { toast('Yours.'); await refreshInbox(); openThread(id); }
+  else { toast(j.error || 'Could not claim'); refreshInbox(); }
+}
+function beep() { try { const a = new (window.AudioContext || window.webkitAudioContext)(); const o = a.createOscillator(), g = a.createGain(); o.connect(g); g.connect(a.destination); o.frequency.value = 880; g.gain.value = .08; o.start(); setTimeout(() => { o.frequency.value = 1175; }, 120); setTimeout(() => { o.stop(); a.close(); }, 260); } catch (e) {} }
+
+/* ---------- duty ---------- */
+async function toggleDuty() {
+  if (ME.on_duty) { const j = await api({ action: 'duty', on: false }); if (j.ok) { toast('Off duty'); refreshInbox(); } return; }
+  if (!ME.mobile) { $('#mobileIn').value = ''; $('#mobileErr').classList.add('hide'); openSheet('mobileSheet'); return; }
+  const j = await api({ action: 'duty', on: true });
+  if (j.ok) { toast('On duty — chats will text ' + j.mobile); refreshInbox(); } else if (j.code === 'need_mobile') openSheet('mobileSheet'); else toast(j.error);
+}
+async function saveMobileAndGoOn() {
+  const j = await api({ action: 'duty', on: true, mobile: $('#mobileIn').value });
+  if (!j.ok) { $('#mobileErr').textContent = j.error; $('#mobileErr').classList.remove('hide'); return; }
+  closeSheet('mobileSheet'); toast('On duty — chats will text ' + j.mobile); refreshInbox();
+}
+
+/* ---------- a conversation ---------- */
+function showQueue() { OPEN = null; THREAD = null; clearInterval(pollT); pollT = null; $('#view').classList.add('hide'); $('#queue').classList.remove('hide'); history.replaceState(null, '', location.pathname); renderList(); }
+async function openThread(id) {
+  OPEN = id; $('#queue').classList.add('hide'); $('#view').classList.remove('hide'); history.replaceState(null, '', location.pathname + '#c=' + id);
+  await loadThread(true);
+  clearInterval(pollT); pollT = setInterval(() => loadThread(false), 3000);
+}
+async function loadThread(first) {
+  const j = await api({ action: 'thread', id: OPEN }); if (!j.ok || OPEN !== j.conversation.id) return;
+  const changed = !THREAD || THREAD.messages.length !== j.messages.length || THREAD.conversation.status !== j.conversation.status || THREAD.conversation.claimed_by !== j.conversation.claimed_by;
+  THREAD = j; if (first || changed) renderThread(first);
+}
+const CANNED = {
+  en: [['Hours', b => `We're open Mon–Fri 9am–7pm and Sat 10am–5pm (Moreno Valley also Sun 10–5). ${b} is at (951) 695-1500.`], ['SR-22 docs', () => 'For the SR-22 I need a photo of your driver license, the DMV letter, and your current insurance card if you have one. You can text them to me at this number.'],
+    ['Pay link', () => 'You can pay securely here: https://www.speedyins.com/pay.html — card or bank, no fees.'], ['Quote link', () => 'Start your quote here and I\'ll pick it up on my side: https://www.speedyins.com/quote.html'],
+    ['Tow/NEMT intake', () => 'For commercial trucks or medical transport, this short form gets me everything I need to quote: https://www.speedyins.com/trucking-insurance.html#quote'], ['Hablo español', () => '¿Prefiere continuar en español? Con gusto.'], ['Call you?', () => 'Would it be easier if I called you right now? Which number is best?']],
+  es: [['Horario', b => `Abrimos lunes a viernes 9am–7pm y sábados 10am–5pm (Moreno Valley también domingos 10–5). ${b}: (951) 695-1500.`], ['Docs SR-22', () => 'Para el SR-22 necesito foto de su licencia, la carta del DMV y su tarjeta de seguro actual si la tiene. Me las puede mandar por texto a este número.'],
+    ['Link de pago', () => 'Puede pagar de forma segura aquí: https://www.speedyins.com/pay.html — tarjeta o banco, sin cargos.'], ['Cotización', () => 'Empiece su cotización aquí y yo la sigo de mi lado: https://www.speedyins.com/cotizar.html'],
+    ['¿Le llamo?', () => '¿Le sería más fácil si le llamo ahora mismo? ¿A qué número?']],
+};
+function renderThread(first) {
+  const c = THREAD.conversation, me = THREAD.me;
+  const mine = c.claimed_by === me.email, canAct = mine || me.admin, live = c.status !== 'closed';
+  $('#tName').textContent = c.visitor_name || (c.lang === 'es' ? 'Visitante' : 'Visitor');
+  $('#tSub').innerHTML = `&#128205; ${esc(c.branch_name)}${c.topic ? ' · ' + esc(c.topic) : ''} · ${c.lang.toUpperCase()} · started ${hhmm(c.created_at)} · <span class="chip ${c.status === 'waiting' ? '' : c.status === 'closed' ? 'cl' : 'me'}">${esc(c.status === 'active' ? (mine ? 'Mine' : (c.claimed_name || 'claimed')) : c.status)}</span> ${live ? (c.visitor_here ? '<span class="chip cl">visitor here</span>' : '<span class="chip">visitor away' + (c.visitor_phone ? ' — replies go by text' : '') + '</span>') : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}`;
+  $('#tLinks').innerHTML = c.visitor_phone ? `<a class="chip" href="tel:+1${c.visitor_phone}">&#128222; ${esc(pretty(c.visitor_phone))}</a>` : '<span class="chip">no phone</span>';
+  const prev = THREAD.previous || [];
+  $('#tPrev').classList.toggle('hide', !prev.length);
+  $('#tPrev').innerHTML = prev.length ? 'Earlier chats from this number: ' + prev.map(p => `<a href="#" onclick="openThread(${p.id});return false">#${p.id} ${new Date(p.created_at).toLocaleDateString()} · ${esc(p.outcome || p.status)}</a>`).join('') : '';
+  const cl = THREAD.client;
+  $('#tClient').innerHTML = cl && cl.name ? `<div class="match"><div class="h">&#10004; Matched by phone — client ${cl.client_no}</div>
+      <div class="k"><span>Name</span><span><b>${esc(cl.name)}</b>${cl.city ? ' · ' + esc(cl.city) : ''}</span></div>
+      <div class="k"><span>Branch / producer</span><span>${esc(cl.branch || '—')}${cl.producer ? ' · ' + esc(cl.producer) : ''}</span></div>
+      ${(cl.policies || []).slice(0, 3).map(p => `<div class="k"><span>${esc(p.lob || 'Policy')}</span><span>${esc(p.carrier || '')} ${p.number ? '· ' + esc(p.number) : ''}${p.expires ? ' · exp ' + esc(p.expires) : ''}${p.status ? ' · ' + esc(p.status) : ''}</span></div>`).join('')}
+      ${cl.last_payment ? `<div class="k"><span>Last payment</span><span>$${Number(cl.last_payment.amount).toFixed(2)} · ${new Date(cl.last_payment.ts).toLocaleDateString()} · ${esc(cl.last_payment.audit || '')}</span></div>` : ''}
+      ${cl.last_payment && Number(cl.last_payment.owed) > 0 ? `<div class="k"><span>Open</span><span style="color:var(--amber-ink)">Owes $${Number(cl.last_payment.owed).toFixed(2)}</span></div>` : ''}
+    </div>` : (c.client_no ? `<div class="match"><div class="h">Client ${c.client_no}</div></div>` : '');
+  const th = $('#tThread');
+  th.innerHTML = THREAD.messages.map(m => {
+    if (m.sender_kind === 'system') return `<div class="m sys">${esc(m.body)} · ${hhmm(m.ts)}</div>`;
+    if (m.sender_kind === 'visitor') return `<div class="m v">${esc(m.body)}<small>${hhmm(m.ts)}</small></div>`;
+    if (m.audience === 'agents') return `<div class="m w">&#128065; ${esc(m.name || m.sender)} (whisper): ${esc(m.body)}<small>${hhmm(m.ts)}</small></div>`;
+    return `<div class="m a">${esc(m.body)}<small>${esc(m.name || '')} · ${hhmm(m.ts)}${m.channel === 'sms' ? ' · sent as text' : ''}</small></div>`;
+  }).join('');
+  th.scrollTop = th.scrollHeight;
+  const bn = c.branch_name.replace('Riverside — ', '');
+  $('#tCanned').innerHTML = (CANNED[c.lang] || CANNED.en).map(([l, f], i) => `<span onclick="useCanned(${i})">${esc(l)}</span>`).join('');
+  $('#tCanned')._bn = bn;
+  $('#replyBox').classList.toggle('hide', !(live && canAct)); $('#wToggle').classList.toggle('hide', !(live && me.admin));
+  $('#rText').placeholder = WHISPER ? 'Whisper to agents (the visitor never sees this)…' : ('Reply to ' + (c.visitor_name || 'the visitor') + '…');
+  const acts = [];
+  if (live && c.status === 'waiting') acts.push(`<button class="btn btn-blue" onclick="claim(${c.id})">Claim this chat</button>`);
+  if (live && c.status === 'active' && !mine && me.admin) acts.push(`<button class="btn btn-ghost" onclick="takeover()">Take over</button>`);
+  if (live && canAct && c.status === 'active') { acts.push(`<button class="btn btn-ghost" onclick="openHandoff()">Hand to…</button>`); acts.push(`<button class="btn btn-ghost" onclick="unclaim()">Back to queue</button>`); }
+  if (live && canAct) acts.push(`<button class="btn btn-red" onclick="openClose()">Close…</button>`);
+  if (!live && c.lead_id) acts.push(`<span class="chip cl" style="align-self:center">&rarr; Lead #${c.lead_id}</span>`);
+  $('#tActs').innerHTML = acts.join('');
+  if (first) $('#rText').value = '';
+}
+function useCanned(i) { const c = THREAD.conversation; const f = (CANNED[c.lang] || CANNED.en)[i][1]; $('#rText').value = f($('#tCanned')._bn); $('#rText').focus(); }
+function toggleWhisper() { WHISPER = !WHISPER; $('#wState').textContent = WHISPER ? 'ON' : 'off'; $('#replyBox').classList.toggle('whisper', WHISPER); renderThread(false); }
+async function sendReply() {
+  const t = $('#rText').value.trim(); if (!t || !OPEN) return;
+  $('#rBtn').disabled = true;
+  const j = await api({ action: 'reply', id: OPEN, body: t, whisper: WHISPER });
+  $('#rBtn').disabled = false;
+  if (!j.ok) { toast(j.error || 'Could not send'); return; }
+  $('#rText').value = ''; if (j.via === 'sms') toast('Visitor is away — sent as a text'); await loadThread(false);
+}
+async function takeover() { const j = await api({ action: 'takeover', id: OPEN }); toast(j.ok ? 'Yours now.' : j.error); loadThread(false); }
+async function unclaim() { const j = await api({ action: 'unclaim', id: OPEN }); toast(j.ok ? 'Back in the queue.' : j.error); if (j.ok) showQueue(); refreshInbox(); }
+function openHandoff() {
+  const names = (INBOX && INBOX.on_duty || []).filter(a => a.email !== ME.email);
+  $('#handSel').innerHTML = names.length ? names.map(a => `<option value="${esc(a.email)}">${esc(a.name)} (on duty)</option>`).join('') : '<option value="">Nobody else is on duty</option>';
+  openSheet('handSheet');
+}
+async function doHandoff() { const to = $('#handSel').value; if (!to) return; const j = await api({ action: 'handoff', id: OPEN, to }); closeSheet('handSheet'); toast(j.ok ? 'Handed off.' : j.error); if (j.ok) showQueue(); refreshInbox(); }
+function openClose() {
+  const c = THREAD.conversation;
+  $('#closeNote').value = '';
+  $('#closeHint').textContent = c.client_no ? `Client ${c.client_no} is matched — "Log on client" puts the transcript on their Log tab.` : (c.visitor_phone || c.visitor_email ? 'No client matched — "Make a lead" puts it in the Leads queue with the transcript.' : 'No phone or email was given: it can only be closed as abandoned or spam.');
+  const can = !!(c.visitor_phone || c.visitor_email);
+  $('#closeActs').innerHTML = `${c.client_no ? `<button class="btn btn-blue" onclick="doClose('logged')">Log on client ${c.client_no}</button>` : ''}${can ? `<button class="btn btn-green" onclick="doClose('lead')">Make a lead</button>` : ''}<button class="btn btn-ghost" onclick="doClose('abandoned')">Abandoned</button><button class="btn btn-ghost" onclick="doClose('spam')">Spam${ME.admin ? ' + block' : ''}</button>`;
+  openSheet('closeSheet');
+}
+async function doClose(outcome) {
+  const j = await api({ action: 'close', id: OPEN, outcome, note: $('#closeNote').value, block: outcome === 'spam' && ME.admin });
+  closeSheet('closeSheet');
+  if (!j.ok) { toast(j.error || 'Could not close'); return; }
+  toast(outcome === 'lead' ? `Lead #${j.lead_id} created` : outcome === 'logged' ? 'Logged on the client' : 'Closed');
+  showQueue(); refreshInbox();
+}
+</script>
+</body>
+</html>

@@ -143,6 +143,7 @@ export default async function handler(req, res) {
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
   const s = sb();
   if (!s) return res.status(500).json({ ok: false, error: 'Storage not configured' });
+  if (AGENT_ACTIONS.has(action)) return agentHandler(req, res, s, b, action);
 
   /* ------------------------------------------------ start ------------------------------------------------ */
   if (action === 'start') {
@@ -179,6 +180,10 @@ export default async function handler(req, res) {
     const greeting = GREET[lang](BRANCHES[branch]);
     await sbPost(s, 'messages', { conversation_id: conv.row.id, sender_kind: 'system', audience: 'visitor', channel: 'web', body: greeting, is_test: conv.row.is_test });
     if (clean(b.topic)) await sbPost(s, 'messages', { conversation_id: conv.row.id, sender_kind: 'visitor', audience: 'visitor', channel: 'web', body: clean(b.topic, 60), is_test: conv.row.is_test });
+    if (reason === 'nobody_on_duty') {
+      const e = await escalate(s, cfg, `Speedy Chat: nobody is on duty and ${who(conv.row)} just arrived (${BRANCHES[branch]}). Go on duty: ${SITE}/admin/chat.html`, conv.row);
+      if (e.sent) await sbPatch(s, `conversations?id=eq.${conv.row.id}`, { alerts: [{ kind: 'escalation', to: 'escalation', at: new Date().toISOString(), ok: true, reason: 'nobody_on_duty' }] });
+    }
     await record(s, { actor: 'website', kind: 'chat.start', source: 'chat', client_no,
       payload: { conversation_id: conv.row.id, branch, lang, mode, reason, topic: clean(b.topic, 60), is_test: conv.row.is_test } });
     return res.status(200).json({ ok: true, token, id: conv.row.id, mode, reason, opens_at: st.opens_at || null, greeting, client_known: !!client_no });
@@ -217,6 +222,7 @@ export default async function handler(req, res) {
     const cfg = await settings(s);
     const waitedS = (Date.now() - new Date(conv.created_at).getTime()) / 1000;
     const stale = conv.status === 'waiting' && waitedS > (Number(cfg.claim_window_s) || 60) * 3;
+    if (conv.status === 'waiting' && !stale) await alertChain(s, conv, cfg);
     return res.status(200).json({ ok: true, status: stale ? 'missed' : conv.status, agent, messages: ms.rows.map(m => ({ id: m.id, ts: m.ts, from: m.sender_kind, name: m.sender_kind === 'agent' ? (agent && agent.name) : null, body: m.body })) });
   }
 
@@ -244,6 +250,332 @@ export default async function handler(req, res) {
     await record(s, { actor: 'website', kind: 'chat.left', source: 'chat', client_no: merged.client_no || null,
       payload: { conversation_id: conv.id, lead_id, was: conv.status, is_test: conv.is_test } });
     return res.status(200).json({ ok: true, lead_id });
+  }
+
+  return res.status(400).json({ ok: false, error: 'Unknown action' });
+}
+
+/* ===========================================================================
+   AGENT SIDE (stage 2, Sep 16 2026) — behind x-id-token, the portal's Google token.
+   Same identity rules as platform.js: aud must be our client id, email verified,
+   @speedyins.com, and an ACTIVE row in `agents`. admin = role admin | owner.
+
+   Actions: inbox, inbox_count, thread, claim, unclaim, reply, handoff, close, duty,
+            takeover (admin), set_setting (admin)
+   The SMS chain (who gets texted when) lives in alertChain(), driven by the visitor's
+   own poll while the chat is waiting - no cron, and it runs exactly while someone
+   is actually waiting.
+   =========================================================================== */
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
+const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting']);
+const SITE = 'https://www.speedyins.com';
+const VISITOR_GONE_MS = 2 * 60 * 1000;
+const ESCALATION_THROTTLE_MS = 15 * 60 * 1000;
+
+/* tokeninfo once per token, not once per 3-second poll */
+const tokCache = new Map();
+async function verifyAgent(req, s) {
+  const tok = String(req.headers['x-id-token'] || '');
+  if (!tok) return null;
+  let c = tokCache.get(tok);
+  if (!c || c.exp < Date.now()) {
+    try {
+      const g = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(tok));
+      const j = await g.json();
+      if (!g.ok || j.aud !== GOOGLE_CLIENT_ID || String(j.email_verified) !== 'true') return null;
+      const email = String(j.email || '').toLowerCase();
+      if (!email.endsWith('@speedyins.com')) return null;
+      c = { email, exp: Math.min(Number(j.exp) * 1000, Date.now() + 10 * 60 * 1000) };
+      tokCache.set(tok, c); if (tokCache.size > 500) tokCache.clear();
+    } catch { return null; }
+  }
+  const a = await sbGet(s, `agents?email=eq.${enc(c.email)}&active=is.true&select=email,full_name,branch,role&limit=1`);
+  if (!a.rows[0]) return null;
+  const r = a.rows[0];
+  return { email: c.email, name: r.full_name || c.email, first: String(r.full_name || c.email).split(' ')[0], branch: r.branch || null, admin: r.role === 'admin' || r.role === 'owner' };
+}
+
+async function smsSend(to, text) {
+  /* through our own /api/sms with the admin key: one RingCentral auth flow in the codebase */
+  const key = process.env.ADMIN_KEY;
+  if (!key) return { ok: false, error: 'ADMIN_KEY not set' };
+  try {
+    const r = await fetch(`${SITE}/api/sms`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': key }, body: JSON.stringify({ action: 'send', to, text: text.slice(0, 1000), purpose: 'chat' }) });
+    return await r.json();
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+}
+const chatLink = id => `${SITE}/admin/chat.html#c=${id}`;
+const who = conv => conv.visitor_name || (conv.lang === 'es' ? 'a Spanish-speaking visitor' : 'a visitor');
+
+/* on-duty agents with a fresh heartbeat and a mobile, with names */
+async function dutyRoster(s) {
+  const since = new Date(Date.now() - HEARTBEAT_MS).toISOString();
+  const d = await sbGet(s, `agent_duty?on_duty=is.true&last_seen_at=gte.${since}&select=agent_email,mobile,since,last_seen_at&order=since.asc`);
+  const emails = d.rows.map(r => r.agent_email);
+  const names = {};
+  if (emails.length) { const a = await sbGet(s, `agents?email=in.(${emails.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = r.full_name; }
+  return d.rows.map(r => ({ email: r.agent_email, name: names[r.agent_email] || r.agent_email, first: String(names[r.agent_email] || r.agent_email).split(' ')[0], mobile: r.mobile, since: r.since }));
+}
+
+async function escalate(s, cfg, text, conv) {
+  const phones = Array.isArray(cfg.escalation_phones) ? cfg.escalation_phones : [];
+  const last = Number(cfg.last_escalation_at || 0);
+  if (!phones.length) return { sent: 0, reason: 'no_escalation_phones' };
+  if (Date.now() - last < ESCALATION_THROTTLE_MS) return { sent: 0, reason: 'throttled' };
+  let sent = 0;
+  for (const p of phones) { if (conv && conv.is_test) { sent++; continue; } const r = await smsSend(p, text); if (r && r.ok) sent++; }
+  await fetch(`${s.base}/rest/v1/chat_settings`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ key: 'last_escalation_at', value: Date.now() }]) });
+  return { sent };
+}
+
+/* the chain: first on-duty agent now; the next one after the claim window; then
+   escalation, once. Called from the visitor's poll while status is waiting. */
+async function alertChain(s, conv, cfg) {
+  const alerts = Array.isArray(conv.alerts) ? conv.alerts.slice() : [];
+  const window = (Number(cfg.claim_window_s) || 60) * 1000;
+  const last = alerts.length ? alerts[alerts.length - 1] : null;
+  if (last && Date.now() - new Date(last.at).getTime() < window) return null;   /* still inside the current window */
+  const roster = await dutyRoster(s);
+  const tried = new Set(alerts.filter(a => a.kind === 'agent').map(a => a.to));
+  const next = roster.find(a => !tried.has(a.email));
+  let entry;
+  if (next) {
+    const text = `Speedy Chat: ${who(conv)} is waiting (${BRANCHES[conv.branch] || conv.branch}${conv.topic ? ' · ' + conv.topic : ''}). Claim it: ${chatLink(conv.id)}`;
+    const r = (conv.is_test || !next.mobile) ? { ok: !!next.mobile, skipped: true } : await smsSend(next.mobile, text);
+    entry = { kind: 'agent', to: next.email, at: new Date().toISOString(), ok: !!(r && r.ok) };
+  } else if (!alerts.some(a => a.kind === 'escalation')) {
+    const r = await escalate(s, cfg, `Speedy Chat: nobody claimed ${who(conv)} (${BRANCHES[conv.branch] || conv.branch}) after ${alerts.length} agent alert${alerts.length === 1 ? '' : 's'}. ${chatLink(conv.id)}`, conv);
+    entry = { kind: 'escalation', to: 'escalation', at: new Date().toISOString(), ok: r.sent > 0, reason: r.reason || null };
+  } else return null;
+  alerts.push(entry);
+  await sbPatch(s, `conversations?id=eq.${conv.id}`, { alerts, updated_at: new Date().toISOString() });
+  await record(s, { actor: 'system', kind: 'chat.alert', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: conv.id, ...entry, is_test: conv.is_test } });
+  return entry;
+}
+
+async function sysMsg(s, conv, body, audience = 'visitor') {
+  return sbPost(s, 'messages', { conversation_id: conv.id, sender_kind: 'system', audience, channel: 'web', body, is_test: conv.is_test });
+}
+const secs = (a, b) => Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 1000));
+const canAct = (conv, me) => me.admin || conv.claimed_by === me.email;
+
+/* the client card: who this phone is, what they hold, what they last paid */
+async function clientCard(s, conv) {
+  if (!conv.client_no) return null;
+  const [c, p, pay] = await Promise.all([
+    sbGet(s, `clients?client_no=eq.${conv.client_no}&select=client_no,first_name,last_name,business_name,branch,phone,city,extras&limit=1`),
+    sbGet(s, `policies?client_no=eq.${conv.client_no}&select=policy_number,lob,carrier,expiration_date,status,premium&order=expiration_date.desc&limit=5`),
+    sbGet(s, `bridge_ledger?client_id=eq.${conv.client_no}&is_test=is.false&select=ts,amount,purpose,audit_status,carrier_name,total_owed&order=ts.desc&limit=1`),
+  ]);
+  const cl = c.rows[0]; if (!cl) return { client_no: conv.client_no };
+  return {
+    client_no: conv.client_no, name: cl.business_name || [cl.first_name, cl.last_name].filter(Boolean).join(' '), branch: cl.branch, city: cl.city, phone: cl.phone,
+    producer: cl.extras && cl.extras.producer ? cl.extras.producer : null,
+    policies: p.rows.map(x => ({ number: x.policy_number, lob: x.lob, carrier: x.carrier, expires: x.expiration_date, status: x.status, premium: x.premium })),
+    last_payment: pay.rows[0] ? { ts: pay.rows[0].ts, amount: pay.rows[0].amount, purpose: pay.rows[0].purpose, audit: pay.rows[0].audit_status, carrier: pay.rows[0].carrier_name, owed: pay.rows[0].total_owed } : null,
+  };
+}
+
+async function agentHandler(req, res, s, b, action) {
+  const me = await verifyAgent(req, s);
+  if (!me) return res.status(401).json({ ok: false, error: 'Not authorized' });
+  const now = new Date().toISOString();
+  const cfg = await settings(s);
+
+  /* the light one for the portal badge: counts only, and a heartbeat ONLY if already on duty */
+  if (action === 'inbox_count') {
+    const [w, m, d] = await Promise.all([
+      sbGet(s, 'conversations?status=eq.waiting&select=id'),
+      sbGet(s, `conversations?status=eq.active&claimed_by=eq.${enc(me.email)}&select=id`),
+      sbGet(s, `agent_duty?agent_email=eq.${enc(me.email)}&select=on_duty,mobile&limit=1`),
+    ]);
+    const duty = d.rows[0] || { on_duty: false, mobile: null };
+    if (duty.on_duty) await sbPatch(s, `agent_duty?agent_email=eq.${enc(me.email)}`, { last_seen_at: now });
+    return res.status(200).json({ ok: true, waiting: w.rows.length, mine: m.rows.length, on_duty: !!duty.on_duty });
+  }
+
+  if (action === 'inbox') {
+    /* heartbeat: the inbox open IS being present */
+    await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, last_seen_at: now, updated_at: now }]) });
+    const dayStart = new Date(); dayStart.setUTCHours(dayStart.getUTCHours() - 7); dayStart.setUTCHours(7, 0, 0, 0);   /* Pacific midnight, approx */
+    const [open, closed, dutyRow, roster] = await Promise.all([
+      sbGet(s, 'conversations?status=in.(waiting,active)&select=*&order=created_at.asc&limit=100'),
+      sbGet(s, `conversations?status=in.(closed,missed,offline)&updated_at=gte.${dayStart.toISOString()}&select=*&order=updated_at.desc&limit=50`),
+      sbGet(s, `agent_duty?agent_email=eq.${enc(me.email)}&select=on_duty,mobile,since&limit=1`),
+      dutyRoster(s),
+    ]);
+    const convs = open.rows.concat(closed.rows);
+    const ids = convs.map(c => c.id);
+    let lastMsg = {}, unread = {};
+    if (ids.length) {
+      const ms = await sbGet(s, `messages?conversation_id=in.(${ids.join(',')})&audience=eq.visitor&select=conversation_id,ts,sender_kind,body&order=id.desc&limit=2000`);
+      for (const m of ms.rows) {
+        if (!lastMsg[m.conversation_id]) lastMsg[m.conversation_id] = { ts: m.ts, from: m.sender_kind, body: m.body.slice(0, 140) };
+        const c = convs.find(x => x.id === m.conversation_id);
+        if (m.sender_kind === 'visitor' && (!c.agent_seen_at || m.ts > c.agent_seen_at)) unread[m.conversation_id] = (unread[m.conversation_id] || 0) + 1;
+      }
+    }
+    const names = {}; const emails = [...new Set(convs.map(c => c.claimed_by).filter(Boolean))];
+    if (emails.length) { const a = await sbGet(s, `agents?email=in.(${emails.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = String(r.full_name || r.email).split(' ')[0]; }
+    const row = c => ({
+      id: c.id, status: c.status, outcome: c.outcome, created_at: c.created_at, branch: c.branch, branch_name: BRANCHES[c.branch] || c.branch, lang: c.lang, topic: c.topic,
+      name: c.visitor_name, phone: c.visitor_phone, client_no: c.client_no, claimed_by: c.claimed_by, claimed_name: names[c.claimed_by] || null, claimed_at: c.claimed_at,
+      waited_s: c.status === 'waiting' ? secs(c.created_at, now) : (c.claimed_at ? secs(c.created_at, c.claimed_at) : null),
+      last: lastMsg[c.id] || null, unread: unread[c.id] || 0, lead_id: c.lead_id, visitor_here: !!c.visitor_seen_at && (Date.now() - new Date(c.visitor_seen_at).getTime()) < VISITOR_GONE_MS,
+      alerts: (c.alerts || []).length, is_test: c.is_test,
+    });
+    return res.status(200).json({ ok: true,
+      me: { email: me.email, name: me.name, first: me.first, admin: me.admin, on_duty: !!(dutyRow.rows[0] && dutyRow.rows[0].on_duty), mobile: dutyRow.rows[0] ? dutyRow.rows[0].mobile : null, since: dutyRow.rows[0] ? dutyRow.rows[0].since : null },
+      waiting: open.rows.filter(c => c.status === 'waiting').map(row),
+      mine: open.rows.filter(c => c.status === 'active' && c.claimed_by === me.email).map(row),
+      team: open.rows.filter(c => c.status === 'active' && c.claimed_by !== me.email).map(row),
+      closed: closed.rows.map(row),
+      on_duty: roster.map(r => ({ email: r.email, name: r.first, since: r.since })),
+      settings: me.admin ? { claim_window_s: cfg.claim_window_s, silent_agent_s: cfg.silent_agent_s, escalation_phones: cfg.escalation_phones, closed_dates: cfg.closed_dates, blocked: cfg.blocked } : { claim_window_s: cfg.claim_window_s },
+    });
+  }
+
+  if (action === 'duty') {
+    const on = b.on === true;
+    const cur = await sbGet(s, `agent_duty?agent_email=eq.${enc(me.email)}&select=mobile,on_duty&limit=1`);
+    let mobile = cur.rows[0] ? cur.rows[0].mobile : null;
+    if (b.mobile != null && String(b.mobile).trim()) { const d = digits10(b.mobile); if (!d) return res.status(400).json({ ok: false, error: 'A 10-digit mobile number is needed', code: 'need_mobile' }); mobile = '+1' + d; }
+    if (on && !mobile) return res.status(400).json({ ok: false, error: 'Enter the mobile number that should be texted when a chat arrives', code: 'need_mobile' });
+    await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, on_duty: on, since: on ? now : null, mobile, last_seen_at: now, updated_at: now }]) });
+    await record(s, { actor: me.email, kind: on ? 'chat.duty_on' : 'chat.duty_off', source: 'chat', client_no: null, payload: { mobile_set: !!mobile } });
+    return res.status(200).json({ ok: true, on_duty: on, mobile });
+  }
+
+  if (action === 'set_setting') {
+    if (!me.admin) return res.status(403).json({ ok: false, error: 'Admin only' });
+    const ALLOWED = { claim_window_s: v => Number.isInteger(v) && v >= 15 && v <= 600, silent_agent_s: v => Number.isInteger(v) && v >= 30 && v <= 1800,
+      escalation_phones: v => Array.isArray(v) && v.every(x => /^\+1\d{10}$/.test(x)) && v.length <= 5, closed_dates: v => Array.isArray(v) && v.every(x => /^\d{4}-\d{2}-\d{2}$/.test(x)),
+      blocked: v => v && typeof v === 'object' && Array.isArray(v.phones) && Array.isArray(v.ips) };
+    const key = String(b.key || '');
+    if (!ALLOWED[key] || !ALLOWED[key](b.value)) return res.status(400).json({ ok: false, error: 'Bad setting' });
+    await fetch(`${s.base}/rest/v1/chat_settings`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ key, value: b.value, updated_at: now, updated_by: me.email }]) });
+    await record(s, { actor: me.email, kind: 'chat.setting', source: 'chat', client_no: null, payload: { key, value: b.value } });
+    return res.status(200).json({ ok: true });
+  }
+
+  /* everything below is about one conversation */
+  const id = Number(b.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Bad id' });
+  const cv = await sbGet(s, `conversations?id=eq.${id}&select=*&limit=1`);
+  const conv = cv.rows[0];
+  if (!conv) return res.status(404).json({ ok: false, error: 'No such chat' });
+
+  if (action === 'thread') {
+    const [ms, prev, card] = await Promise.all([
+      sbGet(s, `messages?conversation_id=eq.${id}&select=id,ts,sender_kind,sender,audience,channel,body&order=id.asc&limit=500`),
+      conv.visitor_phone ? sbGet(s, `conversations?visitor_phone=eq.${conv.visitor_phone}&id=neq.${id}&select=id,created_at,status,outcome,topic,claimed_by,lead_id&order=id.desc&limit=5`) : { rows: [] },
+      clientCard(s, conv),
+    ]);
+    if (conv.claimed_by === me.email) await sbPatch(s, `conversations?id=eq.${id}`, { agent_seen_at: now });
+    const names = {}; const emails = [...new Set(ms.rows.map(m => m.sender).filter(Boolean).concat(conv.claimed_by ? [conv.claimed_by] : []))];
+    if (emails.length) { const a = await sbGet(s, `agents?email=in.(${emails.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = String(r.full_name || r.email).split(' ')[0]; }
+    return res.status(200).json({ ok: true,
+      conversation: { ...conv, token: undefined, branch_name: BRANCHES[conv.branch] || conv.branch, claimed_name: names[conv.claimed_by] || null, visitor_here: !!conv.visitor_seen_at && (Date.now() - new Date(conv.visitor_seen_at).getTime()) < VISITOR_GONE_MS, mine: conv.claimed_by === me.email },
+      messages: ms.rows.map(m => ({ ...m, name: m.sender ? (names[m.sender] || m.sender) : null })),
+      previous: prev.rows, client: card, me: { email: me.email, admin: me.admin, first: me.first },
+    });
+  }
+
+  if (action === 'claim') {
+    /* atomic: only a waiting, unclaimed row flips; two taps, one winner */
+    const r = await sbPatch(s, `conversations?id=eq.${id}&status=eq.waiting&claimed_by=is.null`, { claimed_by: me.email, claimed_at: now, status: 'active', agent_seen_at: now, updated_at: now });
+    if (!r.rows.length) {
+      const fresh = await sbGet(s, `conversations?id=eq.${id}&select=claimed_by,status&limit=1`);
+      const f = fresh.rows[0] || {};
+      const n = f.claimed_by ? await sbGet(s, `agents?email=eq.${enc(f.claimed_by)}&select=full_name&limit=1`) : { rows: [] };
+      return res.status(409).json({ ok: false, error: f.claimed_by ? `${(n.rows[0] && n.rows[0].full_name) || f.claimed_by} got it` : `Chat is ${f.status}`, taken_by: f.claimed_by || null, status: f.status });
+    }
+    await sysMsg(s, conv, conv.lang === 'es' ? `${me.first} se unió al chat` : `${me.first} joined the chat`);
+    await record(s, { actor: me.email, kind: 'chat.claimed', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, waited_s: secs(conv.created_at, now), alerts: (conv.alerts || []).length, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, claimed_by: me.email });
+  }
+
+  if (action === 'takeover') {
+    if (!me.admin) return res.status(403).json({ ok: false, error: 'Admin only' });
+    if (conv.status === 'closed') return res.status(409).json({ ok: false, error: 'Chat is closed' });
+    await sbPatch(s, `conversations?id=eq.${id}`, { claimed_by: me.email, claimed_at: conv.claimed_at || now, status: 'active', agent_seen_at: now, updated_at: now });
+    await sysMsg(s, conv, `${me.first} took over from ${conv.claimed_by || 'the queue'}`, 'agents');
+    await sysMsg(s, conv, conv.lang === 'es' ? `${me.first} se unió al chat` : `${me.first} joined the chat`);
+    await record(s, { actor: me.email, kind: 'chat.takeover', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, from: conv.claimed_by, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true });
+  }
+
+  if (!canAct(conv, me)) return res.status(403).json({ ok: false, error: 'Not your chat' });
+
+  if (action === 'unclaim') {
+    if (conv.status !== 'active') return res.status(409).json({ ok: false, error: 'Not active' });
+    await sbPatch(s, `conversations?id=eq.${id}`, { claimed_by: null, claimed_at: null, status: 'waiting', updated_at: now });
+    await sysMsg(s, conv, `${me.first} put the chat back in the queue`, 'agents');
+    await record(s, { actor: me.email, kind: 'chat.unclaimed', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true });
+  }
+
+  if (action === 'reply') {
+    const body = clean(b.body, 2000);
+    if (!body) return res.status(400).json({ ok: false, error: 'Empty message' });
+    if (conv.status === 'closed') return res.status(409).json({ ok: false, error: 'Chat is closed' });
+    const whisper = b.whisper === true;
+    if (whisper && !me.admin) return res.status(403).json({ ok: false, error: 'Only an admin can whisper' });
+    /* the visitor left the page and gave a phone: the reply goes out as a text too */
+    let via = 'web';
+    const gone = !conv.visitor_seen_at || (Date.now() - new Date(conv.visitor_seen_at).getTime()) > VISITOR_GONE_MS;
+    if (!whisper && gone && conv.visitor_phone) {
+      const r = conv.is_test ? { ok: true, skipped: true } : await smsSend('+1' + conv.visitor_phone, `Speedy Insurance (${me.first}): ${body} — reply by text or call (951) 695-1500`);
+      if (r && r.ok) via = 'sms';
+    }
+    const m = await sbPost(s, 'messages', { conversation_id: id, sender_kind: 'agent', sender: me.email, audience: whisper ? 'agents' : 'visitor', channel: via, body, is_test: conv.is_test });
+    if (!m.ok) return res.status(502).json({ ok: false, error: 'Could not send' });
+    const patch = { agent_seen_at: now, updated_at: now }; if (!whisper && !conv.first_reply_at) patch.first_reply_at = now;
+    await sbPatch(s, `conversations?id=eq.${id}`, patch);
+    if (!whisper && !conv.first_reply_at) await record(s, { actor: me.email, kind: 'chat.first_reply', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, seconds: secs(conv.created_at, now), via, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, id: m.row.id, via });
+  }
+
+  if (action === 'handoff') {
+    const to = String(b.to || '').toLowerCase();
+    const a = await sbGet(s, `agents?email=eq.${enc(to)}&active=is.true&select=email,full_name&limit=1`);
+    if (!a.rows[0]) return res.status(400).json({ ok: false, error: 'No such agent' });
+    const first = String(a.rows[0].full_name || to).split(' ')[0];
+    await sbPatch(s, `conversations?id=eq.${id}`, { claimed_by: to, claimed_at: now, status: 'active', updated_at: now });
+    await sysMsg(s, conv, `${me.first} handed the chat to ${first}`, 'agents');
+    await sysMsg(s, conv, conv.lang === 'es' ? `${first} se unió al chat` : `${first} joined the chat`);
+    await record(s, { actor: me.email, kind: 'chat.handoff', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, to, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, to });
+  }
+
+  if (action === 'close') {
+    const outcome = String(b.outcome || '');
+    if (!['lead', 'logged', 'spam', 'abandoned'].includes(outcome)) return res.status(400).json({ ok: false, error: 'Bad outcome' });
+    if (conv.status === 'closed') return res.status(409).json({ ok: false, error: 'Already closed' });
+    const patch = { status: 'closed', outcome, closed_at: now, closed_by: me.email, updated_at: now };
+    const note = clean(b.note, 1000);
+    if (outcome === 'lead') {
+      if (!conv.visitor_phone && !conv.visitor_email) return res.status(400).json({ ok: false, error: 'A phone or email is needed to make a lead', code: 'need_phone' });
+      const lead_id = conv.lead_id || await convertToLead(s, conv, { message: note });
+      if (!lead_id) return res.status(502).json({ ok: false, error: 'Could not create the lead' });
+      patch.lead_id = lead_id;
+    }
+    if (outcome === 'logged') {
+      if (!conv.client_no) return res.status(400).json({ ok: false, error: 'No client matched - close as a lead instead', code: 'no_client' });
+      const msgs = await sbGet(s, `messages?conversation_id=eq.${id}&audience=eq.visitor&select=sender_kind,sender,body&order=id.asc&limit=200`);
+      const transcript = msgs.rows.map(m => `${m.sender_kind === 'visitor' ? 'Client' : (m.sender_kind === 'agent' ? me.first : 'Speedy')}: ${m.body}`).join('\n').slice(0, 6000);
+      await record(s, { actor: me.email, kind: 'chat.logged', source: 'chat', client_no: conv.client_no, payload: { conversation_id: id, transcript, note, branch: conv.branch, topic: conv.topic, is_test: conv.is_test } });
+    }
+    if (outcome === 'spam' && me.admin && b.block === true && (conv.visitor_phone || conv.ip)) {
+      const blocked = cfg.blocked && typeof cfg.blocked === 'object' ? cfg.blocked : { phones: [], ips: [] };
+      if (conv.visitor_phone && !blocked.phones.includes(conv.visitor_phone)) blocked.phones.push(conv.visitor_phone);
+      if (conv.ip && !blocked.ips.includes(conv.ip)) blocked.ips.push(conv.ip);
+      await fetch(`${s.base}/rest/v1/chat_settings`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ key: 'blocked', value: blocked, updated_at: now, updated_by: me.email }]) });
+    }
+    await sbPatch(s, `conversations?id=eq.${id}`, patch);
+    await sysMsg(s, conv, conv.lang === 'es' ? 'El chat terminó. Gracias.' : 'This chat has ended. Thank you.');
+    await record(s, { actor: me.email, kind: 'chat.closed', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, outcome, lead_id: patch.lead_id || null, duration_s: secs(conv.created_at, now), first_reply_s: conv.first_reply_at ? secs(conv.created_at, conv.first_reply_at) : null, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, outcome, lead_id: patch.lead_id || null });
   }
 
   return res.status(400).json({ ok: false, error: 'Unknown action' });

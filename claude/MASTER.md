@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 16 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `4bc4956` (another session pushes the public
+otherwise; `git status` is clean at `2c25809` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -530,8 +530,38 @@ agents' My activity and HawkSoft get a line; the Audit tab shows what approving 
 Build plan: `set_share` takes `helper` explicitly (validated against the roster) and a
 `why`; the share sheet is rewritten as the stepper; commission page unchanged.
 
-**Next (Saif's list):** build "Share with…" after his OK; My activity could gain a Reply
-on notes; a sentence for `audit.submitted_by_other`.
+**The todo banner (`562a087`).** Saif watched Sammy upload proof and the amber "N payments
+need proof" stayed: `unfinished_count` counted rows already SUBMITTED and waiting for the
+auditor. `portal_home` now returns `needs_action_count` (no proof yet / sent back) and
+`waiting_count`; the banner is amber for the first, a quiet green "N submitted · waiting
+for the auditor" for the second, hidden when both are 0; the page derives them from an
+older answer. harnessAuditReview 162, mutateTodo 4/4.
+
+**"Share with…" — built (`2c25809`).** `admin/shared/share.js`: "share with…" on the
+card's commission line for the commission owner (portal) and admins (Console: the
+read-only card takes `share: !!pc.is_admin`); three steps (with whom — the roster minus
+the owner; how much of YOUR commission — 25/50/75/another, dollars = my_rate × fee,
+"known after the audit" before it; why — one line); locked once set, Tony changes or
+removes it. `set_share` takes `helper` (roster-checked, never the owner) + `why`; the
+admin check reads the TABLE via rosterAdmins; refunds/pay links refused; `extra.share`
+stored; HawkSoft "COMMISSION SHARE — X shares 50% … with Y: why" / "…REMOVED (was Y
+50%)"; event `commission.shared` carries why/amount/before/changed; the audit-time
+prompt still works with no helper named. `portal_client` returns `share{…}` and
+`my_rate`; the card shows the shared line; the Log sentence names the reason. The sheet
+reads the page's `let EMAIL` the way pageToken reads TOKEN (the harness declares it via
+vm and caught window.EMAIL). harnessShare 37, mutateShare 30/30. **Not seen live** — the
+Console tab's Google token expired before the deploy; the first real use is Sammy on
+26424 (or Tony from the Console → client 26424 → "share with…").
+
+**Sort on every list (`2c25809`).** Saif: "each tab should have sort option" — one
+control per list, remembered for the session: Documents tab (newest / oldest / by type /
+by who / biggest), Log (newest / oldest), the document center (+ by client; day headings
+only for the date orders), the activity report (newest / oldest / by client / by who,
+grouped under those names). `ClientTabs.sortRows/sortHtml/sortKey`. mutateSort 8/8.
+
+**Next (Saif's list):** My activity could gain a Reply on notes; a sentence for
+`audit.submitted_by_other`; sync a client the moment it is first charged (the "Client
+#26427" gap until the 9 AM sync).
 
 **Next conversation: the document center** (see the block above). Saif's questions to
 answer first: who uses it and what they do first; honest-and-partial (platform documents

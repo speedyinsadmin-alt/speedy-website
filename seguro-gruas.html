@@ -627,6 +627,9 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
         <a href="/#services" class="footer-link">Seguro de Auto</a>
         <a href="/#services" class="footer-link">Seguro de Hogar</a>
         <a href="/#services" class="footer-link">Commercial</a>
+        <a href="seguro-gruas.html" class="footer-link">Seguro para Grúas</a>
+        <a href="seguro-transporte-medico.html" class="footer-link">Transporte Médico (NEMT)</a>
+        <a href="seguro-camiones.html" class="footer-link">Camiones Comerciales</a>
         <a href="/#services" class="footer-link">SR-22</a>
         <a href="/#services" class="footer-link">Seguro de Fianza</a>
         <a href="/#services" class="footer-link">Responsabilidad General</a>
@@ -678,7 +681,12 @@ body{font-family:'Outfit',sans-serif;color:var(--gray-900);background:var(--off-
       err.textContent = UI.errReq; err.style.display = 'block'; return;
     }
     var data = { line: 'towing', lang: 'es', page: location.pathname, src: new URLSearchParams(location.search).get('src') || '' };
-    new FormData(f).forEach(function (v, k) { if (k in data) { if (Array.isArray(data[k])) data[k].push(v); else data[k] = [data[k], v]; } else data[k] = v; });
+    /* scalars from FormData; checkbox groups ALWAYS as arrays, even one or none ticked
+       (Sep 16: Saif's first lead had "work" as a string and "types" as an array) */
+    var groups = {};
+    Array.prototype.forEach.call(f.querySelectorAll('input[type="checkbox"]'), function (c) { groups[c.name] = groups[c.name] || []; if (c.checked) groups[c.name].push(c.value); });
+    new FormData(f).forEach(function (v, k) { if (!(k in data) && !(k in groups)) data[k] = v; });
+    Object.keys(groups).forEach(function (k) { data[k] = groups[k]; });
     btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + UI.sending;
     try {
       var r = await fetch('/api/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });

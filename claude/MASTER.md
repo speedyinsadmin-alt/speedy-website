@@ -99,6 +99,59 @@ files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` lo
 every session and carry the traps. Copy new harnesses back into that folder before
 stopping for the day.
 
+### ✅ SEP 16 EVENING · SPEEDY CHAT STAGE 1 — TAWK IS BEING REPLACED
+Saif: replace Tawk.to with a chat built in the platform ("we will use it for other
+incoming things"). Decisions: **one central rotation for all five branches** (the
+visitor's branch pick is context, stamped on the thread); **name + phone asked first
+but optional**; **60-second claim window**; **agents flip on/off duty themselves in the
+portal**; **admin/owner watch any chat and whisper** (agent-only messages); **no ticket
+system** — a missed or after-hours chat becomes a `leads` row, the Leads queue IS the
+ticket system; Console gets ONE new **Inbox** tab (control: live chats, whisper, duty,
+block list, settings) and reports go into the existing **Activity** tab — no duplicate
+report tab. Keep Tawk live until two weeks side by side. Every scenario (nobody on duty,
+nobody claims, after hours, visitor leaves mid-chat, silent agent, stale duty, double
+claim, spam, refresh, Spanish) is tabled in the Sep 16 chat with where each lands.
+
+- **Tables** (migration `create_chat`): `conversations` (channel web|sms|gbp|email,
+  token, branch, lang, topic, visitor name/phone/email, client_no by phone, status
+  waiting|active|missed|offline|closed, claimed_by/at, first_reply_at, closed_at/by,
+  outcome lead|missed|logged|spam|abandoned, lead_id, previous_id, seen_at both sides,
+  alerts jsonb, is_test); `messages` (sender_kind visitor|agent|system, sender,
+  **audience visitor|agents = the whisper**, channel, body); `agent_duty` (on_duty,
+  since, mobile, last_seen_at heartbeat); `chat_settings` (claim_window_s 60,
+  silent_agent_s 180, escalation_phones [], closed_dates [], blocked {phones,ips}).
+  RLS on, no policies, service role only.
+- **`api/chat.js`** (`57e15a0`) — PUBLIC visitor side: `start` decides live vs
+  offline (branch hours: Mon–Fri 9–7, Sat 10–5, **Sunday Moreno Valley only**,
+  closed_dates; AND an on-duty agent with a heartbeat < 30 min), matches the client by
+  phone, links the same phone's previous thread, honeypot + blocked list answer a
+  plausible offline, 5 starts/min/IP; `send` 30/min; `poll` returns **audience=visitor
+  only** and says `missed` after 3× the claim window; `leave` → `leads` row (line=chat,
+  transcript in fields, outcome missed vs lead, idempotent). Events `chat.start`,
+  `chat.left`, `lead.new`. `CHAT_FAKE_NOW` is honoured only off Vercel (harness clock).
+  Function count 16.
+- **Widget** `assets/chat.js` + `chat.css`, mockup-faithful, EN/ES by
+  `data-lang`, on the **six commercial pages only** (no Tawk there, no collision):
+  branch → topic → optional name/phone → live thread polling 3 s / or the leave form;
+  resumes from `localStorage.speedy_chat`; badge while closed; cannot change branch
+  mid-chat. Photographed in Chrome (`shoot_chat.mjs`) at 1280 and 390: no sideways
+  scroll, panel 12–378 of 390.
+- **Verified:** harnessChat 50/50 (mutations: whisper leaking, duty check removed,
+  leave twice, every branch open Sunday — all caught); harnessChatWidget 40/40 (branch
+  change mid-chat, no polling on resume — caught after adding the closed-panel case).
+  Live: a flagged conversation → offline/nobody_on_duty → leave → lead 3, then deleted;
+  the table holds only Saif's lead 2.
+- **Widget bug the harness caught:** the greeting painted twice once other messages
+  existed; and the poll cursor was not saved when nothing new painted.
+
+**Next:** Stage 2 — `admin/chat.html` (agents: queue, atomic claim, reply, canned,
+hand-off, phone match card, Close → Lead / Close → Log, on/off duty with mobile,
+heartbeat; admin: whisper + take over), a Chat tab with a counter in the portal, SMS to
+the on-duty chain via `api/sms.js`, 60 s → next → escalation. Needs from Saif:
+**escalation phone(s)**; agents enter their own mobile on first duty (assumed OK).
+Stage 3 Console Inbox tab; Stage 4 cutover (index/es widget, remove Tawk + dead
+`sendChat`).
+
 ### ✅ SEP 16 AFTERNOON · COMMERCIAL LINES ON THE WEBSITE, LEADS TABLE, LICENCE NUMBER
 Saif: "add Towing Insurance and Non-Emergency Transportation Insurance" — the agency
 brokers every commercial line already, so no market gap. Rules from Saif: **no carrier
@@ -3543,6 +3596,9 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 61. **SEO files** — sitemap.xml, robots.txt, JSON-LD for 5 branches, hreflang on index/es, GA4
 62. **Lead notifications** — who gets told on a new lead; Saif: decide later
 63. **Delete test lead id 1** once Saif has submitted a real one from the live form
+65. **Speedy Chat stage 2** — agent inbox page + portal tab + SMS chain (see Sep 16 evening)
+66. **Speedy Chat stage 3/4** — Console Inbox tab with whisper; cutover from Tawk after two weeks side by side
+67. **Chat: silent-agent unclaim + auto off-duty at close** — server-side sweep (cron) once stage 2 exists
 64. **`refund_requests` has RLS disabled** (Supabase advisory, Sep 16) — enable + no policies like the other tables
 
 ---

@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 16 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `0d29fb8` (another session pushes the public
+otherwise; `git status` is clean at `4bc4956` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -448,8 +448,37 @@ to the agent (my uploads, my needs-a-label, my payments with no proof, fix links
 Server side needs one view (`documents` with filters + the three queue queries) — every
 renderer already exists in clienttabs.js.
 
-**Next (Saif's list):** build the document center (after his OK on the mock); "Share
-with…" on the card (after its mock); My activity could gain a Reply on notes.
+**The document center — built (`4bc4956`, Sep 16 afternoon).** Console → Documents,
+portal → "My documents" (header, beside My activity); one renderer
+`admin/shared/doccenter.js`. View `documents&from&to[&who][&queues=1]` (metadata only,
+≤3000 rows, 92 days max, Pacific edges; an agent held to their own uploads and their own
+no-proof payments; admins everyone + roster) and `doc_thumbs&ids=` for the visible
+cards. Page: search (client name/number, file name, label; every word must hit), type
+chips with counts, who/branch (admins), This week / This month / Last 90 days / dates,
+five tiles, cards by day with the client-page thumbnails (mini-slips; PDFs without one
+drawn + saved), Export CSV; queues on the right — payments with no proof yet (60 days,
+client_paid/carrier_pending), needs a label, not in HawkSoft (over 5 MB vs refused, with
+"retry HawkSoft" → new carrier action `retry_hawksoft`: re-posts the stored bytes,
+never >5 MB, never one already filed, patches filed + refid, event either way), by type,
+who uploads. "say what it is" reuses the client tabs' picker. harnessDocCenter 36,
+mutateDocCenter 33/33. **Verified live** by injecting the new scripts into the signed-in
+Console tab (no reload): this month = 675 documents across 274 clients, 164 this week by
+11 agents, 5 need a label, 1 over 5 MB, 0 refused, 30 payments with no proof yet; 60 cards
+drawn, 18 real thumbnails, 27 mini-slips, the queues filled. Seen: a client charged today
+that the daily sync has not pulled yet shows as "Client #26427" until 9 AM.
+
+**"Share with…" — mocked (`mock_share.html`, Desktop `Mock_share.png`), waiting for
+Saif's OK:** a third link on the commission line (change · wrong client · share with…)
+for the commission owner and admins, before or after the audit; a three-step sheet (with
+whom — the roster as chips; how much of YOUR commission — 25/50/75/another, dollar figures
+are the agent's own commission; why — one line for the log); the card then shows
+"✓ Shared: Jorge Ramos 50% · set by Samuel · locked — Tony can change it"; the Log, both
+agents' My activity and HawkSoft get a line; the Audit tab shows what approving pays each.
+Build plan: `set_share` takes `helper` explicitly (validated against the roster) and a
+`why`; the share sheet is rewritten as the stepper; commission page unchanged.
+
+**Next (Saif's list):** build "Share with…" after his OK; My activity could gain a Reply
+on notes; a sentence for `audit.submitted_by_other`.
 
 **Next conversation: the document center** (see the block above). Saif's questions to
 answer first: who uses it and what they do first; honest-and-partial (platform documents

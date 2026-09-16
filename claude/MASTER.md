@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 16 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `bf19781` (another session pushes the public
+otherwise; `git status` is clean at `c8793b5` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -553,7 +553,18 @@ vm and caught window.EMAIL). harnessShare 37, mutateShare 32/32. Saif reloaded, 
 text link, and asked for a button (`bf19781`): **"Share commission…"** now sits in the
 row's action line beside Add more documents / Refund… ("Change the share…" once set,
 for admins); on the Console's read-only card it is the only button in that row; the text
-link is gone. The first real use is Sammy on 26424 (or Tony from the Console).
+link is gone.
+
+**The first real share happened (Sep 16, 20:20 UTC): Sammy → Jorge, 50%, on 26424**
+("assisted with processing policy"). Verified in the database: the ledger row carries
+helper_email / helper_share_pct 50 / share_locked_at / share_set_by / extra.share; the
+`commission.shared` event says `hawksoft_note: true`; portal_share_due and reassign
+both skip locked rows. Checking it exposed a money bug (`c8793b5`): portal_home only
+walked rows the agent OWNS or CHARGED, so a helper who did neither - exactly the case
+the button exists for - never had the half counted and had no "You helped on" line.
+Rows where `helper_email` is me now join the walk; the line reads the owner's reason.
+harnessShare S6 (41), mutateShare 35/35. Jorge's My commission will show $186.94 for
+26424 once Tony completes the audit (50% of Sammy's 50% of the $747.75 fee).
 
 **Sort on every list (`2c25809`).** Saif: "each tab should have sort option" — one
 control per list, remembered for the session: Documents tab (newest / oldest / by type /
@@ -1136,7 +1147,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessTabs.mjs` 98 · `mutateTabs.mjs` 55 · `fixtureTabs.mjs` · `renderTabs.mjs` · `renderConsoleTabs.mjs` · `mock_tabs.mjs` | the client's tabs (Documents, Log, notes, thumbnails, sort) |
 | `harnessActivity.mjs` 36 · `mutateActivity.mjs` 38 · `renderActivity.mjs` · `mock_activity.html` | the activity report (My activity, Console Activity) |
 | `harnessDocCenter.mjs` 40 · `mutateDocCenter.mjs` 33 · `renderDocCenter.mjs` · `mock_doccenter.html` | the document center |
-| `harnessShare.mjs` 37 · `mutateShare.mjs` 32 · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
+| `harnessShare.mjs` 41 · `mutateShare.mjs` 35 · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
 | `mutateSort.mjs` 8 · `mutateTodo.mjs` 4 · (updated) `harnessAuditReview.mjs` 162 | sort on every list; the todo banner's two numbers |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |
 | `harnessStaff2.mjs` | 137 — the Staff page, on real jsdom, through the markup |

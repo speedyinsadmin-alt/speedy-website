@@ -21,6 +21,7 @@
    Nothing here sends. Nothing here logs message bodies.
 --------------------------------------------------------------------------- */
 import { randomBytes } from 'node:crypto';
+import { resolveClient } from './_inbox.js';
 
 /* ---- RingCentral auth (JWT -> access token), the proven flow from sms.js, for
    downloading MMS media. Media is the whole point of many texts (licence, DMV
@@ -109,20 +110,20 @@ export async function ingest(s, m) {
   if (!body) return { skipped: 'empty' };
 
   /* the customer's open thread, if any: newest first, prefer one on this line */
-  const open = await sbGet(s, `conversations?visitor_phone=eq.${customer}&status=in.(waiting,active)&select=id,channel,line,status,claimed_by,client_no,visibility,lang,is_test&order=id.desc&limit=5`);
+  const open = await sbGet(s, `conversations?visitor_phone=eq.${customer}&status=in.(waiting,active)&select=id,channel,line,status,claimed_by,client_no,link_status,visibility,lang,is_test&order=id.desc&limit=5`);
   let conv = open.rows.find(c => c.line === line.phone10) || open.rows[0] || null;
   const now = new Date().toISOString();
   const mirror = line.usage_type === 'DirectNumber' && !!line.agent_email;   /* an agent's own number */
 
-  let client_no = conv ? conv.client_no : null;
-  if (!client_no) { const c = await sbGet(s, `client_phone_index?phone10=eq.${customer}&select=client_number,display_name&limit=1`); client_no = c.rows[0] ? c.rows[0].client_number : null; }
+  let client_no = conv ? conv.client_no : null, link_status = conv ? (conv.link_status || 'none') : 'none';
+  if (!client_no) { const rc = await resolveClient(s, customer); client_no = rc.client_no; link_status = rc.status; }
 
   let created = false;
   if (!conv) {
     const prev = await sbGet(s, `conversations?visitor_phone=eq.${customer}&select=id,visitor_name&order=id.desc&limit=1`);
     const r = await sbPost(s, 'conversations', {
       channel: 'sms', token: cryptoToken(), source_page: null, lang: 'en', branch: line.branch || null, topic: null,
-      visitor_name: prev.rows[0] ? prev.rows[0].visitor_name : null, visitor_phone: customer, client_no, previous_id: prev.rows[0] ? prev.rows[0].id : null,
+      visitor_name: prev.rows[0] ? prev.rows[0].visitor_name : null, visitor_phone: customer, client_no, link_status, previous_id: prev.rows[0] ? prev.rows[0].id : null,
       line: line.phone10, line_extension_id: line.extension_id || null, visibility: mirror ? 'owner' : 'all',
       status: mirror ? 'active' : (m.direction === 'inbound' ? 'waiting' : 'active'),
       claimed_by: mirror ? line.agent_email : null, claimed_at: mirror ? now : null,
@@ -147,7 +148,7 @@ export async function ingest(s, m) {
   }
 
   const patch = { updated_at: now, line: conv.line || line.phone10, line_extension_id: conv.line_extension_id || line.extension_id || null };
-  if (m.direction === 'inbound') { patch.visitor_seen_at = now; if (!conv.client_no && client_no) patch.client_no = client_no; }
+  if (m.direction === 'inbound') { patch.visitor_seen_at = now; if (!conv.client_no && client_no) { patch.client_no = client_no; patch.link_status = link_status; } }
   else {
     patch.agent_seen_at = now;
     /* an agent answered from the RingCentral app: that is their thread now */

@@ -55,6 +55,26 @@
   .thead .n{font-weight:800;font-size:17px;line-height:1.15} .thead .s{font-size:12px;color:var(--mute);margin-top:2px;line-height:1.5}
   .thead a{color:var(--blue-l);text-decoration:none}
   .match{background:var(--card);border:1px solid var(--green);border-radius:12px;padding:11px 12px;margin-bottom:10px;font-size:12.5px}
+  /* the client link card: amber = a guess, green = confirmed, plain = nobody */
+  .link{border-radius:12px;padding:12px;margin-bottom:10px;font-size:12.5px;background:var(--card);border:1px solid var(--amber)}
+  .link.ok{border-color:var(--green)} .link.none{border-color:var(--line)}
+  .link .h{font-weight:800;font-size:12px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;color:var(--amber-ink)}
+  .link.ok .h{color:var(--green)} .link.none .h{color:var(--mute)}
+  .link .who{font-size:15px;font-weight:800;margin-bottom:2px} .link .sub{color:var(--mute);margin-bottom:8px}
+  .link .btns{display:flex;gap:6px;margin-top:8px} .link .btns .btn{flex:1;padding:9px;font-size:12.5px;margin:0}
+  .pol{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .pol label{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer;color:var(--ink);font-size:12.5px;margin:0}
+  .pol label.on{border-color:var(--blue);background:var(--field)}
+  .pol input{width:16px;height:16px;accent-color:var(--blue);margin:0}
+  .pol .t{flex:1} .pol .t b{display:block;font-size:13px} .pol .t span{color:var(--mute);font-size:11.5px}
+  .pol .pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mute)} .pol .pill.warn{color:var(--amber-ink);border-color:var(--amber)}
+  .search{display:flex;gap:6px;margin-top:8px} .search input{flex:1} .search .btn{padding:0 14px;margin:0}
+  .res{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+  .res .r{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;font-size:12.5px}
+  .res .r b{display:block;font-size:13px} .res .r span{color:var(--mute);font-size:11.5px} .res .r .btn{padding:7px 10px;font-size:12px;margin:0}
+  .compact{display:flex;align-items:center;gap:10px} .compact .t{flex:1;min-width:0} .compact .t b{display:block;font-size:13.5px} .compact .t span{color:var(--mute);font-size:11.5px}
+  .compact a{color:var(--blue-l);font-size:12px;text-decoration:none;flex:none;cursor:pointer}
+  .logline{font-size:11.5px;color:var(--green);margin-top:6px}
   .match .h{font-weight:800;color:var(--green);font-size:12px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
   .match .k{display:flex;justify-content:space-between;gap:8px;margin-top:3px} .match .k span:first-child{color:var(--mute)}
   .thread{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px;max-height:52vh;overflow-y:auto}
@@ -280,13 +300,13 @@ async function saveMobileAndGoOn() {
 /* ---------- a conversation ---------- */
 function showQueue() { OPEN = null; THREAD = null; clearInterval(pollT); pollT = null; $('#view').classList.add('hide'); $('#queue').classList.remove('hide'); history.replaceState(null, '', location.pathname); renderList(); }
 async function openThread(id) {
-  OPEN = id; $('#queue').classList.add('hide'); $('#view').classList.remove('hide'); history.replaceState(null, '', location.pathname + '#c=' + id);
+  OPEN = id; LINK = { sig: null, q: '', results: null, busy: false, editing: false }; $('#queue').classList.add('hide'); $('#view').classList.remove('hide'); history.replaceState(null, '', location.pathname + '#c=' + id);
   await loadThread(true);
   clearInterval(pollT); pollT = setInterval(() => loadThread(false), 3000);
 }
 async function loadThread(first) {
   const j = await api({ action: 'thread', id: OPEN }); if (!j.ok || OPEN !== j.conversation.id) return;
-  const changed = !THREAD || THREAD.messages.length !== j.messages.length || THREAD.conversation.status !== j.conversation.status || THREAD.conversation.claimed_by !== j.conversation.claimed_by;
+  const changed = !THREAD || THREAD.messages.length !== j.messages.length || THREAD.conversation.status !== j.conversation.status || THREAD.conversation.claimed_by !== j.conversation.claimed_by || THREAD.conversation.client_no !== j.conversation.client_no || THREAD.conversation.link_status !== j.conversation.link_status || JSON.stringify(THREAD.conversation.policy || null) !== JSON.stringify(j.conversation.policy || null);
   THREAD = j; if (first || changed) renderThread(first);
 }
 const CANNED = {
@@ -306,14 +326,7 @@ function renderThread(first) {
   const prev = THREAD.previous || [];
   $('#tPrev').classList.toggle('hide', !prev.length);
   $('#tPrev').innerHTML = prev.length ? 'Earlier chats from this number: ' + prev.map(p => `<a href="#" onclick="openThread(${p.id});return false">#${p.id} ${new Date(p.created_at).toLocaleDateString()} · ${esc(p.outcome || p.status)}</a>`).join('') : '';
-  const cl = THREAD.client;
-  $('#tClient').innerHTML = cl && cl.name ? `<div class="match"><div class="h">&#10004; Matched by phone — client ${cl.client_no}</div>
-      <div class="k"><span>Name</span><span><b>${esc(cl.name)}</b>${cl.city ? ' · ' + esc(cl.city) : ''}</span></div>
-      <div class="k"><span>Branch / producer</span><span>${esc(cl.branch || '—')}${cl.producer ? ' · ' + esc(cl.producer) : ''}</span></div>
-      ${(cl.policies || []).slice(0, 3).map(p => `<div class="k"><span>${esc(p.lob || 'Policy')}</span><span>${esc(p.carrier || '')} ${p.number ? '· ' + esc(p.number) : ''}${p.expires ? ' · exp ' + esc(p.expires) : ''}${p.status ? ' · ' + esc(p.status) : ''}</span></div>`).join('')}
-      ${cl.last_payment ? `<div class="k"><span>Last payment</span><span>$${Number(cl.last_payment.amount).toFixed(2)} · ${new Date(cl.last_payment.ts).toLocaleDateString()} · ${esc(cl.last_payment.audit || '')}</span></div>` : ''}
-      ${cl.last_payment && Number(cl.last_payment.owed) > 0 ? `<div class="k"><span>Open</span><span style="color:var(--amber-ink)">Owes $${Number(cl.last_payment.owed).toFixed(2)}</span></div>` : ''}
-    </div>` : (c.client_no ? `<div class="match"><div class="h">Client ${c.client_no}</div></div>` : '');
+  renderLink(first);
   const th = $('#tThread');
   th.innerHTML = THREAD.messages.map(m => {
     if (m.sender_kind === 'system') return `<div class="m sys">${esc(m.body)} · ${hhmm(m.ts)}</div>`;
@@ -360,6 +373,58 @@ async function loadMedia() {
     ph.onclick = () => { if (/^data:image\//.test(MEDIA[key])) { $('#lbImg').src = MEDIA[key]; $('#lbDl').href = MEDIA[key]; $('#lbDl').download = 'speedy-chat-' + key.replace(':', '-'); $('#lightbox').classList.add('on'); } else { const a = document.createElement('a'); a.href = MEDIA[key]; a.download = 'speedy-chat-' + key.replace(':', '-'); a.click(); } };
   }
 }
+/* ---- the client link card: guess / none / confirmed ---- */
+let LINK = { sig: null, q: '', results: null, busy: false, editing: false };
+function policyRows(policies, chosen) {
+  const list = (policies || []).slice(0, 6).map((p, i) => ({ kind: 'policy', number: p.number, carrier: p.carrier, lob: p.lob, expires: p.expires, status: p.status, i }));
+  const opts = list.concat([{ kind: 'new_quote' }, { kind: 'general' }]);
+  const same = (a, b) => a && b && a.kind === b.kind && (a.kind !== 'policy' || a.number === b.number);
+  return '<div class="pol">' + opts.map((o, k) => {
+    const on = same(o, chosen);
+    if (o.kind === 'new_quote') return `<label class="${on ? 'on' : ''}" onclick="pickPolicy({kind:'new_quote'})"><input type="radio" ${on ? 'checked' : ''}><span class="t"><b>New quote</b><span>a policy that doesn't exist yet</span></span></label>`;
+    if (o.kind === 'general') return `<label class="${on ? 'on' : ''}" onclick="pickPolicy({kind:'general'})"><input type="radio" ${on ? 'checked' : ''}><span class="t"><b>General</b><span>DMV, a question, not one policy</span></span></label>`;
+    const days = o.expires ? Math.round((new Date(o.expires) - Date.now()) / 86400000) : null;
+    const pill = /cancel|lapse|expired/i.test(o.status || '') ? '<span class="pill warn">' + esc(o.status) + '</span>' : (days != null && days >= 0 && days <= 60 ? '<span class="pill">renews in ' + days + ' d</span>' : (days != null && days < 0 ? '<span class="pill warn">expired</span>' : ''));
+    return `<label class="${on ? 'on' : ''}" onclick='pickPolicy(${JSON.stringify({ kind: 'policy', number: o.number, carrier: o.carrier, lob: o.lob, expires: o.expires }).replace(/'/g, '&#39;')})'><input type="radio" ${on ? 'checked' : ''}><span class="t"><b>${esc(o.lob || 'Policy')} · ${esc(o.carrier || '')}${o.number ? ' · ' + esc(o.number) : ''}</b><span>${o.expires ? 'exp ' + esc(o.expires) : ''}${o.status ? ' · ' + esc(o.status) : ''}</span></span>${pill}</label>`;
+  }).join('') + '</div>';
+}
+function payLine(cl) { if (!cl || !cl.last_payment) return ''; const lp = cl.last_payment; return '<div class="sub" style="margin:6px 0 0">Last payment $' + Number(lp.amount).toFixed(2) + ' · ' + new Date(lp.ts).toLocaleDateString() + (lp.audit ? ' · ' + esc(lp.audit) : '') + (Number(lp.owed) > 0 ? ' · <span style="color:var(--amber-ink)">Owes $' + Number(lp.owed).toFixed(2) + '</span>' : '') + '</div>'; }
+function policyLine(pol) { if (!pol) return 'no policy chosen'; if (pol.kind === 'new_quote') return 'New quote'; if (pol.kind === 'general') return 'General'; return [pol.lob, pol.carrier, pol.number].filter(Boolean).join(' · ') + (pol.expires ? ' · exp ' + pol.expires : ''); }
+function renderLink(first) {
+  const c = THREAD.conversation, cl = THREAD.client, me = THREAD.me;
+  const canAct = c.claimed_by === me.email || me.admin;
+  const sig = [c.client_no, c.link_status, JSON.stringify(c.policy || null), LINK.editing, LINK.results ? LINK.results.length : -1, canAct].join('|');
+  if (!first && sig === LINK.sig) return; LINK.sig = sig;
+  const box = $('#tClient');
+  if (!canAct) { box.innerHTML = cl && cl.name ? `<div class="link ${c.link_status === 'confirmed' ? 'ok' : ''}"><div class="h">Client ${cl.client_no}${c.link_status === 'guess' ? ' · matched by phone, not confirmed' : ''}</div><div class="compact"><div class="av">${esc(initials(cl.name))}</div><div class="t"><b>${esc(cl.name)}${cl.branch ? ' · ' + esc(cl.branch) : ''}</b><span>${esc(policyLine(c.policy))}</span></div></div></div>` : ''; return; }
+  /* confirmed + compact */
+  if (c.client_no && c.link_status === 'confirmed' && !LINK.editing) {
+    box.innerHTML = `<div class="link ok"><div class="h">&#10004; Client ${c.client_no}</div>
+      <div class="compact"><div class="av">${esc(initials(cl && cl.name || '?'))}</div><div class="t"><b>${esc(cl && cl.name || 'Client ' + c.client_no)}${cl && cl.branch ? ' · ' + esc(cl.branch) : ''}</b><span>${esc(policyLine(c.policy))}</span></div><a onclick="LINK.editing=true;renderLink(true)">Change</a></div>${payLine(cl)}
+      ${c.policy ? '' : '<div class="sub" style="margin:10px 0 0">Which policy is this about?</div>' + policyRows(cl && cl.policies, null)}</div>`;
+    return;
+  }
+  /* a guess, or editing a confirmed one: confirm / not them + the policy */
+  if (c.client_no && cl) {
+    box.innerHTML = `<div class="link ${c.link_status === 'confirmed' ? 'ok' : ''}"><div class="h">${c.link_status === 'confirmed' ? '&#10004; Client ' + c.client_no : '&#9888; Matched by phone — confirm'}</div>
+      <div class="who">${esc(cl.name || 'Client')} · client ${c.client_no}</div>
+      <div class="sub">${[cl.branch, cl.producer ? 'producer ' + cl.producer : null, cl.phone ? pretty(String(cl.phone).replace(/\D/g, '').slice(-10)) : null].filter(Boolean).map(esc).join(' · ')}</div>${payLine(cl)}
+      <div class="btns">${c.link_status === 'confirmed' ? '<button class="btn btn-ghost" onclick="LINK.editing=false;renderLink(true)">Done</button>' : '<button class="btn btn-green" onclick="confirmLink()">&#10004; It\u2019s them</button>'}<button class="btn btn-ghost" onclick="rejectLink()">Not them</button></div>
+      <div class="sub" style="margin:10px 0 0">Which policy is this about?</div>${policyRows(cl.policies, c.policy)}</div>`;
+    return;
+  }
+  /* nobody: search */
+  box.innerHTML = `<div class="link none"><div class="h">No client matched${c.visitor_phone ? ' for ' + esc(pretty(c.visitor_phone)) : ''}</div>
+    <div class="sub">Search by name, phone or client number — or make it a lead when you close.</div>
+    <div class="search"><input id="linkQ" placeholder="name, phone or client #" value="${esc(LINK.q)}" onkeydown="if(event.key==='Enter'){event.preventDefault();findClient()}"><button class="btn btn-blue" onclick="findClient()" ${LINK.busy ? 'disabled' : ''}>Find</button></div>
+    ${LINK.results ? (LINK.results.length ? '<div class="res">' + LINK.results.map(r => `<div class="r"><div><b>${esc(r.name)} · ${r.client_no}</b><span>${[r.branch, r.phone ? pretty(String(r.phone).replace(/\D/g, '').slice(-10)) : null, r.policy ? [r.policy.lob, r.policy.carrier, r.policy.number].filter(Boolean).join(' ') : null].filter(Boolean).map(esc).join(' · ')}</span></div><button class="btn btn-blue" onclick="linkClient(${r.client_no})">Link</button></div>`).join('') + '</div>' : '<div class="sub" style="margin-top:8px">Nobody found.</div>') : ''}
+    ${c.visitor_phone ? '<div class="sub" style="margin-top:10px;font-size:11.5px">Linking saves ' + esc(pretty(c.visitor_phone)) + ' to the client so next time it matches by itself.</div>' : ''}</div>`;
+}
+async function confirmLink() { const c = THREAD.conversation; const j = await api({ action: 'link', id: OPEN, client_no: c.client_no, policy: c.policy || undefined }); if (!j.ok) return toast(j.error); toast('Linked to client ' + j.client_no); LINK.editing = false; await loadThread(true); }
+async function rejectLink() { const j = await api({ action: 'unlink', id: OPEN }); if (!j.ok) return toast(j.error); toast('Unlinked — that phone will not match this client again'); LINK.editing = false; LINK.results = null; LINK.q = ''; await loadThread(true); }
+async function findClient() { const q = ($('#linkQ') || {}).value || ''; LINK.q = q.trim(); if (!LINK.q) return; LINK.busy = true; renderLink(true); const j = await api({ action: 'find_client', q: LINK.q }); LINK.busy = false; LINK.results = j.ok ? j.results : []; if (!j.ok) toast(j.error); renderLink(true); }
+async function linkClient(no) { const j = await api({ action: 'link', id: OPEN, client_no: no }); if (!j.ok) return toast(j.error); toast('Linked to client ' + no); LINK.results = null; LINK.q = ''; LINK.editing = false; await loadThread(true); }
+async function pickPolicy(pol) { const c = THREAD.conversation; if (!c.client_no) return; const j = c.link_status === 'confirmed' ? await api({ action: 'set_policy', id: OPEN, policy: pol }) : await api({ action: 'link', id: OPEN, client_no: c.client_no, policy: pol }); if (!j.ok) return toast(j.error); toast(c.link_status === 'confirmed' ? 'Policy set' : 'Linked, policy set'); LINK.editing = false; await loadThread(true); }
 function useCanned(i) { const c = THREAD.conversation; const f = (CANNED[c.lang] || CANNED.en)[i][1]; $('#rText').value = f($('#tCanned')._bn); $('#rText').focus(); }
 function toggleWhisper() { WHISPER = !WHISPER; $('#wState').textContent = WHISPER ? 'ON' : 'off'; $('#replyBox').classList.toggle('whisper', WHISPER); renderThread(false); }
 async function sendReply() {

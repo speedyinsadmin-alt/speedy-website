@@ -24,6 +24,7 @@
    chat_settings closes everything for a day. All Pacific.
 --------------------------------------------------------------------------- */
 import { randomBytes } from 'node:crypto';
+import { resolveClient, findClients } from './_inbox.js';
 
 const BRANCHES = {
   mv: 'Moreno Valley', vb: 'Riverside — Van Buren', mg: 'Riverside — Magnolia', le: 'Lake Elsinore', co: 'Colton',
@@ -163,8 +164,8 @@ export default async function handler(req, res) {
     else if (!(await anyoneOnDuty(s))) { mode = 'offline'; reason = 'nobody_on_duty'; }
 
     /* the client match, by phone, before the agent ever looks */
-    let client_no = null;
-    if (phone) { const m = await sbGet(s, `client_phone_index?phone10=eq.${phone}&select=client_number&limit=1`); client_no = m.rows[0] ? m.rows[0].client_number : null; }
+    let client_no = null, link_status = 'none';
+    if (phone) { const rc = await resolveClient(s, phone); client_no = rc.client_no; link_status = rc.status; }
     /* the same person's last thread, so the agent sees history */
     let previous_id = null;
     if (phone) { const p = await sbGet(s, `conversations?visitor_phone=eq.${phone}&select=id&order=id.desc&limit=1`); previous_id = p.rows[0] ? p.rows[0].id : null; }
@@ -172,7 +173,7 @@ export default async function handler(req, res) {
     const token = randomBytes(16).toString('hex');
     const conv = await sbPost(s, 'conversations', {
       channel: 'web', token, source_page: clean(b.page, 200), lang, branch, topic: clean(b.topic, 60), line: BRANCH_LINE[branch] || null,
-      visitor_name: clean(b.name, 80), visitor_phone: phone, visitor_email: clean(b.email, 120), client_no, previous_id,
+      visitor_name: clean(b.name, 80), visitor_phone: phone, visitor_email: clean(b.email, 120), client_no, link_status, previous_id,
       status: mode === 'live' ? 'waiting' : 'offline', visitor_seen_at: new Date().toISOString(),
       ip: ip || null, ua: clean(req.headers['user-agent'], 300), is_test: b.is_test === true,
     });
@@ -236,7 +237,7 @@ export default async function handler(req, res) {
     if (!(phone || conv.visitor_phone) && !(clean(b.email) || conv.visitor_email)) return res.status(400).json({ ok: false, error: 'A 10-digit phone number or an email is needed', code: 'need_phone' });
     const message = clean(b.message, 2000);
     if (message) await sbPost(s, 'messages', { conversation_id: conv.id, sender_kind: 'visitor', audience: 'visitor', channel: 'web', body: message, is_test: conv.is_test });
-    if (phone && !conv.client_no) { const m = await sbGet(s, `client_phone_index?phone10=eq.${phone}&select=client_number&limit=1`); if (m.rows[0]) patch.client_no = m.rows[0].client_number; }
+    if (phone && !conv.client_no) { const rc = await resolveClient(s, phone); if (rc.client_no) { patch.client_no = rc.client_no; patch.link_status = rc.status; } }
     /* a waiting chat that gave up is 'missed'; an offline one stays 'offline'; both close */
     /* outcome remembers HOW it became a lead: 'missed' (we were open and nobody took it)
        or 'lead' (offline by hours or duty). Reports count the first one. */
@@ -267,7 +268,7 @@ export default async function handler(req, res) {
    is actually waiting.
    =========================================================================== */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media']);
+const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy']);
 const SITE = 'https://www.speedyins.com';
 const VISITOR_GONE_MS = 2 * 60 * 1000;
 const ESCALATION_THROTTLE_MS = 15 * 60 * 1000;
@@ -361,6 +362,14 @@ async function sysMsg(s, conv, body, audience = 'visitor') {
 }
 const secs = (a, b) => Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 1000));
 /* an unclaimed waiting chat belongs to whoever acts on it first: replying IS claiming */
+/* {kind: policy|new_quote|general, number, carrier, lob, expires} - only those keys, capped */
+function cleanPolicy(p) {
+  if (!p || typeof p !== 'object') return null;
+  const kind = ['policy', 'new_quote', 'general'].includes(p.kind) ? p.kind : null; if (!kind) return null;
+  const out = { kind };
+  if (kind === 'policy') { out.number = clean(p.number, 40); out.carrier = clean(p.carrier, 60); out.lob = clean(p.lob, 40); out.expires = clean(p.expires, 20); if (!out.number && !out.carrier) return null; }
+  return out;
+}
 const canAct = (conv, me) => me.admin || conv.claimed_by === me.email || (conv.status === 'waiting' && !conv.claimed_by);
 
 /* the client card: who this phone is, what they hold, what they last paid */
@@ -468,6 +477,12 @@ async function agentHandler(req, res, s, b, action) {
     return res.status(200).json({ ok: true });
   }
 
+  if (action === 'find_client') {
+    const q = clean(b.q, 60); if (!q) return res.status(400).json({ ok: false, error: 'Type a name, phone or client number' });
+    const results = await findClients(s, q, 8);
+    return res.status(200).json({ ok: true, results });
+  }
+
   /* everything below is about one conversation */
   const id = Number(b.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Bad id' });
@@ -532,6 +547,42 @@ async function agentHandler(req, res, s, b, action) {
   }
 
   if (!canAct(conv, me)) return res.status(403).json({ ok: false, error: 'Not your chat' });
+
+  /* ---- the client link (Sep 17): a phone match is a GUESS until an agent says so ---- */
+  if (action === 'link') {
+    const client_no = Number(b.client_no);
+    if (!Number.isInteger(client_no) || client_no <= 0) return res.status(400).json({ ok: false, error: 'Bad client number' });
+    const c = await sbGet(s, `clients?client_no=eq.${client_no}&select=client_no&limit=1`);
+    if (!c.rows[0]) return res.status(404).json({ ok: false, error: 'No such client' });
+    const patch = { client_no, link_status: 'confirmed', linked_by: me.email, linked_at: now, updated_at: now };
+    if (conv.visitor_phone) {
+      /* the agent's decision, remembered for this phone: wins over the HawkSoft guess next time */
+      await fetch(`${s.base}/rest/v1/phone_links?phone10=eq.${conv.visitor_phone}&kind=eq.link`, { method: 'DELETE', headers: s.hdrs });
+      await fetch(`${s.base}/rest/v1/phone_links`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ phone10: conv.visitor_phone, client_no, kind: 'link', by_email: me.email, at: now }]) });
+    }
+    if (b.policy && typeof b.policy === 'object') patch.policy = cleanPolicy(b.policy);
+    await sbPatch(s, `conversations?id=eq.${id}`, patch);
+    await record(s, { actor: me.email, kind: 'chat.linked', source: 'chat', client_no, payload: { conversation_id: id, phone: conv.visitor_phone, was: conv.client_no || null, how: conv.client_no === client_no ? 'confirmed' : 'chosen', policy: patch.policy || null, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, client_no, link_status: 'confirmed', policy: patch.policy || conv.policy || null });
+  }
+  if (action === 'unlink') {
+    if (!conv.client_no) return res.status(409).json({ ok: false, error: 'Nothing linked' });
+    if (conv.visitor_phone) {
+      await fetch(`${s.base}/rest/v1/phone_links?phone10=eq.${conv.visitor_phone}&client_no=eq.${conv.client_no}`, { method: 'DELETE', headers: s.hdrs });
+      await fetch(`${s.base}/rest/v1/phone_links`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ phone10: conv.visitor_phone, client_no: conv.client_no, kind: 'reject', by_email: me.email, at: now }]) });
+    }
+    await sbPatch(s, `conversations?id=eq.${id}`, { client_no: null, link_status: 'none', policy: null, linked_by: me.email, linked_at: now, updated_at: now });
+    await record(s, { actor: me.email, kind: 'chat.unlinked', source: 'chat', client_no: conv.client_no, payload: { conversation_id: id, phone: conv.visitor_phone, rejected: conv.client_no, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, client_no: null, link_status: 'none' });
+  }
+  if (action === 'set_policy') {
+    if (!conv.client_no) return res.status(409).json({ ok: false, error: 'Link a client first' });
+    const policy = cleanPolicy(b.policy);
+    if (!policy) return res.status(400).json({ ok: false, error: 'Bad policy' });
+    await sbPatch(s, `conversations?id=eq.${id}`, { policy, updated_at: now });
+    await record(s, { actor: me.email, kind: 'chat.policy', source: 'chat', client_no: conv.client_no, payload: { conversation_id: id, policy, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, policy });
+  }
 
   if (action === 'unclaim') {
     if (conv.status !== 'active') return res.status(409).json({ ok: false, error: 'Not active' });

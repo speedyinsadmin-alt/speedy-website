@@ -127,7 +127,22 @@ export default async function handler(req, res) {
   if (action === 'send') {
     const to = toE164(body.to);
     const text = String(body.text || '').trim();
-    const from = process.env.RC_SMS_FROM;
+    let from = process.env.RC_SMS_FROM, extPath = '~';
+    /* Sep 17: the Inbox sends from the BRANCH LINE of the conversation. Only the
+       admin-key caller (our own /api/chat) may choose, and only a number that
+       rc_numbers says is ours and SMS-capable; anything else falls back to the
+       default line rather than failing the text. */
+    if (who === 'admin key' && body.from) {
+      const want = String(body.from).replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+      const s = sb();
+      if (s && /^\d{10}$/.test(want)) {
+        try {
+          const r = await fetch(`${s.base}/rest/v1/rc_numbers?phone10=eq.${want}&sms=is.true&select=e164,extension_id&limit=1`, { headers: s.hdrs });
+          const rows = await r.json().catch(() => []);
+          if (Array.isArray(rows) && rows[0]) { from = rows[0].e164; extPath = rows[0].extension_id || '~'; }
+        } catch { /* default line */ }
+      }
+    }
 
     if (!to) return res.status(400).json({ ok: false, error: 'A 10-digit US number is required.' });
     if (!text) return res.status(400).json({ ok: false, error: 'The message is empty.' });
@@ -137,14 +152,14 @@ export default async function handler(req, res) {
     let out;
     try {
       const token = await getAccessToken();
-      const r = await fetch(`${RC_BASE()}/restapi/v1.0/account/~/extension/~/sms`, {
+      const r = await fetch(`${RC_BASE()}/restapi/v1.0/account/~/extension/${encodeURIComponent(extPath)}/sms`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: { phoneNumber: from }, to: [{ phoneNumber: to }], text }),
       });
       const j = await r.json().catch(() => ({}));
       out = { ok: r.status === 200, httpStatus: r.status, id: j.id || null,
-              status: j.messageStatus || null, error: r.status === 200 ? null : (j.message || j.errorCode || 'send failed') };
+              status: j.messageStatus || null, from, error: r.status === 200 ? null : (j.message || j.errorCode || 'send failed') };
     } catch (e) {
       out = { ok: false, error: String(e.message || e) };
     }

@@ -171,7 +171,7 @@ export default async function handler(req, res) {
 
     const token = randomBytes(16).toString('hex');
     const conv = await sbPost(s, 'conversations', {
-      channel: 'web', token, source_page: clean(b.page, 200), lang, branch, topic: clean(b.topic, 60),
+      channel: 'web', token, source_page: clean(b.page, 200), lang, branch, topic: clean(b.topic, 60), line: BRANCH_LINE[branch] || null,
       visitor_name: clean(b.name, 80), visitor_phone: phone, visitor_email: clean(b.email, 120), client_no, previous_id,
       status: mode === 'live' ? 'waiting' : 'offline', visitor_seen_at: new Date().toISOString(),
       ip: ip || null, ua: clean(req.headers['user-agent'], 300), is_test: b.is_test === true,
@@ -295,17 +295,19 @@ async function verifyAgent(req, s) {
   return { email: c.email, name: r.full_name || c.email, first: String(r.full_name || c.email).split(' ')[0], branch: r.branch || null, admin: r.role === 'admin' || r.role === 'owner' };
 }
 
-async function smsSend(to, text) {
+async function smsSend(to, text, from) {
   /* through our own /api/sms with the admin key: one RingCentral auth flow in the codebase */
   const key = process.env.ADMIN_API_KEY || process.env.ADMIN_KEY;
   if (!key) return { ok: false, error: 'ADMIN_API_KEY not set' };
   try {
-    const r = await fetch(`${SITE}/api/sms`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': key }, body: JSON.stringify({ action: 'send', to, text: text.slice(0, 1000), purpose: 'chat' }) });
+    const r = await fetch(`${SITE}/api/sms`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': key }, body: JSON.stringify({ action: 'send', to, text: text.slice(0, 1000), purpose: 'chat', from: from || undefined }) });
     return await r.json();
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 }
 const chatLink = id => `${SITE}/admin/chat.html#c=${id}`;
-const who = conv => conv.visitor_name || (conv.lang === 'es' ? 'a Spanish-speaking visitor' : 'a visitor');
+/* the branch lines the website prints: a web chat texts from its branch's number */
+const BRANCH_LINE = { mv: '9514720927', vb: '9516951500', mg: '9519779400', le: '9515794095', co: '9095876001' };
+const who = conv => conv.visitor_name || (conv.channel === 'sms' && conv.visitor_phone ? `a text from (${conv.visitor_phone.slice(0, 3)}) ${conv.visitor_phone.slice(3, 6)}-${conv.visitor_phone.slice(6)}` : (conv.lang === 'es' ? 'a Spanish-speaking visitor' : 'a visitor'));
 
 /* on-duty agents with a fresh heartbeat and a mobile, with names */
 async function dutyRoster(s) {
@@ -406,6 +408,11 @@ async function agentHandler(req, res, s, b, action) {
       sbGet(s, `agent_duty?agent_email=eq.${enc(me.email)}&select=on_duty,mobile,since&limit=1`),
       dutyRoster(s),
     ]);
+    /* an agent's own direct-number thread is theirs and the admins'; everyone else never sees it */
+    const canSee = c => c.visibility !== 'owner' || me.admin || c.claimed_by === me.email;
+    open.rows = open.rows.filter(canSee); closed.rows = closed.rows.filter(canSee);
+    /* a text waiting on a branch line has no visitor poll to drive the chain: the inbox does it */
+    for (const c of open.rows) { if (c.status === 'waiting' && c.channel === 'sms') { try { await alertChain(s, c, cfg); } catch { /* next poll */ } } }
     const convs = open.rows.concat(closed.rows);
     const ids = convs.map(c => c.id);
     let lastMsg = {}, unread = {};
@@ -421,6 +428,7 @@ async function agentHandler(req, res, s, b, action) {
     if (emails.length) { const a = await sbGet(s, `agents?email=in.(${emails.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = String(r.full_name || r.email).split(' ')[0]; }
     const row = c => ({
       id: c.id, status: c.status, outcome: c.outcome, created_at: c.created_at, branch: c.branch, branch_name: BRANCHES[c.branch] || c.branch, lang: c.lang, topic: c.topic,
+      channel: c.channel || 'web', line: c.line || null, visibility: c.visibility || 'all',
       name: c.visitor_name, phone: c.visitor_phone, client_no: c.client_no, claimed_by: c.claimed_by, claimed_name: names[c.claimed_by] || null, claimed_at: c.claimed_at,
       waited_s: c.status === 'waiting' ? secs(c.created_at, now) : (c.claimed_at ? secs(c.created_at, c.claimed_at) : null),
       last: lastMsg[c.id] || null, unread: unread[c.id] || 0, lead_id: c.lead_id, visitor_here: !!c.visitor_seen_at && (Date.now() - new Date(c.visitor_seen_at).getTime()) < VISITOR_GONE_MS,
@@ -468,6 +476,7 @@ async function agentHandler(req, res, s, b, action) {
   if (!conv) return res.status(404).json({ ok: false, error: 'No such chat' });
 
   if (action === 'thread') {
+    if (conv.visibility === 'owner' && !me.admin && conv.claimed_by !== me.email) return res.status(403).json({ ok: false, error: 'Not your thread' });
     const [ms, prev, card] = await Promise.all([
       sbGet(s, `messages?conversation_id=eq.${id}&select=id,ts,sender_kind,sender,audience,channel,body&order=id.asc&limit=500`),
       conv.visitor_phone ? sbGet(s, `conversations?visitor_phone=eq.${conv.visitor_phone}&id=neq.${id}&select=id,created_at,status,outcome,topic,claimed_by,lead_id&order=id.desc&limit=5`) : { rows: [] },
@@ -538,13 +547,18 @@ async function agentHandler(req, res, s, b, action) {
       conv.claimed_by = me.email; conv.status = 'active';
     }
     /* the visitor left the page and gave a phone: the reply goes out as a text too */
-    let via = 'web';
+    let via = 'web', rc_message_id = null;
     const gone = !conv.visitor_seen_at || (Date.now() - new Date(conv.visitor_seen_at).getTime()) > VISITOR_GONE_MS;
-    if (!whisper && gone && conv.visitor_phone) {
-      const r = conv.is_test ? { ok: true, skipped: true } : await smsSend('+1' + conv.visitor_phone, `Speedy Insurance (${me.first}): ${body} — reply by text or call (951) 695-1500`);
-      if (r && r.ok) via = 'sms';
+    let lastByText = false;
+    if (!whisper && conv.channel !== 'sms' && !gone && conv.visitor_phone) { const lv = await sbGet(s, `messages?conversation_id=eq.${id}&sender_kind=eq.visitor&select=channel&order=id.desc&limit=1`); lastByText = !!(lv.rows[0] && lv.rows[0].channel === 'sms'); }
+    if (!whisper && conv.visitor_phone && (conv.channel === 'sms' || gone || lastByText)) {
+      /* from the thread's own line (the branch number, or the agent's direct number it came in on) */
+      const text = conv.channel === 'sms' ? body : `Speedy Insurance (${me.first}): ${body} — reply by text or call (951) 695-1500`;
+      const r = conv.is_test ? { ok: true, skipped: true } : await smsSend('+1' + conv.visitor_phone, text, conv.line || null);
+      if (r && r.ok) { via = 'sms'; rc_message_id = r.id ? String(r.id) : null; }
+      else if (conv.channel === 'sms') return res.status(502).json({ ok: false, error: 'The text could not be sent' + (r && r.error ? ': ' + r.error : '') });
     }
-    const m = await sbPost(s, 'messages', { conversation_id: id, sender_kind: 'agent', sender: me.email, audience: whisper ? 'agents' : 'visitor', channel: via, body, is_test: conv.is_test });
+    const m = await sbPost(s, 'messages', { conversation_id: id, sender_kind: 'agent', sender: me.email, audience: whisper ? 'agents' : 'visitor', channel: via, body, rc_message_id, is_test: conv.is_test });
     if (!m.ok) return res.status(502).json({ ok: false, error: 'Could not send' });
     const patch = { agent_seen_at: now, updated_at: now }; if (!whisper && !conv.first_reply_at) patch.first_reply_at = now;
     await sbPatch(s, `conversations?id=eq.${id}`, patch);
@@ -589,7 +603,7 @@ async function agentHandler(req, res, s, b, action) {
       await fetch(`${s.base}/rest/v1/chat_settings`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ key: 'blocked', value: blocked, updated_at: now, updated_by: me.email }]) });
     }
     await sbPatch(s, `conversations?id=eq.${id}`, patch);
-    await sysMsg(s, conv, conv.lang === 'es' ? 'El chat terminó. Gracias.' : 'This chat has ended. Thank you.');
+    if (conv.channel !== 'sms') await sysMsg(s, conv, conv.lang === 'es' ? 'El chat terminó. Gracias.' : 'This chat has ended. Thank you.');   /* a text thread ends quietly */
     await record(s, { actor: me.email, kind: 'chat.closed', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, outcome, lead_id: patch.lead_id || null, duration_s: secs(conv.created_at, now), first_reply_s: conv.first_reply_at ? secs(conv.created_at, conv.first_reply_at) : null, is_test: conv.is_test } });
     return res.status(200).json({ ok: true, outcome, lead_id: patch.lead_id || null });
   }

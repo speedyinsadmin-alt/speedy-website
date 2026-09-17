@@ -76,6 +76,88 @@ function callbackUrl() {
 // RingCentral caps subscription lifetime; ask for the max and renew on a cron.
 const expiresIn = 60 * 60 * 24 * 7;
 
+/* ---------------------------------------------------------------------------
+   SMS into the Inbox (Sep 17 2026) — its own subscription, delivered to
+   /api/rc-sms, one message-store/instant filter per extension that owns an
+   SMS-capable number. Kept apart from the telephony subscription on purpose:
+   the renew below never touches it, and a failure here never touches calls.
+--------------------------------------------------------------------------- */
+const SMS_ADDRESS = () => callbackUrl().replace('/api/rc-webhook', '/api/rc-sms');
+/* the branch lines the website prints; every other number is mapped by its extension's agent */
+const BRANCH_LINES = { '9514720927': 'mv', '9516951500': 'vb', '9519779400': 'mg', '9515794095': 'le', '9095876001': 'co' };
+const BRANCH_OF_NAME = { 'Moreno Valley': 'mv', 'Riverside Van Buren': 'vb', 'Riverside 01': 'vb', 'Riverside Magnolia': 'mg', 'Riverside 02': 'mg', 'Lake Elsinore': 'le', 'Colton': 'co' };
+const sbEnv = () => ({ base: (process.env.SUPABASE_URL || '').replace(/\/$/, ''), key: process.env.SUPABASE_SERVICE_ROLE_KEY || '' });
+const sbHdrs = (k) => ({ apikey: k, Authorization: `Bearer ${k}`, 'Content-Type': 'application/json' });
+const d10 = (v) => { const d = String(v || '').replace(/\D/g, ''); return d.length === 11 && d[0] === '1' ? d.slice(1) : (d.length === 10 ? d : null); };
+const norm = (v) => String(v || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+
+/* every number the account owns -> rc_numbers, with branch + agent mapped where we can */
+async function refreshNumbers(token) {
+  const r = await rc(token, '/restapi/v1.0/account/~/phone-number?perPage=500');
+  if (!r.ok) throw new Error(`phone-number HTTP ${r.status}`);
+  const { base, key } = sbEnv();
+  const agents = await fetch(`${base}/rest/v1/agents?active=is.true&select=email,full_name,branch`, { headers: sbHdrs(key) }).then((x) => x.json()).catch(() => []);
+  const rows = [];
+  for (const n of (r.json && r.json.records) || []) {
+    const phone10 = d10(n.phoneNumber); if (!phone10) continue;
+    const feats = Array.isArray(n.features) ? n.features : [];
+    const extName = n.extension ? (n.extension.name || '') : '';
+    let agent = null;
+    if (n.extension && extName) {
+      const toks = norm(extName);
+      const hits = (Array.isArray(agents) ? agents : []).filter((a) => { const t = norm(a.full_name); return t.length >= 2 && t[0] && t[t.length - 1] && toks.includes(t[0]) && toks.includes(t[t.length - 1]); });
+      if (hits.length === 1) agent = hits[0];
+      else { const byFirst = (Array.isArray(agents) ? agents : []).filter((a) => { const t = norm(a.full_name); return t[0] && toks.includes(t[0]); }); if (byFirst.length === 1) agent = byFirst[0]; }
+    }
+    rows.push({
+      phone10, e164: n.phoneNumber, extension_id: n.extension ? String(n.extension.id) : null, extension_number: n.extension ? String(n.extension.extensionNumber || '') : null,
+      extension_name: extName || null, usage_type: n.usageType || null, sms: feats.includes('SmsSender'),
+      branch: BRANCH_LINES[phone10] || (agent && BRANCH_OF_NAME[agent.branch]) || null, agent_email: agent ? agent.email : null, label: n.label || null, updated_at: new Date().toISOString(),
+    });
+  }
+  if (rows.length) {
+    const up = await fetch(`${base}/rest/v1/rc_numbers`, { method: 'POST', headers: { ...sbHdrs(key), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows) });
+    if (!up.ok) throw new Error(`rc_numbers upsert HTTP ${up.status}`);
+  }
+  return rows;
+}
+const smsFilters = (rows) => [...new Set(rows.filter((x) => x.sms && x.extension_id).map((x) => x.extension_id))].map((id) => `/restapi/v1.0/account/~/extension/${id}/message-store/instant?type=SMS`);
+async function saveSmsSub(id) {
+  const { base, key } = sbEnv();
+  await fetch(`${base}/rest/v1/chat_settings`, { method: 'POST', headers: { ...sbHdrs(key), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ key: 'rc_sms_subscription', value: id ? JSON.stringify(id) : 'null', updated_at: new Date().toISOString() }]) }).catch(() => {});
+}
+async function smsCreate(token) {
+  const rows = await refreshNumbers(token);
+  const filters = smsFilters(rows);
+  if (!filters.length) return { ok: false, error: 'No SMS-capable numbers with an extension were found' };
+  const list = await rc(token, '/restapi/v1.0/subscription');
+  for (const sub of (list.json && list.json.records) || []) {
+    if (String(sub.deliveryMode?.address || '').includes('/api/rc-sms')) await rc(token, `/restapi/v1.0/subscription/${sub.id}`, { method: 'DELETE' });
+  }
+  const r = await rc(token, '/restapi/v1.0/subscription', { method: 'POST', body: JSON.stringify({ eventFilters: filters, deliveryMode: { transportType: 'WebHook', address: SMS_ADDRESS() }, expiresIn }) });
+  if (r.ok) await saveSmsSub(r.json?.id);
+  const smsRows = rows.filter((x) => x.sms);
+  return {
+    ok: r.ok, id: r.json?.id, status: r.json?.status, expirationTime: r.json?.expirationTime, filters: filters.length, disabledFilters: r.json?.disabledFilters || [],
+    error: r.ok ? null : (r.json?.message || `HTTP ${r.status}`),
+    numbers: smsRows.map((x) => ({ number: x.e164, ext: x.extension_number, name: x.extension_name, usage: x.usage_type, branch: x.branch, agent: x.agent_email })),
+    unmapped: smsRows.filter((x) => !x.branch && !x.agent_email).map((x) => x.e164 + ' ' + (x.extension_name || '')),
+  };
+}
+async function smsRenew(token) {
+  const list = await rc(token, '/restapi/v1.0/subscription');
+  const mine = ((list.json && list.json.records) || []).filter((sub) => String(sub.deliveryMode?.address || '').includes('/api/rc-sms'));
+  if (!mine.length) return { ok: false, note: 'no SMS subscription - run action=sms_create' };
+  let rows = null; try { rows = await refreshNumbers(token); } catch (e) { /* keep the old filters if the refresh failed */ }
+  const out = [];
+  for (const sub of mine) {
+    const filters = rows ? smsFilters(rows) : sub.eventFilters;
+    const r = await rc(token, `/restapi/v1.0/subscription/${sub.id}`, { method: 'PUT', body: JSON.stringify({ eventFilters: filters, expiresIn }) });
+    out.push({ id: sub.id, ok: r.ok, expirationTime: r.json?.expirationTime, filters: filters.length, disabledFilters: r.json?.disabledFilters || [] });
+  }
+  return { ok: out.every((x) => x.ok), renewed: out };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -130,6 +212,16 @@ export default async function handler(req, res) {
     });
   }
 
+  // ---- SMS subscription (Sep 17) ------------------------------------------
+  if (action === 'sms_create') {
+    try { return res.status(200).json(await smsCreate(token)); }
+    catch (e) { return res.status(502).json({ ok: false, error: e.message }); }
+  }
+  if (action === 'numbers') {
+    try { const rows = await refreshNumbers(token); return res.status(200).json({ ok: true, count: rows.length, sms: rows.filter((x) => x.sms).length, numbers: rows.map((x) => ({ number: x.e164, ext: x.extension_number, name: x.extension_name, usage: x.usage_type, sms: x.sms, branch: x.branch, agent: x.agent_email })) }); }
+    catch (e) { return res.status(502).json({ ok: false, error: e.message }); }
+  }
+
   // ---- delete -----------------------------------------------------------
   if (action === 'delete') {
     const id = String((req.query && req.query.id) || '');
@@ -175,7 +267,9 @@ export default async function handler(req, res) {
         disabledFilters: r.json?.disabledFilters || [],
       });
     }
-    return res.status(200).json({ ok: true, renewed: out });
+    /* the SMS subscription renews on the same cron, but on its own: a failure here is reported, never thrown */
+    let sms = null; try { sms = await smsRenew(token); } catch (e) { sms = { ok: false, error: e.message }; }
+    return res.status(200).json({ ok: true, renewed: out, sms });
   }
 
   // ---- create -----------------------------------------------------------
@@ -222,3 +316,6 @@ export default async function handler(req, res) {
 
   return res.status(400).json({ ok: false, error: `Unknown action "${action}"` });
 }
+
+/* for the harness: the mapping decides which threads are private mirrors */
+export { refreshNumbers, smsFilters };

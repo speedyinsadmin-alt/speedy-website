@@ -167,6 +167,8 @@ const pretty = p => (p && p.length === 10) ? `(${p.slice(0, 3)}) ${p.slice(3, 6)
 const hhmm = ts => ts ? new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
 const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const initials = n => String(n || '?').split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
+/* the Speedy number a thread lives on: a branch line, or an agent's own number */
+const lineLabel = c => c.channel === 'sms' ? (c.visibility === 'owner' ? ((c.claimed_name || 'agent') + '’s line') : ('text to ' + pretty(c.line || ''))) : null;
 function toast(t) { const e = $('#toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(e._t); e._t = setTimeout(() => e.style.display = 'none', 2600); }
 function openSheet(id) { $('#' + id).classList.add('on'); } function closeSheet(id) { $('#' + id).classList.remove('on'); }
 
@@ -236,9 +238,9 @@ function renderList() {
     <div class="conv ${c.status === 'waiting' ? 'wait' : ''} ${SEG === 'closed' ? 'dimmed' : ''}" onclick="openThread(${c.id})">
       <div class="av">${esc(initials(c.name || (c.lang === 'es' ? 'ES' : 'V')))}</div>
       <div class="t">
-        <div class="n">${esc(c.name || 'Visitor')} <small>${c.phone ? esc(pretty(c.phone)) : (c.status === 'waiting' ? 'no phone yet' : '')}</small>${c.unread ? `<span class="chip un">${c.unread} new</span>` : ''}</div>
+        <div class="n">${esc(c.name || (c.channel === 'sms' && c.phone ? pretty(c.phone) : 'Visitor'))} <small>${c.phone ? esc(pretty(c.phone)) : (c.status === 'waiting' ? 'no phone yet' : '')}</small>${c.unread ? `<span class="chip un">${c.unread} new</span>` : ''}</div>
         <div class="p">${c.last ? (c.last.from === 'agent' ? '<span class="dim">You:</span> ' : '') + esc(c.last.body) : ''}</div>
-        <div class="chips"><span class="chip br">&#128205; ${esc(c.branch_name)}</span>${c.topic ? `<span class="chip">${esc(c.topic)}</span>` : ''}${c.lang === 'es' ? '<span class="chip">ES</span>' : ''}${c.client_no ? `<span class="chip cl">Client ${c.client_no}</span>` : '<span class="chip">New</span>'}${c.claimed_name ? `<span class="chip me">${esc(c.claimed_name)}</span>` : ''}${c.outcome ? `<span class="chip cl">&rarr; ${esc(c.outcome)}${c.lead_id ? ' #' + c.lead_id : ''}</span>` : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}</div>
+        <div class="chips">${c.channel === 'sms' ? `<span class="chip" style="color:var(--amber-ink);border-color:var(--amber)">&#128172; SMS · ${esc(lineLabel(c))}</span>` : ''}<span class="chip br">&#128205; ${esc(c.branch_name || '—')}</span>${c.topic ? `<span class="chip">${esc(c.topic)}</span>` : ''}${c.lang === 'es' ? '<span class="chip">ES</span>' : ''}${c.client_no ? `<span class="chip cl">Client ${c.client_no}</span>` : '<span class="chip">New</span>'}${c.claimed_name ? `<span class="chip me">${esc(c.claimed_name)}</span>` : ''}${c.outcome ? `<span class="chip cl">&rarr; ${esc(c.outcome)}${c.lead_id ? ' #' + c.lead_id : ''}</span>` : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}</div>
       </div>
       <div class="r">${c.status === 'waiting' ? `<b>${mmss(c.waited_s)}</b>waiting` : hhmm(c.claimed_at || c.created_at)}</div>
       ${c.status === 'waiting' ? `<button class="claim" onclick="event.stopPropagation();claim(${c.id})">Claim</button>` : ''}
@@ -289,8 +291,8 @@ const CANNED = {
 function renderThread(first) {
   const c = THREAD.conversation, me = THREAD.me;
   const mine = c.claimed_by === me.email, canAct = mine || me.admin, live = c.status !== 'closed';
-  $('#tName').textContent = c.visitor_name || (c.lang === 'es' ? 'Visitante' : 'Visitor');
-  $('#tSub').innerHTML = `&#128205; ${esc(c.branch_name)}${c.topic ? ' · ' + esc(c.topic) : ''} · ${c.lang.toUpperCase()} · started ${hhmm(c.created_at)} · <span class="chip ${c.status === 'waiting' ? '' : c.status === 'closed' ? 'cl' : 'me'}">${esc(c.status === 'active' ? (mine ? 'Mine' : (c.claimed_name || 'claimed')) : c.status)}</span> ${live ? (c.visitor_here ? '<span class="chip cl">visitor here</span>' : '<span class="chip">visitor away' + (c.visitor_phone ? ' — replies go by text' : '') + '</span>') : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}`;
+  $('#tName').textContent = c.visitor_name || (c.channel === 'sms' && c.visitor_phone ? pretty(c.visitor_phone) : (c.lang === 'es' ? 'Visitante' : 'Visitor'));
+  $('#tSub').innerHTML = `${c.channel === 'sms' ? '<span class="chip" style="color:var(--amber-ink);border-color:var(--amber)">&#128172; SMS · ' + esc(lineLabel(c)) + '</span> ' : ''}&#128205; ${esc(c.branch_name || '—')}${c.topic ? ' · ' + esc(c.topic) : ''} · ${(c.lang || 'en').toUpperCase()} · started ${hhmm(c.created_at)} · <span class="chip ${c.status === 'waiting' ? '' : c.status === 'closed' ? 'cl' : 'me'}">${esc(c.status === 'active' ? (mine ? 'Mine' : (c.claimed_name || 'claimed')) : c.status)}</span> ${live && c.channel !== 'sms' ? (c.visitor_here ? '<span class="chip cl">visitor here</span>' : '<span class="chip">visitor away' + (c.visitor_phone ? ' — replies go by text' : '') + '</span>') : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}`;
   $('#tLinks').innerHTML = c.visitor_phone ? `<a class="chip" href="tel:+1${c.visitor_phone}">&#128222; ${esc(pretty(c.visitor_phone))}</a>` : '<span class="chip">no phone</span>';
   const prev = THREAD.previous || [];
   $('#tPrev').classList.toggle('hide', !prev.length);
@@ -315,7 +317,7 @@ function renderThread(first) {
   $('#tCanned').innerHTML = (CANNED[c.lang] || CANNED.en).map(([l, f], i) => `<span onclick="useCanned(${i})">${esc(l)}</span>`).join('');
   $('#tCanned')._bn = bn;
   $('#replyBox').classList.toggle('hide', !(live && canAct)); $('#wToggle').classList.toggle('hide', !(live && me.admin));
-  $('#rText').placeholder = WHISPER ? 'Whisper to agents (the visitor never sees this)…' : ('Reply to ' + (c.visitor_name || 'the visitor') + '…');
+  $('#rText').placeholder = WHISPER ? 'Whisper to agents (the visitor never sees this)…' : (c.channel === 'sms' ? ('Text back from ' + pretty(c.line || '') + '…') : ('Reply to ' + (c.visitor_name || 'the visitor') + '…'));
   const acts = [];
   if (live && c.status === 'waiting') acts.push(`<button class="btn btn-blue" onclick="claim(${c.id})">Claim this chat</button>`);
   if (live && c.status === 'active' && !mine && me.admin) acts.push(`<button class="btn btn-ghost" onclick="takeover()">Take over</button>`);

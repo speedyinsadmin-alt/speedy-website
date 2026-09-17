@@ -329,6 +329,8 @@
   .abtn.go:hover{filter:brightness(1.08)}
   .abtn.no{background:transparent;color:var(--mute);border:1px solid var(--line)}
   .abtn.no:hover{color:#ff8f8f;border-color:rgba(224,49,49,.5)}
+  .feestab{width:100%;border-collapse:collapse;margin-top:4px} .feestab th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);padding:8px 10px;border-bottom:1px solid var(--line)}
+  .feestab td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px} .feestab .num{text-align:right;white-space:nowrap} .feestab tr.tot td{border-bottom:0;border-top:2px solid var(--line);font-weight:700}
   .agentcard{border:1px solid var(--line);border-radius:12px;margin-bottom:9px;overflow:hidden;transition:.12s}
   .agentcard:hover{border-color:rgba(127,168,255,.45)}
   .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0b1220;flex-shrink:0}
@@ -1208,13 +1210,13 @@ async function renderLedger(el) {
   el.innerHTML = h;
 }
 
-let AUDIT_SUB = 'tx';        // 'tx' | 'agents'
+let AUDIT_SUB = 'tx';        // 'tx' | 'agents' | 'fees'
 let AUDIT_Q = '';            // audit search query
 let AGENT_OPEN = null;       // agent email when drilled in
 
 function auditSubNav(){
   const btn = (id,label) => '<button onclick="setAuditSub(\''+id+'\')" style="background:'+(AUDIT_SUB===id?'var(--blue)':'var(--navy)')+';color:'+(AUDIT_SUB===id?'#fff':'var(--mute)')+';border:1px solid var(--line);padding:7px 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;margin-right:8px">'+label+'</button>';
-  return '<div style="margin:2px 0 14px">'+btn('tx','Transactions')+btn('agents','By agent')+'</div>';
+  return '<div style="margin:2px 0 14px">'+btn('tx','Transactions')+btn('agents','By agent')+btn('fees','Fees by agent')+'</div>';
 }
 function setAuditSub(s){ AUDIT_SUB = s; AGENT_OPEN = null; redrawAudit(); }
 
@@ -1440,13 +1442,16 @@ function trustDraw(){
 }
 
 function renderAgentView(r){
-  const rows = r.rows || [];
+  /* the period chips apply here too (Sep 17: this view showed all time whatever was lit) */
+  const rows = (r.rows || []).filter(x => auditInPeriod(x.ts));
+  const FEES = {}; for(const g of feesByAgent(rows)) FEES[g.agent] = g;
   const commMap = {}; for(const c of (r.commissions||[])) commMap[c.agent_email] = Number(c.percentage);
 
   // group by agent
   const byAgent = {};
   for(const x of rows){
-    const a = x.agent || '(unknown)';
+    /* by the EARNER (Sep 17) - the same key as the fees; the row itself still says who ran the charge */
+    const a = String(x.commission_to || x.agent || '(unknown)').toLowerCase();
     if(!byAgent[a]) byAgent[a] = { agent:a, tx:[], fees:0, earned:0, pending:0, first:null, last:null };
     const g = byAgent[a];
     g.tx.push(x);
@@ -1477,8 +1482,12 @@ function renderAgentView(r){
     + '</div>';
   const totEarned = list.reduce((a,x)=>a+x.earned,0);
 
-  let h = '<div class="muted" style="font-size:13px;margin:-4px 0 10px">Commission is earned the day an audit is approved. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
-  h += '<div style="margin-bottom:14px;font-size:14px">Total earned commission: <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></div>';
+  let h = periodChipsHtml();
+  h += '<div class="muted" style="font-size:13px;margin:-4px 0 10px">Fees are what Speedy kept on each charge - approved once the audit is done, waiting until then. Commission is earned the day an audit is approved; edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>'
+  const totFees = list.reduce((a,x)=>a+((FEES[x.agent]||{}).approved||0),0), totWait = list.reduce((a,x)=>a+((FEES[x.agent]||{}).waiting||0),0);
+  h += '<div style="margin-bottom:14px;font-size:14px">Fees approved ' + esc(periodLabel()) + ': <b class="amount" style="color:var(--green)">'+money(totFees)+'</b>'
+    + ' <span class="muted">· waiting <b class="amount">' + money(totWait) + '</b></span>'
+    + ' <span class="muted">· earned commission <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></span></div>';
   h += agSort;
 
   if(!list.length) h += '<div class="muted">No agent activity.</div>';
@@ -1510,6 +1519,10 @@ function renderAgentView(r){
       + '<div style="width:'+pctDone+'%;height:100%;background:'+(pctDone===100?'var(--green)':pctDone>=50?'#7fa8ff':'var(--amber)')+'"></div></div>'
       + '<span class="muted" style="font-size:12px">'+done+' of '+g.tx.length+' audited</span></div>'
       + '</div>'
+      + '<div style="text-align:right"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Fees approved</div>'
+      + '<b class="amount" style="color:var(--green);font-size:17px">'+money((FEES[g.agent]||{}).approved||0)+'</b></div>'
+      + '<div style="text-align:right;min-width:74px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Fees waiting</div>'
+      + '<span class="amount" style="color:'+(((FEES[g.agent]||{}).waiting||0)>0?'var(--amber)':'var(--mute)')+'">'+money((FEES[g.agent]||{}).waiting||0)+'</span></div>'
       + '<div style="text-align:right"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Earned</div>'
       + '<b class="amount" style="color:#7fa8ff;font-size:17px">'+money(g.earned)+'</b></div>'
       + '<div style="text-align:right;min-width:74px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Pending</div>'
@@ -1580,6 +1593,93 @@ function periodLabel(){
        : 'all time';
 }
 function setPeriod(k){ AUDIT_PERIOD = k; redrawAudit(); }
+/* ONE period test for the three Audit views (Sep 17). It lived inside the transactions
+   renderer, so By agent silently showed ALL TIME whatever chip was lit. */
+function auditInPeriod(ts){
+  if(AUDIT_PERIOD === 'all') return true;
+  const d = PT_DAY(ts);
+  if(!d) return false;
+  const today = PT_TODAY();
+  if(AUDIT_PERIOD === 'today')     return d === today;
+  if(AUDIT_PERIOD === 'yesterday') return d === PT_DAY_MINUS(today, 1);
+  if(AUDIT_PERIOD === 'month')     return d.slice(0,7) === today.slice(0,7);
+  if(AUDIT_PERIOD === 'custom')    return (!AUDIT_FROM || d >= AUDIT_FROM) && (!AUDIT_TO || d <= AUDIT_TO);
+  return true;
+}
+function periodChipsHtml(){
+  const chip = (k,label) => '<span class="perchip'+(AUDIT_PERIOD===k?' sel':'')+'" onclick="setPeriod(\''+k+'\')">'+label+'</span>';
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'
+    + chip('today','Today') + chip('yesterday','Yesterday') + chip('month','This month')
+    + chip('all','All time') + chip('custom','Custom')
+    + (AUDIT_PERIOD==='custom'
+        ? '<span style="display:flex;gap:6px;align-items:center;margin-left:6px">'
+          + '<input type="date" id="auditFrom" value="'+esc(AUDIT_FROM||'')+'" onchange="setRange()" class="dinput">'
+          + '<span class="muted" style="font-size:13px">to</span>'
+          + '<input type="date" id="auditTo" value="'+esc(AUDIT_TO||'')+'" onchange="setRange()" class="dinput"></span>'
+        : '')
+    + '</div>';
+}
+/* FEES. The fee is the money Speedy kept on a charge - known for sure once the audit
+   has the carrier cost. A row's fee counts as APPROVED when the audit is complete,
+   WAITING while it is not, and cannot be priced at all until the cost is entered. The
+   EARNER (commission_to, or whoever ran the charge) is credited, not the charger. */
+function feesByAgent(rows){
+  const by = {};
+  const at = e => by[e] || (by[e] = { agent: e, n: 0, approved: 0, waiting: 0, unpriced: 0, shares: [], sharedOut: 0, sharedIn: 0 });
+  for(const x of rows){
+    if(x.pre_audit) continue;
+    if(/declin|fail|void|link_sent|not_a_payment/i.test(String(x.kind || '')) || x.audit_status === 'void') continue;
+    const earner = String(x.commission_to || x.agent || '(unknown)').toLowerCase();
+    const g = at(earner); g.n++;
+    const fee = x.fee != null ? Number(x.fee) : null;
+    if(fee == null){ if(x.audit_status !== 'complete') g.unpriced++; continue; }
+    if(x.audit_status === 'complete') g.approved += fee; else g.waiting += fee;
+    const pct = Number(x.helper_share_pct || 0);
+    if(pct > 0 && x.helper_email){
+      const h = String(x.helper_email).toLowerCase();
+      const part = +(fee * pct / 100).toFixed(2);
+      g.shares.push({ dir: 'out', pct, fee, part, who: h, approved: x.audit_status === 'complete', client_no: x.client_no });
+      g.sharedOut += part;
+      const hg = at(h);
+      hg.shares.push({ dir: 'in', pct, fee, part, who: earner, approved: x.audit_status === 'complete', client_no: x.client_no });
+      hg.sharedIn += part;
+    }
+  }
+  return Object.values(by).sort((a, b) => (b.approved - a.approved) || (b.waiting - a.waiting) || a.agent.localeCompare(b.agent));
+}
+function renderFeesView(r){
+  const rows = (r.rows || []).filter(x => auditInPeriod(x.ts));
+  const list = feesByAgent(rows);
+  const tot = list.reduce((a, g) => ({ n: a.n + g.n, approved: a.approved + g.approved, waiting: a.waiting + g.waiting, unpriced: a.unpriced + g.unpriced }), { n: 0, approved: 0, waiting: 0, unpriced: 0 });
+  let h = periodChipsHtml();
+  h += '<div class="muted" style="font-size:13px;margin:-2px 0 12px">The fee is what Speedy kept on each charge, credited to the agent who earns it. '
+    + '<b>Approved</b> is certain - the audit is done. <b>Waiting</b> is the fee as it stands before the audit; it can change when the carrier cost goes in. '
+    + 'A share is written out, not applied - the split is yours to make.</div>';
+  if(!list.length) return h + '<div class="muted">No charges ' + esc(periodLabel()) + '.</div>';
+  h += '<table class="feestab"><tr><th>Agent</th><th class="num">Charges</th><th class="num">Fees approved</th><th class="num">Fees waiting</th><th>Shares</th></tr>';
+  for(const g of list){
+    const sh = g.shares.map(x => (x.dir === 'out' ? x.pct + '% of ' + money(x.fee) + ' → ' + esc(agentName(x.who)) : x.pct + '% of ' + money(x.fee) + ' ← ' + esc(agentName(x.who)))
+      + ' <span class="muted">(#' + esc(x.client_no) + (x.approved ? '' : ', waiting') + ')</span>').join('<br>');
+    h += '<tr><td><b>' + esc(agentName(g.agent)) + '</b>' + (g.n ? '' : ' <span class="muted">(share only)</span>') + '</td>'
+      + '<td class="num">' + g.n + '</td>'
+      + '<td class="num amount" style="color:var(--green)">' + money(g.approved) + '</td>'
+      + '<td class="num amount" style="color:' + (g.waiting > 0 || g.unpriced ? 'var(--amber)' : 'var(--mute)') + '">' + money(g.waiting) + (g.unpriced ? ' <span class="muted" style="font-weight:400">+ ' + g.unpriced + ' not priced</span>' : '') + '</td>'
+      + '<td class="muted" style="font-size:12px">' + (sh || '—') + '</td></tr>';
+  }
+  h += '<tr class="tot"><td><b>All agents</b></td><td class="num">' + tot.n + '</td><td class="num amount" style="color:var(--green)">' + money(tot.approved) + '</td>'
+    + '<td class="num amount">' + money(tot.waiting) + (tot.unpriced ? ' <span class="muted" style="font-weight:400">+ ' + tot.unpriced + ' not priced</span>' : '') + '</td><td></td></tr>';
+  h += '</table>';
+  h += '<div style="margin-top:10px"><span class="perchip" onclick="feesCsv()">Download CSV</span></div>';
+  return h;
+}
+function feesCsv(){
+  const r = AUDIT_CACHE; if(!r) return;
+  const list = feesByAgent((r.rows || []).filter(x => auditInPeriod(x.ts)));
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const lines = [['Agent', 'Email', 'Charges', 'Fees approved', 'Fees waiting', 'Not priced', 'Shared out', 'Shared in', 'Period'].map(q).join(',')];
+  for(const g of list) lines.push([agentName(g.agent), g.agent, g.n, g.approved.toFixed(2), g.waiting.toFixed(2), g.unpriced, g.sharedOut.toFixed(2), g.sharedIn.toFixed(2), periodLabel()].map(q).join(','));
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' })); a.download = 'fees-by-agent-' + periodLabel().replace(/\s+/g, '-') + '.csv'; a.click();
+}
 function setRange(){
   const f = document.getElementById('auditFrom'), t = document.getElementById('auditTo');
   AUDIT_FROM = f ? f.value : ''; AUDIT_TO = t ? t.value : '';
@@ -1751,6 +1851,11 @@ async function renderAudit(el){
   return drawAudit(el, r);
 }
 async function drawAudit(el, r){
+  if(AUDIT_SUB === 'fees'){
+    try { el.innerHTML = (await renderCorrections()) + '<h2>Audit — fees by agent</h2>' + auditSubNav() + renderFeesView(r); }
+    catch(e){ el.innerHTML = auditSubNav() + '<div class="err">Fees render error: ' + esc(String(e&&e.message||e)) + '</div>'; }
+    return;
+  }
   if(AUDIT_SUB === 'agents'){
     try { el.innerHTML = (await renderCorrections()) + '<h2>Audit — commission by agent</h2>' + auditSubNav() + renderAgentView(r); }
     catch(e){ el.innerHTML = auditSubNav() + '<div class="err">By-agent render error: ' + esc(String(e&&e.message||e)) + '</div>'; }
@@ -1788,17 +1893,7 @@ async function drawAudit(el, r){
 
   // Date filter — "Total fees" with no period read like a business number when it was
   // really "everything ever recorded". Totals below are always for the selected period.
-  const inPeriod = ts => {
-    if(AUDIT_PERIOD === 'all') return true;
-    const d = PT_DAY(ts);
-    if(!d) return false;
-    const today = PT_TODAY();
-    if(AUDIT_PERIOD === 'today')     return d === today;
-    if(AUDIT_PERIOD === 'yesterday') return d === PT_DAY_MINUS(today, 1);
-    if(AUDIT_PERIOD === 'month')     return d.slice(0,7) === today.slice(0,7);
-    if(AUDIT_PERIOD === 'custom')    return (!AUDIT_FROM || d >= AUDIT_FROM) && (!AUDIT_TO || d <= AUDIT_TO);
-    return true;
-  };
+  const inPeriod = auditInPeriod;   // one test for the three views (Sep 17)
   const allRows = rows;
   let periodRows = allRows.filter(x => inPeriod(x.ts));
 
@@ -1847,17 +1942,7 @@ async function drawAudit(el, r){
     + 'style="width:100%;max-width:520px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin-bottom:12px">';
   let h = '';
 
-  const chip = (k,label) => '<span class="perchip'+(AUDIT_PERIOD===k?' sel':'')+'" onclick="setPeriod(\''+k+'\')">'+label+'</span>';
-  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'
-    + chip('today','Today') + chip('yesterday','Yesterday') + chip('month','This month')
-    + chip('all','All time') + chip('custom','Custom')
-    + (AUDIT_PERIOD==='custom'
-        ? '<span style="display:flex;gap:6px;align-items:center;margin-left:6px">'
-          + '<input type="date" id="auditFrom" value="'+esc(AUDIT_FROM||'')+'" onchange="setRange()" class="dinput">'
-          + '<span class="muted" style="font-size:13px">to</span>'
-          + '<input type="date" id="auditTo" value="'+esc(AUDIT_TO||'')+'" onchange="setRange()" class="dinput"></span>'
-        : '')
-    + '</div>';
+  h += periodChipsHtml();
   const schip = (k,label,count,colour) =>
     '<span class="perchip'+(AUDIT_SORT===k?' sel':'')+'" onclick="setAuditSort(\''+k+'\')">' + label
     + (count ? ' <b style="color:'+colour+'">'+count+'</b>' : '') + '</span>';

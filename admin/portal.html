@@ -280,11 +280,11 @@
     </div>
     <div id="earnWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div onclick="openEarnings()" style="background:linear-gradient(135deg,rgba(47,191,113,.15),rgba(77,124,254,.08));border:1px solid rgba(47,191,113,.3);border-radius:12px;padding:13px;cursor:pointer">
-        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em" id="earnedLabel">Earned this month &rsaquo;</div>
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em" id="earnedLabel">Fees approved this month &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--green)" id="earned">$0.00</div>
       </div>
       <div onclick="openPending()" style="background:linear-gradient(135deg,rgba(245,166,35,.14),rgba(77,124,254,.06));border:1px solid rgba(245,166,35,.35);border-radius:12px;padding:13px;cursor:pointer">
-        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Pending &rsaquo;</div>
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Fees waiting &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--amber-ink)" id="pending">$0.00</div>
       </div>
     </div>
@@ -735,8 +735,10 @@ async function loadHome(){
   /* The server says which period it used, so the tile can never disagree with the
      number under it. */
   const el = document.getElementById('earnedLabel');
-  if(el) el.innerHTML = (EARN_PERIOD === 'last' ? 'Earned ' + esc(r.period || 'last month')
-                                                : 'Earned this month') + ' &rsaquo;';
+  /* FEES, not commission (Sep 17): Tony keeps no rates in the system, so the agent sees
+     the fee Speedy kept - approved once the audit is done - the same number Tony reads. */
+  if(el) el.innerHTML = (EARN_PERIOD === 'last' ? 'Fees approved ' + esc(r.period || 'last month')
+                                                : 'Fees approved this month') + ' &rsaquo;';
   HELPED_LINES = r.helped_lines || [];
   PENDING_LINES = r.pending_lines || [];
   const hb = document.getElementById('helpBox');
@@ -894,7 +896,7 @@ function openEarnings(){
   const d = ts => String(ts || '').slice(0, 10);
   let h = earnPickerHtml();
 
-  if(!EARN_LINES.length) h += '<div class="dim" style="font-size:13px">Nothing earned in '
+  if(!EARN_LINES.length) h += '<div class="dim" style="font-size:13px">No fees approved in '
       + (EARN_PERIOD === 'last' ? 'that month' : 'this period') + ' yet.</div>';
   else h += EARN_LINES.map(x =>
       '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px">'

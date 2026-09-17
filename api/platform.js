@@ -1842,8 +1842,7 @@ if (view === 'portal_share_due') {
       const r = await sbGet(s, `bridge_ledger?commission_to=eq.${encodeURIComponent(me)}`
         + `&audit_status=eq.complete&share_locked_at=is.null&is_test=is.false`
         + `&select=id,ts,client_id,amount,agent,fee_amount,audit_completed_by&order=ts.desc&limit=10`);
-      const rate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
-      const pct = (rate.rows && rate.rows[0]) ? Number(rate.rows[0].percentage) : 10;
+      const pct = 100;   // fee basis (Sep 17): the share is a slice of the fee
       /* Two ways somebody can have worked on a payment they do not earn: they RAN
          the charge, or they FINISHED the audit. Only the first was ever considered,
          so an agent who did the finishing was invisible to the share flow. Prefer
@@ -2001,7 +2000,7 @@ if (view === 'portal_share_due') {
 
       const nameOf = e => AGENT_NAME[e] || (e ? String(e).split('@')[0] : 'someone');
       const RATE_CACHE = {};
-      const ownerRateOf = async e => { const k = String(e || '').toLowerCase(); if (RATE_CACHE[k] == null) { const r = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(k)}&select=percentage`); RATE_CACHE[k] = (r.rows && r.rows[0]) ? Number(r.rows[0].percentage) : 10; } return RATE_CACHE[k]; };
+      const ownerRateOf = async () => 100;   // fee basis (Sep 17): dollars are a slice of the fee
       const items = [];
       for (const e of (ev.rows || [])) {
         const p = e.payload || {};
@@ -2044,7 +2043,7 @@ if (view === 'portal_share_due') {
           const dollars = +(Number(p.fee || 0) * ownerRate / 100 * Number(p.pct || 0) / 100).toFixed(2);
           items.push({ id: e.id, ts: e.ts, tone: 'green', client_no: e.client_no, payment_id: p.payment_id,
             title: nameOf(p.owner) + ' shared commission with you' + (p.changed ? ' (changed)' : ''),
-            detail: p.pct + '% of ' + nameOf(p.owner) + '\u2019s commission on the $' + Number(p.amount || p.fee || 0).toFixed(2) + ' payment - about $' + dollars.toFixed(2)
+            detail: p.pct + '% of the fee on ' + nameOf(p.owner) + '\u2019s $' + Number(p.amount || p.fee || 0).toFixed(2) + ' payment - $' + dollars.toFixed(2) + ' of the $' + Number(p.fee || 0).toFixed(2) + ' fee'
               + (p.why ? ' \u2014 \u201c' + p.why + '\u201d' : ''),
             action: 'Pending now under "You helped on"; earned once the audit is approved' });
         } else if (e.kind === 'commission.shared' && p.helper !== me && (p.before || {}).helper === me && actor !== me) {
@@ -2258,7 +2257,7 @@ if (view === 'portal_share_due') {
         producer_name: client && client.extras ? (AGENT_NAME[PRODUCER_MAP[client.extras.producer]] || null) : null,
         documents: docs.rows || [],
         events: (Array.isArray(evs.rows) ? evs.rows : []).filter(e => showTest || !(e.payload && e.payload.is_test === true)),
-        my_rate: Number(((Array.isArray(myRate.rows) ? myRate.rows : [])[0] || {}).percentage || 0),
+        my_rate: 100,   // fee basis (Sep 17): the share sheet prices a share as a slice of the fee
         /* the roster, so the tabs print names and never an email */
         agent_names: AGENT_NAME,
       });
@@ -2277,10 +2276,13 @@ if (view === 'portal_share_due') {
       /* Every rate, not just mine (Sep 16). A share is a slice of the OWNER's
          commission, so the helper's dollars must come from the owner's rate - the
          same number the owner saw on the sheet - or the two halves do not add up. */
-      const rateRows = await sbGet(s, 'agent_commission?select=agent_email,percentage');
-      const RATE = {}; for (const x of (Array.isArray(rateRows.rows) ? rateRows.rows : [])) RATE[String(x.agent_email || '').toLowerCase()] = Number(x.percentage);
-      const rateOf = e => (e && RATE[String(e).toLowerCase()] != null) ? RATE[String(e).toLowerCase()] : 10;
-      const pct = rateOf(me);
+      /* FEE BASIS (Sep 17). Tony will not enter percentages - agent_commission is empty
+         and every number here was "10% of the fee", a figure nobody agreed to. The agent
+         now sees the FEE itself: approved once the audit is done, waiting until then, and
+         a share is a slice of the fee. Same numbers as the Console's Fees by agent. */
+      const FEE_BASIS = 100;
+      const rateOf = () => FEE_BASIS;
+      const pct = FEE_BASIS;
 
       /* Own it, ran it, or were NAMED for a share of it (Sep 16: Jorge on 26424 did
          neither of the first two - the row never reached this loop, so his half was
@@ -2510,7 +2512,7 @@ if (view === 'portal_share_due') {
 
       return res.status(200).json({
         ok: true, email: me, role: who.role,
-        commission: { rate: pct, earned_month: +earned.toFixed(2), pending_month: +pending.toFixed(2) },
+        commission: { rate: pct, basis: 'fee', earned_month: +earned.toFixed(2), pending_month: +pending.toFixed(2) },
         period: period.label, period_from: monthStart, period_to: period.to,
         unfinished_count: unfinished.length, unfinished,
         /* THE BANNER'S TWO NUMBERS (Sep 16). Saif watched Sammy upload the proof and the

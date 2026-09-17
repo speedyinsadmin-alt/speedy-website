@@ -45,7 +45,7 @@ function render(){
   const ready = !!S.helper && S.pct > 0 && S.pct <= 100 && String(S.why || '').trim().length >= 3;
   box.innerHTML = '<div class="ctpanel small share"><div class="hd"><div><b>' + (p.share ? 'Change this share' : 'Share this commission') + '</b>'
     + '<div class="sub">' + money(p.amount) + ' · ' + esc(p.purpose || '') + ' · client #' + esc(S.no) + ' · ' + (iOwn ? 'your' : esc(ownerName) + '’s') + ' commission' + (p.audit_status === 'complete' ? '' : ' when approved') + ': '
-    + (mine != null ? '<b class="green">' + money(mine) + '</b> <span class="dim">(' + Number(S.c.my_rate || 0) + '% of the ' + money(p.fee_amount) + ' fee)</span>' : '<span class="dim">known after the audit — the share is a percentage of it either way</span>') + '</div></div>'
+    + (mine != null ? '<b class="green">' + money(mine) + '</b> <span class="dim">' + (Number(S.c.my_rate || 0) >= 100 ? '(the fee Speedy kept on it)' : '(' + Number(S.c.my_rate || 0) + '% of the ' + money(p.fee_amount) + ' fee)') + '</span>' : '<span class="dim">known after the audit — the share is a percentage of it either way</span>') + '</div></div>'
     + '<span class="x" onclick="ShareWith.close()">&#10005;</span></div>'
     + '<div class="sstep"><div class="q">1 · With whom?</div><div class="speople">' + people().map(x => '<span class="sp' + (S.helper === x.email ? ' on' : '') + '" onclick="ShareWith.pick(\'' + esc(x.email) + '\')">' + esc(x.name) + '</span>').join('') + '</div></div>'
     + '<div class="sstep"><div class="q">2 · How much of ' + (iOwn ? '<u>your</u>' : esc(ownerName.split(' ')[0]) + '’s') + ' commission?</div><div class="spcts">'

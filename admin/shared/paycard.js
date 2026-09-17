@@ -31,7 +31,7 @@ function uploaderShort(email){
   return local ? local.charAt(0).toUpperCase() + local.slice(1) : '';
 }
 function noticeLineHtml(n){
-  const st = 'font-size:11px;margin-top:3px;';
+  const st = 'font-size:12px;margin-top:3px;';
   if(!n) return '<div style="' + st + 'color:var(--dim)">No record of a client confirmation on this row.</div>';
   if(n.result === 'sent') return '<div style="' + st + 'color:var(--green)">&#10003; Client emailed at ' + esc(n.to || '')
     + (n.source === 'typed' ? ' <span style="color:var(--amber-ink)">(typed by ' + esc(String(n.chosen_by||'agent').split('@')[0]) + ', not from the record)</span>' : '') + '</div>';
@@ -44,27 +44,27 @@ const SENDBACK_LABELS = { receipt_missing: 'Receipt missing', receipt_unreadable
   wrong_carrier: 'Wrong carrier', need_photos: 'Need photos of documents', other: 'Needs a fix' };
 function sendbackLabel(code){ return SENDBACK_LABELS[code] || 'Needs a fix'; }
 function auditLineHtml(p){
-  if(p.audit_status === 'invoice_open') return '<div style="font-size:11px;margin-top:3px;color:var(--mute)">No payment yet \u2014 the audit starts when the first payment comes in. Collect it from Charge \u2192 Pay this balance.</div>';
+  if(p.audit_status === 'invoice_open') return '<div style="font-size:12px;margin-top:3px;color:var(--mute)">No payment yet \u2014 the audit starts when the first payment comes in. Collect it from Charge \u2192 Pay this balance.</div>';
   /* Pacific, like every other stamp the agents read - the ISO slice printed UTC next to a "6 hr ago". */
   const t = ts => { try { return new Date(ts).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch(e){ return String(ts || '').slice(0, 16); } };
   const first = n => esc(String(n || '').split(' ')[0] || 'the auditor');
   const sb = p.audit_sendback;
   if(p.audit_status === 'complete'){
     if(!p.audit_submitted_at) return '';
-    return '<div style="font-size:11px;margin-top:3px;color:var(--green)">✓ Approved by ' + first(p.audit_completed_by_name)
+    return '<div style="font-size:12px;margin-top:3px;color:var(--green)">✓ Approved by ' + first(p.audit_completed_by_name)
       + (p.audit_completed_at ? ' · ' + esc(t(p.audit_completed_at)) : '')
       + (sb ? ' <span class="dim">(after a send-back)</span>' : '') + '</div>';
   }
   if(p.audit_status === 'ready_for_audit'){
-    return '<div style="font-size:11px;margin-top:3px;color:var(--mute)">Submitted'
+    return '<div style="font-size:12px;margin-top:3px;color:var(--mute)">Submitted'
       + (p.audit_submitted_by_name ? ' by ' + first(p.audit_submitted_by_name) : '')
       + (p.audit_submitted_at ? ' · ' + esc(t(p.audit_submitted_at)) : '')
       + (sb ? ' · <b style="color:var(--amber-ink)">resubmitted after a send-back</b>' : '')
       + ' · nothing is earned until the auditor approves</div>'
-      + (sb && sb.reply ? '<div style="font-size:11.5px;margin-top:4px;color:var(--mute);padding-left:9px;border-left:2px solid var(--line)">Your reply: “' + esc(sb.reply) + '”</div>' : '');
+      + (sb && sb.reply ? '<div style="font-size:12px;margin-top:4px;color:var(--mute);padding-left:9px;border-left:2px solid var(--line)">Your reply: “' + esc(sb.reply) + '”</div>' : '');
   }
   if(sb){
-    return '<div style="font-size:11.5px;margin-top:5px;color:var(--red-ink);padding-left:9px;border-left:2px solid var(--red-ink)">✗ Sent back by '
+    return '<div style="font-size:12px;margin-top:5px;color:var(--red-ink);padding-left:9px;border-left:2px solid var(--red-ink)">✗ Sent back by '
       + first(sb.by_name) + (sb.at ? ' · ' + esc(t(sb.at)) : '') + ' — <b>' + esc(sendbackLabel(sb.code)) + '</b>'
       + (sb.reason ? ': “' + esc(sb.reason) + '”' : '') + '</div>';
   }
@@ -111,12 +111,12 @@ function payHistoryHtml(c, opts){
   window.__shareCard = c; window.__shareMe = opts.me;
   const pays = c.payments || [];
   const docs = c.documents || [];
-  if(!pays.length && !docs.length) return '<div class="paycard"><div class="dim" style="font-size:11px">No payments recorded for this client yet.</div></div>';
+  if(!pays.length && !docs.length) return '<div class="paycard"><div class="dim" style="font-size:12px">No payments recorded for this client yet.</div></div>';
 
   const byPay = {};
   docs.forEach(d => { const k = d.payment_id || '_client'; (byPay[k] = byPay[k] || []).push(d); });
 
-  let h = '<div class="paycard"><div style="font-size:10px;color:var(--mute);letter-spacing:.06em;margin:14px 0 8px">PAYMENTS &amp; DOCUMENTS'
+  let h = '<div class="paycard"><div style="font-size:12px;color:var(--mute);letter-spacing:.06em;margin:14px 0 8px">PAYMENTS &amp; DOCUMENTS'
     + (c.producer_name ? ' <span style="text-transform:none;letter-spacing:0;color:var(--mute)">· producer ' + esc(c.producer_name) + '</span>' : '')
     + '</div>';
   h += pays.map(p => {
@@ -189,12 +189,12 @@ function payHistoryHtml(c, opts){
          row the same morning, which balanceCell now fixes there. Fixing one reader and
          leaving the other is how two screens end up disagreeing about one number. */
       + ((p.total_owed && p.total_owed > (p.collected || p.amount))
-          ? '<span style="color:var(--amber-ink);font-size:11.5px"> · ' + (invoiceOpen ? 'nothing collected yet' : '$'
+          ? '<span style="color:var(--amber-ink);font-size:12px"> · ' + (invoiceOpen ? 'nothing collected yet' : '$'
             + Number(p.collected || p.amount).toFixed(2) + ' of $' + Number(p.total_owed).toFixed(2))
             + ' · $' + (p.total_owed - (p.collected || p.amount)).toFixed(2) + ' still owed</span>'
-          : (isInvoice && p.total_owed ? '<span style="color:var(--green);font-size:11.5px"> · collected in full</span>' : ''))
-      + ' <span class="dim" style="font-size:11.5px">' + esc(p.purpose || '') + '</span></div>'
-      + '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;'
+          : (isInvoice && p.total_owed ? '<span style="color:var(--green);font-size:12px"> · collected in full</span>' : ''))
+      + ' <span class="dim" style="font-size:12px">' + esc(p.purpose || '') + '</span></div>'
+      + '<span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:7px;'
       /* GREY, not blue. The card's colour language is amber = needs attention, green =
          done, and BLUE = clickable (change, wrong client, every document chip). A blue
          chip reads as a button, and a balance payment needs nothing done to it — which
@@ -218,7 +218,7 @@ function payHistoryHtml(c, opts){
         : isLink ? 'link sent · not paid'
         : invoiceOpen ? 'open invoice · nothing collected'
         : isBal ? 'balance payment' : complete ? 'audited' : sentBack ? 'sent back' : waiting ? 'waiting for the auditor' : 'needs proof') + '</span></div>'
-      + '<div class="dim" style="font-size:11px;margin-top:2px">'
+      + '<div class="dim" style="font-size:12px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
       + (p.ref ? ' · ' + esc(p.ref) : '')
       + (p.charged_by ? ' · charged by ' + esc(p.charged_by.split(' ')[0]) : '')
@@ -233,7 +233,7 @@ function payHistoryHtml(c, opts){
                       : ' · Speedy kept ' + money(p.fee_amount))
           : '')
       + '</div>'
-      + '<div class="dim" style="font-size:11px;margin-top:3px">Commission to <b style="color:var(--ink)">'
+      + '<div class="dim" style="font-size:12px;margin-top:3px">Commission to <b style="color:var(--ink)">'
       + esc(p.commission_to_name || 'unassigned') + '</b>'
       + (canCorrect
           ? ' · <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();reassignPayment(\'' + p.id + '\',\'' + esc(p.commission_to||'') + '\')">change</span>'
@@ -273,7 +273,7 @@ function payHistoryHtml(c, opts){
          what decided whether the client still owes the money, so it belongs on the row
          and not only in an event nobody opens. */
       + (isRefund
-          ? '<div style="font-size:11px;margin-top:3px;color:var(--mute)">Refunds '
+          ? '<div style="font-size:12px;margin-top:3px;color:var(--mute)">Refunds '
             /* a partial names its share: "Refunds $100.00 of the $559.12 payment" (Sep 15) */
             + (refParent ? (Math.abs(Number(p.amount || 0)) + 0.004 < Number(refParent.amount || 0) ? money(Math.abs(Number(p.amount || 0))) + ' of the ' : 'the ')
                            + money(refParent.amount) + ' payment from ' + esc(String(refParent.ts||'').slice(0,10))
@@ -284,7 +284,7 @@ function payHistoryHtml(c, opts){
                    : p.refund_carrier === 'no' ? '<b style="color:var(--red-ink)">not returned — Speedy absorbed it</b>'
                    : 'not back yet') : '')
             + '</div>'
-            + (p.refund_note ? '<div style="font-size:11.5px;color:var(--mute);margin-top:5px;padding-left:9px;'
+            + (p.refund_note ? '<div style="font-size:12px;color:var(--mute);margin-top:5px;padding-left:9px;'
                 + 'border-left:2px solid var(--line)">' + esc(p.refund_note) + '</div>' : '')
           : '')
       /* WAS THE CLIENT TOLD — on every payment and every refund, never blank. Charges
@@ -296,7 +296,7 @@ function payHistoryHtml(c, opts){
       /* A REFUND REQUEST WAITING ON TONY. Shown on the payment, with who asked and when,
          and the Refund button is withheld for everyone until he decides. */
       + (p.refund_request
-          ? '<div style="font-size:11px;margin-top:3px;color:var(--amber-ink)">Refund of ' + money(p.refund_request.amount)
+          ? '<div style="font-size:12px;margin-top:3px;color:var(--amber-ink)">Refund of ' + money(p.refund_request.amount)
             + ' requested by ' + esc(String(p.refund_request.requested_by_name || p.refund_request.requested_by).split(' ')[0])
             + ' on ' + esc(String(p.refund_request.requested_at || '').slice(0, 10))
             + ' — <b>waiting for the owner</b></div>'
@@ -304,7 +304,7 @@ function payHistoryHtml(c, opts){
       /* THE DECISION (Sep 15): what the owner did with the request - as asked, for a
          different amount, or declined and why. Only while nothing newer is pending. */
       + (!p.refund_request && p.refund_decision
-          ? '<div style="font-size:11px;margin-top:3px;color:' + (p.refund_decision.status === 'approved' ? 'var(--green)' : 'var(--red-ink)') + '">'
+          ? '<div style="font-size:12px;margin-top:3px;color:' + (p.refund_decision.status === 'approved' ? 'var(--green)' : 'var(--red-ink)') + '">'
             + (p.refund_decision.status === 'approved'
                 ? 'Refund request <b>approved</b>' + (p.refund_decision.approved_amount != null && Math.abs(p.refund_decision.approved_amount - p.refund_decision.amount) > 0.004
                     ? ' for <b>' + money(p.refund_decision.approved_amount) + '</b> of the ' + money(p.refund_decision.amount) + ' asked'
@@ -320,11 +320,11 @@ function payHistoryHtml(c, opts){
       + (isRefund ? slipLineHtml(p, slips) : '')
       /* And on the payment itself: how much of it has gone back. */
       + (!isRefund && refundedOff > 0
-          ? '<div style="font-size:11px;margin-top:3px;color:var(--red-ink)">'
+          ? '<div style="font-size:12px;margin-top:3px;color:var(--red-ink)">'
             + money(-refundedOff) + ' refunded — the original charge stays on file, it cannot be withdrawn.</div>'
           : '')
       + (isBal
-          ? '<div class="dim" style="font-size:11px;margin-top:3px;color:var(--mute)">'
+          ? '<div class="dim" style="font-size:12px;margin-top:3px;color:var(--mute)">'
             + 'Pays down the '
             + (parent ? money(parent.amount) + ' payment from '
                         + esc(String(parent.ts || '').slice(0, 10))
@@ -337,11 +337,11 @@ function payHistoryHtml(c, opts){
                 + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '')
                 + (d.uploaded_by ? ' · ' + esc(uploaderShort(d.uploaded_by)) : '') + '</span>').join('')
             + '</div>'
-          : (!complete && !isBal && !isLink && !invoiceOpen ? '<div class="dim" style="font-size:11px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
+          : (!complete && !isBal && !isLink && !invoiceOpen ? '<div class="dim" style="font-size:12px;margin-top:6px;color:var(--amber-ink)">No documents yet</div>' : ''))
       /* an open invoice has no payment to prove yet: no proof button until money arrives */
       + (opts.actions && !complete && !isBal && !isLink && !invoiceOpen && mine
           ? '<div onclick="finishAuditFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ',' + Number(p.amount||0) + ')" '
-            + 'style="margin-top:8px;text-align:center;background:' + (waiting ? 'transparent;border:1px solid var(--line);color:var(--blue-l)' : 'var(--amber);color:#2a1a00') + ';border-radius:9px;padding:8px;font-size:12.5px;font-weight:' + (waiting ? '600' : '700') + ';cursor:pointer">'
+            + 'style="margin-top:8px;text-align:center;background:' + (waiting ? 'transparent;border:1px solid var(--line);color:var(--blue-l)' : 'var(--amber);color:#2a1a00') + ';border-radius:9px;padding:8px;font-size:13px;font-weight:' + (waiting ? '600' : '700') + ';cursor:pointer">'
             + (sentBack ? 'Fix and resubmit' : waiting ? 'Edit before the auditor reviews' : 'Add proof of payment') + '</div>'
           : '')
       /* Not the owner: documents only. save_carrier_leg is guarded server-side by
@@ -351,8 +351,8 @@ function payHistoryHtml(c, opts){
          afterwards reads as broken. */
       + (opts.actions && !complete && !isBal && !isLink && !mine
           ? '<div onclick="addDocsFor(\'' + p.id + '\',' + ((c.client && c.client.client_no) || opts.clientNo || 0) + ',' + Number(p.amount||0) + ')" '
-            + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">Add documents to help</div>'
-            + '<div class="dim" style="font-size:11px;text-align:center;margin-top:4px">'
+            + 'style="margin-top:8px;text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);border-radius:9px;padding:7px;font-size:13px;font-weight:600;cursor:pointer">Add documents to help</div>'
+            + '<div class="dim" style="font-size:12px;text-align:center;margin-top:4px">'
             + esc((p.commission_to_name || 'The owner').split(' ')[0]) + ' still confirms the carrier cost</div>'
           : '')
       /* Audited payments used to be a dead end: the button above is gated on
@@ -393,7 +393,7 @@ function payHistoryHtml(c, opts){
 
   const loose = byPay['_client'] || [];
   if(loose.length){
-    h += '<div class="dim" style="font-size:11px;margin:8px 0 5px">Other documents on this client</div>'
+    h += '<div class="dim" style="font-size:12px;margin:8px 0 5px">Other documents on this client</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:5px">'
       + loose.map(d => '<span class="docchip" id="pd' + d.id + '" onclick="openPortalDoc(\'' + d.id + '\')">'
           + esc(docTypeLabel(docType(d))) + (d.bytes ? ' · ' + bytesLabel(d.bytes) : '') + '</span>').join('')

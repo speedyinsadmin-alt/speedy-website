@@ -14,7 +14,7 @@
 <script src="https://checkout.clover.com/sdk.js"></script>
 <style>
   :root{
-    --navy:#0b1029; --card:#0e1533; --ink:#e8ecff; --mute:#8f9ac4; --dim:#5c6690;
+    --navy:#0b1029; --card:#0e1533; --ink:#e8ecff; --mute:#8f9ac4; --dim:#9aa5cc;
     --line:rgba(255,255,255,.10); --blue:#4d7cfe; --blue-l:#7fa8ff; --green:#2fbf71;
     --amber:#f5a623; --red:#e03131; --field:#161f45;
     /* --amber is used BOTH as a button background with dark text and as warning
@@ -33,7 +33,7 @@
   /* Light. Every value is a deliberate substitution, not a lightening: #7fa8ff,
      #2fbf71 and #f5a623 all fail as text on white. */
   [data-theme="light"]{
-    --navy:#f4f6fb; --card:#ffffff; --ink:#101632; --mute:#5c6690; --dim:#8790ab;
+    --navy:#f4f6fb; --card:#ffffff; --ink:#101632; --mute:#5c6690; --dim:#5c6690;
     --line:rgba(16,22,50,.12); --blue:#2f5fe0; --blue-l:#2f5fe0; --green:#16874a;
     --amber:#f5a623; --amber-ink:#a35c00; --red:#d32f2f; --field:#eef1f8;
     --hair:rgba(16,22,50,.08); --scrim:rgba(16,22,50,.45);
@@ -51,7 +51,7 @@
   .beta{background:var(--amber);color:#2a1a00;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;vertical-align:middle;letter-spacing:.03em}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:12px}
   .muted{color:var(--mute)} .dim{color:var(--dim)}
-  label{font-size:12px;color:var(--mute);display:block;margin-bottom:5px}
+  label{font-size:13px;color:var(--mute);display:block;margin-bottom:5px}
   /* TEXTAREA WAS NOT IN THIS LIST. It had never been needed — the refund note is the
      first one in this file — so it rendered at the browser default: monospace, sized in
      cols, a fraction of the width, with the text clipped. Found by photographing the
@@ -71,7 +71,7 @@
   .row{display:flex;justify-content:space-between;align-items:center}
   .tile{border-radius:10px;padding:12px;text-align:center;font-size:13px;font-weight:600;cursor:pointer}
   .chips{display:flex;flex-wrap:wrap;gap:5px}
-  .chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:12px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
+  .chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:13px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
   .chips button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
   /* THE PURPOSE GATE (Saif, Sep 14): "New business" needs a source before anything
      else - the other purposes step back, the source row lights up, Charge waits. */
@@ -80,7 +80,7 @@
   #chgOtherWrap.need input{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,124,254,.22)}
   @keyframes needpulse{0%,100%{box-shadow:0 0 0 3px rgba(77,124,254,.22)}50%{box-shadow:0 0 0 6px rgba(77,124,254,.10)}}
   #chgGo:disabled{opacity:.45;cursor:default}
-  #chgGoWhy{font-size:12px;color:var(--blue-l);text-align:center;margin-top:8px}
+  #chgGoWhy{font-size:13px;color:var(--blue-l);text-align:center;margin-top:8px}
   /* the part-payment answer is the one that changes money; selected, it is red, not blue */
   .chips button.part.sel{background:var(--red);border-color:var(--red);color:#fff}
   .cf{background:#fff;border-radius:10px;height:48px;padding:2px 10px;margin:6px 0;overflow:hidden}
@@ -96,75 +96,75 @@
   #chargeSheet > div,#todoSheet > div,#newsSheet > div,#shareSheet > div,#helpSheet > div,#earnSheet > div,#refundSheet > div{max-height:calc(100dvh - 32px)}
   #chargeSheet > div > .card,#todoSheet > div > .card,#newsSheet > div > .card,#shareSheet > div > .card,#helpSheet > div > .card,#earnSheet > div > .card,#refundSheet > div > .card{
     max-height:calc(100dvh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--blue-l);cursor:pointer}
+  .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:12px;font-weight:600;color:var(--blue-l);cursor:pointer}
   .todoitem{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
   .todoitem:hover{border-color:var(--amber-ink)}
   .res{border-radius:12px;padding:16px;margin-top:12px}
   .res.good{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.45)}
   .res.bad{background:rgba(224,49,49,.12);border:1px solid rgba(224,49,49,.45)}
-  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid var(--hair)}
+  .kv{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid var(--hair)}
   /* ---------- REFUNDS · stages 1-3 ----------
      Every class here is NEW to this file. Checked before writing rather than assumed:
      .sec, .conseq, .warn, .loss, .will, .rowacts, .actghost, .actrefund, .note and
      .lbl had no rule in portal.html, and --red-ink did not exist. Six times this week
      markup went in against CSS living in a sibling file — class="go" rendered as a
      browser-default white slab on the Staff page for exactly that reason. */
-  .sec{font-size:10.5px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;
+  .sec{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;
     margin:18px 0 9px;display:flex;align-items:center;gap:9px}
   .sec::after{content:"";flex:1;height:1px;background:var(--line)}
   .sec:first-child{margin-top:0}
   /* The consequence of the choice just made, shown BEFORE the button and never after. */
   .conseq{background:var(--field);border:1px solid var(--line);border-left:2px solid var(--blue);
-    border-radius:0 10px 10px 0;padding:10px 12px;font-size:12.5px;line-height:1.55;margin-top:8px}
+    border-radius:0 10px 10px 0;padding:10px 12px;font-size:13px;line-height:1.55;margin-top:8px}
   .conseq b{color:var(--ink)}
   .conseq.good{border-left-color:var(--green)}
   .warn{background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.45);border-radius:10px;
-    padding:11px 13px;font-size:12.5px;line-height:1.55;color:var(--amber-ink);margin-top:10px}
+    padding:11px 13px;font-size:13px;line-height:1.55;color:var(--amber-ink);margin-top:10px}
   /* A carrier that keeps its share on a refunded sale is money Speedy has LOST. */
   .loss{background:rgba(224,49,49,.10);border:1px solid rgba(224,49,49,.42);border-radius:10px;
-    padding:11px 13px;font-size:12.5px;line-height:1.55;margin-top:8px}
+    padding:11px 13px;font-size:13px;line-height:1.55;margin-top:8px}
   .loss b{color:var(--red-ink)}
   /* The last thing read before money leaves: a list of facts, deliberately unstyled. */
   /* THE REFUND STEPPER (Sep 15): four numbered questions, one open at a time, the
      answered ones collapsed to a line, a summary that fills in as answers arrive. */
   .rhdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
   .rx{color:var(--dim);font-size:19px;cursor:pointer;padding:0 4px}
-  .rpay{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--mute);margin:10px 0 2px}
+  .rpay{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--mute);margin:10px 0 2px}
   .rpay b{color:var(--ink);font-size:15px}
-  .rpill{background:var(--field);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11.5px}
+  .rpill{background:var(--field);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px}
   .rstep{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
   .rstep.dim .rq{color:var(--dim)} .rstep.dim .rnum{opacity:.6}
   .rstep.open .rq{color:var(--ink)}
-  .rnum{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--dim);font-size:12.5px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;cursor:pointer}
+  .rnum{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--dim);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;cursor:pointer}
   .rnum.on{border-color:var(--blue);color:var(--blue)}
   .rnum.done{border-color:var(--green);background:var(--green);color:#fff}
   .rbody{flex:1;min-width:0}
   .rq{font-size:15px;font-weight:700;cursor:pointer}
-  .rq small{font-weight:400;color:var(--mute);font-size:12.5px;margin-left:6px}
+  .rq small{font-weight:400;color:var(--mute);font-size:13px;margin-left:6px}
   .rdone{font-size:13.5px;margin-top:2px;color:var(--mute)} .rdone b{color:var(--ink)}
-  .rchg{color:var(--blue);font-size:12.5px;margin-left:6px;cursor:pointer}
+  .rchg{color:var(--blue);font-size:13px;margin-left:6px;cursor:pointer}
   .rchoice{margin-top:8px;display:flex;flex-direction:column;gap:6px}
   .rradio{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer;background:var(--card)}
   .rradio.on{border-color:var(--blue);background:rgba(77,124,254,.10)}
   .rradio .dot{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--dim);margin-top:3px}
   .rradio.on .dot{border-color:var(--blue);background:radial-gradient(var(--blue) 45%,transparent 50%)}
   .rradio .t{font-size:14px;font-weight:600;color:var(--ink)}
-  .rradio .m{font-size:12px;color:var(--mute);margin-top:1px}
+  .rradio .m{font-size:13px;color:var(--mute);margin-top:1px}
   .ramt{display:flex;align-items:center;gap:8px;margin-top:10px}
   .ramt input{width:130px;font-size:17px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);color:var(--ink);background:var(--field)}
   .ramt input.need{border-color:var(--red)}
-  .rsub{font-size:12.5px;color:var(--mute);margin-top:7px} .rsub b{color:var(--ink)}
+  .rsub{font-size:13px;color:var(--mute);margin-top:7px} .rsub b{color:var(--ink)}
   #refundSheet textarea.need{border-color:var(--red)}
   .rsum{margin-top:14px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
-  .rsumh{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:5px}
+  .rsumh{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:5px}
   .rsum ul{margin:0;padding:0;list-style:none;font-size:13px;line-height:1.55}
   .rsum li{padding:3px 0;display:flex;gap:8px} .rsum li::before{content:"\2192";color:var(--dim);flex:none}
   .rsum b{color:var(--ink)} .rsum .neg{color:var(--red-ink);font-weight:700} .rwait{color:var(--dim);font-style:italic}
-  .rprog{text-align:center;font-size:12.5px;color:var(--mute);margin-top:8px}
+  .rprog{text-align:center;font-size:13px;color:var(--mute);margin-top:8px}
   .rbar{display:inline-block;width:110px;height:5px;border-radius:5px;background:var(--line);vertical-align:middle;margin-right:8px;overflow:hidden}
   .rbar i{display:block;height:100%;background:var(--green)}
   .rcancel{text-align:center;font-size:13.5px;color:var(--mute);margin-top:10px;cursor:pointer}
-  .will{margin:8px 0 0;padding:0;list-style:none;font-size:12.5px;line-height:1.6}
+  .will{margin:8px 0 0;padding:0;list-style:none;font-size:13px;line-height:1.6}
   .will li{padding:6px 0 6px 20px;position:relative;border-bottom:1px solid var(--hair)}
   .will li:last-child{border-bottom:0}
   .will li::before{content:"\2192";position:absolute;left:0;color:var(--dim)}
@@ -173,13 +173,13 @@
   .rowacts{display:flex;gap:7px;margin-top:8px}
   .rowacts > *{flex:1}
   .actghost{text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);
-    border-radius:9px;padding:7px;font-size:12px;font-weight:600;cursor:pointer}
+    border-radius:9px;padding:7px;font-size:13px;font-weight:600;cursor:pointer}
   /* Findable, not fat-fingerable: outlined rather than filled, and it opens a sheet
      that asks four questions before anything moves. */
   .actrefund{text-align:center;background:transparent;border:1px solid rgba(224,49,49,.45);
-    color:var(--red-ink);border-radius:9px;padding:7px;font-size:12px;font-weight:700;cursor:pointer}
-  .note{font-size:11.5px;color:var(--mute);margin-top:5px;line-height:1.5}
-  .lbl{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
+    color:var(--red-ink);border-radius:9px;padding:7px;font-size:13px;font-weight:700;cursor:pointer}
+  .note{font-size:12px;color:var(--mute);margin-top:5px;line-height:1.5}
+  .lbl{font-size:12px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
   .lbl.red{background:rgba(224,49,49,.15);color:var(--red-ink)}
   @media(max-width:420px){ .rowacts{flex-direction:column} }
 </style>
@@ -187,11 +187,11 @@
 <body>
 <div class="wrap">
 
-  <div id="authWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:11px 13px;font-size:12.5px;margin-bottom:12px;color:var(--amber-ink)">
+  <div id="authWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:11px 13px;font-size:13px;margin-bottom:12px;color:var(--amber-ink)">
     Your sign-in expired. <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="reauth()">Sign in again</span> &mdash; nothing you typed is lost.
   </div>
 
-  <div id="updWarn" class="hide" style="background:rgba(77,124,254,.12);border:1px solid rgba(77,124,254,.45);border-radius:10px;padding:11px 13px;font-size:12.5px;margin-bottom:12px;color:var(--blue-l);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <div id="updWarn" class="hide" style="background:rgba(77,124,254,.12);border:1px solid rgba(77,124,254,.45);border-radius:10px;padding:11px 13px;font-size:13px;margin-bottom:12px;color:var(--blue-l);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <span style="flex:1;min-width:190px">A newer version of the portal is ready.</span>
     <span onclick="location.reload()" style="cursor:pointer;background:var(--blue);color:#fff;padding:6px 14px;border-radius:8px">Reload now</span>
     <span onclick="dismissUpdate()" style="cursor:pointer;color:var(--dim)">Later</span>
@@ -207,7 +207,7 @@
       <div id="hlFound" class="hide" style="background:rgba(77,124,254,.12);border:1px solid rgba(77,124,254,.45);border-radius:10px;padding:12px 14px;margin-top:16px;text-align:left">
         <div style="font-size:11px;color:var(--blue-l);text-transform:uppercase;letter-spacing:.05em">Opened from HawkSoft</div>
         <div id="hlName" style="font-size:16px;font-weight:800;margin-top:3px">&mdash;</div>
-        <div class="muted" style="font-size:12px;margin-top:4px">Sign in and you go straight to the charge sheet.</div>
+        <div class="muted" style="font-size:13px;margin-top:4px">Sign in and you go straight to the charge sheet.</div>
       </div>
     </div>
   </div>
@@ -224,7 +224,7 @@
       <!-- Shown only when Continue is pressed with nothing chosen, which is now
            possible: someone with no home branch on their staff record gets a
            placeholder rather than an assumed Moreno Valley. -->
-      <div id="officeWarn" class="hide" style="color:var(--amber);font-size:12.5px;margin-top:6px"></div>
+      <div id="officeWarn" class="hide" style="color:var(--amber);font-size:13px;margin-top:6px"></div>
       <button class="btn btn-blue" onclick="confirmOffice()">Continue →</button>
     </div>
   </div>
@@ -239,11 +239,11 @@
       <div class="row">
         <div>
           <div style="font-size:16px;font-weight:800" id="homeName">Agent <span class="beta">BETA</span></div>
-          <div class="muted" style="font-size:12px;margin-top:2px">📍 Working at <b style="color:var(--blue-l)" id="workingAt">—</b></div>
+          <div class="muted" style="font-size:13px;margin-top:2px">📍 Working at <b style="color:var(--blue-l)" id="workingAt">—</b></div>
         </div>
         <div style="text-align:right">
           <div style="background:var(--field);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600" id="officeLabel">—</div>
-          <div class="dim" style="font-size:10px;margin-top:3px"><span style="color:var(--blue-l);cursor:pointer;font-weight:600" onclick="Activity.open()" title="What you did, today / this week / a range">My activity</span> · <span style="color:var(--blue-l);cursor:pointer;font-weight:600" onclick="DocCenter.open()" title="Your uploads, what needs a label, your payments with no proof">My documents</span> · sign out to change office · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span> · <span id="themeBtn" onclick="toggleTheme()" style="color:var(--blue-l);cursor:pointer" title="Switch light / dark">&#9789; Light</span></div>
+          <div class="dim" style="font-size:12px;margin-top:3px"><span style="color:var(--blue-l);cursor:pointer;font-weight:600" onclick="Activity.open()" title="What you did, today / this week / a range">My activity</span> · <span style="color:var(--blue-l);cursor:pointer;font-weight:600" onclick="DocCenter.open()" title="Your uploads, what needs a label, your payments with no proof">My documents</span> · sign out to change office · <span style="color:var(--blue-l);cursor:pointer" onclick="signOut()">sign out</span> · <span id="themeBtn" onclick="toggleTheme()" style="color:var(--blue-l);cursor:pointer" title="Switch light / dark">&#9789; Light</span></div>
         </div>
       </div>
     </div>
@@ -252,39 +252,39 @@
     <div id="chatBox" class="hide" onclick="openChat()" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:12px">
       <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none">&#128172;</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:700;color:var(--blue-l)">Chat <span id="chatDuty" class="dim" style="font-weight:600;font-size:11px">· off duty</span></div>
-        <div style="font-size:11px;color:var(--dim);margin-top:1px" id="chatLine">Website visitors waiting for an agent &rarr;</div>
+        <div style="font-size:13px;font-weight:700;color:var(--blue-l)">Chat <span id="chatDuty" class="dim" style="font-weight:600;font-size:12px">· off duty</span></div>
+        <div style="font-size:12px;color:var(--dim);margin-top:1px" id="chatLine">Website visitors waiting for an agent &rarr;</div>
       </div>
-      <span id="chatCount" class="hide" style="background:var(--red);color:#fff;font-size:11px;font-weight:800;border-radius:99px;padding:2px 8px">0</span>
+      <span id="chatCount" class="hide" style="background:var(--red);color:#fff;font-size:12px;font-weight:800;border-radius:99px;padding:2px 8px">0</span>
     </div>
 
     <!-- to-do -->
     <div id="newsBell" class="hide" onclick="openNews()" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-bottom:8px;cursor:pointer">
-      <span style="color:var(--blue-l);font-size:12.5px">What's new</span>
-      <span id="newsCount" style="background:var(--red);color:#fff;font-size:10.5px;font-weight:800;border-radius:99px;padding:1px 7px">0</span>
+      <span style="color:var(--blue-l);font-size:13px">What's new</span>
+      <span id="newsCount" style="background:var(--red);color:#fff;font-size:12px;font-weight:800;border-radius:99px;padding:1px 7px">0</span>
     </div>
 
     <div id="helpBox" class="hide" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openHelp()">
       <div style="font-size:13px;font-weight:700;color:var(--blue-l)" id="helpText">Payments needing proof</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:1px">Other agents' — you can finish these for them &rarr;</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:1px">Other agents' — you can finish these for them &rarr;</div>
     </div>
 
     <div id="todo" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="openTodo()">
       <div style="font-size:13px;font-weight:700;color:var(--amber-ink)" id="todoText">⚠ You have payments needing proof</div>
-      <div style="font-size:11px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
+      <div style="font-size:12px;color:#c9d2f0;margin-top:1px">Finish them to release your commission →</div>
     </div>
 
     <!-- commission — hideable so an agent can help a client with someone beside them -->
     <div style="display:flex;justify-content:flex-end;margin-bottom:5px">
-      <span onclick="toggleEarnings()" id="eyeBtn" style="cursor:pointer;color:var(--mute);font-size:11.5px">Hide my earnings</span>
+      <span onclick="toggleEarnings()" id="eyeBtn" style="cursor:pointer;color:var(--mute);font-size:12px">Hide my earnings</span>
     </div>
     <div id="earnWrap" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div onclick="openEarnings()" style="background:linear-gradient(135deg,rgba(47,191,113,.15),rgba(77,124,254,.08));border:1px solid rgba(47,191,113,.3);border-radius:12px;padding:13px;cursor:pointer">
-        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em" id="earnedLabel">Earned this month &rsaquo;</div>
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em" id="earnedLabel">Earned this month &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--green)" id="earned">$0.00</div>
       </div>
       <div onclick="openPending()" style="background:linear-gradient(135deg,rgba(245,166,35,.14),rgba(77,124,254,.06));border:1px solid rgba(245,166,35,.35);border-radius:12px;padding:13px;cursor:pointer">
-        <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.04em">Pending &rsaquo;</div>
+        <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Pending &rsaquo;</div>
         <div style="font-size:22px;font-weight:800;color:var(--amber-ink)" id="pending">$0.00</div>
       </div>
     </div>
@@ -297,14 +297,14 @@
            by failing to find them. -->
       <div style="display:flex;justify-content:flex-end;margin-top:6px">
         <span onclick="showNewClient(document.getElementById('searchBox').value)"
-              style="font-size:12px;color:var(--blue-l);cursor:pointer">&#65291; New client in HawkSoft</span>
+              style="font-size:13px;color:var(--blue-l);cursor:pointer">&#65291; New client in HawkSoft</span>
       </div>
       <div id="newClientHost"></div>
       <div id="searchResults"></div>
-      <div id="chargeHint" class="hide" style="font-size:12px;color:var(--amber);margin-top:8px"></div>
-      <div class="dim" style="font-size:11px;margin-top:10px">Open clients — up to 5</div>
+      <div id="chargeHint" class="hide" style="font-size:13px;color:var(--amber);margin-top:8px"></div>
+      <div class="dim" style="font-size:12px;margin-top:10px">Open clients — up to 5</div>
       <div id="tabbar" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
-        <div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>
+        <div class="dim" style="font-size:13px;padding:6px 0">No clients open yet</div>
       </div>
       <button class="btn btn-red" onclick="openCharge(ACTIVE_TAB)" style="margin-top:12px">＋ New charge</button>
     </div>
@@ -312,7 +312,7 @@
     <!-- open client panel -->
     <div id="clientPanel"></div>
 
-    <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v4.1</span> · you see only your own work</div>
+    <div class="dim" style="text-align:center;font-size:12px;margin-top:6px">Speedy Platform · portal <span class="beta">BETA</span> · <span id="ver">v4.1</span> · you see only your own work</div>
   </div>
 
 </div>
@@ -321,9 +321,9 @@
   <div style="max-width:460px;margin:0 auto">
     <div class="card" style="border-color:var(--green)">
       <div style="font-size:16px;font-weight:800">Share this commission?</div>
-      <div class="muted" style="font-size:12px;margin-top:2px" id="shareWho">—</div>
+      <div class="muted" style="font-size:13px;margin-top:2px" id="shareWho">—</div>
       <div id="shareBody" style="margin-top:12px"></div>
-      <div class="dim" style="font-size:11px;text-align:center;margin-top:10px">
+      <div class="dim" style="font-size:12px;text-align:center;margin-top:10px">
         This is the only time you can set it. Choosing nothing keeps all of it.
       </div>
     </div>
@@ -336,7 +336,7 @@
       <div class="row" style="align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:16px;font-weight:800">What's new</div>
-          <div class="muted" style="font-size:12px;margin-top:2px">Changes that affect your work</div>
+          <div class="muted" style="font-size:13px;margin-top:2px">Changes that affect your work</div>
         </div>
         <div onclick="closeNews()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
       </div>
@@ -353,7 +353,7 @@
       <div class="row" style="align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:16px;font-weight:800" id="earnTitle">Where this came from</div>
-          <div class="muted" style="font-size:12px;margin-top:2px" id="earnSub">&mdash;</div>
+          <div class="muted" style="font-size:13px;margin-top:2px" id="earnSub">&mdash;</div>
         </div>
         <div onclick="closeEarnings()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
       </div>
@@ -369,7 +369,7 @@
       <div class="row" style="align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:16px;font-weight:800">Help another agent</div>
-          <div class="muted" style="font-size:12px;margin-top:2px">Finish an audit on a payment they earn</div>
+          <div class="muted" style="font-size:13px;margin-top:2px">Finish an audit on a payment they earn</div>
         </div>
         <div onclick="closeHelp()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
       </div>
@@ -385,7 +385,7 @@
       <div class="row" style="align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:16px;font-weight:800">Payments needing proof</div>
-          <div class="muted" style="font-size:12px;margin-top:2px">Tap one to finish it</div>
+          <div class="muted" style="font-size:13px;margin-top:2px">Tap one to finish it</div>
         </div>
         <div onclick="closeTodo()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px">&#10005;</div>
       </div>
@@ -403,12 +403,12 @@
       <div class="row" style="align-items:flex-start;margin-bottom:12px">
         <div>
           <div style="font-size:16px;font-weight:800" id="chgTitle">Charge</div>
-          <div class="muted" style="font-size:12px;margin-top:2px" id="chgSub">—</div>
+          <div class="muted" style="font-size:13px;margin-top:2px" id="chgSub">—</div>
         </div>
         <div onclick="closeCharge()" style="cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px" title="Close">&#10005;</div>
       </div>
 
-      <div id="chgAuthWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:10px;color:var(--amber-ink)">
+      <div id="chgAuthWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px;color:var(--amber-ink)">
         Your sign-in expired. <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="reauth()">Sign in again</span> &mdash; nothing you typed is lost.
       </div>
 
@@ -448,7 +448,7 @@
             <label for="chgTotal" style="color:var(--red-ink)">Total the client owes for this sale &mdash; required</label>
             <input id="chgTotal" inputmode="decimal" placeholder="e.g. 187.00" autocomplete="off" oninput="showBalance();renderChgHsPreview()" style="border-color:rgba(224,49,49,.55)">
           </div>
-          <div id="chgBal" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px;font-size:12.5px;color:var(--amber-ink)"></div>
+          <div id="chgBal" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px;font-size:13px;color:var(--amber-ink)"></div>
         </div>
 
         <label for="chgNote" style="margin-top:12px">Note &mdash; optional</label>
@@ -457,21 +457,21 @@
         <div id="chgPolWrap" class="hide" style="margin-top:12px">
           <label for="chgPolSel">Apply to policy &mdash; files the receipt under that policy tab</label>
           <select id="chgPolSel" onchange="updatePolicyPreview()"></select>
-          <div id="chgPolOdd" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:9px;padding:9px 10px;margin-top:7px;font-size:12px;color:var(--amber-ink)"></div>
+          <div id="chgPolOdd" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.4);border-radius:9px;padding:9px 10px;margin-top:7px;font-size:13px;color:var(--amber-ink)"></div>
           <div id="chgPolPrev" class="hide" style="background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-top:7px">
-            <div class="dim" style="font-size:11px">Receipt will show</div>
-            <div id="chgPolPrevVal" style="font-size:12.5px;margin-top:3px"></div>
+            <div class="dim" style="font-size:12px">Receipt will show</div>
+            <div id="chgPolPrevVal" style="font-size:13px;margin-top:3px"></div>
           </div>
         </div>
 
-        <div id="chgRefresh" onclick="chgRefresh()" style="border:1.5px solid var(--line);border-radius:9px;text-align:center;cursor:pointer;color:var(--mute);padding:9px;font-size:12.5px;margin-top:8px">&#8635; New tab in HawkSoft? Refresh</div>
+        <div id="chgRefresh" onclick="chgRefresh()" style="border:1.5px solid var(--line);border-radius:9px;text-align:center;cursor:pointer;color:var(--mute);padding:9px;font-size:13px;margin-top:8px">&#8635; New tab in HawkSoft? Refresh</div>
 
         <div style="margin-top:12px">
           <label for="chgComm">Commission to</label>
           <select id="chgComm" onchange="onCommChange()"></select>
           <div id="chgProdNote" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:6px">
-            <div style="font-size:11.5px;color:var(--amber-ink)" id="chgProdText"></div>
-            <div class="dim" style="font-size:11px;margin-top:2px">Is this your job, or are you charging for someone?</div>
+            <div style="font-size:12px;color:var(--amber-ink)" id="chgProdText"></div>
+            <div class="dim" style="font-size:12px;margin-top:2px">Is this your job, or are you charging for someone?</div>
             <div style="display:flex;gap:6px;margin-top:8px">
               <button type="button" class="btn btn-ghost" style="margin:0;padding:7px" onclick="giveToProducer()" id="chgGiveBtn"></button>
               <button type="button" class="btn btn-ghost" style="margin:0;padding:7px" onclick="document.getElementById('chgComm').focus()">Someone else…</button>
@@ -489,7 +489,7 @@
             <div id="pCardCvv" class="cf" style="flex:1"></div>
             <div id="pCardZip" class="cf" style="flex:1"></div>
           </div>
-          <div class="dim" id="chgCardHint" style="font-size:11px;margin-top:6px"></div>
+          <div class="dim" id="chgCardHint" style="font-size:12px;margin-top:6px"></div>
         </div>
 
         <div id="chgAltWrap" class="hide" style="margin-top:10px">
@@ -500,7 +500,7 @@
         <div id="chgGoWhy" class="hide"></div>
         <button class="btn btn-red" id="chgGo" onclick="doCharge()">Charge</button>
         <button class="btn btn-ghost" onclick="closeCharge()">Cancel</button>
-        <div id="chgOut" class="hide dim" style="font-size:12.5px;margin-top:10px;text-align:center"></div>
+        <div id="chgOut" class="hide dim" style="font-size:13px;margin-top:10px;text-align:center"></div>
       </div>
 
       <div id="chgResult"></div>
@@ -795,7 +795,7 @@ function openTodo(){
     return d === today ? 'today' : d === y ? 'yesterday' : d;
   };
   document.getElementById('todoBody').innerHTML =
-    '<div class="dim" style="font-size:12px;margin-bottom:10px">Each one needs the carrier cost and a receipt, then the auditor approves it. '
+    '<div class="dim" style="font-size:13px;margin-bottom:10px">Each one needs the carrier cost and a receipt, then the auditor approves it. '
     + 'Commission is earned when he does. A row marked <span style="color:var(--red-ink)">sent back</span> has his reason on the client card.</div>'
     + UNFINISHED.map(u => {
         const started = u.audit_status === 'carrier_pending' && !u.audit_sendback;
@@ -808,21 +808,21 @@ function openTodo(){
           + '<div style="display:flex;justify-content:space-between;gap:10px">'
           + '<span style="font-size:13.5px;font-weight:600">' + esc(u.client_name || ('#' + u.client_no)) + '</span>'
           + '<span style="font-size:13.5px;font-weight:700">' + money2(u.amount) + '</span></div>'
-          + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
+          + '<div class="dim" style="font-size:12px;margin-top:2px">'
           + esc(u.purpose || 'Payment') + ' · ' + when(u.ts) + ' · #' + u.client_no
           + (started ? ' · <span style="color:var(--amber-ink)">started, not finished</span>' : '')
           + (waiting ? ' · <span style="color:var(--mute)">submitted · waiting for the auditor</span>' : '')
           + (back ? ' · <span style="color:var(--red-ink)">sent back — ' + esc(sendbackLabel(u.audit_sendback.code)) + '</span>' : '')
           + '</div></div>'
           + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)">'
-          + '<span class="dim" style="font-size:11px">'
+          + '<span class="dim" style="font-size:12px">'
           + (u.mine
               ? (u.charged_by && !u.charged_by.toLowerCase().includes((EMAIL||'').split('@')[0])
                   ? 'Yours &mdash; charged by ' + esc(u.charged_by.split(' ')[0])
                   : 'Your payment')
               : 'You charged this &mdash; ' + esc(u.owner_name || 'another agent') + ' earns it')
           + '</span>'
-          + '<span style="color:var(--blue-l);font-size:11px;cursor:pointer;text-decoration:underline" '
+          + '<span style="color:var(--blue-l);font-size:12px;cursor:pointer;text-decoration:underline" '
           + 'onclick="event.stopPropagation();reassignPayment(\'' + u.id + '\',\'' + esc(u.owner_email || '') + '\')">Not mine &mdash; change</span>'
           + '</div></div>';
       }).join('');
@@ -846,7 +846,7 @@ function setEarnPeriod(p){
 function earnPickerHtml(){
   const btn = (val, label) =>
     '<div onclick="setEarnPeriod(\'' + val + '\')" style="flex:1;text-align:center;padding:7px;'
-    + 'border-radius:8px;font-size:12px;cursor:pointer;'
+    + 'border-radius:8px;font-size:13px;cursor:pointer;'
     + (EARN_PERIOD === val
         ? 'background:var(--blue);color:#fff;font-weight:700'
         : 'background:var(--field);color:var(--blue-l);border:1px solid var(--line)')
@@ -864,18 +864,18 @@ function openPending(){
   const total = PENDING_LINES.reduce((a, x) => a + Number(x.pending || 0), 0);
   const unknown = PENDING_LINES.filter(x => x.pending == null).length;
   let h = earnPickerHtml();
-  if(!PENDING_LINES.length) h += '<div class="dim" style="font-size:12.5px">Nothing pending in '
+  if(!PENDING_LINES.length) h += '<div class="dim" style="font-size:13px">Nothing pending in '
       + (EARN_PERIOD === 'last' ? 'that month' : 'this period') + '. Everything you earned is approved.</div>';
-  else h += '<div class="dim" style="font-size:11.5px;margin-bottom:8px">Not earned yet. Each line says what it is waiting for'
+  else h += '<div class="dim" style="font-size:12px;margin-bottom:8px">Not earned yet. Each line says what it is waiting for'
       + (unknown ? '; ' + unknown + ' cannot be priced until the carrier cost is entered' : '') + '.</div>'
     + PENDING_LINES.map(x =>
       '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px'
         + (x.state === 'needs_proof' || x.state === 'sent_back' ? ';cursor:pointer" onclick="closeEarnings();openClient(' + Number(x.client_no) + ')"' : '"') + '>'
       + '<div style="display:flex;justify-content:space-between;gap:10px">'
-      + '<span style="font-size:13px;font-weight:600">#' + x.client_no + (x.role === 'helper' ? ' <span class="dim" style="font-weight:400;font-size:11px">\u00b7 ' + esc(x.owner_name || '') + '\u2019s</span>' : '') + '</span>'
+      + '<span style="font-size:13px;font-weight:600">#' + x.client_no + (x.role === 'helper' ? ' <span class="dim" style="font-weight:400;font-size:12px">\u00b7 ' + esc(x.owner_name || '') + '\u2019s</span>' : '') + '</span>'
       + '<span style="font-size:13.5px;font-weight:800;color:' + (x.pending == null ? 'var(--dim)' : 'var(--amber-ink)') + '">' + (x.pending == null ? '?' : m(x.pending)) + '</span></div>'
-      + '<div style="font-size:11.5px;margin-top:3px;color:' + tone(x.state) + '">' + esc(x.why) + (x.state === 'needs_proof' || x.state === 'sent_back' ? ' \u2192' : '') + '</div>'
-      + '<div class="dim" style="font-size:11px;margin-top:2px">' + m(x.amount) + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '')
+      + '<div style="font-size:12px;margin-top:3px;color:' + tone(x.state) + '">' + esc(x.why) + (x.state === 'needs_proof' || x.state === 'sent_back' ? ' \u2192' : '') + '</div>'
+      + '<div class="dim" style="font-size:12px;margin-top:2px">' + m(x.amount) + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '')
         + (x.shared_with ? ' \u00b7 you shared ' + x.shared_pct + '% with ' + esc(x.shared_with) : '')
         + ' \u00b7 ' + d(x.ts) + '</div>'
       + '</div>').join('');
@@ -894,34 +894,34 @@ function openEarnings(){
   const d = ts => String(ts || '').slice(0, 10);
   let h = earnPickerHtml();
 
-  if(!EARN_LINES.length) h += '<div class="dim" style="font-size:12.5px">Nothing earned in '
+  if(!EARN_LINES.length) h += '<div class="dim" style="font-size:13px">Nothing earned in '
       + (EARN_PERIOD === 'last' ? 'that month' : 'this period') + ' yet.</div>';
   else h += EARN_LINES.map(x =>
       '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px">'
       + '<div style="display:flex;justify-content:space-between;gap:10px">'
       + '<span style="font-size:13px;font-weight:600">#' + x.client_no + '</span>'
       + '<span style="font-size:13.5px;font-weight:800;color:var(--green)">' + m(x.commission) + '</span></div>'
-      + '<div class="dim" style="font-size:11.5px;margin-top:3px">'
+      + '<div class="dim" style="font-size:12px;margin-top:3px">'
       + 'charged ' + m(x.amount)
       + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '')
       + (x.carrier_cost != null ? ' \u00b7 carrier ' + m(x.carrier_cost) : '')
       + (x.fee != null ? ' \u00b7 Speedy kept ' + m(x.fee) : '')
       + '</div>'
       + ((x.charged_by || x.finished_by || x.shared_pct || x.collected_ratio < 1)
-          ? '<div class="dim" style="font-size:11px;margin-top:3px;color:var(--mute)">'
+          ? '<div class="dim" style="font-size:12px;margin-top:3px;color:var(--mute)">'
             + [x.charged_by ? esc(x.charged_by) + ' ran the charge' : '',
                x.finished_by ? esc(x.finished_by) + ' finished the audit' : '',
                x.shared_pct ? 'you shared ' + x.shared_pct + '%' : '',
                x.collected_ratio < 1 ? Math.round(x.collected_ratio * 100) + '% collected so far' : ''
               ].filter(Boolean).join(' \u00b7 ')
             + '</div>' : '')
-      + '<div class="dim" style="font-size:10.5px;margin-top:2px">' + d(x.ts) + '</div>'
+      + '<div class="dim" style="font-size:12px;margin-top:2px">' + d(x.ts) + '</div>'
       + '</div>').join('');
 
   if(HELPED_LINES.length){
-    h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px">'
+    h += '<div style="font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px">'
       + 'You helped on ' + HELPED_LINES.length + '</div>'
-      + '<div class="dim" style="font-size:11.5px;margin-bottom:8px">'
+      + '<div class="dim" style="font-size:12px;margin-bottom:8px">'
       /* honest when a share is on the list: the owner still earns it, but part is yours */
       + (HELPED_LINES.some(x => x.your_share) ? 'Someone else earns these; where they shared it with you, your part is on the right - pending until the audit is approved.'
                                               : 'Someone else earns these. Shown because you did the work.') + '</div>'
@@ -929,13 +929,13 @@ function openEarnings(){
         '<div style="background:var(--field);border-radius:10px;padding:10px 12px;margin-bottom:7px">'
         + '<div style="display:flex;justify-content:space-between;gap:10px">'
         + '<span style="font-size:13px;font-weight:600">#' + x.client_no + '</span>'
-        + '<span style="font-size:12.5px;' + (x.your_share ? (x.waiting ? 'font-weight:800;color:var(--amber-ink)' : 'font-weight:800;color:var(--green)') : 'color:var(--dim)') + '">'
+        + '<span style="font-size:13px;' + (x.your_share ? (x.waiting ? 'font-weight:800;color:var(--amber-ink)' : 'font-weight:800;color:var(--green)') : 'color:var(--dim)') + '">'
         + (x.your_share ? m(x.your_share) : '\u2014') + '</span></div>'
-        + (x.waiting ? '<div style="color:var(--amber-ink);font-size:11px;margin-top:2px">Pending \u00b7 ' + esc(x.waiting) + '</div>' : '')
-        + '<div class="dim" style="font-size:11.5px;margin-top:3px">'
+        + (x.waiting ? '<div style="color:var(--amber-ink);font-size:12px;margin-top:2px">Pending \u00b7 ' + esc(x.waiting) + '</div>' : '')
+        + '<div class="dim" style="font-size:12px;margin-top:3px">'
         + esc(x.what) + ' \u00b7 ' + m(x.amount)
         + (x.carrier ? ' \u00b7 ' + esc(x.carrier) : '') + '</div>'
-        + '<div class="dim" style="font-size:11px;margin-top:2px">'
+        + '<div class="dim" style="font-size:12px;margin-top:2px">'
         + esc(x.owner_name) + ' earns it \u00b7 ' + d(x.ts) + '</div>'
         + '</div>').join('');
   }
@@ -957,14 +957,14 @@ function openHelp(){
   const money2 = a => '$' + Number(a || 0).toFixed(2);
   const when = ts => String(ts || '').slice(0, 10);
   document.getElementById('helpBody').innerHTML =
-    '<div class="dim" style="font-size:12px;margin-bottom:10px">These belong to other agents. '
+    '<div class="dim" style="font-size:13px;margin-bottom:10px">These belong to other agents. '
     + 'You can finish the audit for them \u2014 carrier cost and documents. They keep the commission.</div>'
     + HELP_OPEN.map(u =>
         '<div class="todoitem" onclick="helpWith(\'' + u.id + '\',' + (u.client_no||0) + ',' + Number(u.amount||0) + ')">'
         + '<div style="display:flex;justify-content:space-between;gap:10px">'
         + '<span style="font-size:13.5px;font-weight:600">#' + u.client_no + '</span>'
         + '<span style="font-size:13.5px;font-weight:700">' + money2(u.amount) + '</span></div>'
-        + '<div class="dim" style="font-size:11.5px;margin-top:2px">'
+        + '<div class="dim" style="font-size:12px;margin-top:2px">'
         + esc(u.purpose || 'Payment') + ' \u00b7 ' + when(u.ts)
         + ' \u00b7 ' + esc(u.owner_name || 'another agent') + ' earns it</div></div>').join('');
   document.getElementById('helpSheet').classList.remove('hide');
@@ -1007,8 +1007,8 @@ function chgSubHtml(no){
   const em = (CHG && CHG.confirmed && CHG.confirmed.emails && CHG.confirmed.emails[0]) || '';
   return '#' + esc(String(no)) + ' \u00b7 ' + esc(OFFICE)
     + (HL.armed ? ' \u00b7 <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="hlChangeOffice()">change office</span>' : '')
-    + (em ? '<div style="font-size:11.5px;color:var(--mute);margin-top:3px">Confirmation will be emailed to <b style="color:var(--ink)">' + esc(em) + '</b></div>'
-          : '<div style="font-size:11.5px;color:var(--red-ink);margin-top:3px;font-weight:600">&#9888; No email on this client’s record — they will get no confirmation. Add one in HawkSoft first if they should.</div>');
+    + (em ? '<div style="font-size:12px;color:var(--mute);margin-top:3px">Confirmation will be emailed to <b style="color:var(--ink)">' + esc(em) + '</b></div>'
+          : '<div style="font-size:12px;color:var(--red-ink);margin-top:3px;font-weight:600">&#9888; No email on this client’s record — they will get no confirmation. Add one in HawkSoft first if they should.</div>');
 }
 function hlChangeOffice(){
   var pick = prompt('Charging as ' + OFFICE + '.\n\nType the office to charge under:\n\n' + OFFICES.join('\n'), OFFICE);
@@ -1055,9 +1055,9 @@ function initSearch(){
 }
 async function runSearch(q){
   const box = document.getElementById('searchResults');
-  box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">Searching…</div>';
+  box.innerHTML = '<div class="dim" style="font-size:13px;padding:8px 0">Searching…</div>';
   const r = await api('portal_search&q=' + encodeURIComponent(q));
-  if(!r || !r.ok){ box.innerHTML = '<div class="dim" style="font-size:12px;padding:8px 0">Search failed</div>'; return; }
+  if(!r || !r.ok){ box.innerHTML = '<div class="dim" style="font-size:13px;padding:8px 0">Search failed</div>'; return; }
   if(!r.results.length){ box.innerHTML = emptySearchHtml(q); return; }
   renderSearchResults(r.results);
 }
@@ -1079,23 +1079,23 @@ function newClientFormHtml(){
     + 'border-radius:10px;padding:13px;margin-top:9px">'
     + '<div style="font-size:13px;font-weight:700;margin-bottom:9px">New client in HawkSoft</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    + '<div><label style="font-size:11px">First name</label>'
+    + '<div><label style="font-size:12px">First name</label>'
     + '<input id="ncFirst" maxlength="14" autocomplete="off" style="margin:0"></div>'
-    + '<div><label style="font-size:11px">Last name</label>'
+    + '<div><label style="font-size:12px">Last name</label>'
     + '<input id="ncLast" maxlength="24" autocomplete="off" style="margin:0"></div></div>'
-    + '<label style="font-size:11px;margin-top:8px">Cell phone</label>'
+    + '<label style="font-size:12px;margin-top:8px">Cell phone</label>'
     + '<input id="ncPhone" type="tel" placeholder="951 555 1234" autocomplete="off" style="margin:0">'
-    + '<label style="font-size:11px;margin-top:8px">Branch</label>'
+    + '<label style="font-size:12px;margin-top:8px">Branch</label>'
     + '<select id="ncOffice" style="margin:0">'
     + '<option value="1">Moreno Valley</option>'
     + '<option value="2">Riverside \u2014 Van Buren</option>'
     + '<option value="3">Riverside \u2014 Magnolia</option>'
     + '<option value="4">Lake Elsinore</option>'
     + '<option value="5">Colton</option></select>'
-    + '<div id="ncOut" class="dim" style="font-size:12px;margin-top:9px"></div>'
+    + '<div id="ncOut" class="dim" style="font-size:13px;margin-top:9px"></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px">'
-    + '<div onclick="hideNewClient()" style="text-align:center;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:12.5px;cursor:pointer">Cancel</div>'
-    + '<div id="ncGo" onclick="createClientPortal()" style="text-align:center;background:var(--blue);color:#fff;border-radius:8px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer">Create &amp; open</div>'
+    + '<div onclick="hideNewClient()" style="text-align:center;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:13px;cursor:pointer">Cancel</div>'
+    + '<div id="ncGo" onclick="createClientPortal()" style="text-align:center;background:var(--blue);color:#fff;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer">Create &amp; open</div>'
     + '</div></div>';
 }
 function showNewClient(q){
@@ -1155,7 +1155,7 @@ function renderSearchResults(results){
   const box = document.getElementById('searchResults');
   box.innerHTML = '<div style="background:var(--navy);border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:8px">'
     + results.map(c => '<div onclick="openClient('+c.client_no+',\''+esc(c.name).replace(/\x27/g,"")+'\')" style="padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--hair)">'
-        + '<b>'+esc(c.name)+'</b> <span class="dim" style="font-size:11px">· #'+c.client_no+(c.branch?' · '+esc(c.branch):'')+'</span></div>').join('')
+        + '<b>'+esc(c.name)+'</b> <span class="dim" style="font-size:12px">· #'+c.client_no+(c.branch?' · '+esc(c.branch):'')+'</span></div>').join('')
     + '</div>';
 }
 
@@ -1166,29 +1166,29 @@ function renderSearchResults(results){
    HawkSoft only exposes a client once the file has been SAVED in CMS — which is why
    the "nothing new" message says so rather than leaving them clicking. */
 function emptySearchHtml(q){
-  return '<div class="dim" style="font-size:12px;padding:8px 0">No clients found</div>'
+  return '<div class="dim" style="font-size:13px;padding:8px 0">No clients found</div>'
     + '<div id="refreshBox" style="background:var(--card);border:1px solid var(--line);border-radius:9px;padding:12px 13px;margin-top:2px">'
-    + '<div class="dim" style="font-size:12.5px;margin-bottom:9px">A client added in HawkSoft in the last few minutes may not be here yet.</div>'
+    + '<div class="dim" style="font-size:13px;margin-bottom:9px">A client added in HawkSoft in the last few minutes may not be here yet.</div>'
     + '<span id="refreshBtn" onclick="refreshClients(\'' + esc(q).replace(/\x27/g,'') + '\')" '
-    + 'style="display:inline-block;cursor:pointer;font-size:12.5px;background:var(--blue);color:#fff;padding:8px 15px;border-radius:8px">'
+    + 'style="display:inline-block;cursor:pointer;font-size:13px;background:var(--blue);color:#fff;padding:8px 15px;border-radius:8px">'
     + 'Refresh client list</span>'
     /* Charge-first is the model: the agent takes the money, then buys the policy. So a
        walk-in with no HawkSoft record has to be creatable HERE, not only on the
        HawkSoft-launched charge page where this has quietly existed all along. */
     + '<div style="border-top:1px solid var(--line);margin-top:11px;padding-top:11px">'
-    + '<div class="dim" style="font-size:12.5px;margin-bottom:9px">Brand new walk-in, not in HawkSoft at all?</div>'
+    + '<div class="dim" style="font-size:13px;margin-bottom:9px">Brand new walk-in, not in HawkSoft at all?</div>'
     + '<span onclick="showNewClient(\'' + esc(q).replace(/\x27/g,'') + '\')" '
-    + 'style="display:inline-block;cursor:pointer;font-size:12.5px;border:1px solid var(--line);'
+    + 'style="display:inline-block;cursor:pointer;font-size:13px;border:1px solid var(--line);'
     + 'color:var(--blue-l);padding:8px 15px;border-radius:8px">\uff0b New client in HawkSoft</span>'
     + '</div></div>';
 }
 
 async function refreshClients(q){
   const box = document.getElementById('refreshBox');
-  if(box) box.innerHTML = '<div class="dim" style="font-size:12.5px">Refreshing from HawkSoft… this can take a few seconds.</div>';
+  if(box) box.innerHTML = '<div class="dim" style="font-size:13px">Refreshing from HawkSoft… this can take a few seconds.</div>';
   const r = await api('portal_refresh_clients');
   if(!r || !r.ok){
-    if(box) box.innerHTML = '<div style="font-size:12.5px;color:var(--amber-ink)">Could not reach HawkSoft just now. Try again in a moment.</div>';
+    if(box) box.innerHTML = '<div style="font-size:13px;color:var(--amber-ink)">Could not reach HawkSoft just now. Try again in a moment.</div>';
     return;
   }
   // re-run the search either way — a sync skipped by cooldown may still have new rows
@@ -1197,8 +1197,8 @@ async function refreshClients(q){
   if(found){ renderSearchResults(again.results); return; }
   if(box){
     box.innerHTML = r.skipped
-      ? '<div class="dim" style="font-size:12.5px">Client list was refreshed moments ago. If the client is brand new, make sure their file has been saved in HawkSoft.</div>'
-      : '<div class="dim" style="font-size:12.5px">Client list is up to date' + (r.clients ? ' — ' + r.clients + ' updated' : '')
+      ? '<div class="dim" style="font-size:13px">Client list was refreshed moments ago. If the client is brand new, make sure their file has been saved in HawkSoft.</div>'
+      : '<div class="dim" style="font-size:13px">Client list is up to date' + (r.clients ? ' — ' + r.clients + ' updated' : '')
         + '. If the client is brand new, make sure their file has been saved in HawkSoft.</div>';
   }
 }
@@ -1275,13 +1275,13 @@ function closeTab(no, ev){
 function switchTab(no){ ACTIVE_TAB = no; renderTabs(); renderPanel(); navPush(); }
 function renderTabs(){
   const bar = document.getElementById('tabbar');
-  if(!OPEN_TABS.length){ bar.innerHTML = '<div class="dim" style="font-size:12px;padding:6px 0">No clients open yet</div>'; return; }
+  if(!OPEN_TABS.length){ bar.innerHTML = '<div class="dim" style="font-size:13px;padding:6px 0">No clients open yet</div>'; return; }
   bar.innerHTML = OPEN_TABS.map(t => {
     const on = t.client_no === ACTIVE_TAB;
     const short = t.name.length > 14 ? t.name.slice(0,13)+'…' : t.name;
-    return '<div onclick="switchTab('+t.client_no+')" style="background:'+(on?'var(--card)':'var(--field)')+';border:1px solid '+(on?'var(--blue)':'var(--line)')+';border-radius:8px;padding:7px 11px;font-size:12px;font-weight:'+(on?'700':'400')+';cursor:pointer;display:flex;gap:7px;align-items:center">'
+    return '<div onclick="switchTab('+t.client_no+')" style="background:'+(on?'var(--card)':'var(--field)')+';border:1px solid '+(on?'var(--blue)':'var(--line)')+';border-radius:8px;padding:7px 11px;font-size:13px;font-weight:'+(on?'700':'400')+';cursor:pointer;display:flex;gap:7px;align-items:center">'
       + esc(short) + '<span onclick="closeTab('+t.client_no+',event)" style="color:var(--mute)">✕</span></div>';
-  }).join('') + '<div class="dim" style="font-size:11px;align-self:center;margin-left:4px">'+OPEN_TABS.length+'/5</div>';
+  }).join('') + '<div class="dim" style="font-size:12px;align-self:center;margin-left:4px">'+OPEN_TABS.length+'/5</div>';
 }
 
 // --- client detail ---
@@ -1315,8 +1315,8 @@ async function renderPanel(){
   // header
   h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
     + '<div><div style="font-size:16px;font-weight:800">'+esc(name)+'</div>'
-    + '<div class="muted" style="font-size:12px">#'+c.client_no+(c.branch?' · '+esc(c.branch):'')+(c.phone?' · <span style="color:var(--blue-l)">'+esc(c.phone)+'</span>':'')+'</div></div>'
-    + '<span style="background:rgba(47,191,113,.2);color:var(--green);font-size:10px;padding:3px 9px;border-radius:6px;font-weight:700">'+esc(c.status||'Active')+'</span></div>';
+    + '<div class="muted" style="font-size:13px">#'+c.client_no+(c.branch?' · '+esc(c.branch):'')+(c.phone?' · <span style="color:var(--blue-l)">'+esc(c.phone)+'</span>':'')+'</div></div>'
+    + '<span style="background:rgba(47,191,113,.2);color:var(--green);font-size:12px;padding:3px 9px;border-radius:6px;font-weight:700">'+esc(c.status||'Active')+'</span></div>';
 
   /* MONEY OWED BELONGS AT THE TOP OF THE CARD. It was only rendered inside a payment
      row, behind the "Payments & documents" toggle — so an agent had to know to expand a
@@ -1331,15 +1331,15 @@ async function renderPanel(){
       + 'border-radius:9px;padding:9px 11px;margin-bottom:12px">'
       + '<div style="font-size:13px;font-weight:700;color:var(--amber-ink)">Owes $'
       + totalLeft.toFixed(2) + '</div>'
-      + owedNow.map(b => '<div class="dim" style="font-size:11.5px;margin-top:2px">$'
+      + owedNow.map(b => '<div class="dim" style="font-size:12px;margin-top:2px">$'
           + b.got.toFixed(2) + ' of $' + b.owed.toFixed(2) + ' collected · from '
           + esc(String(b.ts).slice(0,10)) + '</div>').join('')
       + '</div>';
   }
 
   // policies compact
-  h += '<div style="font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Policies ('+pols.length+')</div>';
-  if(!pols.length) h += '<div class="dim" style="font-size:12px;margin-bottom:8px">No insurance policies</div>';
+  h += '<div style="font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Policies ('+pols.length+')</div>';
+  if(!pols.length) h += '<div class="dim" style="font-size:13px;margin-bottom:8px">No insurance policies</div>';
   /* One row per policy, each tappable. Client 6402 has FOURTEEN tabs: the old
      "See full details" expanded every one of them at once - drivers, vehicles,
      VINs, billing - so an agent scrolled past thirteen to reach the one he wanted,
@@ -1355,7 +1355,7 @@ async function renderPanel(){
     const tm = termMonths(p);
     const expired = isExpired(p);
     const open = openIdx === i;
-    const premLabel = prem ? '$'+prem.toLocaleString()+(tm?' <span style="font-size:10px;color:var(--mute)">/ '+tm+'-mo term</span>':' <span style="font-size:10px;color:var(--mute)">term</span>') : '';
+    const premLabel = prem ? '$'+prem.toLocaleString()+(tm?' <span style="font-size:12px;color:var(--mute)">/ '+tm+'-mo term</span>':' <span style="font-size:12px;color:var(--mute)">term</span>') : '';
     const tabN = (function(){ const x = p.carrier_extras && p.carrier_extras.policyIndex;
                               return (x === 0 || x > 0) ? 'Tab '+(Number(x)+1) : ''; })();
     /* Enough on the collapsed row to pick the right policy without opening it:
@@ -1364,12 +1364,12 @@ async function renderPanel(){
     h += '<div style="background:var(--field);border:1px solid '+(open?'var(--blue)':'transparent')+';border-radius:10px;padding:11px 13px;margin-bottom:6px;cursor:pointer" onclick="togglePolicy('+i+')">'
       + '<div style="display:flex;justify-content:space-between;align-items:center">'
       + '<div style="min-width:0"><b style="font-size:13px">'+esc(p.carrier || (isDmv ? 'DMV service' : '—'))+'</b>'
-      + '<div style="font-size:11px;color:'+(expired?'#ff8787':'var(--mute)')+'">'+esc(sub)
+      + '<div style="font-size:12px;color:'+(expired?'#ff8787':'var(--mute)')+'">'+esc(sub)
       + (expired ? ' · expired '+String(p.expiration_date).slice(0,10) : '')+'</div></div>'
       + '<div style="text-align:right;white-space:nowrap;padding-left:8px">'
       + (prem?'<div style="font-size:14px;font-weight:800;color:var(--blue-l)">'+premLabel+'</div>':'')
-      + (!expired && p.status ? '<span style="font-size:10px;color:var(--amber-ink)">'+esc(p.status)+'</span>' : '')
-      + ' <span style="color:'+(open?'var(--blue-l)':'var(--dim)')+';font-size:12px">'+(open?'&#9662;':'&#9656;')+'</span>'
+      + (!expired && p.status ? '<span style="font-size:12px;color:var(--amber-ink)">'+esc(p.status)+'</span>' : '')
+      + ' <span style="color:'+(open?'var(--blue-l)':'var(--dim)')+';font-size:13px">'+(open?'&#9662;':'&#9656;')+'</span>'
       + '</div></div>'
       + (open ? policyDetailHtml(p) : '')
       + '</div>';
@@ -1635,7 +1635,7 @@ function drawRefund(){
   const radio = (on, onclick, t, m) => '<div class="rradio' + (on ? ' on' : '') + '" onclick="' + onclick + '"><div class="dot"></div><div><div class="t">' + t + '</div>' + (m ? '<div class="m">' + m + '</div>' : '') + '</div></div>';
 
   let h = '<div class="rhdr"><div><b style="font-size:18px">' + (isReq ? 'Ask for a refund' : verb + ' a payment') + '</b>'
-    + '<div class="dim" style="font-size:12.5px">' + esc(name) + ' · client ' + esc(String(RF.clientNo)) + '</div></div>'
+    + '<div class="dim" style="font-size:13px">' + esc(name) + ' · client ' + esc(String(RF.clientNo)) + '</div></div>'
     + '<span class="rx" onclick="closeRefund()">✕</span></div>'
     + '<div class="rpay"><b>' + money(p.amount) + '</b><span>' + esc(p.purpose || '') + ' · ' + esc(String(p.ts||'').slice(0,10)) + '</span>'
     + '<span class="rpill">' + (isCard ? esc(p.ref || 'Card') : 'Cash') + '</span>'
@@ -1658,7 +1658,7 @@ function drawRefund(){
       + (RF.mode === 'part'
           ? '<div class="ramt"><span style="font-size:15px;font-weight:700">$</span>'
             + '<input id="rfAmt" type="text" inputmode="decimal" placeholder="0.00" value="' + esc(RF.typedAmt) + '" oninput="rfAmt(this.value)" class="' + (amtOk ? '' : 'need') + '">'
-            + '<span class="dim" style="font-size:12.5px">of ' + money(cap) + '</span></div>'
+            + '<span class="dim" style="font-size:13px">of ' + money(cap) + '</span></div>'
             + (amtOk
                 ? '<div class="rsub"><b>Refunding ' + money(amt) + ' of ' + money(cap) + '.</b> '
                   + (amt + 0.004 >= cap ? 'That is everything that is left' : money(cap - amt) + ' of the payment stays with Speedy')
@@ -2068,13 +2068,13 @@ function openNews(){
         return '<div style="background:var(--field);border-left:2px solid ' + tone(n.tone) + ';border-radius:8px;padding:10px 11px;margin-bottom:7px;'
           + (isNew ? '' : 'opacity:.6;') + (n.client_no ? 'cursor:pointer"onclick="closeNews();openClient(' + n.client_no + ')"' : '"')
           + '>'
-          + '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>'
-          + '<div class="dim" style="font-size:11.5px;margin-top:2px">' + esc(n.detail || '') + '</div>'
-          + (n.action ? '<div style="color:var(--amber-ink);font-size:11px;margin-top:4px">' + esc(n.action) + ' →</div>' : '')
-          + '<div class="dim" style="font-size:10.5px;margin-top:3px">' + ago(n.ts)
+          + '<div style="font-size:13px;font-weight:600">' + esc(n.title) + '</div>'
+          + '<div class="dim" style="font-size:12px;margin-top:2px">' + esc(n.detail || '') + '</div>'
+          + (n.action ? '<div style="color:var(--amber-ink);font-size:12px;margin-top:4px">' + esc(n.action) + ' →</div>' : '')
+          + '<div class="dim" style="font-size:12px;margin-top:3px">' + ago(n.ts)
           + (n.client_no ? ' · #' + n.client_no : '') + (isNew ? '' : ' · read') + '</div></div>';
       }).join('')
-    : '<div class="dim" style="font-size:12.5px">Nothing new.</div>';
+    : '<div class="dim" style="font-size:13px">Nothing new.</div>';
   document.getElementById('newsSheet').classList.remove('hide');
   document.body.style.overflow = 'hidden';
 }
@@ -2114,11 +2114,11 @@ function showNextShare(){
     + (pct===0 ? 'var(--line)' : 'rgba(47,191,113,.4)')
     + ';border-radius:10px;padding:12px 6px;text-align:center;cursor:pointer">'
     + '<div style="font-size:15px;font-weight:800;color:' + (pct===0?'var(--mute)':'var(--green)') + '">' + label + '</div>'
-    + '<div class="dim" style="font-size:11px;margin-top:2px">$' + (c.commission*pct/100).toFixed(2) + '</div></div>';
+    + '<div class="dim" style="font-size:12px;margin-top:2px">$' + (c.commission*pct/100).toFixed(2) + '</div></div>';
   document.getElementById('shareBody').innerHTML =
     '<div style="background:var(--field);border-radius:10px;padding:11px;margin-bottom:11px">'
-    + '<div class="row" style="font-size:12.5px"><span class="muted">Fee kept by Speedy</span><b>$' + c.fee.toFixed(2) + '</b></div>'
-    + '<div class="row" style="font-size:12.5px;margin-top:3px"><span class="muted">Your commission</span><b style="color:var(--green)">$' + c.commission.toFixed(2) + '</b></div>'
+    + '<div class="row" style="font-size:13px"><span class="muted">Fee kept by Speedy</span><b>$' + c.fee.toFixed(2) + '</b></div>'
+    + '<div class="row" style="font-size:13px;margin-top:3px"><span class="muted">Your commission</span><b style="color:var(--green)">$' + c.commission.toFixed(2) + '</b></div>'
     + '</div>'
     + '<div style="display:flex;gap:6px">' + opt(0,'Keep all') + opt(25,'25%') + opt(50,'50%') + '</div>'
     + '<button class="btn btn-ghost" onclick="customShare()">Another amount…</button>';
@@ -2199,20 +2199,20 @@ function renderOpenBalance(cache){
   CHG_BALANCE_OF = null; CHG_ADD_TO = null;
   if(!bals.length && !adds.length){ box.classList.add('hide'); box.innerHTML = ''; return; }
   const who = p => String(p.agent || '').replace(/\s*\(.*$/, '').split(' ')[0];
-  box.innerHTML = '<div style="font-size:12.5px;font-weight:700;color:var(--amber-ink)">' + (adds.length ? 'Is this more money for a sale already charged?' : 'This client still owes money') + '</div>'
+  box.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--amber-ink)">' + (adds.length ? 'Is this more money for a sale already charged?' : 'This client still owes money') + '</div>'
     + bals.map(b =>
         '<div class="balrow" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
         + '<div><b style="font-size:13px">$' + b.left.toFixed(2) + ' still owed</b>'
-        + '<div class="dim" style="font-size:11px">of $' + b.owed.toFixed(2) + ' from ' + esc(String(b.ts).slice(0,10)) + '</div></div>'
+        + '<div class="dim" style="font-size:12px">of $' + b.owed.toFixed(2) + ' from ' + esc(String(b.ts).slice(0,10)) + '</div></div>'
         + '<button type="button" class="btn btn-ghost" style="margin:0;padding:7px 12px;width:auto" '
         + 'onclick="applyToBalance(\'' + b.id + '\',' + b.left + ')">Pay this balance</button></div>').join('')
     + adds.map(p =>
         '<div class="addrow" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px">'
         + '<div><b style="font-size:13px">$' + Number(p.amount).toFixed(2) + '</b> \u00b7 ' + esc(p.purpose || 'payment')
-        + '<div class="dim" style="font-size:11px">' + esc(String(p.ts).slice(0,10)) + (who(p) ? ' \u00b7 ' + esc(who(p)) : '') + ' \u00b7 not approved yet</div></div>'
+        + '<div class="dim" style="font-size:12px">' + esc(String(p.ts).slice(0,10)) + (who(p) ? ' \u00b7 ' + esc(who(p)) : '') + ' \u00b7 not approved yet</div></div>'
         + '<button type="button" class="btn btn-ghost" style="margin:0;padding:7px 12px;width:auto;white-space:nowrap" '
         + 'onclick="addToPayment(\'' + p.id + '\')">Add this payment to it</button></div>').join('')
-    + '<div class="dim" id="chgBalPicked" style="font-size:11px;margin-top:8px">Or ignore this and charge something new.</div>';
+    + '<div class="dim" id="chgBalPicked" style="font-size:12px;margin-top:8px">Or ignore this and charge something new.</div>';
   box.classList.remove('hide');
 }
 /* this charge joins an earlier payment: the purpose is theirs, the total is the sum */
@@ -2240,7 +2240,7 @@ function addToPayment(id){
   const box = chgEl('chgOpenBal');
   box.querySelectorAll('.addrow, .balrow').forEach(r => {
     if(!r.innerHTML.includes(id)) r.style.display = 'none';
-    else { const b = r.querySelector('button'); if(b) b.outerHTML = '<span style="color:var(--green);font-size:12px;white-space:nowrap">✓ picked</span>'; }
+    else { const b = r.querySelector('button'); if(b) b.outerHTML = '<span style="color:var(--green);font-size:13px;white-space:nowrap">✓ picked</span>'; }
   });
   chgEl('chgBalPicked').innerHTML = '<span style="color:var(--green)">\u2713 Adding to the sale from ' + esc(String(p.ts).slice(0,10)) + '</span>'
     + ' \u00b7 <span style="color:var(--blue-l);cursor:pointer;text-decoration:underline" onclick="clearAddTo()">not that</span>'
@@ -2251,7 +2251,7 @@ function addToPayment(id){
 function fadePurpose(on){
   ['chgPurp', 'chgPurpSub', 'chgOtherWrap'].forEach(id => { const e = chgEl(id); if(!e) return; e.style.opacity = on ? '.45' : ''; e.style.pointerEvents = on ? 'none' : ''; });
   let n = chgEl('chgPurpInherit');
-  if(on){ if(!n){ n = document.createElement('div'); n.id = 'chgPurpInherit'; n.className = 'dim'; n.style.cssText = 'font-size:11px;margin-top:4px'; chgEl('chgPurpSub').insertAdjacentElement('afterend', n); } n.textContent = 'same as the earlier payment'; }
+  if(on){ if(!n){ n = document.createElement('div'); n.id = 'chgPurpInherit'; n.className = 'dim'; n.style.cssText = 'font-size:12px;margin-top:4px'; chgEl('chgPurpSub').insertAdjacentElement('afterend', n); } n.textContent = 'same as the earlier payment'; }
   else if(n) n.remove();
 }
 function addNote(paid, amt){
@@ -2285,7 +2285,7 @@ function showBalance(){
   if(tot > amt && amt > 0){
     const bal = tot - amt;
     box.innerHTML = 'Balance left <b>$' + bal.toFixed(2) + '</b>'
-      + '<div class="dim" style="font-size:11px;margin-top:2px;color:var(--mute)">'
+      + '<div class="dim" style="font-size:12px;margin-top:2px;color:var(--mute)">'
       + 'Commission releases as the balance is collected. The next payment applies to it.</div>';
     box.classList.remove('hide');
   } else if(tot > 0 && tot < amt){
@@ -2332,21 +2332,21 @@ function policyDetailHtml(p){
     ['Billing plan', ce.billingPlan || p.billing || '—'],
     ['Billing freq', ce.term || '—'],
   ];
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:8px;font-size:12px">';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:8px;font-size:13px">';
   for(const [k,v] of rows){
     const isExp = String(v).includes('Expired') || String(v).includes('(past)');
     h += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hair);padding-bottom:3px"><span class="dim">'+k+'</span><b'+(isExp?' style="color:#ff8787"':'')+'>'+esc(v)+'</b></div>';
   }
   h += '</div>';
-  h += '<div class="dim" style="font-size:11px;margin-bottom:8px">💡 Exact down payment &amp; monthly amounts are set by the carrier — check the carrier portal for the live schedule.</div>';
-  if(ce.note){ h += '<div style="font-size:12px;margin-bottom:8px"><span class="dim">Note: </span>'+esc(ce.note)+'</div>'; }
+  h += '<div class="dim" style="font-size:12px;margin-bottom:8px">💡 Exact down payment &amp; monthly amounts are set by the carrier — check the carrier portal for the live schedule.</div>';
+  if(ce.note){ h += '<div style="font-size:13px;margin-bottom:8px"><span class="dim">Note: </span>'+esc(ce.note)+'</div>'; }
   const drivers = ce.drivers || [];
   if(drivers.length){ h += '<div class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Drivers ('+drivers.length+')</div>';
     for(const d of drivers){
       const nm = [d.firstName, d.middleName, d.lastName].filter(Boolean).join(' ') || '(driver)';
-      h += '<div style="background:var(--navy);border-radius:8px;padding:8px 11px;margin-bottom:5px;font-size:12px">'
+      h += '<div style="background:var(--navy);border-radius:8px;padding:8px 11px;margin-bottom:5px;font-size:13px">'
         + '<b>'+esc(nm)+'</b>'+(d.relationship?' <span class="dim">'+esc(d.relationship)+'</span>':'')
-        + '<div class="dim" style="font-size:11px;margin-top:2px">'
+        + '<div class="dim" style="font-size:12px;margin-top:2px">'
         + [d.dateOfBirth?'DOB '+String(d.dateOfBirth).slice(0,10):'', d.gender||'', d.maritalStatus||'',
            d.licenseNumber?('Lic '+(d.licenseState||'')+' '+d.licenseNumber):'', d.licenseDate?'since '+String(d.licenseDate).slice(0,10):'',
            d.occupation||''].filter(Boolean).join(' · ')
@@ -2356,9 +2356,9 @@ function policyDetailHtml(p){
   if(autos.length){ h += '<div class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px">Vehicles ('+autos.length+')</div>';
     for(const a of autos){
       const v = [a.year,a.make,a.model].filter(Boolean).join(' ');
-      h += '<div style="background:var(--navy);border-radius:8px;padding:8px 11px;margin-bottom:5px;font-size:12px">'
+      h += '<div style="background:var(--navy);border-radius:8px;padding:8px 11px;margin-bottom:5px;font-size:13px">'
         + '<b>'+esc(v)+'</b>'+(a.totalPremium?' <span style="color:var(--blue-l)">$'+Number(a.totalPremium).toLocaleString()+'</span>':'')
-        + '<div class="dim" style="font-size:11px;margin-top:2px">'
+        + '<div class="dim" style="font-size:12px;margin-top:2px">'
         + [a.vin?'VIN '+a.vin:'', a.use?'Use: '+a.use:'', (a.personalInfo&&a.personalInfo.annualMiles)?a.personalInfo.annualMiles+' mi/yr':''].filter(Boolean).join(' · ')
         + '</div></div>';
     } }
@@ -2370,7 +2370,7 @@ function policyDetailHtml(p){
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">'
     + '<div onclick="event.stopPropagation();openPolicyDocs(\'' + esc(p.policy_number || '') + '\',\'' + esc(p.hs_policy_guid || '') + '\')" '
     + 'style="border:1px solid var(--line);border-radius:9px;padding:9px;text-align:center;'
-    + 'font-size:12px;font-weight:600;color:var(--blue-l);cursor:pointer">'
+    + 'font-size:13px;font-weight:600;color:var(--blue-l);cursor:pointer">'
     + '\uff0b Documents</div>'
     /* Charging THIS policy, not "the client". The picker still shows every policy
        and the agent can change it - the preselect is a starting point, not a lock,
@@ -2378,7 +2378,7 @@ function policyDetailHtml(p){
        correct one after it is sent. */
     + '<div onclick="event.stopPropagation();chargeThisPolicy(\'' + esc(p.policy_number || '') + '\')" '
     + 'style="background:var(--red);color:#fff;border-radius:9px;padding:9px;text-align:center;'
-    + 'font-size:12px;font-weight:700;cursor:pointer">Charge this policy</div>'
+    + 'font-size:13px;font-weight:700;cursor:pointer">Charge this policy</div>'
     + '</div>';
   return h + '</div>';
 }
@@ -2713,7 +2713,7 @@ const RF_WARN = 'border:1.5px solid rgba(245,166,35,.4);background:rgba(245,166,
 
 async function refreshHawkSoft(btnId, clientNo, mode){
   const pad = mode === 'card' ? 'padding:10px;font-size:13px;margin-top:8px'
-                              : 'padding:9px;font-size:12.5px;margin-top:8px';
+                              : 'padding:9px;font-size:13px;margin-top:8px';
   /* renderPanel() rebuilds #clientPanel, so the node we started on is gone by the
      time we report. Always re-query by id rather than holding a reference. */
   const at = () => document.getElementById(btnId);
@@ -2769,7 +2769,7 @@ function renderChargeForm(){
       + ppl.map(p => '<option value="'+esc(p.name)+'"'+(p.role==='named insured'?' selected':'')+'>'+esc(p.name)+' — '
           + (p.role==='named insured' ? '★ named insured' : p.role==='excluded' ? '⚠ EXCLUDED — do not charge' : 'active driver')
           + '</option>').join('')
-      + '</select><div id="chgNameWarn" class="hide" style="color:var(--amber-ink);font-size:12px;margin-top:5px"></div>'
+      + '</select><div id="chgNameWarn" class="hide" style="color:var(--amber-ink);font-size:13px;margin-top:5px"></div>'
       + '<div style="height:12px"></div>';
   } else np.innerHTML = '';
 
@@ -2778,13 +2778,13 @@ function renderChargeForm(){
   const list = c.openInvoices || [];
   CHG_PICKED_INV = null;   // cleared on every open; it applies to THIS charge only
   if(list.length){
-    inv.innerHTML = '<div style="font-size:10px;color:#7ee2a8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Open invoices — pick one to apply this payment to it</div>'
+    inv.innerHTML = '<div style="font-size:11px;color:#7ee2a8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Open invoices — pick one to apply this payment to it</div>'
       + '<div class="chips" style="margin-bottom:12px">'
       + list.map((iv,i) => '<button type="button" onclick="pickInv('+i+',this)" style="text-align:left">'
-          + '<b style="color:var(--ink);font-size:13px">$'+Number(iv.bal).toFixed(2)+'</b><br><span style="font-size:11px">'
+          + '<b style="color:var(--ink);font-size:13px">$'+Number(iv.bal).toFixed(2)+'</b><br><span style="font-size:12px">'
           + esc(iv.num || 'Invoice') + (iv.dueDate ? ' · due '+esc(iv.dueDate) : '') + '</span></button>').join('')
       + '<button type="button" class="sel" onclick="pickInv(-1,this)" style="text-align:left">'
-      + '<b style="color:var(--ink);font-size:13px">No invoice</b><br><span style="font-size:11px">just take the payment</span></button>'
+      + '<b style="color:var(--ink);font-size:13px">No invoice</b><br><span style="font-size:12px">just take the payment</span></button>'
       + '</div>';
   } else inv.innerHTML = '';
 
@@ -2884,16 +2884,16 @@ function renderChgHsPreview(){
             mism ? ('<b>No accounting receipt</b> — ' + mism)
                  : '<b>No accounting receipt</b> — open invoices stay open'];
   }
-  el.innerHTML = '<div class="dim" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">What HawkSoft will receive</div>'
-    + '<div style="font-size:12.5px;line-height:1.5">· For: <b>' + esc(chgPurposeText()) + '</b></div>'
+  el.innerHTML = '<div class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">What HawkSoft will receive</div>'
+    + '<div style="font-size:13px;line-height:1.5">· For: <b>' + esc(chgPurposeText()) + '</b></div>'
     + (function(){
         if(CHG_FULL) return '';
         const amt = parseFloat(String(chgEl('chgAmt').value).replace(/[^0-9.]/g,'')) || 0;
         const tot = parseFloat(String(chgEl('chgTotal').value).replace(/[^0-9.]/g,'')) || 0;
-        return '<div style="font-size:12.5px;line-height:1.5;color:var(--red-ink)">· <b>Part payment</b>'
+        return '<div style="font-size:13px;line-height:1.5;color:var(--red-ink)">· <b>Part payment</b>'
           + (tot > amt && amt > 0 ? ' \u2014 ' + money(amt) + ' of ' + money(tot) + ', <b>' + money(tot - amt) + ' still owed</b>' : ' \u2014 total not entered yet') + '</div>';
       })()
-    + rows.map(r => '<div style="font-size:12.5px;line-height:1.5">· ' + r + '</div>').join('');
+    + rows.map(r => '<div style="font-size:13px;line-height:1.5">· ' + r + '</div>').join('');
 }
 let CHG_FULL = true;   // the answer to "paid in full?"; false shows the total box
 function pickFull(full, btn){
@@ -3011,7 +3011,7 @@ async function openInvoicePortal(amt){
         + '<div class="kv"><span class="muted">Client</span><b>' + esc(c.name || '') + ' \u00b7 #' + c.clientNumber + '</b></div>'
         + '<div class="kv"><span class="muted">For</span><b>' + esc(chgPurposeText()) + '</b></div>'
         + '<div class="kv"><span class="muted">Collected</span><b>$0.00</b></div>'
-        + '<div class="dim" style="font-size:11.5px;margin-top:8px">Nothing was charged. A log note is on the HawkSoft record; the balance is on the client card. When the client pays, open Charge and tap <b>Pay this balance</b> \u2014 the audit starts with that first payment.</div>'
+        + '<div class="dim" style="font-size:12px;margin-top:8px">Nothing was charged. A log note is on the HawkSoft record; the balance is on the client card. When the client pays, open Charge and tap <b>Pay this balance</b> \u2014 the audit starts with that first payment.</div>'
         + '<button class="btn btn-ghost" onclick="closeCharge()">Done</button></div>';
     } else chgFail(j.error || 'Could not record the invoice.');
   }catch(e){ chgFail(String(e)); }
@@ -3077,10 +3077,10 @@ function showChargeResult(amt, rows){
     + '<div class="kv"><span class="muted">For</span><b>' + esc(chgPurposeText()) + '</b></div>'
     + '<div class="kv"><span class="muted">Office</span><b>' + esc(OFFICE) + '</b></div>'
     + rows.filter(r => r[1]).map(r => '<div class="kv"><span class="muted">' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>').join('')
-    + '<div class="dim" style="font-size:11.5px;margin-top:8px">Receipt, branded PDF and log note filed to the HawkSoft record.</div>'
+    + '<div class="dim" style="font-size:12px;margin-top:8px">Receipt, branded PDF and log note filed to the HawkSoft record.</div>'
     + '<a href="' + carrierLink(parseFloat(amt).toFixed(2)) + '" onclick="stashHandoff()" style="display:block;text-align:center;background:var(--amber);color:#2a1a00;padding:12px;border-radius:11px;font-weight:700;text-decoration:none;font-size:14px;margin-top:12px">Next → Carrier payment &amp; documents</a>'
     + '<button class="btn btn-ghost" onclick="closeCharge()">Save &amp; finish later</button>'
-    + '<div class="dim" style="font-size:11.5px;text-align:center;margin-top:2px">The payment is saved either way. Until the carrier cost and proof are added, it stays in your unfinished list — and commission isn\'t earned yet.</div>'
+    + '<div class="dim" style="font-size:12px;text-align:center;margin-top:2px">The payment is saved either way. Until the carrier cost and proof are added, it stays in your unfinished list — and commission isn\'t earned yet.</div>'
     + '</div>';
 }
 function carrierLink(amt){
@@ -3120,13 +3120,13 @@ async function createLinkPortal(amt){
     const phone = (c.phones && c.phones[0]) ? String(c.phones[0]).replace(/\D/g,'') : '';
     chgEl('chgResult').innerHTML = '<div class="res good">'
       + '<div style="font-size:15px;font-weight:800;color:var(--green)">Payment link ready</div>'
-      + '<div style="word-break:break-all;font-size:12px;color:#c9d2f0;margin:8px 0">' + esc(j.url) + '</div>'
+      + '<div style="word-break:break-all;font-size:13px;color:#c9d2f0;margin:8px 0">' + esc(j.url) + '</div>'
       + '<button class="btn btn-blue" onclick="copyTxt(_plUrl,this)">Copy link</button>'
       + '<button class="btn btn-ghost" onclick="copyTxt(_plMsg,this)">Copy text message</button>'
       + (phone ? '<a class="btn btn-ghost" style="text-decoration:none" href="sms:' + phone + '?body=' + encodeURIComponent(_plMsg) + '">Text to ' + esc(first) + '</a>' : '')
       + '<button class="btn btn-ghost" onclick="emailLink()">Email to client (Gmail)</button>'
-      + '<div class="dim" id="chgGmailHint" style="font-size:11.5px;margin-top:8px;display:none">Email copied ✓ — in the Gmail window click into the body, press Ctrl+V, then Send.</div>'
-      + '<div class="dim" style="font-size:11.5px;margin-top:8px">When the client pays, the receipt, PDF and log file automatically — marked as sent by you.</div>'
+      + '<div class="dim" id="chgGmailHint" style="font-size:12px;margin-top:8px;display:none">Email copied ✓ — in the Gmail window click into the body, press Ctrl+V, then Send.</div>'
+      + '<div class="dim" style="font-size:12px;margin-top:8px">When the client pays, the receipt, PDF and log file automatically — marked as sent by you.</div>'
       + '<button class="btn btn-ghost" onclick="closeCharge()">Close</button>'
       + '</div>';
   }catch(e){ chgFail(String(e)); }

@@ -19,7 +19,7 @@
        Named here so the Staff page and everything after it stop re-inventing them.
        Checked first: --dim, --card and --blue-l did NOT exist, and assuming they did
        would have been the fourth "CSS that exists in a sibling file" bug today. */
-    --dim:#5c6690; --blue-l:#7fa8ff;
+    --dim:#9aa5cc; --blue-l:#7fa8ff;   /* Sep 17: #5c6690 was 2.9:1 on the card - unreadable */
   }
 
   /* ---------- Staff & permissions (item 70 step 4) ----------
@@ -34,10 +34,10 @@
   .sbar .sq input{width:100%;background:var(--navy);border:1px solid var(--line);
     border-radius:10px;padding:9px 12px;color:var(--ink);font-size:13.5px}
   .schip{background:transparent;border:1px solid var(--line);color:var(--mute);
-    border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+    border-radius:999px;padding:6px 13px;font-size:13px;cursor:pointer;white-space:nowrap}
   .schip.on{background:rgba(77,124,254,.16);border-color:rgba(77,124,254,.55);
     color:var(--blue-l);font-weight:600}
-  .schip .n{opacity:.65;font-size:11px;margin-left:3px}
+  .schip .n{opacity:.65;font-size:12px;margin-left:3px}
   /* Its own rule because class="go" HAS NO RULE in this file — .go only exists as
      `.abtn.go`, so the Add button rendered as a browser-default white slab, the
      brightest thing on a navy page and next to the quietest action on it. Sixth time
@@ -47,7 +47,7 @@
     color:var(--blue-l);border-radius:10px;padding:9px 15px;font-size:13px;
     font-weight:600;cursor:pointer;white-space:nowrap;width:auto}
   .sadd:hover{background:rgba(77,124,254,.22)}
-  .sgrp{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;
+  .sgrp{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;
     margin:18px 0 7px;padding-left:2px}
   .srow{display:grid;grid-template-columns:1fr 170px 84px 1fr 18px;gap:12px;align-items:center;
     padding:11px 13px;border:1px solid transparent;border-radius:11px;cursor:pointer;transition:.11s}
@@ -59,37 +59,37 @@
   .sdot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:0 0 auto}
   .sdot.no{background:var(--dim)}
   .snm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .sem{font-size:11.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .smeta{font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .spc{font-family:var(--mono);font-size:11px;color:var(--dim)}
-  .srole{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  .sem{font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .smeta{font-size:13px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spc{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .srole{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
     padding:3px 9px;border-radius:6px;text-align:center;white-space:nowrap}
   .srole.owner{background:rgba(245,166,35,.16);color:var(--amber)}
   .srole.admin{background:rgba(77,124,254,.16);color:var(--blue-l)}
   .srole.agent{background:rgba(143,154,196,.13);color:var(--mute)}
   .sperms{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
-  .sp{font-size:11px;background:rgba(47,191,113,.14);color:#7ee2a8;border-radius:6px;
+  .sp{font-size:12px;background:rgba(47,191,113,.14);color:#7ee2a8;border-radius:6px;
     padding:2.5px 8px;white-space:nowrap}
   .sp.none{background:transparent;color:var(--dim)}
   .sp.all{background:rgba(245,166,35,.14);color:var(--amber)}
-  .scar{color:var(--dim);font-size:12px;text-align:center}
-  .stag{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+  .scar{color:var(--dim);font-size:13px;text-align:center}
+  .stag{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
   .sedit{background:rgba(255,255,255,.045);border:1px solid rgba(77,124,254,.42);
     border-top:0;border-radius:0 0 11px 11px;padding:0 15px 15px;margin-bottom:8px}
   /* Section headers match the list's group headings, with a hairline, so the editor
      reads as part of the page rather than a form dropped into it. */
-  .selab{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;
+  .selab{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;
     margin:15px 0 10px;display:flex;align-items:center;gap:9px}
   .selab::after{content:"";flex:1;height:1px;background:var(--line)}
   .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:12px 16px}
   .f{display:flex;flex-direction:column;gap:5px;min-width:0}
-  .f label{font-size:11px;color:var(--mute)}
+  .f label{font-size:12px;color:var(--mute)}
   .f input,.f select{width:100%;background:var(--navy);border:1px solid var(--line);
     border-radius:9px;color:var(--ink);padding:9px 11px;font-size:13px}
   .f input:focus,.f select:focus{outline:none;border-color:var(--blue)}
   .f input:disabled,.f select:disabled{opacity:.55;cursor:not-allowed}
   .f .pcin{font-family:var(--mono);text-transform:uppercase}
-  .fhint{font-size:10.5px;color:var(--dim);line-height:1.45}
+  .fhint{font-size:12px;color:var(--dim);line-height:1.45}
   /* A REAL switch, not a checkbox. A disabled checkbox at low opacity reads as
      unchecked - which is what made "can sign in" look like "never signs in" on Saif's
      screenshot. On and off are now a shape and a colour, not a tick. */
@@ -107,14 +107,14 @@
      "update the design, update its details" failure. Editable now, at Saif's request. */
   .note{background:rgba(245,166,35,.07);border-left:2px solid var(--amber);
     border-radius:0 8px 8px 0;padding:10px 12px;margin-top:12px}
-  .note label{font-size:10.5px;color:var(--amber);text-transform:uppercase;letter-spacing:.06em}
+  .note label{font-size:11px;color:var(--amber);text-transform:uppercase;letter-spacing:.06em}
   /* The note is the one field whose whole job is to be READ, and the right height
      depends on the width: 38px clipped Malcolm's third line on a phone, while a fixed
      62px left dead space on a 1280 desktop where the same note is one line. field-sizing
      grows the box to its content, so neither happens; min-height is the fallback for a
      browser without it, and rows="2" in the markup is the last resort. */
   .note textarea{width:100%;background:transparent;border:0;color:var(--mute);
-    font-family:inherit;font-size:12.5px;line-height:1.55;resize:vertical;padding:4px 0 0;
+    font-family:inherit;font-size:13px;line-height:1.55;resize:vertical;padding:4px 0 0;
     field-sizing:content;min-height:40px}
   .note textarea:focus{outline:none;color:var(--ink)}
   /* PERMISSION PILLS. Three states that cannot be confused: off is outlined and empty,
@@ -123,18 +123,18 @@
   .pills{position:relative;display:flex;flex-wrap:wrap;gap:8px}
   .pill2{display:inline-flex;align-items:center;gap:7px;
     border:1px solid var(--line);background:var(--navy);color:var(--mute);border-radius:999px;
-    padding:8px 14px 8px 11px;font-size:12.5px;cursor:pointer;transition:.12s;user-select:none}
+    padding:8px 14px 8px 11px;font-size:13px;cursor:pointer;transition:.12s;user-select:none}
   .pill2 input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
   .pill2:hover{border-color:rgba(255,255,255,.22)}
   .pill2 .tick{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--dim);
-    display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+    display:inline-flex;align-items:center;justify-content:center;font-size:12px;
     color:transparent;flex:0 0 auto;transition:.12s}
   .pill2.on{background:rgba(47,191,113,.16);border-color:rgba(47,191,113,.55);color:#a9edc4;font-weight:600}
   .pill2.on .tick{background:var(--green);border-color:var(--green);color:#04220f}
   .pill2.via{background:rgba(245,166,35,.1);border-color:rgba(245,166,35,.35);
     color:var(--amber);cursor:not-allowed}
   .pill2.via .tick{background:var(--amber);border-color:var(--amber);color:#2a1a00}
-  .pill2 small{color:var(--dim);font-size:10.5px}
+  .pill2 small{color:var(--dim);font-size:12px}
   /* HOVER EXPLANATION, Saif's ask: "when hover on the refund, explain what is this
      for?". Read from data-tip so the same sentence serves the tooltip, the title
      attribute and the tap-friendly list below - one string, three places.
@@ -149,60 +149,60 @@
   .pill2[data-tip]:hover::after{content:attr(data-lab) " — " attr(data-tip);
     position:absolute;left:0;right:0;top:calc(100% + 9px);
     background:#060b20;border:1px solid rgba(255,255,255,.16);
-    border-radius:10px;padding:10px 13px;font-size:12px;line-height:1.55;color:var(--ink);
+    border-radius:10px;padding:10px 13px;font-size:13px;line-height:1.55;color:var(--ink);
     font-weight:400;letter-spacing:0;z-index:40;white-space:normal;text-align:left;
     box-shadow:0 10px 26px rgba(0,0,0,.55);pointer-events:none}
   /* Hover does not exist on a phone, so the same sentences are also a tappable list.
      <details> is native: no state to hold and no handler to wire wrong. */
-  .capdefs{margin-top:11px;font-size:12px}
-  .capdefs summary{color:var(--blue-l);cursor:pointer;font-size:12px;width:fit-content;
+  .capdefs{margin-top:11px;font-size:13px}
+  .capdefs summary{color:var(--blue-l);cursor:pointer;font-size:13px;width:fit-content;
     padding:3px 0;list-style:none}
   .capdefs summary::-webkit-details-marker{display:none}
   .capdefs summary::before{content:"? ";opacity:.7}
   .capdefs dl{margin:9px 0 0;display:grid;gap:8px}
-  .capdefs dt{font-size:12px;font-weight:600;color:var(--ink)}
-  .capdefs dd{margin:1px 0 0;font-size:11.5px;color:var(--mute);line-height:1.5}
-  .sfoot{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--dim);
+  .capdefs dt{font-size:13px;font-weight:600;color:var(--ink)}
+  .capdefs dd{margin:1px 0 0;font-size:12px;color:var(--mute);line-height:1.5}
+  .sfoot{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--dim);
     margin-top:15px;padding-top:11px;border-top:1px solid var(--line)}
   .sdiff{margin-top:13px;background:rgba(245,166,35,.09);border:1px solid rgba(245,166,35,.4);
-    border-radius:9px;padding:9px 12px;font-size:12.5px}
+    border-radius:9px;padding:9px 12px;font-size:13px}
   .sdiff b{color:var(--amber)}
   .ssave{display:flex;gap:9px;align-items:center;margin-top:10px;flex-wrap:wrap}
   .ssave input{flex:1;min-width:180px;background:var(--navy);border:1px solid var(--line);
     border-radius:9px;padding:9px 11px;color:var(--ink);font-size:13px}
   .ssave button{background:var(--green);color:#04220f;border:0;border-radius:9px;
     padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;width:auto;white-space:nowrap}
-  .shint{font-size:11.5px;color:var(--dim);line-height:1.5}
+  .shint{font-size:12px;color:var(--dim);line-height:1.5}
   /* ---------- Refunds tab. .will, .lbl AND .row exist in portal.html, NOT here. The
      first two I checked by hand; .row I did not, and the harness caught it before it
      shipped as an unstyled div. */
   .row{display:flex;justify-content:space-between;align-items:center}
   .rq{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:9px}
-  .rqnote{font-size:12.5px;color:var(--mute);margin-top:7px;padding-left:9px;border-left:2px solid rgba(255,255,255,.14)}
+  .rqnote{font-size:13px;color:var(--mute);margin-top:7px;padding-left:9px;border-left:2px solid rgba(255,255,255,.14)}
   .rqacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .rqok{background:var(--green);color:#04220f;border:0;border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700;cursor:pointer;width:auto;flex:1;min-width:150px}
+  .rqok{background:var(--green);color:#04220f;border:0;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;width:auto;flex:1;min-width:150px}
   .rqok.rqslip{background:var(--field);color:var(--blue);border:1px solid var(--line);flex:0 0 auto;min-width:0}
-  .rqno{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:600;cursor:pointer;width:auto;flex:1;min-width:110px}
+  .rqno{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:9px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;width:auto;flex:1;min-width:110px}
   /* AUDIT REVIEW (Sep 12). Row actions are small and never stretch; the bulk bar is
      the one loud element and appears only once something is ticked. */
   tr.waitrow td{background:rgba(77,124,254,.06)}
   .selcell{width:26px;padding-right:0}
   .selcell input{width:16px;height:16px;cursor:pointer;accent-color:var(--blue)}
   .rvacts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
-  .aok{background:var(--green);color:#04220f;border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
-  .ano{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .aok{background:var(--green);color:#04220f;border:0;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .ano{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
   .aok:disabled,.ano:disabled{opacity:.5;cursor:default}
-  .rvsub{font-size:11px;color:var(--mute);margin-top:3px;max-width:240px;line-height:1.35}
+  .rvsub{font-size:12px;color:var(--mute);margin-top:3px;max-width:240px;line-height:1.35}
   .rvsub i{color:var(--ink);font-style:italic}
   .rvsub .re{color:var(--amber);font-weight:700}
   .rvsub .fee{color:var(--green);font-weight:700}
   .rvsub .reply{display:block;margin-top:4px;padding:6px 9px;border-left:2px solid var(--amber);background:rgba(245,166,35,.08);color:var(--ink);font-style:normal;border-radius:0 6px 6px 0;max-width:260px}
   .rvsub .reply.note{border-left-color:var(--blue);background:rgba(77,124,254,.08)}
   .msg.note{border-color:var(--blue);background:rgba(77,124,254,.08)}
-  .rvmsg{font-size:11.5px;margin-top:4px}
+  .rvmsg{font-size:12px;margin-top:4px}
   .bulkbar{border:1px solid var(--blue);background:rgba(77,124,254,.10);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
   .bulkbar b{color:#7fa8ff}
-  .bulkbar .hint{color:var(--mute);font-size:12px}
+  .bulkbar .hint{color:var(--mute);font-size:13px}
   /* the send-back sheet: a card over the page, same shape as the refund sheet on the portal */
   #sbSheet{position:fixed;inset:0;background:rgba(6,10,26,.72);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
   #sbSheet .sbcard{background:var(--navy2);border:1px solid var(--line);border-radius:14px;padding:16px 18px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)}
@@ -210,10 +210,10 @@
   #sbSheet .sbwhy{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
   .sbgo{background:var(--red);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;flex:1}
   .sbgo:disabled{opacity:.5;cursor:default}
-  .lbl{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
+  .lbl{font-size:12px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap}
   .rqnz{margin-top:10px}
   .rqchips{display:flex;flex-wrap:wrap;gap:6px}
-  .rqchip{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:12px;font-weight:600;padding:6px 11px;border-radius:8px;cursor:pointer}
+  .rqchip{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:13px;font-weight:600;padding:6px 11px;border-radius:8px;cursor:pointer}
   .rqchip.on{background:var(--blue);border-color:var(--blue);color:#fff}
   .rqin{display:block;width:100%;margin-top:6px;font-size:13px;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--navy);color:var(--ink)}
   .rqamt{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
@@ -221,7 +221,7 @@
   .lbl.amber{background:rgba(245,166,35,.15);color:var(--amber)}
   .lbl.green{background:rgba(47,191,113,.15);color:var(--green)}
   .lbl.red{background:rgba(224,49,49,.15);color:#ff7b7b}
-  .will{margin:8px 0 0;padding:0;list-style:none;font-size:12px;line-height:1.55}
+  .will{margin:8px 0 0;padding:0;list-style:none;font-size:13px;line-height:1.55}
   .will li{padding:4px 0 4px 18px;position:relative;border-bottom:1px solid var(--line)}
   .will li:last-child{border-bottom:0}
   .will li::before{content:"\2192";position:absolute;left:0;color:var(--dim)}
@@ -237,7 +237,7 @@
     .srow > .smeta,.srow > .sperms,.srow > .srole{display:none}
     .smob{grid-area:mob;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
     .smob .srole{display:inline-block}
-    .smob .smeta{display:inline-block;font-size:11.5px}
+    .smob .smeta{display:inline-block;font-size:12px}
     .fields{grid-template-columns:1fr}
     .pill2{padding:10px 15px 10px 12px;font-size:13px}
     /* A tap counts as a hover on touch, so the tooltip would stick over the pill after
@@ -297,14 +297,14 @@
   .strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0 16px}
   .cell{background:var(--navy2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
   .cell .n{font-size:19px;font-weight:800;font-family:var(--mono);letter-spacing:-.02em;line-height:1.15}
-  .cell .k{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+  .cell .k{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
   tr:last-child td{border-bottom:0}
-  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
-  .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:13px;font-weight:600}
+  .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
   .perchip.sel{background:var(--blue);border-color:var(--blue);color:#fff}
   /* Trust: the search, the opened carrier, the CSV button */
   .tsearch{width:100%;max-width:640px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin:0 0 6px}
-  .tsub{font-size:12px;color:var(--mute);margin:0 0 14px}
+  .tsub{font-size:13px;color:var(--mute);margin:0 0 14px}
   .tsub b{color:var(--ink)}
   .thit{background:rgba(77,124,254,.16);color:var(--ink);border-radius:3px;padding:0 2px}
   .cgrp{cursor:pointer;user-select:none}
@@ -313,17 +313,17 @@
   .cgrp.open .tri{transform:rotate(90deg);color:var(--blue)}
   .cdet{background:rgba(255,255,255,.02)}
   .cdet td{padding:0 0 0 22px;border-bottom:1px solid var(--line)}
-  .cdet table{font-size:12.5px;margin:0;min-width:0}
-  .cdet th{font-size:11px;padding:6px 8px;border-bottom:1px solid var(--hair)}
+  .cdet table{font-size:13px;margin:0;min-width:0}
+  .cdet th{font-size:12px;padding:6px 8px;border-bottom:1px solid var(--hair)}
   .cdet td{padding:5px 8px;background:none}
   .cdet tr:last-child td{border-bottom:0}
   .amt{font-family:var(--mono);text-align:right;white-space:nowrap}
-  .dl{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--mute);cursor:pointer;background:transparent;font-family:inherit}
+  .dl{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--mute);cursor:pointer;background:transparent;font-family:inherit}
   .dl:hover{color:var(--ink);border-color:rgba(255,255,255,.22)}
   .trow{transition:background .1s}
   .trow:hover{background:rgba(255,255,255,.03)}
   .trow td{border-bottom:1px solid var(--line)}
-  .dinput{background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--ink);font-size:12px}
+  .dinput{background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--ink);font-size:13px}
   .abtn{display:inline-block;border:0;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.12s}
   .abtn.go{background:var(--green,#2fbf71);color:#04220f}
   .abtn.go:hover{filter:brightness(1.08)}
@@ -331,8 +331,8 @@
   .abtn.no:hover{color:#ff8f8f;border-color:rgba(224,49,49,.5)}
   .agentcard{border:1px solid var(--line);border-radius:12px;margin-bottom:9px;overflow:hidden;transition:.12s}
   .agentcard:hover{border-color:rgba(127,168,255,.45)}
-  .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;color:#0b1220;flex-shrink:0}
-  .docbtn{display:inline-block;padding:4px 11px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent}
+  .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0b1220;flex-shrink:0}
+  .docbtn{display:inline-block;padding:4px 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent}
   .docbtn.g{background:rgba(47,191,113,.15);color:#7ee2a8;border-color:rgba(47,191,113,.35)}
   .docbtn.r{background:rgba(224,49,49,.15);color:#ff8f8f;border-color:rgba(224,49,49,.35)}
   .docbtn.a{background:rgba(245,166,35,.14);border-color:rgba(245,166,35,.45);color:#f5a623}
@@ -353,25 +353,25 @@
   .docwrap.room.full{max-width:none;min-height:calc(100vh - 40px)}
   .roomhdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:11px;border-bottom:1px solid var(--line);gap:12px}
   .roomhdr .t{font-size:15px;font-weight:700}
-  .roomhdr .s{font-size:12px;color:var(--mute);margin-top:2px;line-height:1.5}
+  .roomhdr .s{font-size:13px;color:var(--mute);margin-top:2px;line-height:1.5}
   .roomhdr .x{cursor:pointer;color:var(--mute);font-size:20px;padding:0 4px;flex-shrink:0}
   .roomgrid{display:flex;gap:14px;margin-top:12px}
   .roomside{width:300px;flex-shrink:0;max-height:560px;overflow-y:auto}
   .full .roomside{max-height:calc(100vh - 220px)}
   .xchg{margin-bottom:12px}
-  .xchg .who{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px;color:var(--mute)}
+  .xchg .who{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px;color:var(--mute)}
   .msg{border-left:3px solid var(--line);padding:8px 11px;border-radius:0 9px 9px 0;font-size:13px;line-height:1.5;margin-bottom:8px;background:rgba(255,255,255,.03);white-space:pre-wrap;word-break:break-word}
   .msg.back{border-color:var(--red);background:rgba(224,49,49,.08)}
   .msg.reply{border-color:var(--amber);background:rgba(245,166,35,.08)}
-  .msg .when{display:block;font-size:11px;color:var(--mute);margin-top:5px;white-space:normal}
+  .msg .when{display:block;font-size:12px;color:var(--mute);margin-top:5px;white-space:normal}
   .msg .code{font-weight:700;color:#ff8f8f}
   .roompane{flex:1;display:flex;flex-direction:column;min-width:0}
   .vtool{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
-  .vtool .vb{border:1px solid var(--line);background:var(--navy);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .vtool .vb{border:1px solid var(--line);background:var(--navy);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
   .vtool .vb:hover{border-color:rgba(255,255,255,.25)}
   .vtool .vb.on{border-color:var(--blue);color:var(--blue)}
   .vtool .vb:disabled{opacity:.35;cursor:default}
-  .vtool .pg{font-size:12px;color:var(--mute);padding:0 6px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
+  .vtool .pg{font-size:13px;color:var(--mute);padding:0 6px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
   .vtool .sp{flex:1}
   .roompane .docpane{overflow:auto;min-height:520px}
   .roompane .docpane iframe{height:520px}
@@ -382,8 +382,8 @@
   .docpane .zoomwrap.fit img{max-width:100%;max-height:520px}
   .full .docpane .zoomwrap.fit img{max-height:calc(100vh - 240px)}
   .roomfoot{display:flex;gap:8px;margin-top:12px;align-items:center;border-top:1px solid var(--line);padding-top:12px;flex-wrap:wrap}
-  .roomfoot .rnote{flex:1;font-size:12px;color:var(--mute);min-width:160px}
-  .roomfoot .close{border:1px solid var(--line);background:none;color:var(--mute);border-radius:8px;padding:7px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .roomfoot .rnote{flex:1;font-size:13px;color:var(--mute);min-width:160px}
+  .roomfoot .close{border:1px solid var(--line);background:none;color:var(--mute);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;font-family:inherit}
   .rvsub .more{color:var(--blue);cursor:pointer;font-weight:600;white-space:nowrap}
   @media (max-width:760px){.roomgrid{flex-direction:column}.roomside{width:auto;max-height:none}.roompane .docpane{min-height:360px}.roompane .docpane iframe{height:360px}}
   .dchip:first-child{margin-left:0}
@@ -517,7 +517,7 @@ const DOC_ROWS = {};
 function releasedNote(r){
   const ratio = r.collected_ratio != null ? Number(r.collected_ratio) : 1;
   if(r.commission == null || ratio >= 0.995) return '';
-  return '<div style="font-size:10.5px;color:var(--amber);font-weight:400;white-space:nowrap">'
+  return '<div style="font-size:12px;color:var(--amber);font-weight:400;white-space:nowrap">'
     + money(r.commission * ratio) + ' released</div>';
 }
 
@@ -538,9 +538,9 @@ function balanceCell(r){
   if(owed == null || owed <= got + 0.005) return '';
   const left = owed - got;
   const pct = Math.round((got / owed) * 100);
-  return '<div style="font-size:10.5px;color:var(--mute);white-space:nowrap">'
+  return '<div style="font-size:12px;color:var(--mute);white-space:nowrap">'
       + money(got) + ' of ' + money(owed) + ' \u00b7 ' + pct + '%</div>'
-    + '<div style="font-size:10.5px;color:var(--amber);white-space:nowrap">'
+    + '<div style="font-size:12px;color:var(--amber);white-space:nowrap">'
       + money(left) + ' still owed</div>';
 }
 
@@ -699,7 +699,7 @@ async function renderClients(el) {
     + '<div id="seedprog" class="muted" style="display:none;font-size:13px;margin:4px 0 10px"></div>'
     + '<input id="csearch" placeholder="Search name, client #, phone, or email…" value="' + esc(SEARCH_Q) + '" '
     + 'style="width:100%;max-width:380px;margin:6px 0 6px;padding:10px 13px;border-radius:9px;border:1px solid var(--line);background:#0a0f26;color:var(--ink);font-size:14px">'
-    + '<div class="muted" style="font-size:12px;margin-bottom:12px">' + label + '</div>'
+    + '<div class="muted" style="font-size:13px;margin-bottom:12px">' + label + '</div>'
     + '<div id="ctable">' + clientTable(list, r.policy_counts) + '</div>';
   el.innerHTML = h;
 
@@ -860,7 +860,7 @@ function section(key, title, count, bodyHtml, opts) {
     + '<span class="chev" style="color:var(--mute);width:14px">' + chevron + '</span>'
     + '<b style="font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--mute)">' + title + '</b>'
     + '<span class="pill b" style="margin-left:2px">' + count + '</span>'
-    + (opts.note ? '<span class="muted" style="font-size:12px;margin-left:4px">' + opts.note + '</span>' : '')
+    + (opts.note ? '<span class="muted" style="font-size:13px;margin-left:4px">' + opts.note + '</span>' : '')
     + '</div>'
     + '<div class="secbody" style="' + (open ? '' : 'display:none') + ';padding-bottom:8px">' + (empty ? '<div class="muted" style="padding:4px 0 12px">' + (opts.emptyText || 'Nothing here.') + '</div>' : bodyHtml) + '</div>'
     + '</div>';
@@ -889,7 +889,7 @@ function policyRows(list, isDmv) {
         else if (days <= 30) badge = '<span class="pill a">renew in ' + days + 'd</span>';
         else badge = '<span class="pill g">current</span>';
       }
-      const isLatest = p._latest ? ' <span class="pill b" style="font-size:10px">latest</span>' : '';
+      const isLatest = p._latest ? ' <span class="pill b" style="font-size:12px">latest</span>' : '';
       return '<tr>'
         + '<td>' + esc(p.policy_number || '—') + isLatest + '</td>'
         + '<td>' + (p.renewal_months ? p.renewal_months + ' mo' : '—') + '</td>'
@@ -918,10 +918,10 @@ function policyRows(list, isDmv) {
     const _perPay = (_prem && _nPay) ? (_prem / _nPay) : null;
     const header = '<div onclick="togglePol(\'' + pid + '\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--navy);border:1px solid var(--line);border-radius:10px;margin-bottom:' + (open?'0':'8px') + '">'
       + '<span class="chev2" style="color:var(--mute);width:12px">' + (open?'▾':'▸') + '</span>'
-      + '<div style="flex:1"><b>' + esc(p.policy_number || '—') + '</b> <span class="muted" style="font-size:12px">· ' + esc(p.carrier || '—') + '</span></div>'
-      + '<span class="muted hidemob" style="font-size:12px">' + esc(p.effective_date||'') + ' → ' + esc(p.expiration_date||'') + '</span>'
-      + (_perPay ? '<span style="font-size:13px;font-weight:700;color:#7fa8ff;white-space:nowrap">' + money(_perPay) + '<span style="font-size:10px;font-weight:400;color:var(--mute)">/mo</span></span>' : '')
-      + '<span class="amount muted" style="font-size:12px" title="term premium">' + money(p.premium) + '</span>'
+      + '<div style="flex:1"><b>' + esc(p.policy_number || '—') + '</b> <span class="muted" style="font-size:13px">· ' + esc(p.carrier || '—') + '</span></div>'
+      + '<span class="muted hidemob" style="font-size:13px">' + esc(p.effective_date||'') + ' → ' + esc(p.expiration_date||'') + '</span>'
+      + (_perPay ? '<span style="font-size:13px;font-weight:700;color:#7fa8ff;white-space:nowrap">' + money(_perPay) + '<span style="font-size:12px;font-weight:400;color:var(--mute)">/mo</span></span>' : '')
+      + '<span class="amount muted" style="font-size:13px" title="term premium">' + money(p.premium) + '</span>'
       + (live ? '<span class="pill g">in force</span>' : '<span class="pill a">' + esc(p.status||'—') + '</span>')
       + '</div>';
     if (!open) return header;
@@ -956,7 +956,7 @@ function policyRows(list, isDmv) {
         + '<table><tr><th>Year / Make / Model</th><th class="hidemob">VIN</th><th class="hidemob">Use</th><th>Premium</th></tr>'
         + autos.map(a => '<tr>'
             + '<td>' + esc([a.year,a.make,a.model].filter(Boolean).join(' ')) + '</td>'
-            + '<td class="hidemob amount" style="font-size:11px">' + esc(a.vin||'—') + '</td>'
+            + '<td class="hidemob amount" style="font-size:12px">' + esc(a.vin||'—') + '</td>'
             + '<td class="hidemob">' + esc(a.use||'—') + '</td>'
             + '<td class="amount">' + money(a.totalPremium) + '</td>'
             + '</tr>').join('') + '</table>';
@@ -987,18 +987,18 @@ function policyRows(list, isDmv) {
       ? '<div style="display:flex;align-items:baseline;gap:10px;background:linear-gradient(135deg,rgba(77,124,254,.18),rgba(47,191,113,.10));border:1px solid rgba(77,124,254,.4);border-radius:12px;padding:14px 18px;margin:8px 0 4px">'
         + '<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);font-weight:700;margin-bottom:2px">Est. monthly payment</div>'
         + '<span style="font-size:26px;font-weight:800;color:#7fa8ff;letter-spacing:-.5px">' + money(perPay) + '</span>'
-        + ' <span class="muted" style="font-size:12px">× ' + nPay + ' payments</span></div>'
-        + '<div style="margin-left:auto;text-align:right"><div class="muted" style="font-size:11px">Term premium</div><span class="amount" style="font-size:15px">' + money(prem) + '</span></div>'
+        + ' <span class="muted" style="font-size:13px">× ' + nPay + ' payments</span></div>'
+        + '<div style="margin-left:auto;text-align:right"><div class="muted" style="font-size:12px">Term premium</div><span class="amount" style="font-size:15px">' + money(prem) + '</span></div>'
         + '</div>'
       : '';
     const billHtml = '<div style="margin:10px 0 2px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:700">Billing</div>'
       + heroPay
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px 16px;font-size:13px;padding:6px 0 2px">'
-      + '<div><span class="muted" style="font-size:11px;display:block">Billing type</span>' + esc(billType) + (isDirect?' <span class="pill b" style="font-size:10px">carrier bills client</span>':'') + '</div>'
-      + '<div><span class="muted" style="font-size:11px;display:block">Payment plan</span>' + esc(billPlan) + '</div>'
-      + (nTerms?('<div><span class="muted" style="font-size:11px;display:block">Term length</span>' + nTerms + ' months</div>'):'')
+      + '<div><span class="muted" style="font-size:12px;display:block">Billing type</span>' + esc(billType) + (isDirect?' <span class="pill b" style="font-size:12px">carrier bills client</span>':'') + '</div>'
+      + '<div><span class="muted" style="font-size:12px;display:block">Payment plan</span>' + esc(billPlan) + '</div>'
+      + (nTerms?('<div><span class="muted" style="font-size:12px;display:block">Term length</span>' + nTerms + ' months</div>'):'')
       + '</div>'
-      + (isDirect?'<div class="muted" style="font-size:11px;margin-top:3px">↳ Exact amount &amp; next due are on the carrier portal for direct-bill policies. Monthly shown is an estimate.</div>':'');
+      + (isDirect?'<div class="muted" style="font-size:12px;margin-top:3px">↳ Exact amount &amp; next due are on the carrier portal for direct-bill policies. Monthly shown is an estimate.</div>':'');
     const detail = '<div style="border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;padding:6px 14px 14px;margin-bottom:8px;background:rgba(255,255,255,.02)">'
       + billHtml
       + (dHtml||vHtml||cHtml ? (dHtml+vHtml+cHtml) : '<div class="muted" style="padding:8px 0">No detailed data stored for this policy.</div>')
@@ -1085,7 +1085,7 @@ async function renderOurClient(el, no, _bg, o) {
      exactly as the agent reads it - audit state, review state, documents, refund
      state, "client emailed at". The old ledger table (raw kinds, ref, office) is kept
      underneath, collapsed, for the columns the card does not carry. */
-  let cardHtml = '<div class="muted" style="font-size:12px">Loading the payment card…</div>';
+  let cardHtml = '<div class="muted" style="font-size:13px">Loading the payment card…</div>';
   try {
     /* the card is re-read only on a real open or ↻; the background HawkSoft refresh
        after open touches the client and policies, not the payments */
@@ -1095,8 +1095,8 @@ async function renderOurClient(el, no, _bg, o) {
        they are, and the log in sentences. Read-only card; notes may be added here too. */
     if (pc && pc.ok) cardHtml = ClientTabs.html(pc, { me: r.email || null, clientNo: no, actions: false, page: 'console',
       payHtml: PayCard.html(pc, { me: r.email || null, clientNo: no, actions: false, share: !!pc.is_admin }), rerender: () => refreshClientCard(no) });
-    else cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded' + (pc && pc.error ? ': ' + esc(pc.error) : '') + '.</div>';
-  } catch (e) { cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded.</div>'; }
+    else cardHtml = '<div class="muted" style="font-size:13px">The payment card could not be loaded' + (pc && pc.error ? ': ' + esc(pc.error) : '') + '.</div>';
+  } catch (e) { cardHtml = '<div class="muted" style="font-size:13px">The payment card could not be loaded.</div>'; }
   const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th class="hidemob">Office</th><th>Ref</th></tr>'
     + (r.payments||[]).map(p => '<tr>'
       + '<td>' + esc(String(p.ts).replace('T',' ').slice(0,16)) + '</td>'
@@ -1339,7 +1339,7 @@ async function renderTrust(el){
   const chip = (k,l) => '<span class="perchip'+(TRUST_PERIOD===k?' sel':'')+'" onclick="setTrustPeriod(\''+k+'\')">'+l+'</span>';
   const monthName = (() => { try { const [y, m] = String(r.period || '').split('-').map(Number); return new Date(Date.UTC(y, m - 1, 15)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }); } catch(e){ return r.period || ''; } })();
   let h = '<h2>Trust — premium collected and owed</h2>';
-  h += '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">'+esc(r.source)+'</div>';
+  h += '<div class="muted" style="font-size:13px;margin:-4px 0 12px">'+esc(r.source)+'</div>';
   h += '<div style="display:flex;gap:6px;margin-bottom:14px;align-items:center;flex-wrap:wrap">'+chip('this','This month')+chip('last','Last month')
     + '<span style="flex:1"></span><button class="dl" onclick="trustCsv()" title="Every payment and refund of the period, as a spreadsheet">\u2b73 Download ' + esc(monthName) + ' (CSV) \u00b7 ' + (r.items||[]).length + ' payment' + ((r.items||[]).length === 1 ? '' : 's') + '</button></div>';
   h += '<input class="tsearch" id="trustSearch" value="' + esc(TRUST_Q) + '" oninput="trustSearch(this.value)" placeholder="Search anything \u2014 an exact amount (112.43), client name or #, carrier, agent, purpose, transaction ref">';
@@ -1363,7 +1363,7 @@ function trustDraw(){
       + (list.length ? ' \u00b7 collected <b>' + money(sum('amount')) + '</b> \u00b7 to carriers <b>' + money(sum('cost')) + '</b> \u00b7 Speedy kept <b>' + money(sum('fee')) + '</b>' + where : '') + '</div>';
     h += list.length ? '<div class="tscroll">' + trustRowsHtml(list) + '</div>'
       : '<div class="muted" style="font-size:13px;margin:6px 0 14px">Nothing in ' + (TRUST_PERIOD === 'last' ? 'last month' : 'this month') + ' matches that. An amount has to be exact to the cent; try the other month, or fewer words.</div>';
-    h += '<div class="muted" style="font-size:12px;margin-top:10px">An amount matches the charge, the carrier cost or the fee, to the cent. Words match client, #, carrier, agent, purpose and ref. Clear the box to get the summary back.</div>';
+    h += '<div class="muted" style="font-size:13px;margin-top:10px">An amount matches the charge, the carrier cost or the fee, to the cent. Words match client, #, carrier, agent, purpose and ref. Clear the box to get the summary back.</div>';
     el.innerHTML = h; return;
   }
 
@@ -1373,7 +1373,7 @@ function trustDraw(){
      neither owed to a carrier nor earned, and it should look unresolved. */
   const cell = (label, val, colour, sub) =>
     '<div class="cell"><div class="n" style="'+(colour?'color:'+colour:'')+'">'+esc(val)+'</div>'
-    + '<div class="k">'+esc(label)+'</div>'+(sub?'<div class="muted" style="font-size:10.5px;margin-top:2px">'+esc(sub)+'</div>':'')+'</div>';
+    + '<div class="k">'+esc(label)+'</div>'+(sub?'<div class="muted" style="font-size:12px;margin-top:2px">'+esc(sub)+'</div>':'')+'</div>';
   h += '<div class="strip">'
     + cell('COLLECTED', money(T.collected), '', (T.payments||0)+' payments')
     + cell('OWED / PAID TO CARRIERS', money(T.to_carriers), '#7fa8ff')
@@ -1390,7 +1390,7 @@ function trustDraw(){
     + '</div>';
 
   if((T.not_yet_collected||0) > 0){
-    h += '<div style="border-left:3px solid var(--amber);padding:9px 12px;margin:0 0 16px;font-size:12.5px;color:var(--mute)">'
+    h += '<div style="border-left:3px solid var(--amber);padding:9px 12px;margin:0 0 16px;font-size:13px;color:var(--mute)">'
       + 'Carriers + kept + unaccounted comes to <b style="color:var(--ink)">'
       + money((T.to_carriers||0) + (T.speedy_kept||0) + (T.unaccounted||0))
       + '</b>, which is more than the <b style="color:var(--ink)">' + money(T.collected)
@@ -1400,7 +1400,7 @@ function trustDraw(){
   }
 
   if(T.unaccounted > 0){
-    h += '<div style="border-left:3px solid var(--amber);padding:9px 12px;margin:0 0 16px;font-size:12.5px;color:var(--mute)">'
+    h += '<div style="border-left:3px solid var(--amber);padding:9px 12px;margin:0 0 16px;font-size:13px;color:var(--mute)">'
       + '<b style="color:var(--ink)">'+money(T.unaccounted)+'</b> was collected but no carrier cost has been entered, '
       + 'so it is neither owed to a carrier nor earned by Speedy. Every one has an agent and an unfinished audit behind it.</div>';
   }
@@ -1434,7 +1434,7 @@ function trustDraw(){
     h += '</table>';
   }
 
-  h += '<div class="muted" style="font-size:11.5px;margin-top:18px;border-top:1px solid var(--line);padding-top:10px">'
+  h += '<div class="muted" style="font-size:12px;margin-top:18px;border-top:1px solid var(--line);padding-top:10px">'
     + esc(r.caveat) + '</div>';
   el.innerHTML = h;
 }
@@ -1471,13 +1471,13 @@ function renderAgentView(r){
   /* The order control lives on BOTH sub-views. It was only ever rendered on
      Transactions, so switching to By agent silently dropped it. */
   const agSort = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
-    + '<span class="muted" style="font-size:12px;margin-right:2px">Order</span>'
+    + '<span class="muted" style="font-size:13px;margin-right:2px">Order</span>'
     + '<span class="perchip'+(AUDIT_SORT==='action'?' sel':'')+'" onclick="setAuditSort(\'action\')">Needs action first</span>'
     + '<span class="perchip'+(AUDIT_SORT==='date'?' sel':'')+'" onclick="setAuditSort(\'date\')">By date</span>'
     + '</div>';
   const totEarned = list.reduce((a,x)=>a+x.earned,0);
 
-  let h = '<div class="muted" style="font-size:12.5px;margin:-4px 0 10px">Commission is earned the day an audit is approved. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
+  let h = '<div class="muted" style="font-size:13px;margin:-4px 0 10px">Commission is earned the day an audit is approved. Edit each agent'+"'"+'s rate; totals recalc live. Paid end of month with salary.</div>';
   h += '<div style="margin-bottom:14px;font-size:14px">Total earned commission: <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></div>';
   h += agSort;
 
@@ -1500,19 +1500,19 @@ function renderAgentView(r){
     const hue = [...g.agent].reduce((a,c) => a + c.charCodeAt(0), 0) % 360;
     h += '<div class="agentcard">';
     h += '<div onclick="toggleAgent(\''+g.agent+'\')" style="cursor:pointer;display:flex;align-items:center;gap:13px;padding:13px 16px;background:var(--navy)">'
-      + '<span style="color:var(--mute);width:10px;font-size:11px">'+(open?'▾':'▸')+'</span>'
+      + '<span style="color:var(--mute);width:10px;font-size:12px">'+(open?'▾':'▸')+'</span>'
       + '<span class="avatar" style="background:hsl('+hue+',55%,68%)">'+esc(initials)+'</span>'
       + '<div style="flex:1"><b style="font-size:15px">'+esc(agentName(g.agent))+'</b>'
-      + (g.agent==='info@speedyins.com'?' <span class="pill a" style="font-size:10px">admin</span>':'')
-      + '<div class="muted" style="font-size:11.5px;margin-top:2px">'+g.tx.length+' payments · '+esc(period)+'</div>'
+      + (g.agent==='info@speedyins.com'?' <span class="pill a" style="font-size:12px">admin</span>':'')
+      + '<div class="muted" style="font-size:12px;margin-top:2px">'+g.tx.length+' payments · '+esc(period)+'</div>'
       + '<div style="display:flex;align-items:center;gap:7px;margin-top:6px">'
       + '<div style="flex:1;max-width:150px;height:4px;background:rgba(255,255,255,.09);border-radius:99px;overflow:hidden">'
       + '<div style="width:'+pctDone+'%;height:100%;background:'+(pctDone===100?'var(--green)':pctDone>=50?'#7fa8ff':'var(--amber)')+'"></div></div>'
-      + '<span class="muted" style="font-size:10.5px">'+done+' of '+g.tx.length+' audited</span></div>'
+      + '<span class="muted" style="font-size:12px">'+done+' of '+g.tx.length+' audited</span></div>'
       + '</div>'
-      + '<div style="text-align:right"><div class="muted" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.04em">Earned</div>'
+      + '<div style="text-align:right"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Earned</div>'
       + '<b class="amount" style="color:#7fa8ff;font-size:17px">'+money(g.earned)+'</b></div>'
-      + '<div style="text-align:right;min-width:74px"><div class="muted" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.04em">Pending</div>'
+      + '<div style="text-align:right;min-width:74px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Pending</div>'
       + '<span class="amount" style="color:'+(g.pending>0?'var(--amber)':'var(--mute)')+'">'+money(g.pending)+'</span></div>'
       + '</div>';
 
@@ -1700,19 +1700,19 @@ function auditRowHtml(row, ctx){
       + (ctx.canApprove ? '<td class="selcell">' + (isWait && !ownRow
           ? '<input type="checkbox" ' + (AUDIT_SEL.has(row.id) ? 'checked ' : '') + 'onchange="toggleSel(\'' + row.id + '\', this.checked)" aria-label="select for approval">'
           : '') + '</td>' : '')
-      + '<td class="muted" style="font-size:12px">'+esc(PT_STAMP(row.ts))+'</td>'
+      + '<td class="muted" style="font-size:13px">'+esc(PT_STAMP(row.ts))+'</td>'
       /* WHAT THE CHARGE WAS FOR. `purpose` has always been returned and is already
          searchable — the placeholder promises it — but the table never showed it, so
          every row read as an anonymous amount. Under the client rather than in a new
          column: the table's minimum width is already the problem here. */
       + '<td class="cli"><span class="raw-t" onclick="openClient('+row.client_no+')">'+(nm?nm+' ':'')+'#'+row.client_no+'</span>'
-        + (row.purpose ? '<div class="muted" style="font-size:11px;margin-top:1px">'+esc(row.purpose)+'</div>' : '')
+        + (row.purpose ? '<div class="muted" style="font-size:12px;margin-top:1px">'+esc(row.purpose)+'</div>' : '')
         + '</td>'
       + '<td><span class="pill b">'+pathLabel(row.path)+'</span></td>'
       + '<td class="amount">'+money(row.amount)+balanceCell(row)+'</td>'
       + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
       + '<td class="amount">'+(row.fee!=null?signed(row.fee):'—')+'</td>'
-      + '<td class="hidemob muted" style="font-size:12px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
+      + '<td class="hidemob muted" style="font-size:13px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
       + '<td class="amount">'+(row.commission!=null?'<b style="color:'+(row.commission<0?'var(--red)':'#7fa8ff')+'">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
       + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+reviewSub(row)+reviewActs(row)+'</td>'
       + '<td class="docs">'+docCell+'</td>'
@@ -1842,7 +1842,7 @@ async function drawAudit(el, r){
 
   /* the head is drawn once and left alone: the search box lives in it */
   const head = '<h2>Audit — full transaction trail</h2>' + auditSubNav()
-    + '<div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. The agent submits; commission is earned the day it is approved here.</div>'
+    + '<div class="muted" style="font-size:13px;margin:-4px 0 12px">Each charge with its proof of payment (carrier or DMV) and required documents. The agent submits; commission is earned the day it is approved here.</div>'
     + '<input id="auditSearch" placeholder="Search client name, #, transaction ref, agent, purpose…" value="'+esc(AUDIT_Q)+'" '
     + 'style="width:100%;max-width:520px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin-bottom:12px">';
   let h = '';
@@ -1854,7 +1854,7 @@ async function drawAudit(el, r){
     + (AUDIT_PERIOD==='custom'
         ? '<span style="display:flex;gap:6px;align-items:center;margin-left:6px">'
           + '<input type="date" id="auditFrom" value="'+esc(AUDIT_FROM||'')+'" onchange="setRange()" class="dinput">'
-          + '<span class="muted" style="font-size:12px">to</span>'
+          + '<span class="muted" style="font-size:13px">to</span>'
           + '<input type="date" id="auditTo" value="'+esc(AUDIT_TO||'')+'" onchange="setRange()" class="dinput"></span>'
         : '')
     + '</div>';
@@ -1862,12 +1862,12 @@ async function drawAudit(el, r){
     '<span class="perchip'+(AUDIT_SORT===k?' sel':'')+'" onclick="setAuditSort(\''+k+'\')">' + label
     + (count ? ' <b style="color:'+colour+'">'+count+'</b>' : '') + '</span>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
-    + '<span class="muted" style="font-size:12px;margin-right:2px">Order</span>'
+    + '<span class="muted" style="font-size:13px;margin-right:2px">Order</span>'
     + (canApprove ? schip('waiting','Waiting for you', nWait, '#7fa8ff') : '')
     + schip('action','Needs action first', nProof + nCost, '#f5a623')
     + schip('date','By date', 0, '')
     + (nWait || nBack || nProof || nCost
-        ? '<span class="muted" style="font-size:12px;margin-left:8px">'
+        ? '<span class="muted" style="font-size:13px;margin-left:8px">'
           + [ nWait ? nWait + (canApprove ? ' waiting for your approval' : ' waiting for approval') : '',
               nBack ? nBack + ' sent back, not yet resubmitted' : '',
               nProof ? nProof + ' with no proof' : '',
@@ -1900,7 +1900,7 @@ async function drawAudit(el, r){
   h += '</table></div>';
 
   // pre-audit note
-  if(periodRows.some(x=>x.pre_audit)) h += '<div class="muted" style="font-size:12px;margin-top:10px">— Transactions marked "—" were charged before the proof-of-payment process began; no audit documents are required for them.</div>';
+  if(periodRows.some(x=>x.pre_audit)) h += '<div class="muted" style="font-size:13px;margin-top:10px">— Transactions marked "—" were charged before the proof-of-payment process began; no audit documents are required for them.</div>';
 
   const body = document.getElementById('auditBody');
   if(body && document.getElementById('auditSearch') && el.contains(body)){
@@ -1959,7 +1959,7 @@ function drawSendBack(){
   const who = String(((AUDIT_CACHE||{}).names||{})[row.commission_to || row.agent] || row.commission_to || row.agent || 'the agent').split(' ')[0];
   el.innerHTML = '<div class="sbcard">'
     + '<div style="font-size:15px;font-weight:700">Send back to ' + esc(who) + ' — ' + esc(row.client_name || ('#' + row.client_no)) + ' · ' + money(row.amount) + '</div>'
-    + '<div class="muted" style="font-size:12.5px;margin-top:3px">' + esc(who) + ' sees the reason on the client card and on the carrier page, and gets a notification. Nothing is earned until it is resubmitted and approved.</div>'
+    + '<div class="muted" style="font-size:13px;margin-top:3px">' + esc(who) + ' sees the reason on the client card and on the carrier page, and gets a notification. Nothing is earned until it is resubmitted and approved.</div>'
     + '<div class="lbl" style="margin-top:12px">Why</div>'
     + '<div class="sbwhy">' + Object.entries(SENDBACK_CODES).map(([k,l]) =>
         '<span class="perchip' + (SB.code===k ? ' sel' : '') + '" onclick="sbPick(\'' + k + '\')">' + esc(l) + '</span>').join('') + '</div>'
@@ -2059,16 +2059,16 @@ function openDocs(rowKey){
     const k = docKind(d);
     const isProof = isProofDoc(d);
     return '<div class="docitem' + (isProof?' carrier':'') + '" id="di'+i+'" onclick="showDoc(\''+rowKey+'\','+i+')">'
-      + '<div style="font-size:10.5px;font-weight:700;color:' + (isProof?'#7ee2a8':k==='client_receipt'?'#a8b2d4':'#8fadff') + '">'
+      + '<div style="font-size:12px;font-weight:700;color:' + (isProof?'#7ee2a8':k==='client_receipt'?'#a8b2d4':'#8fadff') + '">'
       + esc(d.doc_label || docLabel(k)).toUpperCase() + (isProof ? ' \u00b7 PROOF' : '') + '</div>'
-      + '<div style="font-size:12px;margin-top:3px;word-break:break-all">' + esc(d.filename || 'file') + '</div>'
-      + '<div class="muted" style="font-size:10.5px">' + fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed \u2713' : '') + '</div></div>';
+      + '<div style="font-size:13px;margin-top:3px;word-break:break-all">' + esc(d.filename || 'file') + '</div>'
+      + '<div class="muted" style="font-size:12px">' + fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed \u2713' : '') + '</div></div>';
   };
-  const hdr = t => '<div class="muted" style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin:4px 0 6px">' + t + '</div>';
+  const hdr = t => '<div class="muted" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin:4px 0 6px">' + t + '</div>';
   let listHtml = own.length ? hdr('This payment') + own.map((d,i) => item(d,i)).join('')
-                            : '<div class="muted" style="font-size:12.5px;margin-bottom:8px">No documents on this payment yet.</div>';
+                            : '<div class="muted" style="font-size:13px;margin-bottom:8px">No documents on this payment yet.</div>';
   if(other.length){
-    listHtml += '<div id="otherHdr" onclick="toggleOther()" style="cursor:pointer;color:var(--blue);font-size:11.5px;margin:10px 0 6px">'
+    listHtml += '<div id="otherHdr" onclick="toggleOther()" style="cursor:pointer;color:var(--blue);font-size:12px;margin:10px 0 6px">'
       + '\u25b8 Other files on this client (' + other.length + ')</div>'
       + '<div id="otherWrap" style="display:none">' + other.map((d,i) => item(d, own.length + i)).join('') + '</div>';
   }
@@ -2315,7 +2315,7 @@ async function renderSystemHealth(){
   const barColor = pct => pct >= 90 ? '#e03131' : pct >= 70 ? '#f5a623' : '#2fbf71';
 
   let h = '<h2 style="margin-top:26px">System health</h2>';
-  h += '<div class="muted" style="font-size:12px;margin:-4px 0 12px">Storage usage and capacity. Updated live · '+esc(String(r.generated_at||'').replace('T',' ').slice(0,16))+'</div>';
+  h += '<div class="muted" style="font-size:13px;margin:-4px 0 12px">Storage usage and capacity. Updated live · '+esc(String(r.generated_at||'').replace('T',' ').slice(0,16))+'</div>';
 
   // alerts
   if(r.alerts && r.alerts.length){
@@ -2331,14 +2331,14 @@ async function renderSystemHealth(){
   h += '<div style="margin-bottom:16px">';
   h += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span>Database total</span><span><b>'+fmt(dbBytes)+'</b> <span class="muted">/ 8 GB (Pro)</span></span></div>';
   h += '<div style="height:10px;background:var(--navy);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+dbPct.toFixed(1)+'%;background:'+barColor(dbPct)+'"></div></div>';
-  h += '<div class="muted" style="font-size:11px;margin-top:3px">Warn at '+fmt(dbWarn)+' · plan expansion by then</div>';
+  h += '<div class="muted" style="font-size:12px;margin-top:3px">Warn at '+fmt(dbWarn)+' · plan expansion by then</div>';
   h += '</div>';
 
   // Attachments usage bar (vs 500MB warn)
   h += '<div style="margin-bottom:18px">';
   h += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span>Inline attachments ('+(r.attachment_count||0)+' files)</span><span><b>'+fmt(attBytes)+'</b> <span class="muted">/ 500 MB (move-to-Blob line)</span></span></div>';
   h += '<div style="height:10px;background:var(--navy);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+attPct.toFixed(1)+'%;background:'+barColor(attPct)+'"></div></div>';
-  h += '<div class="muted" style="font-size:11px;margin-top:3px">Receipt/doc PDFs stored in DB. Past 500 MB, move to Blob storage.</div>';
+  h += '<div class="muted" style="font-size:12px;margin-top:3px">Receipt/doc PDFs stored in DB. Past 500 MB, move to Blob storage.</div>';
   h += '</div>';
 
   // per-table breakdown
@@ -2409,9 +2409,9 @@ async function renderCalls(el) {
       const label = x.outcome === 'Auto' ? 'Auto / IVR' : x.outcome;
       const live = !x.call_end && !x.talk_seconds;
       const extra = (x.transferred
-          ? '<div class="muted" style="font-size:11px">transferred: ' + esc((x.answer_chain||[]).join(' \u2192 ')) + '</div>' : '')
+          ? '<div class="muted" style="font-size:12px">transferred: ' + esc((x.answer_chain||[]).join(' \u2192 ')) + '</div>' : '')
         + ((x.rang_agents||[]).length
-          ? '<div class="muted" style="font-size:11px">also rang: ' + esc(x.rang_agents.join(', ')) + '</div>' : '');
+          ? '<div class="muted" style="font-size:12px">also rang: ' + esc(x.rang_agents.join(', ')) + '</div>' : '');
       h += '<tr style="cursor:pointer" onclick="toggleCall(\'' + esc(x.rc_session_id) + '\')">'
         + '<td>' + hhmm(x.ring_start || x.call_end) + '</td>'
         + '<td><span class="pill ' + (x.direction === 'Inbound' ? 'b' : 'a') + '">' + (x.direction === 'Inbound' ? 'In' : 'Out') + '</span></td>'
@@ -2453,7 +2453,7 @@ async function recProbe() {
     + esc(r.callsReturned) + ' calls checked \u00b7 <b>' + esc(r.withRecording) + '</b> with a recording</div>';
 
   if ((r.sample || []).length) {
-    h += '<table style="font-size:12px;margin-top:10px"><tr><th>Started</th><th>Dir</th><th>Secs</th>'
+    h += '<table style="font-size:13px;margin-top:10px"><tr><th>Started</th><th>Dir</th><th>Secs</th>'
       + '<th>Recording ID</th><th>Type</th><th>Fetchable</th></tr>'
       + r.sample.map(x => '<tr><td>' + esc(String(x.startTime || '').replace('T',' ').slice(0,19)) + '</td>'
         + '<td class="muted">' + esc(x.direction || '\u2014') + '</td>'
@@ -2479,8 +2479,8 @@ async function loadLegs(sid) {
   const legs = (d && d.legs) || [];
   const hhmm = t => t ? new Date(t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—';
   cell.innerHTML = !legs.length ? '<span class="muted">No leg detail.</span>'
-    : '<div class="muted" style="margin-bottom:6px;font-size:12px">RingCentral creates one leg per party. This is what the row above is built from.</div>'
-      + '<table style="font-size:12px"><tr><th>Leg</th><th>Dir</th><th>Party</th><th>Status</th><th>Reason</th>'
+    : '<div class="muted" style="margin-bottom:6px;font-size:13px">RingCentral creates one leg per party. This is what the row above is built from.</div>'
+      + '<table style="font-size:13px"><tr><th>Leg</th><th>Dir</th><th>Party</th><th>Status</th><th>Reason</th>'
       + '<th>Rang</th><th>Answered</th><th>Ended</th><th>Secs</th></tr>'
       + legs.map(l => '<tr><td>' + esc((l.rc_party_id||'').slice(-2)) + '</td>'
         + '<td class="muted">' + esc(l.direction||'—') + '</td>'
@@ -2506,14 +2506,14 @@ async function renderCorrections(){
   if(!r || !r.ok || !r.rows.length) return '';
   return '<div class="card" style="border-color:rgba(245,166,35,.5);margin-bottom:14px">'
     + '<h2 style="margin:0 0 3px">Wrong-client corrections waiting for you</h2>'
-    + '<div class="muted" style="font-size:12.5px;margin-bottom:10px">The money is unchanged — only which client the payment sits on. Approving writes a correction note to both records.</div>'
+    + '<div class="muted" style="font-size:13px;margin-bottom:10px">The money is unchanged — only which client the payment sits on. Approving writes a correction note to both records.</div>'
     + r.rows.map(x =>
         '<div style="background:var(--navy);border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:7px">'
         + '<div style="font-size:13.5px"><b>' + money(x.amount) + '</b> · ' + esc(x.purpose || '') + '</div>'
-        + '<div style="font-size:12.5px;margin-top:4px">'
+        + '<div style="font-size:13px;margin-top:4px">'
         + '<span class="muted">from</span> ' + esc(x.from_name || '') + ' #' + x.client_id
         + ' <span class="muted">→ to</span> <b>' + esc(x.to_name || '(unknown)') + ' #' + x.correction_to_client + '</b></div>'
-        + '<div class="muted" style="font-size:11.5px;margin-top:3px">'
+        + '<div class="muted" style="font-size:12px;margin-top:3px">'
         + esc(String(x.correction_requested_by || '').split('@')[0]) + ' · ' + esc(String(x.correction_requested_at || '').slice(0,16).replace('T',' '))
         + (x.correction_note ? ' · "' + esc(x.correction_note) + '"' : '') + '</div>'
         + '<div style="display:flex;gap:7px;margin-top:9px">'
@@ -2797,7 +2797,7 @@ function staffHtml() {
     + ' <span class="n">' + counts[k] + '</span></button>';
 
   let h = '<h2>Staff &amp; permissions</h2>'
-    + '<div class="muted" style="font-size:12.5px;margin-bottom:14px;line-height:1.5">'
+    + '<div class="muted" style="font-size:13px;margin-bottom:14px;line-height:1.5">'
     + 'A role sets the defaults. Open someone and turn on a pill to give '
     + '<b style="color:var(--ink)">that one person</b> something extra — hover a pill to read what it does. '
     + 'Switching someone off only stops them signing in; their name and producer code stay on every payment '
@@ -2805,7 +2805,7 @@ function staffHtml() {
 
   if (rows.some(a => a.external)) {
     h += '<div style="border:1.5px solid var(--red);background:rgba(224,49,49,.08);border-radius:10px;'
-      + 'padding:10px 13px;margin-bottom:14px;font-size:12.5px">'
+      + 'padding:10px 13px;margin-bottom:14px;font-size:13px">'
       + '<b style="color:var(--red)">A non-Speedy address is on this list.</b> '
       + 'It is granted nothing, but it should not be here.</div>';
   }
@@ -2976,7 +2976,7 @@ const rqAgo = ts => {
 function refundsHtml() {
   const r = RQ_DATA, pend = r.pending || [], carr = r.carrier_pending || [], done = r.decided || [];
   let h = '<h2>Refunds</h2>'
-    + '<div class="muted" style="font-size:12.5px;margin-bottom:14px;line-height:1.5">'
+    + '<div class="muted" style="font-size:13px;margin-bottom:14px;line-height:1.5">'
     + 'Requests from agents wait here for you. Approving one issues the refund straight away with the agent’s answers '
     + '— the same thing as doing it yourself from the client card. Declining needs a reason; the agent reads it.</div>';
 
@@ -2990,13 +2990,13 @@ function refundsHtml() {
       + '<div class="row" style="align-items:flex-start;gap:10px">'
       + '<div><b style="font-size:15px">' + money(q.amount) + '</b>'
       + (Number(q.amount) + 0.004 < Number(p.amount || 0) ? ' <span class="lbl">part</span>' : '')
-      + ' <span class="muted" style="font-size:12px">of ' + money(p.amount) + ' · client ' + esc(String(q.client_no || ''))
+      + ' <span class="muted" style="font-size:13px">of ' + money(p.amount) + ' · client ' + esc(String(q.client_no || ''))
       + (q.client_name ? ' ' + esc(q.client_name) : '') + '</span></div>'
       + '<span class="lbl amber">needs you</span></div>'
-      + '<div class="muted" style="font-size:12px;margin-top:3px">Asked by <b style="color:var(--ink)">' + esc(q.requested_by_name || q.requested_by) + '</b>'
+      + '<div class="muted" style="font-size:13px;margin-top:3px">Asked by <b style="color:var(--ink)">' + esc(q.requested_by_name || q.requested_by) + '</b>'
       + ' · ' + rqAgo(q.requested_at) + ' · ' + esc(rqReason(q.reason)) + ' — ' + rqOwes(q.reason)
       + ' · carrier money ' + (q.carrier === 'yes' ? 'returned' : q.carrier === 'no' ? '<b style="color:var(--red)">not returned — a loss</b>' : 'not back yet') + '</div>'
-      + '<div class="muted" style="font-size:11.5px;margin-top:3px">Payment: ' + esc(String(p.ts || '').slice(0, 10))
+      + '<div class="muted" style="font-size:12px;margin-top:3px">Payment: ' + esc(String(p.ts || '').slice(0, 10))
       + ' · ' + esc(p.purpose || '') + (p.ref ? ' · ' + esc(p.ref) : '')
       + (p.carrier_name ? ' · ' + esc(p.carrier_name) + (p.service_cost != null ? ' ' + money(p.service_cost) : '') : '')
       + (p.fee_amount != null ? ' · Speedy kept ' + money(p.fee_amount) : '')
@@ -3013,10 +3013,10 @@ function refundsHtml() {
       /* THE OWNER MAY CHANGE THE AMOUNT (Saif, Sep 15) - full to part, or less. The
          box starts at what was asked; the button follows it; the cap is what is still
          refundable on the payment. */
-      + '<div class="rqamt"><span class="muted" style="font-size:12px">Approve</span><span style="font-weight:700">$</span>'
+      + '<div class="rqamt"><span class="muted" style="font-size:13px">Approve</span><span style="font-weight:700">$</span>'
       + '<input id="rqamt_' + esc(q.id) + '" type="text" inputmode="decimal" value="' + esc(Number(q.amount).toFixed(2)) + '" oninput="rqAmtChanged(\'' + esc(q.id) + '\', this.value)">'
-      + '<span class="muted" style="font-size:12px">of ' + money(q.refundable != null ? q.refundable : p.amount) + ' refundable</span>'
-      + '<span id="rqamtnote_' + esc(q.id) + '" class="muted" style="font-size:11.5px"></span></div>'
+      + '<span class="muted" style="font-size:13px">of ' + money(q.refundable != null ? q.refundable : p.amount) + ' refundable</span>'
+      + '<span id="rqamtnote_' + esc(q.id) + '" class="muted" style="font-size:12px"></span></div>'
       /* THE NOTICE (Saif, Sep 15): the agent's choice is the default; the owner may pick
          an address on the record, type one, or say why not. Same shape the sheet sends. */
       + '<div class="rqnz" id="rqnz_' + esc(q.id) + '">' + rqNoticeHtml(q) + '</div>'
@@ -3029,15 +3029,15 @@ function refundsHtml() {
   /* ---- carrier recovery ---- */
   h += '<div class="sgrp" style="margin-top:22px">Carrier still owes us · ' + carr.length + ' · ' + money(r.carrier_pending_total || 0) + '</div>';
   if (!carr.length) h += '<div class="muted" style="font-size:13px;padding:6px 2px 14px">Nothing outstanding.</div>';
-  else h += '<div class="muted" style="font-size:12px;margin-bottom:8px;line-height:1.5">Refunds where the carrier has not answered on their share. '
+  else h += '<div class="muted" style="font-size:13px;margin-bottom:8px;line-height:1.5">Refunds where the carrier has not answered on their share. '
     + 'Nothing chases these on their own. When you know — a remittance, a call, a statement — settle each one.</div>';
   for (const c of carr) {
     h += '<div class="rq" id="cr_' + esc(c.refund_id) + '">'
       + '<div class="row" style="align-items:flex-start;gap:10px">'
-      + '<div><b>' + esc(c.carrier_name || 'carrier not named') + '</b> <span class="muted" style="font-size:12px">· client '
+      + '<div><b>' + esc(c.carrier_name || 'carrier not named') + '</b> <span class="muted" style="font-size:13px">· client '
       + esc(String(c.client_no)) + (c.client_name ? ' ' + esc(c.client_name) : '') + ' · refunded ' + esc(String(c.refunded_at || '').slice(0, 10)) + '</span></div>'
       + '<b>' + money(c.carrier_cost) + '</b></div>'
-      + '<div class="muted" style="font-size:11.5px;margin-top:3px">' + money(c.amount) + ' went back to the client · ' + esc(rqReason(c.reason))
+      + '<div class="muted" style="font-size:12px;margin-top:3px">' + money(c.amount) + ' went back to the client · ' + esc(rqReason(c.reason))
       + (c.refunded_by ? ' · by ' + esc(c.refunded_by) : '') + '</div>'
       + (c.note ? '<div class="rqnote">“' + esc(c.note) + '”</div>' : '')
       + '<div id="crmsg_' + esc(c.refund_id) + '" class="shint" style="margin-top:6px;min-height:0"></div>'
@@ -3055,13 +3055,13 @@ function refundsHtml() {
       const nzd = q.client_notice || null;
       const canMail = q.status === 'approved' && q.refund_id && (!nzd || nzd.result !== 'sent');
       h += '<div class="rq" style="opacity:.8" id="rqd_' + esc(q.id) + '">'
-        + '<div class="row"><div>' + (changed ? money(q.approved_amount) + ' <span class="muted" style="font-size:12px">approved of ' + money(q.amount) + ' asked</span>' : money(q.amount)) + ' <span class="muted" style="font-size:12px">· client ' + esc(String(q.client_no || ''))
+        + '<div class="row"><div>' + (changed ? money(q.approved_amount) + ' <span class="muted" style="font-size:13px">approved of ' + money(q.amount) + ' asked</span>' : money(q.amount)) + ' <span class="muted" style="font-size:13px">· client ' + esc(String(q.client_no || ''))
         + (q.client_name ? ' ' + esc(q.client_name) : '') + ' · asked by ' + esc(q.requested_by_name || q.requested_by) + '</span></div>'
         + '<span class="lbl ' + (q.status === 'approved' ? 'green' : 'red') + '">' + esc(q.status) + '</span></div>'
-        + '<div class="muted" style="font-size:11.5px;margin-top:3px">' + esc(q.status) + ' by ' + esc(q.decided_by_name || q.decided_by || '')
+        + '<div class="muted" style="font-size:12px;margin-top:3px">' + esc(q.status) + ' by ' + esc(q.decided_by_name || q.decided_by || '')
         + ' on ' + esc(String(q.decided_at || '').slice(0, 10)) + (q.decision_note ? ' — “' + esc(q.decision_note) + '”' : '') + '</div>'
         + (q.status === 'approved' && nzd
-            ? '<div class="muted" style="font-size:11.5px;margin-top:3px">' + (nzd.result === 'sent'
+            ? '<div class="muted" style="font-size:12px;margin-top:3px">' + (nzd.result === 'sent'
                 ? 'Client emailed at <b style="color:var(--ink)">' + esc(nzd.to) + '</b>' + (nzd.late ? ' (sent afterwards by ' + esc(String(nzd.chosen_by || '').split('@')[0]) + ')' : '')
                 : nzd.result === 'failed' ? '<span style="color:var(--red)">Email to ' + esc(nzd.to || '') + ' FAILED</span>' + (nzd.detail ? ' — ' + esc(nzd.detail) : '')
                 : '<span style="color:var(--amber)">Client not told</span>' + (nzd.skip_reason ? ' — ' + esc(nzd.skip_reason) : '')) + '</div>'
@@ -3092,15 +3092,15 @@ function rqNoticeOf(q){ return RQ_NZ[q.id] || q.notify || { channel: 'none', ski
 function rqNoticeHtml(q){
   const nz = rqNoticeOf(q); const emails = q.client_emails || [];
   const chip = (on, onclick, label) => '<button class="rqchip' + (on ? ' on' : '') + '" onclick="' + onclick + '">' + label + '</button>';
-  let h = '<div class="muted" style="font-size:12px;margin-bottom:4px">Tell the client' + (RQ_NZ[q.id] ? ' <span style="color:var(--amber)">(changed from what ' + esc(String(q.requested_by_name || q.requested_by).split(' ')[0]) + ' asked)</span>' : '') + '</div><div class="rqchips">'
+  let h = '<div class="muted" style="font-size:13px;margin-bottom:4px">Tell the client' + (RQ_NZ[q.id] ? ' <span style="color:var(--amber)">(changed from what ' + esc(String(q.requested_by_name || q.requested_by).split(' ')[0]) + ' asked)</span>' : '') + '</div><div class="rqchips">'
     + emails.map(e => chip(nz.channel === 'email' && nz.source === 'on_file' && nz.to === String(e).toLowerCase(), "rqNotify('" + esc(q.id) + "','on_file'," + JSON.stringify(String(e).toLowerCase()).replace(/"/g, '&quot;') + ")", 'Email ' + esc(e))).join('')
     + chip(nz.channel === 'email' && nz.source === 'typed', "rqNotify('" + esc(q.id) + "','typed')", emails.length ? 'A different address…' : 'Type an address…')
     + chip(nz.channel === 'none', "rqNotify('" + esc(q.id) + "','none')", 'Don’t notify')
     + '</div>';
   if (nz.channel === 'email' && nz.source === 'typed') h += '<input class="rqin" id="rqto_' + esc(q.id) + '" type="email" placeholder="name@example.com" value="' + esc(nz.to || '') + '" oninput="rqNotifyTo(\'' + esc(q.id) + '\', this.value)">'
-    + '<div class="muted" style="font-size:11px;margin-top:3px">Not on the record — the refund will say it was typed by you. Check it: a wrong address sends the client’s name and the amount to a stranger.</div>';
+    + '<div class="muted" style="font-size:12px;margin-top:3px">Not on the record — the refund will say it was typed by you. Check it: a wrong address sends the client’s name and the amount to a stranger.</div>';
   else if (nz.channel === 'none') h += '<input class="rqin" id="rqskip_' + esc(q.id) + '" placeholder="Why not? (recorded)" value="' + esc(nz.skip_reason || '') + '" oninput="rqNotifySkip(\'' + esc(q.id) + '\', this.value)">';
-  else if (!emails.length && nz.channel !== 'email') h += '<div class="muted" style="font-size:11px;margin-top:3px">No email on this client’s record.</div>';
+  else if (!emails.length && nz.channel !== 'email') h += '<div class="muted" style="font-size:12px;margin-top:3px">No email on this client’s record.</div>';
   return h;
 }
 function rqNotify(id, kind, addr){
@@ -3201,21 +3201,21 @@ async function renderHealth(el) {
   let h = '<div class="card">';
   h += '<div class="row" style="align-items:flex-start;margin-bottom:6px"><div>'
     + '<h2 style="margin:0">Health check</h2>'
-    + '<div class="muted" style="font-size:12.5px;margin-top:3px">Where the money and the paperwork disagree. '
+    + '<div class="muted" style="font-size:13px;margin-top:3px">Where the money and the paperwork disagree. '
     + esc(r.checked) + ' payments and ' + esc(r.documents) + ' documents examined.</div></div>'
     + '<button class="btn" onclick="render()">Run again</button></div>';
 
   if (!r.issues.length) {
     h += '<div style="background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.4);border-radius:12px;padding:16px;margin-top:10px">'
       + '<div style="font-size:15px;font-weight:800;color:var(--green)">✓ Everything reconciles</div>'
-      + '<div class="muted" style="font-size:12.5px;margin-top:3px">Every charge has its receipt, every audit its figures, every payment an owner.</div></div>';
+      + '<div class="muted" style="font-size:13px;margin-top:3px">Every charge has its receipt, every audit its figures, every payment an owner.</div></div>';
   } else {
     for (const i of r.issues) {
       h += '<div style="border:1px solid ' + (i.sev === 'high' ? 'rgba(224,49,49,.4)' : 'rgba(245,166,35,.4)')
         + ';border-radius:12px;padding:13px;margin-top:10px">'
         + '<div class="row" style="align-items:flex-start"><div>'
         + '<div style="font-size:14px;font-weight:800">' + esc(i.title) + '</div>'
-        + '<div class="muted" style="font-size:12px;margin-top:2px">' + esc(i.why) + '</div></div>'
+        + '<div class="muted" style="font-size:13px;margin-top:2px">' + esc(i.why) + '</div></div>'
         + '<div style="text-align:right"><div style="font-size:19px;font-weight:800">' + i.count + '</div>'
         + sevPill(i.sev) + '</div></div>';
       h += '<table style="margin-top:9px"><tr><th>When</th><th>Client</th><th>Detail</th><th></th></tr>';
@@ -3227,11 +3227,11 @@ async function renderHealth(el) {
           + '<td class="muted">' + esc(row.agent ? String(row.agent).split('@')[0] : '') + '</td></tr>';
       }
       h += '</table>';
-      if (i.count > i.rows.length) h += '<div class="muted" style="font-size:11.5px;margin-top:6px">Showing ' + i.rows.length + ' of ' + i.count + '.</div>';
+      if (i.count > i.rows.length) h += '<div class="muted" style="font-size:12px;margin-top:6px">Showing ' + i.rows.length + ' of ' + i.count + '.</div>';
       h += '</div>';
     }
   }
-  h += '<div class="muted" style="font-size:11px;margin-top:12px">Receipts have only been stored since Aug 5, so earlier charges are not reported as missing one.</div>';
+  h += '<div class="muted" style="font-size:12px;margin-top:12px">Receipts have only been stored since Aug 5, so earlier charges are not reported as missing one.</div>';
   h += '</div>';
   el.innerHTML = h;
 }

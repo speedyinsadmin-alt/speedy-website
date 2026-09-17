@@ -18,20 +18,20 @@
   header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
   h1{font-size:18px;margin:0}
-  h1 small{color:var(--mute);font-weight:400;font-size:12px;margin-left:6px}
+  h1 small{color:var(--mute);font-weight:400;font-size:13px;margin-left:6px}
   #gate{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:34px 22px;text-align:center;max-width:400px;margin:12vh auto}
   #gate p{color:var(--mute);margin:8px 0 18px}
   #gsibtn{display:flex;justify-content:center}
   #app{display:none}
   .card{background:var(--navy2);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px}
   .eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
-  label{font-size:12px;color:var(--mute);display:block;margin:12px 0 6px;font-weight:600}
+  label{font-size:13px;color:var(--mute);display:block;margin:12px 0 6px;font-weight:600}
   input,select{width:100%;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:14px}
   input:focus,select:focus{outline:none;border-color:var(--blue)}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .clientbar{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:4px}
   .clientbar .amt{color:var(--green);font-size:18px;font-weight:600;text-align:right}
-  .clientbar .sub{color:var(--mute);font-size:12px}
+  .clientbar .sub{color:var(--mute);font-size:13px}
   .fee{display:flex;justify-content:space-between;font-size:13px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
   .fee b{color:var(--green)}
   .drop{border:1.5px dashed rgba(245,166,35,.5);border-radius:12px;background:rgba(245,166,35,.06);padding:18px;text-align:center;cursor:pointer;transition:.15s}
@@ -49,31 +49,31 @@
   .review b{font-weight:700}
   /* PROOF OF PAYMENT (Tony, Sep 14): one document proves the payment - the guide says
      which one is usual for this purpose, the agent picks freely. */
-  .guide{border-left:3px solid var(--blue);padding:8px 11px;border-radius:0 9px 9px 0;background:rgba(77,124,254,.08);font-size:12.5px;line-height:1.5;margin-bottom:4px;color:var(--mute)}
+  .guide{border-left:3px solid var(--blue);padding:8px 11px;border-radius:0 9px 9px 0;background:rgba(77,124,254,.08);font-size:13px;line-height:1.5;margin-bottom:4px;color:var(--mute)}
   .guide b{color:var(--ink)}
   .proofchips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}
-  .proofchips button{background:var(--navy);border:1px solid var(--line);color:var(--mute);font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:inherit}
+  .proofchips button{background:var(--navy);border:1px solid var(--line);color:var(--mute);font-size:13px;font-weight:600;padding:7px 12px;border-radius:9px;cursor:pointer;font-family:inherit}
   .proofchips button.sel{background:var(--green);border-color:var(--green);color:#04220f}
-  .proofchips button .usual{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.75;margin-left:6px}
+  .proofchips button .usual{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.75;margin-left:6px}
   #auditNote{width:100%;min-height:58px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:13px;font-family:inherit;resize:vertical}
   .review textarea{width:100%;min-height:64px;margin-top:8px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:13px;font-family:inherit;resize:vertical}
-  .review .replylbl{font-size:12px;margin-top:10px;color:var(--ink);font-weight:600}
-  .review .replyhint{font-size:11.5px;opacity:.8;margin-top:4px}
+  .review .replylbl{font-size:13px;margin-top:10px;color:var(--ink);font-weight:600}
+  .review .replyhint{font-size:12px;opacity:.8;margin-top:4px}
   .btns button{flex:1;padding:12px;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;border:0}
   .save{background:var(--navy2);border:1.5px solid var(--line)!important;color:var(--mute)}
   .submit{background:var(--green);color:#04220f;flex:1.4}
   .submit:disabled{opacity:.4;cursor:not-allowed}
   #msg{margin-top:12px;font-size:13px;text-align:center;min-height:18px}
   .ok{color:var(--green)} .err{color:var(--red)} .warn{color:var(--amber)}
-  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
   /* the document-type picker (Sep 15): chips in the sheet, a pill-shaped menu on the row */
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-  .chip{font-size:12px;padding:5px 10px;border-radius:999px;border:1.5px solid var(--line);color:var(--ink);background:var(--navy);cursor:pointer;user-select:none}
+  .chip{font-size:13px;padding:5px 10px;border-radius:999px;border:1.5px solid var(--line);color:var(--ink);background:var(--navy);cursor:pointer;user-select:none}
   .chip.guess{border-style:dashed;border-color:var(--amber);color:var(--amber)}
   .chip.on{background:rgba(47,191,113,.16);border-color:var(--green);color:#7ee2a8}
   .chip.on::before{content:"\2713\00a0"}
-  .looks{font-size:11px;color:var(--amber);margin-top:6px}
-  .tagsel{-webkit-appearance:none;appearance:none;width:auto;display:inline-block;padding:2px 20px 2px 9px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid rgba(77,124,254,.35);background:rgba(77,124,254,.15) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6'%3E%3Cpath d='M0 0h8L4 6z' fill='%239db4ff'/%3E%3C/svg%3E") no-repeat right 7px center;color:#9db4ff;cursor:pointer;margin:0;line-height:1.4}
+  .looks{font-size:12px;color:var(--amber);margin-top:6px}
+  .tagsel{-webkit-appearance:none;appearance:none;width:auto;display:inline-block;padding:2px 20px 2px 9px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid rgba(77,124,254,.35);background:rgba(77,124,254,.15) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6'%3E%3Cpath d='M0 0h8L4 6z' fill='%239db4ff'/%3E%3C/svg%3E") no-repeat right 7px center;color:#9db4ff;cursor:pointer;margin:0;line-height:1.4}
   .tagsel.done{background-color:rgba(47,191,113,.15);border-color:rgba(47,191,113,.35);color:var(--green)}
   .tagsel.odd{background-color:rgba(245,166,35,.15);border-color:rgba(245,166,35,.4);color:var(--amber)}
   /* the sheets' own buttons (review, camera) sit outside .btns and were browser-default white slabs */
@@ -82,15 +82,15 @@
   .btn[disabled]{opacity:.45;cursor:default}
   .revrow{position:relative}
   .docbtns{display:flex;gap:8px;margin-top:8px}
-  .docbtns button{flex:1;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;color:var(--ink);padding:9px 4px;font-size:12.5px;cursor:pointer}
+  .docbtns button{flex:1;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;color:var(--ink);padding:9px 4px;font-size:13px;cursor:pointer}
   .camgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
   .tile{background:var(--navy);border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center;font-size:13px;font-weight:700;cursor:pointer}
-  .tile small{display:block;font-weight:400;color:var(--mute);font-size:11px;margin-top:2px}
+  .tile small{display:block;font-weight:400;color:var(--mute);font-size:12px;margin-top:2px}
   .tile.on{border-color:var(--green);background:rgba(47,191,113,.12)}
   .rthumb{width:64px;height:80px;border-radius:7px;object-fit:cover;display:block;flex:none;background:#fff}
   .rthumb.pdf{background:#f4f4f6;display:flex;align-items:center;justify-content:center;font-size:22px;color:#556}
   .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
-  .hint{color:var(--mute);font-size:11px;margin-top:4px}
+  .hint{color:var(--mute);font-size:12px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -173,7 +173,7 @@
       <div id="feeBase" class="hint hide" style="text-align:right"></div>
       <div id="feeWarn" class="hide"></div>
       </div>
-      <div id="docsOnlyNote" class="hide" style="margin-top:14px;border:1px solid var(--blue);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5">
+      <div id="docsOnlyNote" class="hide" style="margin-top:14px;border:1px solid var(--blue);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.5">
         <span id="docsOnlyWhy">Adding documents to a payment that is already audited. The carrier cost, the fee and the commission stay exactly as they are.</span>
       </div>
     </div>
@@ -196,7 +196,7 @@
     </div>
 
     <div class="card">
-      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Documents <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional — application, photos, license</span></div>
+      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Documents <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:12px">optional — application, photos, license</span></div>
       <!-- NO SILENT DEFAULT (Saif, Sep 15). The "Document type" dropdown that sat here
            labelled 48% of documents "carrier application" - whatever they were - because
            it was set before the file was seen and rarely changed. Now every file is
@@ -222,16 +222,16 @@
           <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:1px solid var(--line)">
             <div>
               <div style="font-size:15px;font-weight:800" id="revTitle">What is each one?</div>
-              <div class="muted" style="font-size:11.5px;margin-top:2px" id="revSub"></div>
+              <div class="muted" style="font-size:12px;margin-top:2px" id="revSub"></div>
             </div>
             <div onclick="cancelReview()" style="cursor:pointer;color:var(--mute);font-size:19px;padding:0 4px">&#10005;</div>
           </div>
           <div id="revAllRow" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)">
-            <span class="muted" style="font-size:11.5px">Set all to</span>
+            <span class="muted" style="font-size:12px">Set all to</span>
             <select id="revAll" onchange="setAllTypes(this.value)" style="margin:0;flex:1"></select>
           </div>
           <div id="revBody"></div>
-          <div id="revWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:10px;font-size:11.5px;color:var(--amber)"></div>
+          <div id="revWarn" class="hide" style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.35);border-radius:9px;padding:9px 10px;margin-top:10px;font-size:12px;color:var(--amber)"></div>
           <div style="display:flex;gap:8px;margin-top:12px">
             <button class="btn btn-ghost" style="margin:0;flex:1" onclick="cancelReview()">Cancel</button>
             <button class="btn" style="margin:0;flex:1.5" id="revAdd" onclick="confirmReview()">Add documents</button>
@@ -246,7 +246,7 @@
       <div style="max-width:520px;margin:0 auto">
         <div class="card" style="border-color:var(--blue)">
           <div style="font-size:15px;font-weight:800">Photos of what?</div>
-          <div class="muted" style="font-size:11.5px;margin-top:2px">Every shot you take now gets this label.</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">Every shot you take now gets this label.</div>
           <div class="camgrid">
             <div class="tile" data-kind="vehicle_photo" onclick="pickPhotoKind('vehicle_photo')">&#128663; Vehicle<small>all sides, VIN, odometer</small></div>
             <div class="tile" data-kind="property_photo" onclick="pickPhotoKind('property_photo')">&#127968; Property<small>roof, exterior, rooms</small></div>
@@ -262,7 +262,7 @@
     </div>
 
     <div class="card" id="noteCard">
-      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Note to auditor <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">optional</span></div>
+      <div class="eyebrow"><span style="color:var(--blue)">◆</span> Note to auditor <span style="color:var(--mute);font-weight:400;text-transform:none;letter-spacing:0;font-size:12px">optional</span></div>
       <textarea id="auditNote" maxlength="500" placeholder="Anything the auditor should know before approving this — a fee-only, a special case, why the cost is what it is"></textarea>
     </div>
     <div class="btns" id="auditBtns">
@@ -532,7 +532,7 @@ function recalcFee(){
     if(warn){
       warn.className = '';
       warn.style.cssText = 'margin-top:8px;border:1.5px solid var(--red);background:rgba(224,49,49,.08);'
-        + 'border-radius:9px;padding:9px 11px;font-size:12px;line-height:1.5;color:var(--ink)';
+        + 'border-radius:9px;padding:9px 11px;font-size:13px;line-height:1.5;color:var(--ink)';
       warn.innerHTML = '<b style="color:var(--red)">The fee is negative.</b> The carrier cost ($'
         + cAmt.toFixed(2) + ') is more than the whole obligation ($' + base.toFixed(2)
         + '). Check the amount on the receipt — the agency would be losing $'
@@ -543,7 +543,7 @@ function recalcFee(){
     if(warn){
       warn.className = '';
       warn.style.cssText = 'margin-top:8px;border:1px solid rgba(245,166,35,.5);background:rgba(245,166,35,.07);'
-        + 'border-radius:9px;padding:8px 11px;font-size:12px;line-height:1.5;color:var(--mute)';
+        + 'border-radius:9px;padding:8px 11px;font-size:13px;line-height:1.5;color:var(--mute)';
       warn.innerHTML = '<b style="color:var(--amber)">Under $' + FEE_LOW + '.</b> '
         + 'Only 7 of 250 audits have been this low. Worth checking the carrier cost before submitting.';
     }
@@ -829,16 +829,16 @@ function renderReview(){
       ? '<div style="padding:0 0 9px 73px;border-bottom:1px solid var(--line)">'
         + '<input type="text" maxlength="41" placeholder="What is this document?" '
         + 'value="' + escAttr(r.label || '') + '" oninput="setLabel(' + r.i + ',this.value)" '
-        + 'style="margin:0;font-size:12px;padding:6px 9px' + (!(r.label || '').trim() ? ';border-color:var(--red)' : '') + '">'
-        + '<div class="muted" style="font-size:10px;margin-top:3px">'
+        + 'style="margin:0;font-size:13px;padding:6px 9px' + (!(r.label || '').trim() ? ';border-color:var(--red)' : '') + '">'
+        + '<div class="muted" style="font-size:12px;margin-top:3px">'
         + ((r.label || '').length) + '/41 — becomes the description in HawkSoft</div></div>'
       : '';
     return '<div class="revrow" style="display:flex;align-items:flex-start;gap:9px;padding:11px 0;'
       + (r.type === 'other' ? '' : 'border-bottom:1px solid var(--line)') + '">'
       + thumb
       + '<div style="flex:1;min-width:0">'
-      + '<div style="font-size:12.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.name) + '</div>'
-      + '<div class="muted" style="font-size:10.5px">' + escHtml(sizeNote(p)) + (needs ? ' \u00b7 tap the type:' : '') + '</div>'
+      + '<div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.name) + '</div>'
+      + '<div class="muted" style="font-size:12px">' + escHtml(sizeNote(p)) + (needs ? ' \u00b7 tap the type:' : '') + '</div>'
       + chips
       + '</div>'
       + '<span onclick="dropFile(' + r.i + ')" style="cursor:pointer;color:var(--mute);font-size:15px">\u2715</span>'
@@ -981,12 +981,12 @@ function renderHave(){
   const el = $('#havelist'); if(!el) return;
   const docs = HAVE_DOCS.filter(d => !['proof', 'carrier_receipt', 'client_receipt'].includes(String(d.kind || '')) && !/_no_payment$/.test(String(d.doc_type || '')));
   if(!docs.length){ el.innerHTML = ''; return; }
-  el.innerHTML = '<div style="font-size:11px;color:var(--mute);margin:12px 0 6px">Already on this payment \u00b7 tap a tag to change it</div>'
+  el.innerHTML = '<div style="font-size:12px;color:var(--mute);margin:12px 0 6px">Already on this payment \u00b7 tap a tag to change it</div>'
     + docs.map(d =>
-      '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
+      '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
       + tagMenu(d.doc_type, 'retypeHave(\'' + d.id + '\',this.value)', oddType(d) ? ' odd' : '')
       + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(d.doc_label ? d.doc_label + ' \u00b7 ' : '') + escHtml(d.filename || '') + '</span>'
-      + '<span style="color:var(--mute);font-size:11px">' + escHtml(String(d.created_at || '').slice(5, 10).replace('-', '/')) + (d.uploaded_by ? ' \u00b7 ' + escHtml(String(d.uploaded_by).split('@')[0]) : '') + (d.filed_hawksoft ? ' \u00b7 in HawkSoft' : '') + '</span>'
+      + '<span style="color:var(--mute);font-size:12px">' + escHtml(String(d.created_at || '').slice(5, 10).replace('-', '/')) + (d.uploaded_by ? ' \u00b7 ' + escHtml(String(d.uploaded_by).split('@')[0]) : '') + (d.filed_hawksoft ? ' \u00b7 in HawkSoft' : '') + '</span>'
       + '</div>'
       + (oddType(d) ? '<div class="hint" style="margin:-2px 0 8px 10px;color:var(--amber)">\u21b3 a photo filed as ' + escHtml(typeLabel(d.doc_type).toLowerCase()) + '? tap the tag to fix it</div>' : '')
     ).join('');
@@ -1235,11 +1235,11 @@ async function submitDocsOnly(){
 
 function renderDocs(){
   $('#doclist').innerHTML = DOCS.map((d,i) =>
-    '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
+    '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px">'
     + tagMenu(d.doc_type, 'retypeDoc(' + i + ',this.value)', d.uploaded ? ' done' : '')
-    + (d.doc_label ? '<span style="color:var(--mute);font-size:11px">' + escHtml(d.doc_label) + '</span>' : '')
+    + (d.doc_label ? '<span style="color:var(--mute);font-size:12px">' + escHtml(d.doc_label) + '</span>' : '')
     + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + d.name + '</span>'
-    + (d.note ? '<span style="color:var(--mute);font-size:11px">' + d.note + '</span>' : '')
+    + (d.note ? '<span style="color:var(--mute);font-size:12px">' + d.note + '</span>' : '')
     + '<span onclick="DOCS.splice('+i+',1);renderDocs()" style="cursor:pointer;color:var(--mute)">✕</span></div>'
   ).join('');
   /* In documents-only mode the ONLY gate is "is there a document", so the button
@@ -1386,12 +1386,12 @@ async function askShare(paymentId){
     '<button class="btn" style="flex:1;margin:0;padding:9px 4px;background:' + (pct === 0 ? 'transparent' : 'rgba(47,191,113,.18)')
     + ';border:1px solid ' + (pct === 0 ? 'var(--line)' : 'rgba(47,191,113,.5)') + ';color:' + (pct === 0 ? 'var(--mute)' : '#7ee2a8')
     + '" onclick="setShare(\'' + paymentId + '\',' + pct + ')">' + label
-    + '<div style="font-size:10.5px;opacity:.75">$' + (due.commission * pct / 100).toFixed(2) + '</div></button>';
+    + '<div style="font-size:12px;opacity:.75">$' + (due.commission * pct / 100).toFixed(2) + '</div></button>';
   box.innerHTML = '<div style="font-size:13px;font-weight:700">' + escHtml(due.helper_name) + ' ran this charge for you</div>'
-    + '<div class="muted" style="font-size:11.5px;margin-top:2px">Fee $' + due.fee.toFixed(2)
+    + '<div class="muted" style="font-size:12px;margin-top:2px">Fee $' + due.fee.toFixed(2)
     + ' · your commission $' + due.commission.toFixed(2) + '. Share any of it?</div>'
     + '<div style="display:flex;gap:6px;margin-top:10px">' + opt(0,'Keep all') + opt(25,'25%') + opt(50,'50%') + '</div>'
-    + '<div class="muted" style="font-size:10.5px;margin-top:8px;text-align:center">Asked once — this cannot be changed afterwards.</div>';
+    + '<div class="muted" style="font-size:12px;margin-top:8px;text-align:center">Asked once — this cannot be changed afterwards.</div>';
   $('#msg').appendChild(box);
 }
 async function setShare(paymentId, pct){
@@ -1453,9 +1453,9 @@ function askTotalOwed(j, complete){
   const box = document.createElement('div');
   box.style.cssText = 'background:rgba(245,166,35,.08);border:1.5px solid rgba(245,166,35,.5);border-radius:12px;padding:14px;margin-top:14px';
   box.innerHTML = '<div style="font-size:13.5px;font-weight:700;color:var(--amber)">What did the client owe in total?</div>'
-    + '<div class="hint" style="font-size:11.5px;line-height:1.5;margin-top:5px">' + escHtml(j.message || '') + '</div>'
+    + '<div class="hint" style="font-size:12px;line-height:1.5;margin-top:5px">' + escHtml(j.message || '') + '</div>'
     + '<input id="owedIn" inputmode="decimal" placeholder="Total owed, e.g. ' + (cost + 20).toFixed(2) + '" style="margin-top:11px">'
-    + '<div id="owedFee" class="hint" style="font-size:11.5px;margin-top:7px">'
+    + '<div id="owedFee" class="hint" style="font-size:12px;margin-top:7px">'
     + 'Carrier cost $' + cost.toFixed(2) + ' · paid so far $' + paid.toFixed(2) + '</div>'
     + '<div class="btns" style="margin-top:11px"><button id="owedGo" class="submit">Continue</button></div>';
   msg.appendChild(box);

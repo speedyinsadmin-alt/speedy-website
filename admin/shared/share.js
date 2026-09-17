@@ -52,7 +52,7 @@ function render(){
     + PCTS.map(n => '<div class="spct' + (!S.custom && S.pct === n ? ' on' : '') + '" onclick="ShareWith.pct(' + n + ')"><b>' + n + '%</b><span>' + (amt(n) || '&nbsp;') + '</span></div>').join('')
     + '<div class="spct' + (S.custom ? ' on' : '') + '" onclick="ShareWith.custom()"><b>' + (S.custom ? esc(String(S.pct)) + '%' : '…%') + '</b><span>' + (S.custom ? (amt(S.pct) || 'another') : 'another') + '</span></div></div>'
     + (S.custom ? '<input class="ctin" id="shPct" type="number" min="1" max="100" step="1" value="' + esc(String(S.pct)) + '" oninput="ShareWith.setPct(this.value)" style="margin-top:8px;width:120px">' : '') + '</div>'
-    + '<div class="sstep"><div class="q">3 · Why? <span class="dim" style="font-weight:400;font-size:12px">— one line, it goes on the client’s log</span></div>'
+    + '<div class="sstep"><div class="q">3 · Why? <span class="dim" style="font-weight:400;font-size:13px">— one line, it goes on the client’s log</span></div>'
     + '<input class="ctin" id="shWhy" maxlength="200" placeholder="e.g. Jorge brought the referral in and did the quote" value="' + esc(S.why || '') + '" oninput="ShareWith.setWhy(this.value)"></div>'
     + '<div class="ssum">' + (S.helper && S.pct > 0
         ? (iOwn ? 'You keep' : esc(ownerName.split(' ')[0]) + ' keeps') + ' <b class="green">' + (mine != null ? money(mine * (100 - S.pct) / 100) : (100 - S.pct) + '%') + '</b> · ' + esc(helperName) + ' receives <b class="green">' + (mine != null ? money(mine * S.pct / 100) : S.pct + '%') + '</b>'

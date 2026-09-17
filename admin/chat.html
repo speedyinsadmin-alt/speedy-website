@@ -64,6 +64,14 @@
   .m.w{align-self:flex-end;background:rgba(245,166,35,.15);border:1px dashed var(--amber);color:var(--ink);border-bottom-right-radius:4px}
   .m.sys{align-self:center;background:transparent;color:var(--dim);font-size:11px;padding:2px;text-align:center}
   .m small{display:block;font-size:10px;opacity:.65;margin-top:3px}
+  .att{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+  .att .ph{width:120px;height:120px;border-radius:8px;background:var(--field);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--mute);overflow:hidden;cursor:pointer;border:1px solid var(--line)}
+  .att .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .att .ph.file{width:auto;height:auto;padding:8px 10px}
+  .att .ph.bad{color:var(--red-ink)}
+  .lightbox{position:fixed;inset:0;background:rgba(6,9,24,.92);display:none;align-items:center;justify-content:center;z-index:60;cursor:zoom-out}
+  .lightbox.on{display:flex} .lightbox img{max-width:96vw;max-height:92vh;border-radius:8px}
+  .lightbox a{position:absolute;bottom:18px;right:18px;color:#fff;background:var(--blue);padding:8px 12px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700}
   .canned{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px}
   .canned span{flex:none;font-size:12px;padding:6px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute);background:var(--card);cursor:pointer;white-space:nowrap}
   .reply{display:flex;gap:8px;align-items:flex-end}
@@ -146,6 +154,7 @@
   <div class="acts" id="closeActs"></div>
 </div></div>
 <div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox" onclick="if(event.target===this)this.classList.remove('on')"><img id="lbImg" alt=""><a id="lbDl" download>Save</a></div>
 
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
@@ -308,11 +317,12 @@ function renderThread(first) {
   const th = $('#tThread');
   th.innerHTML = THREAD.messages.map(m => {
     if (m.sender_kind === 'system') return `<div class="m sys">${esc(m.body)} · ${hhmm(m.ts)}</div>`;
-    if (m.sender_kind === 'visitor') return `<div class="m v">${esc(m.body)}<small>${hhmm(m.ts)}</small></div>`;
+    if (m.sender_kind === 'visitor') return `<div class="m v">${esc(m.body)}${attHtml(m)}<small>${hhmm(m.ts)}</small></div>`;
     if (m.audience === 'agents') return `<div class="m w">&#128065; ${esc(m.name || m.sender)} (whisper): ${esc(m.body)}<small>${hhmm(m.ts)}</small></div>`;
     return `<div class="m a">${esc(m.body)}<small>${esc(m.name || '')} · ${hhmm(m.ts)}${m.channel === 'sms' ? ' · sent as text' + (m.sms_from && m.sms_from !== c.line ? ' from ' + esc(pretty(m.sms_from)) : '') : ''}</small></div>`;
   }).join('');
   th.scrollTop = th.scrollHeight;
+  loadMedia();
   const bn = c.branch_name.replace('Riverside — ', '');
   $('#tCanned').innerHTML = (CANNED[c.lang] || CANNED.en).map(([l, f], i) => `<span onclick="useCanned(${i})">${esc(l)}</span>`).join('');
   $('#tCanned')._bn = bn;
@@ -326,6 +336,29 @@ function renderThread(first) {
   if (!live && c.lead_id) acts.push(`<span class="chip cl" style="align-self:center">&rarr; Lead #${c.lead_id}</span>`);
   $('#tActs').innerHTML = acts.join('');
   if (first) $('#rText').value = '';
+}
+/* MMS media: placeholders now, bytes fetched through the API (private bucket), cached per message */
+const MEDIA = {};
+function attHtml(m) {
+  const atts = Array.isArray(m.attachments) ? m.attachments : []; if (!atts.length) return '';
+  return '<div class="att">' + atts.map((a, i) => {
+    const key = m.id + ':' + i; const isImg = /^image\//.test(a.content_type || '');
+    if (!a.ok) return `<div class="ph file bad" title="${esc(a.error || '')}">not stored yet</div>`;
+    if (!isImg) return `<div class="ph file" data-key="${key}" data-m="${m.id}" data-i="${i}">${esc((a.content_type || 'file').split('/')[1] || 'file')} · ${a.size ? Math.round(a.size / 1024) + ' KB' : ''}</div>`;
+    return `<div class="ph" data-key="${key}" data-m="${m.id}" data-i="${i}">${MEDIA[key] ? '<img src="' + MEDIA[key] + '">' : 'loading…'}</div>`;
+  }).join('') + '</div>';
+}
+async function loadMedia() {
+  for (const ph of document.querySelectorAll('#tThread .ph[data-key]')) {
+    const key = ph.dataset.key;
+    if (!MEDIA[key]) {
+      try { const j = await api({ action: 'media', id: OPEN, message_id: Number(ph.dataset.m), index: Number(ph.dataset.i) });
+        if (!j.ok) { ph.classList.add('bad'); ph.textContent = j.pending ? 'not stored yet' : 'unavailable'; continue; }
+        MEDIA[key] = 'data:' + j.content_type + ';base64,' + j.data; } catch (e) { continue; }
+    }
+    if (/^data:image\//.test(MEDIA[key])) ph.innerHTML = '<img src="' + MEDIA[key] + '">';
+    ph.onclick = () => { if (/^data:image\//.test(MEDIA[key])) { $('#lbImg').src = MEDIA[key]; $('#lbDl').href = MEDIA[key]; $('#lbDl').download = 'speedy-chat-' + key.replace(':', '-'); $('#lightbox').classList.add('on'); } else { const a = document.createElement('a'); a.href = MEDIA[key]; a.download = 'speedy-chat-' + key.replace(':', '-'); a.click(); } };
+  }
 }
 function useCanned(i) { const c = THREAD.conversation; const f = (CANNED[c.lang] || CANNED.en)[i][1]; $('#rText').value = f($('#tCanned')._bn); $('#rText').focus(); }
 function toggleWhisper() { WHISPER = !WHISPER; $('#wState').textContent = WHISPER ? 'ON' : 'off'; $('#replyBox').classList.toggle('whisper', WHISPER); renderThread(false); }

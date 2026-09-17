@@ -22,6 +22,44 @@
 --------------------------------------------------------------------------- */
 import { randomBytes } from 'node:crypto';
 
+/* ---- RingCentral auth (JWT -> access token), the proven flow from sms.js, for
+   downloading MMS media. Media is the whole point of many texts (licence, DMV
+   letter, dec page), so a text with photos is stored WITH its photos. ---- */
+const RC_BASE = () => (process.env.RC_SERVER_URL || 'https://platform.ringcentral.com').replace(/\/$/, '');
+let rcTok = { value: null, expires: 0 };
+async function rcToken() {
+  if (rcTok.value && Date.now() < rcTok.expires) return rcTok.value;
+  const basic = Buffer.from(`${process.env.RC_CLIENT_ID}:${process.env.RC_CLIENT_SECRET}`).toString('base64');
+  const r = await fetch(`${RC_BASE()}/restapi/oauth/token`, { method: 'POST', headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: process.env.RC_JWT }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`auth HTTP ${r.status}: ${j.error_description || j.error || ''}`);
+  rcTok = { value: j.access_token, expires: Date.now() + Math.max(60, (j.expires_in || 3600) - 120) * 1000 };
+  return rcTok.value;
+}
+const MEDIA_BUCKET = 'chat-media';
+const extOf = ct => ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/heic': 'heic', 'application/pdf': 'pdf', 'video/mp4': 'mp4', 'video/3gpp': '3gp', 'audio/mpeg': 'mp3', 'text/vcard': 'vcf' }[String(ct || '').toLowerCase().split(';')[0]] || 'bin');
+/* download one RingCentral attachment and put it in the private bucket; never throws */
+export async function storeMedia(s, att, convId, rcMsgId) {
+  const out = { id: String(att.id), content_type: att.contentType || null, size: null, path: null, ok: false, error: null };
+  try {
+    const tok = await rcToken();
+    const uri = String(att.uri || '');
+    if (!/^https:\/\/[a-z0-9.-]+\.ringcentral\.com\//i.test(uri)) throw new Error('unexpected media host');
+    const r = await fetch(uri, { headers: { Authorization: `Bearer ${tok}` } });
+    if (!r.ok) throw new Error(`RC media HTTP ${r.status}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 25 * 1024 * 1024) throw new Error('over 25 MB');
+    const ct = r.headers.get('content-type') || att.contentType || 'application/octet-stream';
+    out.content_type = ct.split(';')[0]; out.size = buf.length;
+    const path = `sms/${convId}/${rcMsgId}-${att.id}.${extOf(out.content_type)}`;
+    const up = await fetch(`${s.base}/storage/v1/object/${MEDIA_BUCKET}/${path}`, { method: 'POST', headers: { apikey: s.hdrs.apikey, Authorization: s.hdrs.Authorization, 'Content-Type': out.content_type, 'x-upsert': 'true' }, body: buf });
+    if (!up.ok) throw new Error(`storage HTTP ${up.status}`);
+    out.path = path; out.ok = true;
+  } catch (e) { out.error = String(e.message || e).slice(0, 200); out.uri = att.uri || null; }
+  return out;
+}
+
 const BRANCHES = { mv: 'Moreno Valley', vb: 'Riverside — Van Buren', mg: 'Riverside — Magnolia', le: 'Lake Elsinore', co: 'Colton' };
 
 const sb = () => {
@@ -50,7 +88,9 @@ export function shape(payload) {
   const tos = (Array.isArray(b.to) ? b.to : []).map(t => digits10(t && t.phoneNumber)).filter(Boolean);
   const text = String(b.subject || '').trim();
   const extensionId = String((b.extensionId != null ? b.extensionId : (payload.event || '').match(/extension\/(\d+)/)?.[1]) || '') || null;
-  return { rc_id: String(b.id), direction, from, tos, text, ts: b.creationTime || new Date().toISOString(), extensionId, attachments: Array.isArray(b.attachments) ? b.attachments.length : 0 };
+  /* RingCentral lists the text itself as an attachment of type Text; media is the rest */
+  const media = (Array.isArray(b.attachments) ? b.attachments : []).filter(a => a && a.id && String(a.type || '') !== 'Text' && !/^text\/plain/i.test(String(a.contentType || '')));
+  return { rc_id: String(b.id), direction, from, tos, text, ts: b.creationTime || new Date().toISOString(), extensionId, attachments: media.length, media };
 }
 
 export async function ingest(s, m) {
@@ -65,7 +105,7 @@ export async function ingest(s, m) {
   if (!line) return { skipped: 'not one of our numbers', customer_present: true };
   if (line.phone10 === customer) return { skipped: 'self' };
 
-  const body = m.text || (m.attachments ? `[${m.attachments} attachment${m.attachments === 1 ? '' : 's'}]` : '');
+  const body = m.text || (m.attachments ? `[${m.attachments} ${m.attachments === 1 ? 'photo/file' : 'photos/files'}]` : '');
   if (!body) return { skipped: 'empty' };
 
   /* the customer's open thread, if any: newest first, prefer one on this line */
@@ -98,6 +138,13 @@ export async function ingest(s, m) {
     sender: m.direction === 'inbound' ? null : (line.agent_email || null), audience: 'visitor', channel: 'sms', body, rc_message_id: m.rc_id, is_test: conv.is_test === true,
   });
   if (!msg.ok) { if (msg.status === 409) return { skipped: 'duplicate', conversation_id: conv.id }; return { error: 'could not write message' }; }
+  /* the media, after the row exists: a failed download is recorded on the row (ok:false + uri) for the backfill, never lost silently */
+  let stored = 0;
+  if (m.media && m.media.length) {
+    const atts = [];
+    for (const a of m.media.slice(0, 10)) { const r = await storeMedia(s, a, conv.id, m.rc_id); atts.push(r); if (r.ok) stored++; }
+    await sbPatch(s, `messages?id=eq.${msg.row.id}`, { attachments: atts });
+  }
 
   const patch = { updated_at: now, line: conv.line || line.phone10, line_extension_id: conv.line_extension_id || line.extension_id || null };
   if (m.direction === 'inbound') { patch.visitor_seen_at = now; if (!conv.client_no && client_no) patch.client_no = client_no; }
@@ -109,8 +156,8 @@ export async function ingest(s, m) {
   }
   await sbPatch(s, `conversations?id=eq.${conv.id}`, patch);
   await record(s, { actor: m.direction === 'inbound' ? 'customer' : (line.agent_email || 'ringcentral'), kind: m.direction === 'inbound' ? 'sms.in' : 'sms.out', source: 'ringcentral', client_no: client_no || null,
-    payload: { conversation_id: conv.id, line: line.phone10, branch: line.branch || null, mirror, created, chars: body.length, rc_message_id: m.rc_id } });
-  return { ok: true, conversation_id: conv.id, created, mirror, direction: m.direction, client_no: client_no || null };
+    payload: { conversation_id: conv.id, line: line.phone10, branch: line.branch || null, mirror, created, chars: body.length, rc_message_id: m.rc_id, media: m.attachments || 0, stored } });
+  return { ok: true, conversation_id: conv.id, created, mirror, direction: m.direction, client_no: client_no || null, media: m.attachments || 0, stored };
 }
 
 const cryptoToken = () => randomBytes(16).toString('hex');

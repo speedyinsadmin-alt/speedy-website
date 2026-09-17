@@ -267,7 +267,7 @@ export default async function handler(req, res) {
    is actually waiting.
    =========================================================================== */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting']);
+const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media']);
 const SITE = 'https://www.speedyins.com';
 const VISITOR_GONE_MS = 2 * 60 * 1000;
 const ESCALATION_THROTTLE_MS = 15 * 60 * 1000;
@@ -478,7 +478,7 @@ async function agentHandler(req, res, s, b, action) {
   if (action === 'thread') {
     if (conv.visibility === 'owner' && !me.admin && conv.claimed_by !== me.email) return res.status(403).json({ ok: false, error: 'Not your thread' });
     const [ms, prev, card] = await Promise.all([
-      sbGet(s, `messages?conversation_id=eq.${id}&select=id,ts,sender_kind,sender,audience,channel,body,sms_from&order=id.asc&limit=500`),
+      sbGet(s, `messages?conversation_id=eq.${id}&select=id,ts,sender_kind,sender,audience,channel,body,sms_from,attachments&order=id.asc&limit=500`),
       conv.visitor_phone ? sbGet(s, `conversations?visitor_phone=eq.${conv.visitor_phone}&id=neq.${id}&select=id,created_at,status,outcome,topic,claimed_by,lead_id&order=id.desc&limit=5`) : { rows: [] },
       clientCard(s, conv),
     ]);
@@ -490,6 +490,21 @@ async function agentHandler(req, res, s, b, action) {
       messages: ms.rows.map(m => ({ ...m, name: m.sender ? (names[m.sender] || m.sender) : null })),
       previous: prev.rows, client: card, me: { email: me.email, admin: me.admin, first: me.first },
     });
+  }
+
+  /* one attachment, as base64, after the same visibility check as the thread (the
+     bucket is private; the file only ever travels through this authenticated call) */
+  if (action === 'media') {
+    if (conv.visibility === 'owner' && !me.admin && conv.claimed_by !== me.email) return res.status(403).json({ ok: false, error: 'Not your thread' });
+    const mid = Number(b.message_id), idx = Number(b.index);
+    const mm = await sbGet(s, `messages?id=eq.${mid}&conversation_id=eq.${id}&select=attachments&limit=1`);
+    const att = mm.rows[0] && Array.isArray(mm.rows[0].attachments) ? mm.rows[0].attachments[idx] : null;
+    if (!att) return res.status(404).json({ ok: false, error: 'No such attachment' });
+    if (!att.ok || !att.path) return res.status(409).json({ ok: false, error: 'Not stored yet' + (att.error ? ': ' + att.error : ''), pending: true });
+    const f = await fetch(`${s.base}/storage/v1/object/chat-media/${att.path}`, { headers: { apikey: s.hdrs.apikey, Authorization: s.hdrs.Authorization } });
+    if (f.status !== 200) return res.status(502).json({ ok: false, error: 'Storage read failed' });
+    const buf = Buffer.from(await f.arrayBuffer());
+    return res.status(200).json({ ok: true, content_type: att.content_type || 'application/octet-stream', size: buf.length, data: buf.toString('base64') });
   }
 
   if (action === 'claim') {

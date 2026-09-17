@@ -230,6 +230,32 @@ export default async function handler(req, res) {
     });
   }
 
+  // ---- MMS media backfill (Sep 17) ------------------------------------------
+  // Messages whose media was not stored (received before media support, or a
+  // download that failed): read the message from RingCentral's store by its id
+  // and store each attachment through rc-sms.js's storeMedia. Idempotent.
+  if (action === 'media_backfill') {
+    const { storeMedia } = await import('./rc-sms.js');
+    const { base, key } = sbEnv();
+    const hdrs = sbHdrs(key);
+    const sb = { base, hdrs };
+    const q = await fetch(`${base}/rest/v1/messages?channel=eq.sms&rc_message_id=not.is.null&select=id,conversation_id,rc_message_id,body,attachments&order=id.desc&limit=200`, { headers: hdrs }).then((x) => x.json()).catch(() => []);
+    const todo = (Array.isArray(q) ? q : []).filter((m) => (/^\[\d+ (attachment|photo|file)/.test(m.body || '') && !(m.attachments || []).length) || (m.attachments || []).some((a) => !a.ok));
+    const out = [];
+    for (const m of todo.slice(0, 25)) {
+      const conv = await fetch(`${base}/rest/v1/conversations?id=eq.${m.conversation_id}&select=line_extension_id&limit=1`, { headers: hdrs }).then((x) => x.json()).catch(() => []);
+      const ext = conv[0] && conv[0].line_extension_id ? conv[0].line_extension_id : '~';
+      const r = await rc(token, `/restapi/v1.0/account/~/extension/${encodeURIComponent(ext)}/message-store/${encodeURIComponent(m.rc_message_id)}`);
+      if (!r.ok) { out.push({ message_id: m.id, ok: false, error: (r.json && r.json.message) || `HTTP ${r.status}` }); continue; }
+      const media = ((r.json && r.json.attachments) || []).filter((a) => a && a.id && String(a.type || '') !== 'Text' && !/^text\/plain/i.test(String(a.contentType || '')));
+      const atts = [];
+      for (const a of media.slice(0, 10)) atts.push(await storeMedia(sb, a, m.conversation_id, m.rc_message_id));
+      await fetch(`${base}/rest/v1/messages?id=eq.${m.id}`, { method: 'PATCH', headers: { ...hdrs, Prefer: 'return=minimal' }, body: JSON.stringify({ attachments: atts, body: media.length && /^\[\d+ /.test(m.body || '') ? `[${media.length} ${media.length === 1 ? 'photo/file' : 'photos/files'}]` : m.body }) });
+      out.push({ message_id: m.id, ok: atts.every((a) => a.ok), media: media.length, stored: atts.filter((a) => a.ok).length, errors: atts.filter((a) => !a.ok).map((a) => a.error) });
+    }
+    return res.status(200).json({ ok: true, candidates: todo.length, done: out });
+  }
+
   // ---- SMS subscription (Sep 17) ------------------------------------------
   if (action === 'sms_create') {
     try { return res.status(200).json(await smsCreate(token)); }

@@ -150,7 +150,17 @@
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 const API = '/api/chat';
-let TOKEN = null, ME = null, INBOX = null, SEG = 'waiting', OPEN = null, THREAD = null, WHISPER = false, pollQ = null, pollT = null, lastWaitingIds = new Set(), firstInbox = true;
+let TOKEN = null, ME = null, INBOX = null, SEG = 'waiting', OPEN = null, THREAD = null, WHISPER = false, pollQ = null, pollT = null, lastWaitingIds = new Set(), firstInbox = true, lastMineUnread = {};
+/* desktop notifications: asked for once when going on duty; shown for a new waiting chat
+   and for a new message in one of mine while the tab is behind the portal (Saif, Sep 17) */
+function notifyAsk() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {} }
+function notify(id, title, body) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const n = new Notification(title, { body, tag: 'speedy-chat-' + id, icon: '/assets/pwa/icon-192.png', renotify: true });
+    n.onclick = () => { try { window.focus(); } catch (e) {} openThread(id); n.close(); };
+  } catch (e) {}
+}
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pretty = p => (p && p.length === 10) ? `(${p.slice(0, 3)}) ${p.slice(3, 6)}-${p.slice(6)}` : (p || '');
@@ -209,7 +219,11 @@ function applyInbox(j) {
   $('#dutyNote').innerHTML = `<b style="color:var(--ink)">On duty now:</b> ${on ? esc(on) : '<span style="color:var(--amber-ink)">nobody — chats go straight to leads</span>'}. New chats text the on-duty agents in turn; unclaimed after ${esc(j.settings.claim_window_s)}s they text the next in line.`;
   /* a new waiting chat: sound + title */
   const ids = new Set(j.waiting.map(c => c.id));
-  if (!firstInbox && [...ids].some(id => !lastWaitingIds.has(id))) beep();
+  const fresh = j.waiting.filter(c => !lastWaitingIds.has(c.id));
+  if (!firstInbox && fresh.length) { beep(); fresh.forEach(c => notify(c.id, `${c.name || 'A visitor'} is waiting`, `${c.branch_name}${c.topic ? ' · ' + c.topic : ''}${c.lang === 'es' ? ' · Español' : ''}`)); }
+  /* a new message in a chat that is mine, while this tab is not in front */
+  if (!firstInbox && document.hidden) j.mine.forEach(c => { const prev = lastMineUnread[c.id] || 0; if (c.unread > prev) notify(c.id, `${c.name || 'Visitor'}: new message`, c.last ? c.last.body : ''); });
+  lastMineUnread = {}; j.mine.forEach(c => { lastMineUnread[c.id] = c.unread; });
   lastWaitingIds = ids; firstInbox = false;
   document.title = (j.waiting.length ? `(${j.waiting.length}) ` : '') + 'Speedy Chat';
   if (!OPEN) renderList();
@@ -241,10 +255,12 @@ function beep() { try { const a = new (window.AudioContext || window.webkitAudio
 async function toggleDuty() {
   if (ME.on_duty) { const j = await api({ action: 'duty', on: false }); if (j.ok) { toast('Off duty'); refreshInbox(); } return; }
   if (!ME.mobile) { $('#mobileIn').value = ''; $('#mobileErr').classList.add('hide'); openSheet('mobileSheet'); return; }
+  notifyAsk();
   const j = await api({ action: 'duty', on: true });
   if (j.ok) { toast('On duty — chats will text ' + j.mobile); refreshInbox(); } else if (j.code === 'need_mobile') openSheet('mobileSheet'); else toast(j.error);
 }
 async function saveMobileAndGoOn() {
+  notifyAsk();
   const j = await api({ action: 'duty', on: true, mobile: $('#mobileIn').value });
   if (!j.ok) { $('#mobileErr').textContent = j.error; $('#mobileErr').classList.remove('hide'); return; }
   closeSheet('mobileSheet'); toast('On duty — chats will text ' + j.mobile); refreshInbox();

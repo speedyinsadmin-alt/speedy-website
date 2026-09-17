@@ -358,7 +358,8 @@ async function sysMsg(s, conv, body, audience = 'visitor') {
   return sbPost(s, 'messages', { conversation_id: conv.id, sender_kind: 'system', audience, channel: 'web', body, is_test: conv.is_test });
 }
 const secs = (a, b) => Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 1000));
-const canAct = (conv, me) => me.admin || conv.claimed_by === me.email;
+/* an unclaimed waiting chat belongs to whoever acts on it first: replying IS claiming */
+const canAct = (conv, me) => me.admin || conv.claimed_by === me.email || (conv.status === 'waiting' && !conv.claimed_by);
 
 /* the client card: who this phone is, what they hold, what they last paid */
 async function clientCard(s, conv) {
@@ -522,6 +523,20 @@ async function agentHandler(req, res, s, b, action) {
     if (conv.status === 'closed') return res.status(409).json({ ok: false, error: 'Chat is closed' });
     const whisper = b.whisper === true;
     if (whisper && !me.admin) return res.status(403).json({ ok: false, error: 'Only an admin can whisper' });
+    /* Sep 17: Tony (admin) answered before claiming and the visitor got a reply from
+       nobody, then "Tony joined". A visitor-facing reply on an unclaimed chat claims it
+       first, atomically; if someone else just won, the reply is refused with their name. */
+    if (!whisper && conv.status === 'waiting' && !conv.claimed_by) {
+      const r = await sbPatch(s, `conversations?id=eq.${id}&status=eq.waiting&claimed_by=is.null`, { claimed_by: me.email, claimed_at: now, status: 'active', agent_seen_at: now, updated_at: now });
+      if (!r.rows.length) {
+        const fresh = await sbGet(s, `conversations?id=eq.${id}&select=claimed_by&limit=1`);
+        const n = fresh.rows[0] && fresh.rows[0].claimed_by ? await sbGet(s, `agents?email=eq.${enc(fresh.rows[0].claimed_by)}&select=full_name&limit=1`) : { rows: [] };
+        return res.status(409).json({ ok: false, error: `${(n.rows[0] && n.rows[0].full_name) || 'Another agent'} got it` });
+      }
+      await sysMsg(s, conv, conv.lang === 'es' ? `${me.first} se unió al chat` : `${me.first} joined the chat`);
+      await record(s, { actor: me.email, kind: 'chat.claimed', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, waited_s: secs(conv.created_at, now), alerts: (conv.alerts || []).length, by_reply: true, is_test: conv.is_test } });
+      conv.claimed_by = me.email; conv.status = 'active';
+    }
     /* the visitor left the page and gave a phone: the reply goes out as a text too */
     let via = 'web';
     const gone = !conv.visitor_seen_at || (Date.now() - new Date(conv.visitor_seen_at).getTime()) > VISITOR_GONE_MS;

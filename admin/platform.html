@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Platform Console — Speedy Insurance</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://checkout.clover.com/sdk.js"></script>
 <style>
   :root{
     --navy:#0e1533; --navy2:#161f45; --line:rgba(255,255,255,.09);
@@ -20,6 +21,8 @@
        Checked first: --dim, --card and --blue-l did NOT exist, and assuming they did
        would have been the fourth "CSS that exists in a sibling file" bug today. */
     --dim:#9aa5cc; --blue-l:#7fa8ff;   /* Sep 17: #5c6690 was 2.9:1 on the card - unreadable */
+    /* read by the client panel (/admin/shared/clientpanel.css): the card's own surface and the sheets' scrim, the portal's values */
+    --card:#0e1533; --scrim:rgba(6,9,24,.9);
   }
 
   /* ---------- Staff & permissions (item 70 step 4) ----------
@@ -447,9 +450,40 @@
 <script src="/admin/shared/activity.js"></script>
 <script src="/admin/shared/doccenter.js"></script>
 <script src="/admin/shared/share.js"></script>
+<link rel="stylesheet" href="/admin/shared/clientpanel.css">
+<script src="/admin/shared/clientpanel.js"></script>
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, TAB = 'clients';
+/* ---------- THE CLIENT PANEL's host contract (Sep 17) ----------
+   /admin/shared/clientpanel.js is the portal's client card with every action - charge,
+   refund, documents, balances, reassign, wrong client - and it reads these the way the
+   portal declares them: top-level lets (a lexical global, never window.X). EMAIL is set
+   at sign-in; ME / ROSTER / OFFICES are filled by the panel's own loadStaff(). */
+let EMAIL = null, OFFICE = null;
+let ME = { known:false, name:null, branch:null, producer_code:null, role:'agent' };
+let ROSTER = [], OFFICES = [];
+/* The overrides go through window.PanelHost (the module publishes it): if clientpanel.js
+   ever fails to load, the Audit, Trust and Staff tabs must still work - one missing
+   shared script may cost the client page, never the whole Console. */
+Object.assign(window.PanelHost || {}, {
+  page: 'console',
+  /* the carrier page's title reads the open client's name: the card knows it */
+  tab: no => { const c = CLIENT_CACHE[no], cl = c && c.client; return cl ? { client_no: no, name: cl.business_name || [cl.first_name, cl.last_name].filter(Boolean).join(' ') || ('#' + no) } : null; },
+  /* the office a Console charge is stamped with: Tony's home branch, else the client's own */
+  office: () => (ME && ME.branch) || (CLIENT_CACHE[OPEN_CLIENT] && CLIENT_CACHE[OPEN_CLIENT].client && CLIENT_CACHE[OPEN_CLIENT].client.branch) || '',
+  /* the panel changed the client on the server (balance, total, reassign, move, refund):
+     re-read the card only - not HawkSoft, which is the ↻ button's job */
+  changed: async no => { await reloadCard(no || OPEN_CLIENT); },
+  reload: async no => { await reloadCard(no); },
+  closed: () => { if (OPEN_CLIENT) reloadCard(OPEN_CLIENT); },   // a charge may have been made
+  /* carrier.html opens in its own tab from here, as the Audit tab already does, and Back closes it */
+  carrierParams: p => { p.set('from', 'console'); return p; },
+  carrierAttr: () => ' target="_blank"',
+  carrier: p => { stashHandoff(); window.open(panelCarrierHref(p), '_blank'); },
+});
+/* the two sheets the module mounted carry the panel's scoped styles here */
+for (const id of ['chargeSheet', 'refundSheet']) { const el = document.getElementById(id); if (el) el.classList.add('cpanel'); }
 const $ = s => document.querySelector(s);
 
 window.addEventListener('load', () => {
@@ -470,6 +504,7 @@ async function onCred(resp) {
   $('#gate').style.display = 'none';
   $('#app').style.display = 'block';
   $('#who').textContent = r.email || '';
+  EMAIL = String(r.email || '').toLowerCase();   // the panel's "me": which actions are mine, who charged
   render();
 }
 
@@ -636,6 +671,8 @@ window.addEventListener('popstate', e => {
   if(!TOKEN) return;
   const sb = document.getElementById('sbSheet'); if(sb){ closeSendBack(); navPush(); return; }
   const dm = document.getElementById('docModal'); if(dm && dm.innerHTML){ closeDocs(); navPush(); return; }
+  const cs = document.getElementById('chargeSheet'); if(cs && !cs.classList.contains('hide')){ closeCharge(); navPush(); return; }
+  const rs = document.getElementById('refundSheet'); if(rs && !rs.classList.contains('hide')){ closeRefund(); navPush(); return; }
   const st = e.state;
   if(!st || st.v !== 'console'){ navReplace(); return; }
   TAB = st.tab || 'clients'; OPEN_CLIENT = st.client || null; OPEN_FROM = st.from || null;
@@ -1021,13 +1058,28 @@ function togglePol(pid){ POL_OPEN[pid] = !POL_OPEN[pid]; render(); }
    network is used on open, on the one background HawkSoft refresh after open, and on
    the ↻ button. */
 const CONSOLE_CARD = {};
-function refreshClientCard(no){ const el = $('#view'); if (el && OPEN_CLIENT === no) renderOurClient(el, no, true, { cached: true }); }
+/* share.js redraws the card after a share; the panel draws from CLIENT_CACHE, which is the same object */
+function refreshClientCard(no){ if (OPEN_CLIENT === no && document.getElementById('clientPanel')) renderPanel(); }
+/* the panel changed something on the server: drop the card, keep the HawkSoft read */
+async function reloadCard(no){
+  const el = $('#view'); if (!el || OPEN_CLIENT !== no) return;
+  if (CONSOLE_CARD[no]) CONSOLE_CARD[no].pc = null;
+  await renderOurClient(el, no, false, { cached: true });
+}
+/* ---------- THE CLIENT PAGE (Sep 17): the portal's panel, with every action ----------
+   Tony used to get a read-only copy of the agent's card here and had to open the portal
+   to act on it. Now the page IS the agent's panel (/admin/shared/clientpanel.js) with the
+   admin's powers - charge, refund, documents, balances, reassign, wrong client, share -
+   under a one-line summary strip (status, branch, address, in-force count, DMV reminder:
+   the facts the panel does not carry). The old page's HawkSoft policy tables, the raw
+   ledger rows and the audit trail are kept, collapsed, under "Admin · HawkSoft & raw
+   data", for when something looks wrong. Mock approved by Saif: console_portal.html. */
 async function renderOurClient(el, no, _bg, o) {
   const cached = !!(o && o.cached) && CONSOLE_CARD[no];
   const r = cached ? CONSOLE_CARD[no].r : await api('our_client&no=' + no + (_bg ? '&refresh=1' : ''));
   if (!r || !r.ok || !r.client) { el.innerHTML = '<div class="err">Client load failed.</div>'; return; }
+  if (!EMAIL && r.email) EMAIL = String(r.email).toLowerCase();   // the panel's "me", when this page was reached without onCred
   const c = r.client;
-  const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
   const today = new Date().toISOString().slice(0,10);
 
   const all = r.policies || [];
@@ -1047,58 +1099,33 @@ async function renderOurClient(el, no, _bg, o) {
   const other = all.filter(p => p.record_type === 'unknown');
   const inforce = insurance.filter(p => { const st=String(p.status||'').toLowerCase(); return p.expiration_date && p.expiration_date>=today && !['cancelled','canceled','expired'].includes(st); }).length;
 
-  // ---- Summary bar (always visible) ----
+  // ---- Summary strip: what the panel does not carry. The name and number are on the card. ----
   let h = '<span class="raw-t" onclick="closeClient()" style="margin:0 0 10px;display:inline-block">← ' + (OPEN_FROM ? 'Back to ' + esc(TAB_LABEL(OPEN_FROM)) : 'All clients') + '</span>'
     + (r.live ? '<span class="pill g" style="float:right">● live from HawkSoft</span>' : '<span class="pill b" style="float:right;cursor:pointer" onclick="refreshClient(' + no + ')">↻ refresh from HawkSoft</span>');
-  h += '<h2 style="margin:0 0 2px">' + esc(name) + ' <span class="muted" style="font-weight:400">· #' + esc(c.client_no) + '</span></h2>';
   const clientActive = String(c.status||'').toLowerCase()==='active';
   const lapsed = clientActive && insurance.length > 0 && inforce === 0;
-  const prospect = insurance.length === 0 && dmv.length === 0;
-  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 4px">'
+  h += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 10px">'
     + '<span class="pill ' + (clientActive?'g':'a') + '">' + esc(c.status || '—') + '</span>'
     + (lapsed ? '<span class="pill a">⚠ no in-force policies</span>' : '')
     + '<span class="muted">' + esc(c.branch || 'No branch') + '</span>'
     + (c.phone ? '<a href="tel:' + esc(c.phone) + '" style="color:var(--blue);text-decoration:none">' + esc(c.phone) + '</a>' : '')
     + (c.email ? '<a href="mailto:' + esc(c.email) + '" style="color:var(--blue);text-decoration:none">' + esc(c.email) + '</a>' : '')
+    + '<span class="muted">' + esc([c.address1, c.city, c.state, c.zip].filter(Boolean).join(', ') || 'No address on file') + '</span>'
     + '<span class="pill b">' + inforce + ' in-force / ' + insurance.length + ' policies</span>'
     + (dmv.length ? '<span class="pill ' + (dmvReminder?'a':'b') + '" style="background:rgba(77,124,254,.12)">' + dmv.length + ' DMV</span>' : '')
     + (dmvReminder || '')
     + '</div>';
-  h += '<div class="muted" style="font-size:13px;margin-bottom:6px">' + esc([c.address1, c.city, c.state, c.zip].filter(Boolean).join(', ') || 'No address on file') + '</div>';
 
-  // ---- Collapsible sections ----
-  h += section('ins_' + no, 'Insurance policies', insurance.length, policyRows(insurance, false),
-    { defaultOpen: true, emptyText: 'No insurance policies.' });
-  h += section('dmv_' + no, 'DMV / Services', dmv.length, policyRows(dmv, true),
-    { defaultOpen: false, emptyText: 'No DMV services.',
-      note: dmvLatest && dmvLatest.expiration_date ? 'latest reg exp ' + dmvLatest.expiration_date : '' });
-  if (other.length) h += section('unk_' + no, 'Unclassified', other.length, policyRows(other, false),
-    { defaultOpen: false, note: 'needs review', emptyText: '' });
+  /* THE PANEL. renderPanel() (clientpanel.js) draws into #clientPanel from CLIENT_CACHE. */
+  h += '<div id="clientPanel" class="cpanel" style="max-width:640px"><div class="muted" style="font-size:13px;padding:8px 0 14px">Loading the client card…</div></div>';
 
-  // one classifier for every ledger "kind" badge: a declined charge must never read green
+  /* what the old page showed and the card does not: kept, collapsed */
   const kindPill = k => {
     const t = String(k || '');
     if (/declin|fail|error|void|refund/i.test(t)) return 'r';
     if (/captured|pending/i.test(t)) return 'a';
     return t.includes('charge') ? 'g' : 'b';
   };
-  /* THE SAME CARD THE AGENTS SEE. portal_client is the view the portal reads; this is
-     the portal's renderer, read-only (actions:false), so Tony reads a payment here
-     exactly as the agent reads it - audit state, review state, documents, refund
-     state, "client emailed at". The old ledger table (raw kinds, ref, office) is kept
-     underneath, collapsed, for the columns the card does not carry. */
-  let cardHtml = '<div class="muted" style="font-size:13px">Loading the payment card…</div>';
-  try {
-    /* the card is re-read only on a real open or ↻; the background HawkSoft refresh
-       after open touches the client and policies, not the payments */
-    const pc = (cached || (_bg && CONSOLE_CARD[no] && CONSOLE_CARD[no].pc && CONSOLE_CARD[no].pc.ok)) ? CONSOLE_CARD[no].pc : await api('portal_client&no=' + no);
-    CONSOLE_CARD[no] = { r, pc, at: cached ? CONSOLE_CARD[no].at : Date.now() };
-    /* the same three tabs the agent has (Sep 16): the card, the documents grouped by what
-       they are, and the log in sentences. Read-only card; notes may be added here too. */
-    if (pc && pc.ok) cardHtml = ClientTabs.html(pc, { me: r.email || null, clientNo: no, actions: false, page: 'console',
-      payHtml: PayCard.html(pc, { me: r.email || null, clientNo: no, actions: false, share: !!pc.is_admin }), rerender: () => refreshClientCard(no) });
-    else cardHtml = '<div class="muted" style="font-size:13px">The payment card could not be loaded' + (pc && pc.error ? ': ' + esc(pc.error) : '') + '.</div>';
-  } catch (e) { cardHtml = '<div class="muted" style="font-size:13px">The payment card could not be loaded.</div>'; }
   const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th class="hidemob">Office</th><th>Ref</th></tr>'
     + (r.payments||[]).map(p => '<tr>'
       + '<td>' + esc(String(p.ts).replace('T',' ').slice(0,16)) + '</td>'
@@ -1107,21 +1134,40 @@ async function renderOurClient(el, no, _bg, o) {
       + '<td class="hidemob">' + esc(p.purpose || '—') + '</td>'
       + '<td class="hidemob">' + esc((p.extra && p.extra.office) || '—') + '</td>'
       + '<td>' + esc(p.ref || '—') + '</td></tr>').join('') + '</table>';
-  h += section('card_' + no, 'Payments · Documents · Log', Math.max(1, (r.payments||[]).length), cardHtml,   // never auto-collapsed: the Log and Documents tabs have content without a payment
-    { defaultOpen: true, note: 'as the agent sees it', emptyText: 'No payments recorded yet.' });
-  h += section('pay_' + no, 'Ledger rows', (r.payments||[]).length, payBody,
-    { defaultOpen: false, note: 'raw', emptyText: 'No payments recorded yet.' });
-
   const actBody = '<table><tr><th>When</th><th>Event</th><th class="hidemob">By</th><th>Source</th></tr>'
     + (r.events||[]).map(e => '<tr>'
       + '<td>' + esc(String(e.ts).replace('T',' ').slice(0,16)) + '</td>'
       + '<td><span class="pill a">' + esc(e.kind) + '</span></td>'
       + '<td class="hidemob">' + esc(e.actor || '—') + '</td>'
       + '<td>' + esc(e.source || '—') + '</td></tr>').join('') + '</table>';
-  h += section('act_' + no, 'History (audit trail)', (r.events||[]).length, actBody,
+  let adm = '<div class="muted" style="font-size:13px;margin:4px 0 10px">What the old client page showed and the card does not: the HawkSoft policy records in full, the raw ledger rows, the audit trail. For when something looks wrong.</div>';
+  adm += section('ins_' + no, 'Insurance policies · HawkSoft', insurance.length, policyRows(insurance, false),
+    { defaultOpen: true, emptyText: 'No insurance policies.' });
+  adm += section('dmv_' + no, 'DMV / Services', dmv.length, policyRows(dmv, true),
+    { defaultOpen: false, emptyText: 'No DMV services.',
+      note: dmvLatest && dmvLatest.expiration_date ? 'latest reg exp ' + dmvLatest.expiration_date : '' });
+  if (other.length) adm += section('unk_' + no, 'Unclassified', other.length, policyRows(other, false),
+    { defaultOpen: false, note: 'needs review', emptyText: '' });
+  adm += section('pay_' + no, 'Ledger rows', (r.payments||[]).length, payBody,
+    { defaultOpen: false, note: 'raw', emptyText: 'No payments recorded yet.' });
+  adm += section('act_' + no, 'History (audit trail)', (r.events||[]).length, actBody,
     { defaultOpen: false, emptyText: 'No activity yet.' });
-
+  h += section('adm_' + no, 'Admin · HawkSoft & raw data', insurance.length + dmv.length + other.length + (r.payments||[]).length + (r.events||[]).length, adm,
+    { defaultOpen: false, emptyText: 'Nothing recorded in HawkSoft or the ledger yet.' });
   el.innerHTML = h;
+
+  /* THE CARD: portal_client, read on a real open, on ↻, or after the panel changed it -
+     never on the background HawkSoft pass, which touches the client and policies only. */
+  const panel = document.getElementById('clientPanel');
+  try {
+    const havePc = !!(CONSOLE_CARD[no] && CONSOLE_CARD[no].pc && CONSOLE_CARD[no].pc.ok);
+    const pc = ((cached || _bg) && havePc) ? CONSOLE_CARD[no].pc : await api('portal_client&no=' + no);
+    CONSOLE_CARD[no] = { r, pc, at: (cached && CONSOLE_CARD[no]) ? CONSOLE_CARD[no].at : Date.now() };
+    if (pc && pc.ok) {
+      CLIENT_CACHE[no] = pc; ACTIVE_TAB = no;
+      if (panel && panel.isConnected) { await renderPanel(); loadStaff(); }   // still the page on screen; loadStaff: the roster for the charge sheet's Commission to
+    } else if (panel) panel.innerHTML = '<div class="muted" style="font-size:13px;padding:8px 0 14px">The client card could not be loaded' + (pc && pc.error ? ': ' + esc(pc.error) : '') + '.</div>';
+  } catch (e) { if (panel) panel.innerHTML = '<div class="muted" style="font-size:13px;padding:8px 0 14px">The client card could not be loaded.</div>'; }
 
   // First open (not a bg pass) and data isn't live yet -> silently refresh once from HawkSoft
   if (!_bg && !cached && !r.live && OPEN_CLIENT === no) {

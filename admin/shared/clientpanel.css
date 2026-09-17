@@ -36,10 +36,13 @@
    .lbl had no rule in portal.html, and --red-ink did not exist. Six times this week
    markup went in against CSS living in a sibling file — class="go" rendered as a
    browser-default white slab on the Staff page for exactly that reason. */
-.sec{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;
+/* .sec is scoped to the refund sheet: nothing in the portal emits it today, and the
+   Console's collapsible sections are ALSO class="sec" - a global flex rule here would
+   lay every Console section out sideways. */
+#refundSheet .sec{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;
   margin:18px 0 9px;display:flex;align-items:center;gap:9px}
-.sec::after{content:"";flex:1;height:1px;background:var(--line)}
-.sec:first-child{margin-top:0}
+#refundSheet .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+#refundSheet .sec:first-child{margin-top:0}
 /* The consequence of the choice just made, shown BEFORE the button and never after. */
 .conseq{background:var(--field);border:1px solid var(--line);border-left:2px solid var(--blue);
   border-radius:0 10px 10px 0;padding:10px 12px;font-size:13px;line-height:1.55;margin-top:8px}
@@ -54,43 +57,44 @@
 /* The last thing read before money leaves: a list of facts, deliberately unstyled. */
 /* THE REFUND STEPPER (Sep 15): four numbered questions, one open at a time, the
    answered ones collapsed to a line, a summary that fills in as answers arrive. */
-.rhdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-.rx{color:var(--dim);font-size:19px;cursor:pointer;padding:0 4px}
-.rpay{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--mute);margin:10px 0 2px}
-.rpay b{color:var(--ink);font-size:15px}
-.rpill{background:var(--field);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px}
-.rstep{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
-.rstep.dim .rq{color:var(--dim)} .rstep.dim .rnum{opacity:.6}
-.rstep.open .rq{color:var(--ink)}
-.rnum{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--dim);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;cursor:pointer}
-.rnum.on{border-color:var(--blue);color:var(--blue)}
-.rnum.done{border-color:var(--green);background:var(--green);color:#fff}
-.rbody{flex:1;min-width:0}
-.rq{font-size:15px;font-weight:700;cursor:pointer}
-.rq small{font-weight:400;color:var(--mute);font-size:13px;margin-left:6px}
-.rdone{font-size:13.5px;margin-top:2px;color:var(--mute)} .rdone b{color:var(--ink)}
-.rchg{color:var(--blue);font-size:13px;margin-left:6px;cursor:pointer}
-.rchoice{margin-top:8px;display:flex;flex-direction:column;gap:6px}
-.rradio{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer;background:var(--card)}
-.rradio.on{border-color:var(--blue);background:rgba(77,124,254,.10)}
-.rradio .dot{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--dim);margin-top:3px}
-.rradio.on .dot{border-color:var(--blue);background:radial-gradient(var(--blue) 45%,transparent 50%)}
-.rradio .t{font-size:14px;font-weight:600;color:var(--ink)}
-.rradio .m{font-size:13px;color:var(--mute);margin-top:1px}
-.ramt{display:flex;align-items:center;gap:8px;margin-top:10px}
-.ramt input{width:130px;font-size:17px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);color:var(--ink);background:var(--field)}
-.ramt input.need{border-color:var(--red)}
-.rsub{font-size:13px;color:var(--mute);margin-top:7px} .rsub b{color:var(--ink)}
+/* THE REFUND STEPPER - scoped to the sheet (Sep 17): the Console's Refunds tab has its own .rq. */
+#refundSheet .rhdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+#refundSheet .rx{color:var(--dim);font-size:19px;cursor:pointer;padding:0 4px}
+#refundSheet .rpay{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--mute);margin:10px 0 2px}
+#refundSheet .rpay b{color:var(--ink);font-size:15px}
+#refundSheet .rpill{background:var(--field);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px}
+#refundSheet .rstep{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+#refundSheet .rstep.dim .rq{color:var(--dim)} #refundSheet .rstep.dim .rnum{opacity:.6}
+#refundSheet .rstep.open .rq{color:var(--ink)}
+#refundSheet .rnum{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--dim);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;cursor:pointer}
+#refundSheet .rnum.on{border-color:var(--blue);color:var(--blue)}
+#refundSheet .rnum.done{border-color:var(--green);background:var(--green);color:#fff}
+#refundSheet .rbody{flex:1;min-width:0}
+#refundSheet .rq{font-size:15px;font-weight:700;cursor:pointer}
+#refundSheet .rq small{font-weight:400;color:var(--mute);font-size:13px;margin-left:6px}
+#refundSheet .rdone{font-size:13.5px;margin-top:2px;color:var(--mute)} #refundSheet .rdone b{color:var(--ink)}
+#refundSheet .rchg{color:var(--blue);font-size:13px;margin-left:6px;cursor:pointer}
+#refundSheet .rchoice{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+#refundSheet .rradio{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer;background:var(--card)}
+#refundSheet .rradio.on{border-color:var(--blue);background:rgba(77,124,254,.10)}
+#refundSheet .rradio .dot{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--dim);margin-top:3px;background:transparent;box-shadow:none}   /* the Console has a green status .dot of its own */
+#refundSheet .rradio.on .dot{border-color:var(--blue);background:radial-gradient(var(--blue) 45%,transparent 50%)}
+#refundSheet .rradio .t{font-size:14px;font-weight:600;color:var(--ink)}
+#refundSheet .rradio .m{font-size:13px;color:var(--mute);margin-top:1px}
+#refundSheet .ramt{display:flex;align-items:center;gap:8px;margin-top:10px}
+#refundSheet .ramt input{width:130px;font-size:17px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);color:var(--ink);background:var(--field)}
+#refundSheet .ramt input.need{border-color:var(--red)}
+#refundSheet .rsub{font-size:13px;color:var(--mute);margin-top:7px} #refundSheet .rsub b{color:var(--ink)}
 #refundSheet textarea.need{border-color:var(--red)}
-.rsum{margin-top:14px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
-.rsumh{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:5px}
-.rsum ul{margin:0;padding:0;list-style:none;font-size:13px;line-height:1.55}
-.rsum li{padding:3px 0;display:flex;gap:8px} .rsum li::before{content:"\2192";color:var(--dim);flex:none}
-.rsum b{color:var(--ink)} .rsum .neg{color:var(--red-ink);font-weight:700} .rwait{color:var(--dim);font-style:italic}
-.rprog{text-align:center;font-size:13px;color:var(--mute);margin-top:8px}
-.rbar{display:inline-block;width:110px;height:5px;border-radius:5px;background:var(--line);vertical-align:middle;margin-right:8px;overflow:hidden}
-.rbar i{display:block;height:100%;background:var(--green)}
-.rcancel{text-align:center;font-size:13.5px;color:var(--mute);margin-top:10px;cursor:pointer}
+#refundSheet .rsum{margin-top:14px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+#refundSheet .rsumh{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:5px}
+#refundSheet .rsum ul{margin:0;padding:0;list-style:none;font-size:13px;line-height:1.55}
+#refundSheet .rsum li{padding:3px 0;display:flex;gap:8px} #refundSheet .rsum li::before{content:"\2192";color:var(--dim);flex:none}
+#refundSheet .rsum b{color:var(--ink)} #refundSheet .rsum .neg{color:var(--red-ink);font-weight:700} #refundSheet .rwait{color:var(--dim);font-style:italic}
+#refundSheet .rprog{text-align:center;font-size:13px;color:var(--mute);margin-top:8px}
+#refundSheet .rbar{display:inline-block;width:110px;height:5px;border-radius:5px;background:var(--line);vertical-align:middle;margin-right:8px;overflow:hidden}
+#refundSheet .rbar i{display:block;height:100%;background:var(--green)}
+#refundSheet .rcancel{text-align:center;font-size:13.5px;color:var(--mute);margin-top:10px;cursor:pointer}
 .rowacts{display:flex;gap:7px;margin-top:8px}
 .rowacts > *{flex:1}
 .actghost{text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);
@@ -106,6 +110,8 @@
    to .cpanel (the Console puts that class on #clientPanel and on both sheets; the
    portal never uses it). Values are the portal's, dark theme. ---- */
 .cpanel.hide,.cpanel .hide{display:none!important}
+/* the refund sheet has no width of its own in the portal (phones); on the Console it sits like the charge sheet */
+#refundSheet.cpanel > div{max-width:640px;margin:0 auto}
 .cpanel .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:12px}
 .cpanel .dim{color:var(--dim)} .cpanel .muted{color:var(--mute)}
 .cpanel label{font-size:13px;color:var(--mute);display:block;margin-bottom:5px}

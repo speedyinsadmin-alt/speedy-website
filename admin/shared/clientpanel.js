@@ -43,6 +43,7 @@ const PanelHost = {
   carrierAttr: () => '',
   authExpired: () => { if(typeof onAuthExpired === 'function') onAuthExpired(); else if(typeof showAuthExpired === 'function') showAuthExpired(); },
 };
+window.PanelHost = PanelHost;   // a const here is a lexical global; the Console overrides through window so it can miss this file and still run
 function panelCarrierHref(p){ PanelHost.carrierParams(p); return '/admin/carrier.html?' + p.toString() + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : ''); }
 /* the HawkLink launch context (portal only): armed when the agent arrived from HawkSoft with a policy */
 function panelHL(){ try{ if(typeof HL !== 'undefined' && HL) return HL; }catch(e){} return { armed:false, policy:'', client:null }; }

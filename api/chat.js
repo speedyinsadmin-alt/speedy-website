@@ -323,9 +323,10 @@ async function escalate(s, cfg, text, conv) {
   if (!phones.length) return { sent: 0, reason: 'no_escalation_phones' };
   if (Date.now() - last < ESCALATION_THROTTLE_MS) return { sent: 0, reason: 'throttled' };
   let sent = 0;
-  for (const p of phones) { if (conv && conv.is_test) { sent++; continue; } const r = await smsSend(p, text); if (r && r.ok) sent++; }
+  let lastErr = null;
+  for (const p of phones) { if (conv && conv.is_test) { sent++; continue; } const r = await smsSend(p, text); if (r && r.ok) sent++; else lastErr = String((r && r.error) || 'send failed'); }
   await fetch(`${s.base}/rest/v1/chat_settings`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ key: 'last_escalation_at', value: Date.now() }]) });
-  return { sent };
+  return { sent, reason: lastErr };
 }
 
 /* the chain: first on-duty agent now; the next one after the claim window; then
@@ -342,7 +343,7 @@ async function alertChain(s, conv, cfg) {
   if (next) {
     const text = `Speedy Chat: ${who(conv)} is waiting (${BRANCHES[conv.branch] || conv.branch}${conv.topic ? ' · ' + conv.topic : ''}). Claim it: ${chatLink(conv.id)}`;
     const r = (conv.is_test || !next.mobile) ? { ok: !!next.mobile, skipped: true } : await smsSend(next.mobile, text);
-    entry = { kind: 'agent', to: next.email, at: new Date().toISOString(), ok: !!(r && r.ok) };
+    entry = { kind: 'agent', to: next.email, at: new Date().toISOString(), ok: !!(r && r.ok), error: (r && r.ok) ? null : String((r && r.error) || 'send failed') };
   } else if (!alerts.some(a => a.kind === 'escalation')) {
     const r = await escalate(s, cfg, `Speedy Chat: nobody claimed ${who(conv)} (${BRANCHES[conv.branch] || conv.branch}) after ${alerts.length} agent alert${alerts.length === 1 ? '' : 's'}. ${chatLink(conv.id)}`, conv);
     entry = { kind: 'escalation', to: 'escalation', at: new Date().toISOString(), ok: r.sent > 0, reason: r.reason || null };

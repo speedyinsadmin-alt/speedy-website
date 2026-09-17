@@ -99,6 +99,69 @@ files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` lo
 every session and carry the traps. Copy new harnesses back into that folder before
 stopping for the day.
 
+### ✅ SEP 17 · SMS INTO THE INBOX, A SECURITY HOLE CLOSED, RINGCENTRAL LIMITS LEARNED
+**The hole (`3166f34`):** `api/sms.js` compared `x-admin-key` against `process.env.ADMIN_KEY`,
+a name never set in Vercel (every other file reads `ADMIN_API_KEY`). `undefined !== undefined`
+is false, so a request with NO key passed as admin: anyone could text from the agency
+number. Found because the chat alert chain refused to send. Fixed: same name as the rest,
+and an unset key never matches. `harnessSmsGate` reproduces it on the old code. Tony told.
+
+**The live chat proof (chat #7, Sep 17 11:26):** start → text to info@'s mobile in 7 s
+(ok:true) → claimed in 15 s → reply → closed. Then Saif: "the chat should be its own
+tab" → the portal card `window.open`s `admin/chat.html` (named tab); desktop
+notifications (asked on duty; new waiting chat; new message in mine while hidden); a
+reply on an unclaimed chat claims it first (Tony had answered before claiming)
+(`8d66d70`, `f386a9c`). The other session's full-file write of portal.html dropped the
+one-line change once; re-applied.
+
+**RingCentral, read with Saif signed in (Chrome):** 10DLC brand "Speedy Insurance Agency"
+BQE2MSV **Approved 11/08/2024**, 1 campaign; **22 SMS numbers "Ready for use"** — every
+agent's direct number and every branch line; agents already text customers daily
+(Yasmin 201, Sammy 165, Christian 163, Yolanda 151…) invisibly to the platform. The
+API app "Speedy Call Bridge": JWT as Saif's extension 12 (747-229-2938), scopes incl.
+SMS, ReadMessages, Webhook Subscriptions. Saif/Tony: **mirror agents' direct-number
+texts (read-only), and send platform replies from the branch line.**
+
+**Built (`ab38774`, `17433c5`, `7caed70`, `a1a126b`):**
+- Migration `sms_channel`: `rc_numbers` (every account number, branch + agent mapping);
+  `conversations.line / line_extension_id / visibility(all|owner)`; `messages.rc_message_id`
+  UNIQUE (dedupe), `messages.sms_from`.
+- `api/rc-sms.js` — its own webhook + subscription (message-store/instant per
+  extension, 19 filters, id 3d9f67d8…, none disabled), separate from the telephony one.
+  Inbound to a branch line → waiting, visibility all, the chain; to an agent's direct
+  number → private mirror thread claimed by them, no alerts; outbound from the RC app
+  mirrored. Threads by customer phone onto any open conversation (web or sms). Events
+  sms.in/sms.out on the client. Always 200. 24 checks, 4 mutations caught.
+- `rc-subscribe.js`: `action=numbers`, `action=sms_create`; the daily renew also
+  renews SMS on its own. Discovery: the account-level listing has NO features and NO
+  extension names — names from `/extension`, SMS inferred from number type (local
+  Direct/Company/Main = on the campaign; toll-free/fax not). Hand-set mappings survive
+  the nightly refresh. Mapped by hand: Sammy (Samuel), Esme (Esmeralda), Tony = info@.
+- `sms.js`: the admin-key caller may name a `from` line (rc_numbers, sms only).
+  **RingCentral only sends from numbers the API user's own extension owns** — the
+  "extended scope [OutboundSMS]" error names a permission that does not exist
+  (community threads). So: try the line, fall back to `RC_SMS_FROM`, report
+  `fell_back_from`; the thread shows "sent as text from (747) 229-2938".
+- `chat.js`: web chats stamped with their branch line; replies on text threads, to an
+  away visitor, or to one whose last word came by text go by SMS from the thread's line;
+  owner-only threads hidden server-side (inbox filter + thread 403); the inbox poll
+  drives the chain for waiting texts (no visitor poll exists for them).
+- Inbox: SMS chips ("text to (951) 472-0927" / "Yasmin's line"), phone as the name,
+  "Text back from…" placeholder.
+- **Proven live:** Saif texted 472-0927 → #9 waiting, info@ texted in 6 s → Tony
+  claimed → "thank you" left from 747 (RC id 3805470168054), received; the outbound
+  echo deduped. A real customer's text to Yolanda's number (#8, "Bet") became her private
+  mirror thread seven minutes before the test — the first live mirror.
+
+**Open on RingCentral's side:** `695-1500` (MainCompanyNumber) and `353-9900` have no
+extension → no message store → texts to the main number reach nobody. Assign 695-1500 to
+a user/queue, then `sms_create` again (or wait for the 8 AM cron).
+**Decision pending (Saif/Tony):** a dedicated "Speedy Inbox" user extension with its own
+local number as THE texting line (recommended, ~15 min in RC + `RC_JWT`/`RC_SMS_FROM`),
+vs. keep 747, vs. per-branch (moves branch lines off their IVR extensions — not yet).
+**Still not given:** escalation phone(s) — every chain that reaches the last step
+records "no_escalation_phones".
+
 ### ✅ SEP 16 NIGHT · SPEEDY CHAT STAGE 2 — THE AGENT INBOX (`a631cb1`)
 Saif's stage-1 test: three chats from his phone/PC, all became leads (5, 6, 7) — the
 first two only after a fix: the leave form was refused server-side on the 10-digit
@@ -3800,6 +3863,11 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 63. **Delete test lead id 1** once Saif has submitted a real one from the live form
 65. **Speedy Chat stage 2** — agent inbox page + portal tab + SMS chain (see Sep 16 evening)
 66. **Speedy Chat stage 3/4** — Console Inbox tab with whisper; cutover from Tawk after two weeks side by side
+68. **Assign 695-1500 (and 353-9900) to a user/queue in RingCentral** so texts to the main line reach the Inbox
+69. **"Speedy Inbox" user extension + number as the texting line** (RC_JWT / RC_SMS_FROM) — decision with Tony
+70. **Per-agent RingCentral OAuth** so mirror threads can be answered from the agent's own number (stage later)
+71. **Escalation phones** into chat_settings — still not given
+72. **Tawk items 17/18 close when the homepage cuts over** (stage 4)
 67. **Chat: silent-agent unclaim + auto off-duty at close** — server-side sweep (cron) once stage 2 exists
 64. **`refund_requests` has RLS disabled** (Supabase advisory, Sep 16) — enable + no policies like the other tables
 

@@ -553,7 +553,14 @@ async function agentHandler(req, res, s, b, action) {
     if (!whisper && conv.channel !== 'sms' && !gone && conv.visitor_phone) { const lv = await sbGet(s, `messages?conversation_id=eq.${id}&sender_kind=eq.visitor&select=channel&order=id.desc&limit=1`); lastByText = !!(lv.rows[0] && lv.rows[0].channel === 'sms'); }
     if (!whisper && conv.visitor_phone && (conv.channel === 'sms' || gone || lastByText)) {
       /* from the thread's own line (the branch number, or the agent's direct number it came in on) */
-      const text = conv.channel === 'sms' ? body : `Speedy Insurance (${me.first}): ${body} — reply by text or call (951) 695-1500`;
+      /* a text thread: introduce the agent on the FIRST text and whenever a different agent
+         starts writing; every other text goes out clean (Saif, Sep 17) */
+      let text;
+      if (conv.channel === 'sms') {
+        const last = await sbGet(s, `messages?conversation_id=eq.${id}&sender_kind=eq.agent&audience=eq.visitor&select=sender&order=id.desc&limit=1`);
+        const introduce = !last.rows[0] || last.rows[0].sender !== me.email;
+        text = introduce ? `Speedy Insurance (${me.first}): ${body}` : body;
+      } else text = `Speedy Insurance (${me.first}): ${body} — reply by text or call (951) 695-1500`;
       const r = conv.is_test ? { ok: true, skipped: true } : await smsSend('+1' + conv.visitor_phone, text, conv.line || null);
       if (r && r.ok) { via = 'sms'; rc_message_id = r.id ? String(r.id) : null; sms_from = r.from ? String(r.from).replace(/\D/g, '').replace(/^1(\d{10})$/, '$1') : null; }
       else if (conv.channel === 'sms') return res.status(502).json({ ok: false, error: 'The text could not be sent' + (r && r.error ? ': ' + r.error : '') });

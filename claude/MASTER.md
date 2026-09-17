@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 16 evening. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `45a67bb` (another session pushes the public
+Last written Sep 17. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `9576105` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -637,6 +637,46 @@ reuses the earnings sheet (`#earnTitle`, `EARN_SHEET` remembers which one the pe
 picker should reopen). Send-back and needs-proof lines open the client. harnessShare 77,
 mutateShare 65/65 (the run found one miss - the picker flipping back to Earned - closed
 with a real `setEarnPeriod` check; `mutateOne.mjs "<name>"` reruns a single mutation).
+
+**SPEED (Sep 17, `9576105`).** Saif: "the performance of the system is slow." Measured
+first: an API round trip is 0.3 s, the pages 60 KB brotli - the time was INSIDE the calls.
+Three causes, all fixed: (1) `portal_client` ran eight Supabase reads one after the other
+(~0.8 s) - now one `Promise.all` (harness measures max-in-flight 8); (2) the Console
+client page re-fetched `our_client&refresh=1` (LIVE to HawkSoft - seconds) and
+`portal_client` on every tab switch / sort / filter / file picked / relabel - `CONSOLE_CARD`
+keeps the answer per client, rerenders draw from it, `render()` reuses it for a minute,
+↻ drops it; `refreshClientCard(no)` now exists (share.js called it and it was undefined,
+so the Console never showed a fresh share); (3) `fillThumbs` re-ran on every redraw of
+Documents/Log - the thumbs call plus a re-download and re-render of every PDF without a
+stored thumb (up to 8 × 5 MB) - `THUMB_MEM` / `THUMB_TRIED` in clienttabs.js. Not caused by
+the documents themselves: the card never carries file bytes; thumbnails are ≤80 KB and
+fetched separately. Still open, smaller: `portal_home` reads 500 agency rows per load
+(filter server-side); the portal's boot calls (home, news, share_due) could fire together;
+Vercel cold starts (~1 s after a quiet stretch) are normal. Side note: /api/chat polls
+every ~10 s and /api/sms gets a 401 every ~10 s (2,800+ calls/day) - the chat session's.
+harnessSpeed 15, mutateSpeed 12/12 (two vacuous mutations found and replaced), mutateTabs
+re-anchored 55/55 (six anchors had gone stale under Sep 16 work).
+
+**READABILITY - measured, mocked, NOT built (Sep 17).** Body is 15 px but most reading
+text is 11-12.5 px (portal: 42 places at 11 px, 20 at 11.5, 17 at 10-10.5, one at 9). The
+`--dim` token (#5c6690 on the navy field) is **2.86:1** - under the 4.5:1 floor for text,
+under even 3:1; used ~100 places, mostly on the small text; light mode 2.81:1. `--mute` is
+5.8:1 (fine). Proposal (Chrome before/after in the harness folder, `text_*_before/after.png`
+via `shootText.mjs`): `--dim` → #9aa5cc dark / #5c6690 light (one token, ~100 spots), a 12 px
+floor for reading text (9-11.5 → 12, 12/12.5 → 13), uppercase labels 10 → 11, tiny glyphs
+untouched. Waiting for Saif's yes.
+
+**Console client page vs portal client page (Sep 17, Saif asked).** Console = HawkSoft
+header (status, branch, phone, email, address, in-force count, DMV reminder) + Insurance /
+DMV policy sections + the SAME card (read-only, share for admins) + raw "Ledger rows" and
+"History (audit trail)" tables + ↻ live from HawkSoft. Portal = header + policies + the card
+WITH actions (charge, documents, notes, refund, share). Recommendation given: one renderer
+(the portal's page) inside the Console with admin powers, keeping ↻ HawkSoft, DMV reminders
+and the raw tables as a collapsed "Admin" section. Not built; Saif to decide.
+
+**Clover (Sep 17 email "Action required: Upcoming changes to Inventory Webhooks").**
+Nothing to do: we use the Ecommerce API (charges, refunds) and a v3 payments read; no
+inventory API, no Clover webhooks.
 
 ⚠️ **`agent_commission` is EMPTY** (checked Sep 16): every agent is on the code default
 of 10%. On 26424 that is $74.78 of commission, $37.39 each for Sammy and Jorge. If the
@@ -1223,6 +1263,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessTabs.mjs` 98 · `mutateTabs.mjs` 55 · `fixtureTabs.mjs` · `renderTabs.mjs` · `renderConsoleTabs.mjs` · `mock_tabs.mjs` | the client's tabs (Documents, Log, notes, thumbnails, sort) |
 | `harnessActivity.mjs` 36 · `mutateActivity.mjs` 38 · `renderActivity.mjs` · `mock_activity.html` | the activity report (My activity, Console Activity) |
 | `harnessDocCenter.mjs` 40 · `mutateDocCenter.mjs` 33 · `renderDocCenter.mjs` · `mock_doccenter.html` | the document center |
+| `harnessSpeed.mjs` 15 · `mutateSpeed.mjs` 12 · `shootText.mjs` | speed (parallel reads, Console cache, thumb memory); readability before/after |
 | `harnessShare.mjs` 77 · `mutateShare.mjs` 65 · `mutateOne.mjs` · `renderPending.mjs` · `renderPendingList.mjs` · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
 | `mutateSort.mjs` 8 · `mutateTodo.mjs` 4 · (updated) `harnessAuditReview.mjs` 162 | sort on every list; the todo banner's two numbers |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |

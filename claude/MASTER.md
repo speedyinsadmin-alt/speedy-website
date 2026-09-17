@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 17. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `2880ef4` (another session pushes the public
+otherwise; `git status` is clean at `0858cf4` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -734,9 +734,19 @@ declined/void/link rows never count. **By agent** now honours the period chips (
 ALL TIME whatever was lit), leads with fees approved/waiting, and groups by the earner (it
 grouped by the charger, so a reassigned payment sat under the wrong person). One
 `auditInPeriod()` / `periodChipsHtml()` for the three views. `feesByAgent(rows)` is the one
-place the rule lives. harnessFees 22, mutateFees 14/14. Open question put to Saif: the
-agents' portal still shows "Earned/Pending" DOLLARS computed at the 10% default - with no
-real rates those numbers are fiction; proposal is to show the agent their FEES instead.
+place the rule lives. harnessFees 22, mutateFees 14/14.
+
+**THE PORTAL IS ON THE FEE BASIS (`0858cf4`).** Saif: "show the agents their fees instead."
+`FEE_BASIS = 100` in portal_home (`rateOf()` returns it; no rate table read), the bell's
+`ownerRateOf` → 100, portal_client `my_rate: 100`. Tiles read "Fees approved this month ›"
+and "Fees waiting ›"; a 50% share of a $747.75 fee is $373.88 everywhere (tiles, You helped
+on, the bell "50% of the fee on Samuel's $747.75 payment - $373.88 of the $747.75 fee", the
+share sheet "the fee Speedy kept on it"). Same numbers as Tony's Fees by agent, with one
+known difference: the portal still releases a fee in proportion to what has been COLLECTED
+(a half-paid approved payment shows half approved, half "waiting on the balance"); Tony's
+table counts the whole fee as approved once the audit is done. `agent_commission` and the
+Console's rate editor still exist but nothing the agent sees reads them. harnessShare 78,
+mutateShare 67/67; AuditReview / Refund / Speed expectations moved from 7.50 to 75.00.
 
 **MONTH CLOSE - studied, NOT built (Sep 17).** `approve_month` is only a permission label
 ("Finalises what every agent is paid for that month… the last word on a payroll figure").
@@ -777,9 +787,9 @@ and the raw tables as a collapsed "Admin" section. Not built; Saif to decide.
 Nothing to do: we use the Ecommerce API (charges, refunds) and a v3 payments read; no
 inventory API, no Clover webhooks.
 
-⚠️ **`agent_commission` is EMPTY** (checked Sep 16): every agent is on the code default
-of 10%. On 26424 that is $74.78 of commission, $37.39 each for Sammy and Jorge. If the
-real rates are different, Tony sets them from the Console (action at platform.js ~2621).
+~~⚠️ `agent_commission` is EMPTY~~ — moot since `0858cf4`: the portal shows fees, Tony does the
+math outside the system. The table and the Console's rate editor remain but drive nothing an
+agent sees (the Console's By-agent "Earned" column still uses them at the 10% default).
 
 **Sort on every list (`2c25809`).** Saif: "each tab should have sort option" — one
 control per list, remembered for the session: Documents tab (newest / oldest / by type /

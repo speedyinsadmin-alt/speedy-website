@@ -29,10 +29,13 @@ const PanelHost = {
   /* one POST helper on each page: the portal's apiPost takes the body, the Console's apiPostBody does */
   post: body => (window.apiPostBody || window.apiPost)(body),
   /* the client changed on the server (balance linked, total set, reassigned, moved):
-     re-read it and let the page's own lists catch up (the portal's home tiles) */
-  changed: async no => { if(no){ delete CLIENT_CACHE[no]; openClient(no); } await loadHome(); },
+     re-read it and let the page's own lists catch up (the portal's home tiles).
+     loadClient is the re-read: openClient alone only redraws a tab that is already
+     open, so with the cache dropped the card said "Loading client…" until the agent
+     closed the tab and searched again (found Sep 17 while lifting this out). */
+  changed: async no => { if(no){ delete CLIENT_CACHE[no]; openClient(no); await loadClient(no); } await loadHome(); },
   /* a refund went through: re-read the client */
-  reload: async no => { delete CLIENT_CACHE[no]; await openClient(no); },
+  reload: async no => { delete CLIENT_CACHE[no]; openClient(no); await loadClient(no); },
   /* the charge sheet closed */
   closed: () => { loadHome(); },
   /* the to-do sheet, if it is open, reflects a reassignment or a move */

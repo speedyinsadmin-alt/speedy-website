@@ -1,0 +1,128 @@
+/* THE CLIENT PANEL's stylesheet (Sep 17) - the charge sheet, the refund sheet, the
+   result card, moved here from portal.html verbatim so the Console gets the same
+   sheets. Rule order is the portal's. Loaded by both pages next to clientpanel.js. */
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:13px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
+.chips button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+/* THE PURPOSE GATE (Saif, Sep 14): "New business" needs a source before anything
+   else - the other purposes step back, the source row lights up, Charge waits. */
+.chips button.faded{opacity:.35}
+#chgPurpSub.need{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,124,254,.22);animation:needpulse 1.1s ease-in-out 2}
+#chgOtherWrap.need input{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,124,254,.22)}
+@keyframes needpulse{0%,100%{box-shadow:0 0 0 3px rgba(77,124,254,.22)}50%{box-shadow:0 0 0 6px rgba(77,124,254,.10)}}
+#chgGo:disabled{opacity:.45;cursor:default}
+#chgGoWhy{font-size:13px;color:var(--blue-l);text-align:center;margin-top:8px}
+/* the part-payment answer is the one that changes money; selected, it is red, not blue */
+.chips button.part.sel{background:var(--red);border-color:var(--red);color:#fff}
+.cf{background:#fff;border-radius:10px;height:48px;padding:2px 10px;margin:6px 0;overflow:hidden}
+.cf iframe{width:100% !important;height:44px !important;border:0 !important;display:block}
+.clover-footer{position:fixed !important;bottom:8px !important;right:8px !important;left:auto !important;top:auto !important;width:250px !important;height:40px !important;max-width:250px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:transparent !important;z-index:60}
+.clover-footer iframe{width:250px !important;height:40px !important;border:0 !important;background:transparent !important}
+/* Sheets are taller than the screen constantly - fourteen policies, sixteen
+   notifications, a month of earnings. Relying on the outer container to scroll was
+   not enough in practice, so the CARD itself is capped to the viewport and scrolls.
+   100dvh, not 100vh: on mobile 100vh is the height WITHOUT the browser chrome, so
+   the last rows sit under the address bar and cannot be reached. */
+#chargeSheet,#todoSheet,#newsSheet,#shareSheet,#helpSheet,#earnSheet,#refundSheet{position:fixed;inset:0;background:var(--scrim);overflow-y:auto;-webkit-overflow-scrolling:touch;z-index:50;padding:16px}
+#chargeSheet > div,#todoSheet > div,#newsSheet > div,#shareSheet > div,#helpSheet > div,#earnSheet > div,#refundSheet > div{max-height:calc(100dvh - 32px)}
+#chargeSheet > div > .card,#todoSheet > div > .card,#newsSheet > div > .card,#shareSheet > div > .card,#helpSheet > div > .card,#earnSheet > div > .card,#refundSheet > div > .card{
+  max-height:calc(100dvh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.res{border-radius:12px;padding:16px;margin-top:12px}
+.res.good{background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.45)}
+.res.bad{background:rgba(224,49,49,.12);border:1px solid rgba(224,49,49,.45)}
+/* ---------- REFUNDS · stages 1-3 ----------
+   Every class here is NEW to this file. Checked before writing rather than assumed:
+   .sec, .conseq, .warn, .loss, .will, .rowacts, .actghost, .actrefund, .note and
+   .lbl had no rule in portal.html, and --red-ink did not exist. Six times this week
+   markup went in against CSS living in a sibling file — class="go" rendered as a
+   browser-default white slab on the Staff page for exactly that reason. */
+.sec{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;
+  margin:18px 0 9px;display:flex;align-items:center;gap:9px}
+.sec::after{content:"";flex:1;height:1px;background:var(--line)}
+.sec:first-child{margin-top:0}
+/* The consequence of the choice just made, shown BEFORE the button and never after. */
+.conseq{background:var(--field);border:1px solid var(--line);border-left:2px solid var(--blue);
+  border-radius:0 10px 10px 0;padding:10px 12px;font-size:13px;line-height:1.55;margin-top:8px}
+.conseq b{color:var(--ink)}
+.conseq.good{border-left-color:var(--green)}
+.warn{background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.45);border-radius:10px;
+  padding:11px 13px;font-size:13px;line-height:1.55;color:var(--amber-ink);margin-top:10px}
+/* A carrier that keeps its share on a refunded sale is money Speedy has LOST. */
+.loss{background:rgba(224,49,49,.10);border:1px solid rgba(224,49,49,.42);border-radius:10px;
+  padding:11px 13px;font-size:13px;line-height:1.55;margin-top:8px}
+.loss b{color:var(--red-ink)}
+/* The last thing read before money leaves: a list of facts, deliberately unstyled. */
+/* THE REFUND STEPPER (Sep 15): four numbered questions, one open at a time, the
+   answered ones collapsed to a line, a summary that fills in as answers arrive. */
+.rhdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.rx{color:var(--dim);font-size:19px;cursor:pointer;padding:0 4px}
+.rpay{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--mute);margin:10px 0 2px}
+.rpay b{color:var(--ink);font-size:15px}
+.rpill{background:var(--field);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px}
+.rstep{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.rstep.dim .rq{color:var(--dim)} .rstep.dim .rnum{opacity:.6}
+.rstep.open .rq{color:var(--ink)}
+.rnum{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--dim);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;cursor:pointer}
+.rnum.on{border-color:var(--blue);color:var(--blue)}
+.rnum.done{border-color:var(--green);background:var(--green);color:#fff}
+.rbody{flex:1;min-width:0}
+.rq{font-size:15px;font-weight:700;cursor:pointer}
+.rq small{font-weight:400;color:var(--mute);font-size:13px;margin-left:6px}
+.rdone{font-size:13.5px;margin-top:2px;color:var(--mute)} .rdone b{color:var(--ink)}
+.rchg{color:var(--blue);font-size:13px;margin-left:6px;cursor:pointer}
+.rchoice{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.rradio{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer;background:var(--card)}
+.rradio.on{border-color:var(--blue);background:rgba(77,124,254,.10)}
+.rradio .dot{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--dim);margin-top:3px}
+.rradio.on .dot{border-color:var(--blue);background:radial-gradient(var(--blue) 45%,transparent 50%)}
+.rradio .t{font-size:14px;font-weight:600;color:var(--ink)}
+.rradio .m{font-size:13px;color:var(--mute);margin-top:1px}
+.ramt{display:flex;align-items:center;gap:8px;margin-top:10px}
+.ramt input{width:130px;font-size:17px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);color:var(--ink);background:var(--field)}
+.ramt input.need{border-color:var(--red)}
+.rsub{font-size:13px;color:var(--mute);margin-top:7px} .rsub b{color:var(--ink)}
+#refundSheet textarea.need{border-color:var(--red)}
+.rsum{margin-top:14px;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+.rsumh{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:5px}
+.rsum ul{margin:0;padding:0;list-style:none;font-size:13px;line-height:1.55}
+.rsum li{padding:3px 0;display:flex;gap:8px} .rsum li::before{content:"\2192";color:var(--dim);flex:none}
+.rsum b{color:var(--ink)} .rsum .neg{color:var(--red-ink);font-weight:700} .rwait{color:var(--dim);font-style:italic}
+.rprog{text-align:center;font-size:13px;color:var(--mute);margin-top:8px}
+.rbar{display:inline-block;width:110px;height:5px;border-radius:5px;background:var(--line);vertical-align:middle;margin-right:8px;overflow:hidden}
+.rbar i{display:block;height:100%;background:var(--green)}
+.rcancel{text-align:center;font-size:13.5px;color:var(--mute);margin-top:10px;cursor:pointer}
+.rowacts{display:flex;gap:7px;margin-top:8px}
+.rowacts > *{flex:1}
+.actghost{text-align:center;background:transparent;border:1px solid var(--line);color:var(--blue-l);
+  border-radius:9px;padding:7px;font-size:13px;font-weight:600;cursor:pointer}
+/* Findable, not fat-fingerable: outlined rather than filled, and it opens a sheet
+   that asks four questions before anything moves. */
+.actrefund{text-align:center;background:transparent;border:1px solid rgba(224,49,49,.45);
+  color:var(--red-ink);border-radius:9px;padding:7px;font-size:13px;font-weight:700;cursor:pointer}
+@media(max-width:420px){ .rowacts{flex-direction:column} }
+
+/* ---- Console only. The portal styles label / input / .btn / .card / .kv for its whole
+   page; the Console has its own .card, .kv and .note, so the panel's copies are scoped
+   to .cpanel (the Console puts that class on #clientPanel and on both sheets; the
+   portal never uses it). Values are the portal's, dark theme. ---- */
+.cpanel.hide,.cpanel .hide{display:none!important}
+.cpanel .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:12px}
+.cpanel .dim{color:var(--dim)} .cpanel .muted{color:var(--mute)}
+.cpanel label{font-size:13px;color:var(--mute);display:block;margin-bottom:5px}
+.cpanel select,.cpanel input,.cpanel textarea{width:100%;background:var(--field);border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--ink);font-size:14px;outline:none;font-family:inherit}
+.cpanel textarea{field-sizing:content;min-height:62px;resize:vertical;line-height:1.5}
+.cpanel select:focus,.cpanel input:focus,.cpanel textarea:focus{border-color:var(--blue)}
+.cpanel .btn{display:block;width:100%;text-align:center;border:0;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
+.cpanel .btn-blue{background:var(--blue);color:#fff}
+.cpanel .btn-red{background:var(--red);color:#fff}
+.cpanel .btn-ghost{background:transparent;color:var(--mute);border:1.5px solid var(--line);font-weight:600}
+.cpanel .row{display:flex;justify-content:space-between;align-items:center}
+.cpanel .kv{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid var(--hair)}
+.cpanel .note{font-size:12px;color:var(--mute);margin-top:5px;line-height:1.5}
+.cpanel .will{margin:8px 0 0;padding:0;list-style:none;font-size:13px;line-height:1.6}
+.cpanel .will li{padding:6px 0 6px 20px;position:relative;border-bottom:1px solid var(--hair)}
+.cpanel .will li:last-child{border-bottom:0}
+.cpanel .will li::before{content:"\2192";position:absolute;left:0;color:var(--dim)}
+.cpanel .will b{color:var(--ink)}
+.cpanel .will .neg{color:var(--red-ink);font-weight:700}
+.cpanel .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:12px;font-weight:600;color:var(--blue-l);cursor:pointer}

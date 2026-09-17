@@ -297,8 +297,8 @@ async function verifyAgent(req, s) {
 
 async function smsSend(to, text) {
   /* through our own /api/sms with the admin key: one RingCentral auth flow in the codebase */
-  const key = process.env.ADMIN_KEY;
-  if (!key) return { ok: false, error: 'ADMIN_KEY not set' };
+  const key = process.env.ADMIN_API_KEY || process.env.ADMIN_KEY;
+  if (!key) return { ok: false, error: 'ADMIN_API_KEY not set' };
   try {
     const r = await fetch(`${SITE}/api/sms`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': key }, body: JSON.stringify({ action: 'send', to, text: text.slice(0, 1000), purpose: 'chat' }) });
     return await r.json();

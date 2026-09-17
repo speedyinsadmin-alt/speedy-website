@@ -77,7 +77,11 @@ export default async function handler(req, res) {
   /* Who is asking. Agents reach this with their portal token; the admin key is for
      testing from the Console. */
   let who = 'admin key';
-  if (req.headers['x-admin-key'] !== process.env.ADMIN_KEY) {
+  /* Sep 17: this read ADMIN_KEY, a name that was never set in Vercel, so
+     `undefined !== undefined` let a request with NO key through as admin. Same name as
+     every other file now, and an unset key never matches anything. */
+  const ADMIN = process.env.ADMIN_API_KEY || process.env.ADMIN_KEY;
+  if (!ADMIN || req.headers['x-admin-key'] !== ADMIN) {
     const tok = req.headers['x-user-token'] || req.headers['x-id-token'];
     if (!tok) return res.status(401).json({ ok: false, error: 'Not authorized' });
     try {

@@ -183,6 +183,21 @@ records "no_escalation_phones".
   Saif's phone incl. what caller ID it shows. Moving the number later is two clicks.
 - **Nothing in code waits on this** — the fallback to 747 keeps every text flowing.
 
+**MMS PHOTOS (`e0357fa`):** a customer texted a licence photo + five car photos to Sammy's
+line and the Inbox showed only "[2 attachments]" / "[6 attachments]" — Saif: "it's a must".
+Now: `rc-sms.js` downloads every media attachment at ingest (host pinned to
+*.ringcentral.com, the JWT bearer, 25 MB cap, up to 10 per message) into the PRIVATE
+bucket `chat-media` under `sms/<conv>/<rcMessageId>-<attId>.<ext>` and records
+`messages.attachments` [{id, content_type, size, path, ok, error, uri}]; a failed
+download keeps its uri for `rc-subscribe?action=media_backfill`. RingCentral lists the
+text itself as an attachment of type Text — excluded from the count. `chat.js
+action=media` streams one file as base64 after the thread's visibility check (owner
+threads: owner + admins). Inbox: thumbnails, lightbox with Save, files as downloads,
+"not stored yet" shown honestly. **Reading another extension's message store WORKS with
+Saif's token** (the backfill stored 6/6 from Sammy's line): the "own extension" rule is
+about SENDING only. Agents' RingCentral logins are the same @speedyins.com emails, so
+per-agent OAuth (option D) maps one-to-one when it comes. Verified by Tony in the Inbox.
+
 ### ✅ SEP 16 NIGHT · SPEEDY CHAT STAGE 2 — THE AGENT INBOX (`a631cb1`)
 Saif's stage-1 test: three chats from his phone/PC, all became leads (5, 6, 7) — the
 first two only after a fix: the leave form was refused server-side on the 10-digit

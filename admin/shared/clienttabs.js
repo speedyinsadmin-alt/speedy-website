@@ -263,28 +263,41 @@ async function pdfjs(){
 }
 /* Fill the boxes: stored thumbs first (one small call), then draw the PDFs that have
    none - first page, 240px, JPEG - and save each so it is drawn once ever. */
+/* SPEED (Sep 17). Every redraw of the Documents or Log tab - a sort, a filter, a file
+   picked for a note - ran this again: the thumbs call, and for each PDF without a
+   stored thumb the WHOLE file downloaded and rendered again (up to 8 files, up to 5 MB
+   each). Once seen, a thumb lives here for the session; a PDF that could not be drawn
+   is not fetched twice. */
+const THUMB_MEM = {}, THUMB_TRIED = new Set();
 async function fillThumbs(no, c, root){
   const boxes = [...document.querySelectorAll((root || '.ctdocs') + ' [data-thumb-for]')];
   if(!boxes.length) return;
   const have = new Set();
+  for(const b of boxes){ const id = b.dataset.thumbFor; if(THUMB_MEM[id]){ have.add(id); setThumb(id, THUMB_MEM[id]); } }
+  const missing = boxes.filter(b => !have.has(b.dataset.thumbFor) && !THUMB_TRIED.has(b.dataset.thumbFor));
+  if(!missing.length) return;                       // everything on screen is already known: no network
   try{
     const r = await window.api('portal_thumbs&no=' + encodeURIComponent(no));
-    ((r && r.thumbs) || []).forEach(x => { have.add(x.id); setThumb(x.id, x.thumb_b64); });
+    ((r && r.thumbs) || []).forEach(x => { have.add(x.id); THUMB_MEM[x.id] = x.thumb_b64; setThumb(x.id, x.thumb_b64); });
   }catch(e){}
-  const todo = boxes.filter(b => b.dataset.pdf === '1' && !have.has(b.dataset.thumbFor)).slice(0, 8);
+  for(const b of boxes) if(!have.has(b.dataset.thumbFor) && b.dataset.pdf !== '1') THUMB_TRIED.add(b.dataset.thumbFor);   // nothing more to draw for these
+  const todo = boxes.filter(b => b.dataset.pdf === '1' && !have.has(b.dataset.thumbFor) && !THUMB_TRIED.has(b.dataset.thumbFor)).slice(0, 8);
   for(const b of todo){
     const id = b.dataset.thumbFor;
+    THUMB_TRIED.add(id);
     try{
       const r = await window.api('portal_doc&id=' + encodeURIComponent(id));
       if(!r || !r.ok || !r.file_b64) continue;
       const dataUrl = await window.ClientTabs.pdfFirstPage(r.file_b64);   // through the export, so a page can swap the renderer
       if(!dataUrl) continue;
+      THUMB_MEM[id] = dataUrl;
       setThumb(id, dataUrl);
       carrierPost({ action: 'set_thumb', attachment_id: id, thumb_b64: dataUrl });
     }catch(e){ /* the placeholder stays; nothing else is affected */ }
   }
 }
 function setThumb(id, dataUrl){
+  if(dataUrl) THUMB_MEM[id] = dataUrl;
   document.querySelectorAll('[data-thumb-for="' + id + '"]').forEach(b => {
     b.innerHTML = '<img src="' + dataUrl + '" alt="">'; b.classList.add('has');
   });
@@ -590,5 +603,5 @@ async function addNote(no){
   if(CUR && CUR.opts.rerender) CUR.opts.rerender(no);
 }
 
-window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, thumbBox, setThumb, carrierPost, pageToken, forLine, bytesLabel, canRelabel, RELABEL, sort: setSort, sortRows, sortHtml, sortKey, SORTS, DOC_SORT_KEYS, DOC_SORT_FIELDS, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage };
+window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, thumbBox, setThumb, carrierPost, pageToken, forLine, bytesLabel, canRelabel, RELABEL, sort: setSort, sortRows, sortHtml, sortKey, SORTS, DOC_SORT_KEYS, DOC_SORT_FIELDS, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage, THUMB_MEM, THUMB_TRIED };
 })();

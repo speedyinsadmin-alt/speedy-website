@@ -599,7 +599,8 @@ let OPEN_CLIENT = null; // client_no currently open in drill-in
 async function render() {
   const el = $('#view');
   el.innerHTML = '<div class="load">Loading…</div>';
-  if (TAB === 'clients') return OPEN_CLIENT ? renderOurClient(el, OPEN_CLIENT) : renderClients(el);
+  /* a policy toggle or a tab return redraws from the cache while it is under a minute old */
+  if (TAB === 'clients') return OPEN_CLIENT ? renderOurClient(el, OPEN_CLIENT, false, { cached: !!(CONSOLE_CARD[OPEN_CLIENT] && Date.now() - CONSOLE_CARD[OPEN_CLIENT].at < 60000) }) : renderClients(el);
   if (TAB === 'hs') return renderHS(el);
   if (TAB === 'ledger') return renderLedger(el);
   if (TAB === 'calls') return renderCalls(el);
@@ -1010,8 +1011,18 @@ function policyRows(list, isDmv) {
 const POL_OPEN = {};
 function togglePol(pid){ POL_OPEN[pid] = !POL_OPEN[pid]; render(); }
 
-async function renderOurClient(el, no, _bg) {
-  const r = await api('our_client&no=' + no + (_bg ? '&refresh=1' : ''));
+/* SPEED (Sep 17, Saif: "the system is slow"). Every tab switch, sort, filter, file
+   attached to a note and relabel used to call this with _bg=true - which went LIVE to
+   HawkSoft and re-read the whole card, seconds each time. The tabs already mutate the
+   card object in place (a note, a relabel, a share), so a rerender needs no network at
+   all: CONSOLE_CARD keeps the last answer per client and `cached` redraws from it. The
+   network is used on open, on the one background HawkSoft refresh after open, and on
+   the ↻ button. */
+const CONSOLE_CARD = {};
+function refreshClientCard(no){ const el = $('#view'); if (el && OPEN_CLIENT === no) renderOurClient(el, no, true, { cached: true }); }
+async function renderOurClient(el, no, _bg, o) {
+  const cached = !!(o && o.cached) && CONSOLE_CARD[no];
+  const r = cached ? CONSOLE_CARD[no].r : await api('our_client&no=' + no + (_bg ? '&refresh=1' : ''));
   if (!r || !r.ok || !r.client) { el.innerHTML = '<div class="err">Client load failed.</div>'; return; }
   const c = r.client;
   const name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '(no name)';
@@ -1076,11 +1087,14 @@ async function renderOurClient(el, no, _bg) {
      underneath, collapsed, for the columns the card does not carry. */
   let cardHtml = '<div class="muted" style="font-size:12px">Loading the payment card…</div>';
   try {
-    const pc = await api('portal_client&no=' + no);
+    /* the card is re-read only on a real open or ↻; the background HawkSoft refresh
+       after open touches the client and policies, not the payments */
+    const pc = (cached || (_bg && CONSOLE_CARD[no] && CONSOLE_CARD[no].pc && CONSOLE_CARD[no].pc.ok)) ? CONSOLE_CARD[no].pc : await api('portal_client&no=' + no);
+    CONSOLE_CARD[no] = { r, pc, at: cached ? CONSOLE_CARD[no].at : Date.now() };
     /* the same three tabs the agent has (Sep 16): the card, the documents grouped by what
        they are, and the log in sentences. Read-only card; notes may be added here too. */
     if (pc && pc.ok) cardHtml = ClientTabs.html(pc, { me: r.email || null, clientNo: no, actions: false, page: 'console',
-      payHtml: PayCard.html(pc, { me: r.email || null, clientNo: no, actions: false, share: !!pc.is_admin }), rerender: () => { if (OPEN_CLIENT === no) renderOurClient(el, no, true); } });
+      payHtml: PayCard.html(pc, { me: r.email || null, clientNo: no, actions: false, share: !!pc.is_admin }), rerender: () => refreshClientCard(no) });
     else cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded' + (pc && pc.error ? ': ' + esc(pc.error) : '') + '.</div>';
   } catch (e) { cardHtml = '<div class="muted" style="font-size:12px">The payment card could not be loaded.</div>'; }
   const payBody = '<table><tr><th>When</th><th>Type</th><th>Amount</th><th class="hidemob">Purpose</th><th class="hidemob">Office</th><th>Ref</th></tr>'
@@ -1108,13 +1122,14 @@ async function renderOurClient(el, no, _bg) {
   el.innerHTML = h;
 
   // First open (not a bg pass) and data isn't live yet -> silently refresh once from HawkSoft
-  if (!_bg && !r.live && OPEN_CLIENT === no) {
+  if (!_bg && !cached && !r.live && OPEN_CLIENT === no) {
     setTimeout(() => { if (OPEN_CLIENT === no) renderOurClient(el, no, true); }, 50);
   }
 }
 
 function refreshClient(no) {
   const el = $('#view');
+  delete CONSOLE_CARD[no];               // ↻ means "from HawkSoft and the database, now"
   if (el) renderOurClient(el, no, true);
 }
 

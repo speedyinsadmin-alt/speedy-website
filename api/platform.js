@@ -2118,10 +2118,10 @@ if (view === 'portal_share_due') {
     if (view === 'portal_client') {
       const no = String(req.query.no || '').replace(/\D/g, '');
       if (!no) return res.status(400).json({ ok: false, error: 'client no required' });
-      const cl = await sbGet(s, `clients?client_no=eq.${no}&select=*`);
-      const client = (cl.rows || [])[0];
-      if (!client) return res.status(404).json({ ok: false, error: 'not found' });
-      const po = await sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`);
+      /* SPEED (Sep 17). These eight reads used to run one after the other - eight
+         Vercel->Supabase hops, ~0.8 s before the card could draw. None depends on
+         another (the test-row rule below reads only the cached roster), so they are
+         fired together and awaited once. Same rows, same shape, one hop. */
       // Full payment history + document METADATA. Deliberately no file_b64 and no
       // thumb_b64 here: bytes are fetched only when a document is opened.
       /* ITEM 84. Test rows are hidden from every real client card, as they should be —
@@ -2134,23 +2134,29 @@ if (view === 'portal_share_due') {
          ADMIN_ALLOWLIST, so the code list said he was not an admin. Item 70's rule. */
       const isAdminHere = (await rosterAdmins()).has(me);
       const showTest = (Number(no) === TEST_CLIENT && isAdminHere);
-      const pay = await sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,audit_submitted_by,audit_submitted_at,audit_sendback,audit_completed_by,audit_completed_at,helper_email,helper_share_pct,share_locked_at,share_set_by,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`);
-      /* the caller's own commission rate, so the share sheet can show dollars (Sep 16) */
-      const myRate = await sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`);
+      const [cl, po, pay, myRate, docs, evs, rqs, dec] = await Promise.all([
+        sbGet(s, `clients?client_no=eq.${no}&select=*`),
+        sbGet(s, `policies?client_no=eq.${no}&select=*&order=expiration_date.desc`),
+        sbGet(s, `bridge_ledger?client_id=eq.${no}${showTest ? '' : '&is_test=is.false'}&select=id,ts,amount,purpose,audit_status,kind,ref,agent,fee_amount,service_cost,carrier_name,commission_to,producer_code,total_owed,balance_of,refund_of,refund_reason,refund_carrier,refund_note,extra,is_test,audit_submitted_by,audit_submitted_at,audit_sendback,audit_completed_by,audit_completed_at,helper_email,helper_share_pct,share_locked_at,share_set_by,policy_number:extra->>policyNumber,policy_guid:extra->>policyGuid&order=ts.desc&limit=50`),
+        /* the caller's own commission rate, so the share sheet can show dollars (Sep 16) */
+        sbGet(s, `agent_commission?agent_email=eq.${encodeURIComponent(me)}&select=percentage`),
       /* uploaded_by: any agent may now add documents to any payment, so the chip has
          to say who did. Short text column — no meaningful payload cost. */
-      const docs = await sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,doc_label,filename,bytes,mime,amount,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`);
+        sbGet(s, `attachments?client_no=eq.${no}&select=id,payment_id,kind,doc_type,doc_label,filename,bytes,mime,amount,created_at,filed_hawksoft,uploaded_by&order=created_at.desc&limit=200`),
       /* THE LOG TAB (Sep 16): every event on the client. Payload included - the tab
          writes the sentence from it. 300 is more than any client has yet. */
-      const evs = await sbGet(s, `events?client_no=eq.${no}&select=id,ts,actor,kind,source,payload&order=ts.desc&limit=300`);
+        sbGet(s, `events?client_no=eq.${no}&select=id,ts,actor,kind,source,payload&order=ts.desc&limit=300`),
       /* Open refund requests on this client, so the card can say "waiting for Tony"
          instead of offering the button again. */
-      const rqs = await sbGet(s, `refund_requests?client_id=eq.${no}&status=eq.pending&select=id,payment_id,requested_by,requested_at,amount,reason`);
-      const rqBy = Object.fromEntries((rqs.rows || []).map(r => [r.payment_id, r]));
+        sbGet(s, `refund_requests?client_id=eq.${no}&status=eq.pending&select=id,payment_id,requested_by,requested_at,amount,reason`),
       /* and the last DECISION on each payment (Sep 15): the agent who asked sees what the
          owner did with it - approved as asked, approved for a different amount, declined
          and why - instead of a refund row appearing with no explanation, or nothing. */
-      const dec = await sbGet(s, `refund_requests?client_id=eq.${no}&status=in.(approved,declined)&select=id,payment_id,requested_by,requested_at,amount,approved_amount,status,decided_by,decided_at,decision_note&order=decided_at.desc&limit=40`);
+        sbGet(s, `refund_requests?client_id=eq.${no}&status=in.(approved,declined)&select=id,payment_id,requested_by,requested_at,amount,approved_amount,status,decided_by,decided_at,decision_note&order=decided_at.desc&limit=40`),
+      ]);
+      const client = (cl.rows || [])[0];
+      if (!client) return res.status(404).json({ ok: false, error: 'not found' });
+      const rqBy = Object.fromEntries((rqs.rows || []).map(r => [r.payment_id, r]));
       const decBy = {};
       for (const r of (dec.rows || [])) if (!decBy[r.payment_id]) decBy[r.payment_id] = r;
       return res.status(200).json({

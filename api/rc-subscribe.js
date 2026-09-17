@@ -95,13 +95,24 @@ const norm = (v) => String(v || '').toLowerCase().replace(/\(.*?\)/g, ' ').repla
 async function refreshNumbers(token) {
   const r = await rc(token, '/restapi/v1.0/account/~/phone-number?perPage=500');
   if (!r.ok) throw new Error(`phone-number HTTP ${r.status}`);
+  /* Sep 17: the account-level listing carries the extension id but NOT its name, and
+     no `features` at all - so names come from the extension list and SMS capability
+     is inferred from the number type (every local Direct/Company/Main number on this
+     account is on the approved 10DLC campaign; toll-free and fax are not). */
+  const exts = await rc(token, '/restapi/v1.0/account/~/extension?perPage=500');
+  const extById = {};
+  for (const e of (exts.ok && exts.json && exts.json.records) || []) extById[String(e.id)] = { name: e.name || (e.contact ? [e.contact.firstName, e.contact.lastName].filter(Boolean).join(' ') : ''), number: String(e.extensionNumber || ''), type: e.type || '' };
+  const TOLL_FREE = /^\+1(800|833|844|855|866|877|888)/;
   const { base, key } = sbEnv();
   const agents = await fetch(`${base}/rest/v1/agents?active=is.true&select=email,full_name,branch`, { headers: sbHdrs(key) }).then((x) => x.json()).catch(() => []);
   const rows = [];
   for (const n of (r.json && r.json.records) || []) {
     const phone10 = d10(n.phoneNumber); if (!phone10) continue;
     const feats = Array.isArray(n.features) ? n.features : [];
-    const extName = n.extension ? (n.extension.name || '') : '';
+    const ext = n.extension ? extById[String(n.extension.id)] : null;
+    const extName = n.extension ? (n.extension.name || (ext && ext.name) || '') : '';
+    const usage = n.usageType || '';
+    const smsCapable = feats.includes('SmsSender') || (!feats.length && /^(DirectNumber|CompanyNumber|MainCompanyNumber)$/.test(usage) && !TOLL_FREE.test(n.phoneNumber || ''));
     let agent = null;
     if (n.extension && extName) {
       const toks = norm(extName);
@@ -110,8 +121,8 @@ async function refreshNumbers(token) {
       else { const byFirst = (Array.isArray(agents) ? agents : []).filter((a) => { const t = norm(a.full_name); return t[0] && toks.includes(t[0]); }); if (byFirst.length === 1) agent = byFirst[0]; }
     }
     rows.push({
-      phone10, e164: n.phoneNumber, extension_id: n.extension ? String(n.extension.id) : null, extension_number: n.extension ? String(n.extension.extensionNumber || '') : null,
-      extension_name: extName || null, usage_type: n.usageType || null, sms: feats.includes('SmsSender'),
+      phone10, e164: n.phoneNumber, extension_id: n.extension ? String(n.extension.id) : null, extension_number: n.extension ? String(n.extension.extensionNumber || (ext && ext.number) || '') : null,
+      extension_name: extName || null, usage_type: usage || null, sms: smsCapable,
       branch: BRANCH_LINES[phone10] || (agent && BRANCH_OF_NAME[agent.branch]) || null, agent_email: agent ? agent.email : null, label: n.label || null, updated_at: new Date().toISOString(),
     });
   }
@@ -142,6 +153,7 @@ async function smsCreate(token) {
     error: r.ok ? null : (r.json?.message || `HTTP ${r.status}`),
     numbers: smsRows.map((x) => ({ number: x.e164, ext: x.extension_number, name: x.extension_name, usage: x.usage_type, branch: x.branch, agent: x.agent_email })),
     unmapped: smsRows.filter((x) => !x.branch && !x.agent_email).map((x) => x.e164 + ' ' + (x.extension_name || '')),
+    no_extension: smsRows.filter((x) => !x.extension_id).map((x) => x.e164 + ' (' + (x.usage_type || '') + ') - no message store to subscribe to; assign it to a user or queue in RingCentral'),
   };
 }
 async function smsRenew(token) {

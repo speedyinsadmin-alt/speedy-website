@@ -478,7 +478,7 @@ async function agentHandler(req, res, s, b, action) {
   if (action === 'thread') {
     if (conv.visibility === 'owner' && !me.admin && conv.claimed_by !== me.email) return res.status(403).json({ ok: false, error: 'Not your thread' });
     const [ms, prev, card] = await Promise.all([
-      sbGet(s, `messages?conversation_id=eq.${id}&select=id,ts,sender_kind,sender,audience,channel,body&order=id.asc&limit=500`),
+      sbGet(s, `messages?conversation_id=eq.${id}&select=id,ts,sender_kind,sender,audience,channel,body,sms_from&order=id.asc&limit=500`),
       conv.visitor_phone ? sbGet(s, `conversations?visitor_phone=eq.${conv.visitor_phone}&id=neq.${id}&select=id,created_at,status,outcome,topic,claimed_by,lead_id&order=id.desc&limit=5`) : { rows: [] },
       clientCard(s, conv),
     ]);
@@ -547,7 +547,7 @@ async function agentHandler(req, res, s, b, action) {
       conv.claimed_by = me.email; conv.status = 'active';
     }
     /* the visitor left the page and gave a phone: the reply goes out as a text too */
-    let via = 'web', rc_message_id = null;
+    let via = 'web', rc_message_id = null, sms_from = null;
     const gone = !conv.visitor_seen_at || (Date.now() - new Date(conv.visitor_seen_at).getTime()) > VISITOR_GONE_MS;
     let lastByText = false;
     if (!whisper && conv.channel !== 'sms' && !gone && conv.visitor_phone) { const lv = await sbGet(s, `messages?conversation_id=eq.${id}&sender_kind=eq.visitor&select=channel&order=id.desc&limit=1`); lastByText = !!(lv.rows[0] && lv.rows[0].channel === 'sms'); }
@@ -555,15 +555,15 @@ async function agentHandler(req, res, s, b, action) {
       /* from the thread's own line (the branch number, or the agent's direct number it came in on) */
       const text = conv.channel === 'sms' ? body : `Speedy Insurance (${me.first}): ${body} — reply by text or call (951) 695-1500`;
       const r = conv.is_test ? { ok: true, skipped: true } : await smsSend('+1' + conv.visitor_phone, text, conv.line || null);
-      if (r && r.ok) { via = 'sms'; rc_message_id = r.id ? String(r.id) : null; }
+      if (r && r.ok) { via = 'sms'; rc_message_id = r.id ? String(r.id) : null; sms_from = r.from ? String(r.from).replace(/\D/g, '').replace(/^1(\d{10})$/, '$1') : null; }
       else if (conv.channel === 'sms') return res.status(502).json({ ok: false, error: 'The text could not be sent' + (r && r.error ? ': ' + r.error : '') });
     }
-    const m = await sbPost(s, 'messages', { conversation_id: id, sender_kind: 'agent', sender: me.email, audience: whisper ? 'agents' : 'visitor', channel: via, body, rc_message_id, is_test: conv.is_test });
+    const m = await sbPost(s, 'messages', { conversation_id: id, sender_kind: 'agent', sender: me.email, audience: whisper ? 'agents' : 'visitor', channel: via, body, rc_message_id, sms_from, is_test: conv.is_test });
     if (!m.ok) return res.status(502).json({ ok: false, error: 'Could not send' });
     const patch = { agent_seen_at: now, updated_at: now }; if (!whisper && !conv.first_reply_at) patch.first_reply_at = now;
     await sbPatch(s, `conversations?id=eq.${id}`, patch);
     if (!whisper && !conv.first_reply_at) await record(s, { actor: me.email, kind: 'chat.first_reply', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, seconds: secs(conv.created_at, now), via, is_test: conv.is_test } });
-    return res.status(200).json({ ok: true, id: m.row.id, via });
+    return res.status(200).json({ ok: true, id: m.row.id, via, sms_from });
   }
 
   if (action === 'handoff') {

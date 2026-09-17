@@ -152,14 +152,25 @@ export default async function handler(req, res) {
     let out;
     try {
       const token = await getAccessToken();
-      const r = await fetch(`${RC_BASE()}/restapi/v1.0/account/~/extension/${encodeURIComponent(extPath)}/sms`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: { phoneNumber: from }, to: [{ phoneNumber: to }], text }),
-      });
-      const j = await r.json().catch(() => ({}));
-      out = { ok: r.status === 200, httpStatus: r.status, id: j.id || null,
-              status: j.messageStatus || null, from, error: r.status === 200 ? null : (j.message || j.errorCode || 'send failed') };
+      const send = async (fromNum, ext) => {
+        const r = await fetch(`${RC_BASE()}/restapi/v1.0/account/~/extension/${encodeURIComponent(ext)}/sms`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: { phoneNumber: fromNum }, to: [{ phoneNumber: to }], text }),
+        });
+        const j = await r.json().catch(() => ({}));
+        return { ok: r.status === 200, httpStatus: r.status, id: j.id || null,
+                 status: j.messageStatus || null, from: fromNum, error: r.status === 200 ? null : (j.message || j.errorCode || 'send failed') };
+      };
+      out = await send(from, extPath);
+      /* Sep 17: RingCentral only sends from numbers the API user's own extension owns
+         (the "extended scope" error names a permission that does not exist). When a
+         branch line is refused, the text still goes - from our own line - and the
+         caller is told which number it left from. */
+      if (!out.ok && extPath !== '~' && process.env.RC_SMS_FROM && /another extension|extended scope|OutboundSMS/i.test(String(out.error))) {
+        const fallback = await send(process.env.RC_SMS_FROM, '~');
+        if (fallback.ok) out = { ...fallback, fell_back_from: from };
+      }
     } catch (e) {
       out = { ok: false, error: String(e.message || e) };
     }

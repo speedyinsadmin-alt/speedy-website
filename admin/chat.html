@@ -310,7 +310,7 @@ function renderThread(first) {
     if (m.sender_kind === 'system') return `<div class="m sys">${esc(m.body)} · ${hhmm(m.ts)}</div>`;
     if (m.sender_kind === 'visitor') return `<div class="m v">${esc(m.body)}<small>${hhmm(m.ts)}</small></div>`;
     if (m.audience === 'agents') return `<div class="m w">&#128065; ${esc(m.name || m.sender)} (whisper): ${esc(m.body)}<small>${hhmm(m.ts)}</small></div>`;
-    return `<div class="m a">${esc(m.body)}<small>${esc(m.name || '')} · ${hhmm(m.ts)}${m.channel === 'sms' ? ' · sent as text' : ''}</small></div>`;
+    return `<div class="m a">${esc(m.body)}<small>${esc(m.name || '')} · ${hhmm(m.ts)}${m.channel === 'sms' ? ' · sent as text' + (m.sms_from && m.sms_from !== c.line ? ' from ' + esc(pretty(m.sms_from)) : '') : ''}</small></div>`;
   }).join('');
   th.scrollTop = th.scrollHeight;
   const bn = c.branch_name.replace('Riverside — ', '');
@@ -335,7 +335,7 @@ async function sendReply() {
   const j = await api({ action: 'reply', id: OPEN, body: t, whisper: WHISPER });
   $('#rBtn').disabled = false;
   if (!j.ok) { toast(j.error || 'Could not send'); return; }
-  $('#rText').value = ''; if (j.via === 'sms') toast('Visitor is away — sent as a text'); await loadThread(false);
+  $('#rText').value = ''; if (j.via === 'sms') toast(j.sms_from && THREAD && THREAD.conversation.line && j.sms_from !== THREAD.conversation.line ? 'Sent as a text from ' + pretty(j.sms_from) + ' (RingCentral would not send from the branch line)' : 'Sent as a text'); await loadThread(false);
 }
 async function takeover() { const j = await api({ action: 'takeover', id: OPEN }); toast(j.ok ? 'Yours now.' : j.error); loadThread(false); }
 async function unclaim() { const j = await api({ action: 'unclaim', id: OPEN }); toast(j.ok ? 'Back in the queue.' : j.error); if (j.ok) showQueue(); refreshInbox(); }

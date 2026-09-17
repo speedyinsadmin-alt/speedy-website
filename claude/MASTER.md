@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 17. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `9576105` (another session pushes the public
+otherwise; `git status` is clean at `2880ef4` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -657,7 +657,43 @@ every ~10 s and /api/sms gets a 401 every ~10 s (2,800+ calls/day) - the chat se
 harnessSpeed 15, mutateSpeed 12/12 (two vacuous mutations found and replaced), mutateTabs
 re-anchored 55/55 (six anchors had gone stale under Sep 16 work).
 
-**READABILITY - measured, mocked, NOT built (Sep 17).** Body is 15 px but most reading
+**READABILITY - BUILT (`cdeaa58`).** `--dim` #9aa5cc dark / #5c6690 light on the portal and the
+Console; 437 sizes lifted by `patch_text.mjs` (10-11.5 → 12, uppercase labels → 11, 12/12.5
+→ 13; ≤9 px glyphs untouched; the slip thumbnail's $ kept at 10). Checked in Chrome on 11
+screens; every suite green. The paragraph below is the measurement that led to it.
+
+**FEES BY AGENT (`2880ef4`).** Tony will NOT enter percentages - "I care about how much fees
+this agent made this month; I do the math." Audit tab, third view **Fees by agent**: per
+EARNER (commission_to) for the period - charges, fees approved (audit complete), fees
+waiting (+ n not priced until the carrier cost is entered), shares written out ("50% of
+$747.75 → Jorge Ramos (#26424, waiting)" / "← Samuel"), helper-only lines, total row, CSV;
+declined/void/link rows never count. **By agent** now honours the period chips (it showed
+ALL TIME whatever was lit), leads with fees approved/waiting, and groups by the earner (it
+grouped by the charger, so a reassigned payment sat under the wrong person). One
+`auditInPeriod()` / `periodChipsHtml()` for the three views. `feesByAgent(rows)` is the one
+place the rule lives. harnessFees 22, mutateFees 14/14. Open question put to Saif: the
+agents' portal still shows "Earned/Pending" DOLLARS computed at the 10% default - with no
+real rates those numbers are fiction; proposal is to show the agent their FEES instead.
+
+**MONTH CLOSE - studied, NOT built (Sep 17).** `approve_month` is only a permission label
+("Finalises what every agent is paid for that month… the last word on a payroll figure").
+No button, no paid state, no lock: an approved audit can be sent back, reassigned or
+re-shared forever and nothing records that Tony paid it. Proposal given: a "Close
+<month>" action for approve_month holders - snapshot approved fees per agent, stamp the
+payments `paid_month`, lock them (send-back / reassign / share / correction need a logged
+admin reopen), agents see "✓ Paid · September" and a Paid tile, later approvals roll into
+the next month. Waiting on Tony: does "confirm" mean *paid with salary* (per-agent tick) or
+*numbers frozen* (one button)?
+
+**CONSOLE CLIENT PAGE → the portal's panel - APPROVED, in progress (Sep 17).** Mock
+`console_portal.html` (renderConsolePortal.mjs): the portal's client panel with every
+admin action inside the Console, the old page's HawkSoft/DMV/raw tables collapsed under
+"Admin · HawkSoft & raw data". Plan: step 1 move the portal's sheets and action functions
+(charge, refund, add documents, edit-before-audit, wrong client, reassign, balances,
+refreshHawkSoft, togglePolicy) into a shared module with the portal unchanged (all suites
+identical); step 2 switch the Console to it. 1-2 days.
+
+**READABILITY - measured (Sep 17).** Body is 15 px but most reading
 text is 11-12.5 px (portal: 42 places at 11 px, 20 at 11.5, 17 at 10-10.5, one at 9). The
 `--dim` token (#5c6690 on the navy field) is **2.86:1** - under the 4.5:1 floor for text,
 under even 3:1; used ~100 places, mostly on the small text; light mode 2.81:1. `--mute` is
@@ -1263,6 +1299,8 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessTabs.mjs` 98 · `mutateTabs.mjs` 55 · `fixtureTabs.mjs` · `renderTabs.mjs` · `renderConsoleTabs.mjs` · `mock_tabs.mjs` | the client's tabs (Documents, Log, notes, thumbnails, sort) |
 | `harnessActivity.mjs` 36 · `mutateActivity.mjs` 38 · `renderActivity.mjs` · `mock_activity.html` | the activity report (My activity, Console Activity) |
 | `harnessDocCenter.mjs` 40 · `mutateDocCenter.mjs` 33 · `renderDocCenter.mjs` · `mock_doccenter.html` | the document center |
+| `harnessFees.mjs` 22 · `mutateFees.mjs` 14 · `fees_view.html` / `fees_byagent.html` | Fees by agent; By agent by earner + period |
+| `patch_text.mjs` (438 sizes, --dim) · `overflowOf.mjs` | readability build |
 | `harnessSpeed.mjs` 15 · `mutateSpeed.mjs` 12 · `shootText.mjs` | speed (parallel reads, Console cache, thumb memory); readability before/after |
 | `harnessShare.mjs` 77 · `mutateShare.mjs` 65 · `mutateOne.mjs` · `renderPending.mjs` · `renderPendingList.mjs` · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
 | `mutateSort.mjs` 8 · `mutateTodo.mjs` 4 · (updated) `harnessAuditReview.mjs` 162 | sort on every list; the todo banner's two numbers |

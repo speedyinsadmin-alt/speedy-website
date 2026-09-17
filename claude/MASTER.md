@@ -162,6 +162,27 @@ vs. keep 747, vs. per-branch (moves branch lines off their IVR extensions — no
 **Still not given:** escalation phone(s) — every chain that reaches the last step
 records "no_escalation_phones".
 
+**SEP 17 AFTERNOON · DECISIONS (Saif, pending Tony):**
+- Text threads introduce the agent — "Speedy Insurance (Name): …" on the first text and
+  whenever a different agent starts writing; otherwise clean (`2d2e7ac`). Verified: Saif's
+  second text joined open thread #9; the reply went out clean because Tony had already
+  introduced himself there — by design.
+- "Via RingCentral" on Saif's phone = the CARRIER caller-ID name (CNAM) for 747-229-2938,
+  or his own contacts. In RingCentral the number already uses the company name
+  SPEEDYINSURANCE (read in the portal, nothing changed). No portal setting fixes a stale
+  carrier CNAM; only a RingCentral support ticket re-push.
+- No existing number fits as the texting line: 353-9900 has a CUSTOM caller ID "Liberty
+  Express" and rings the auto-receptionist; 742-7041 / 626-313-1198 are "Insurance
+  Affordable" (another brand); branch lines are call queues (the API cannot send from
+  them); the rest are agents' personal lines.
+- **Decision: option B** — a new "Speedy Inbox" user extension with a NEW local (951)
+  number as THE agency texting line (CNAM registered as SPEEDYINSURANCE at provisioning).
+  Saif talks to Tony (license cost) first. Then: Phone Numbers → Add Number → Local →
+  951 → assign to the new user; Business SMS shows it "Ready for use"; a JWT for that
+  user; Vercel `RC_JWT` + `RC_SMS_FROM`; `rc-subscribe?action=sms_create`; test from
+  Saif's phone incl. what caller ID it shows. Moving the number later is two clicks.
+- **Nothing in code waits on this** — the fallback to 747 keeps every text flowing.
+
 ### ✅ SEP 16 NIGHT · SPEEDY CHAT STAGE 2 — THE AGENT INBOX (`a631cb1`)
 Saif's stage-1 test: three chats from his phone/PC, all became leads (5, 6, 7) — the
 first two only after a fix: the leave form was refused server-side on the 10-digit

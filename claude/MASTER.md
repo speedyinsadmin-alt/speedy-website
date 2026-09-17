@@ -863,6 +863,13 @@ by who / biggest), Log (newest / oldest), the document center (+ by client; day 
 only for the date orders), the activity report (newest / oldest / by client / by who,
 grouped under those names). `ClientTabs.sortRows/sortHtml/sortKey`. mutateSort 8/8.
 
+**Open after Sep 17:** (1) MONTH CLOSE - waiting on Tony's answer (paid-with-salary tick per
+agent, or one "numbers frozen" button) before building "Close <month>". (2) A charge from
+the Console with no home branch on Tony's staff record is stamped with the CLIENT's branch
+(said on the sheet); if he should pick an office like the portal, that is a small change.
+(3) Optional: align the portal's collected-ratio hold-back with Tony's whole-fee-on-
+approval rule (the one known difference between the tiles and Fees by agent).
+
 **Next (Saif's list):** My activity could gain a Reply on notes; a sentence for
 `audit.submitted_by_other`; sync a client the moment it is first charged (the "Client
 #26427" gap until the 9 AM sync).

@@ -3179,7 +3179,8 @@ window.addEventListener('load', () => {
 </script>
 <script>
 /* Speedy Chat card: counts every 30s while signed in; TOKEN is the portal's own (top-level let, visible here) */
-function openChat(){ try{ if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); }catch(e){} location.href = '/admin/chat.html' + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : ''); }
+/* its own tab (named, so a second click focuses it): the portal stays where the agent was (Saif, Sep 17) */
+function openChat(){ try{ if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); }catch(e){} const w = window.open('/admin/chat.html' + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : ''), 'speedychat'); if(w && w.focus) w.focus(); }
 async function chatCounts(){
   if(typeof TOKEN === 'undefined' || !TOKEN) return;
   try{

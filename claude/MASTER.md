@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 17. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `0858cf4` (another session pushes the public
+otherwise; `git status` is clean at `04751de` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -794,13 +794,43 @@ admin reopen), agents see "✓ Paid · September" and a Paid tile, later approva
 the next month. Waiting on Tony: does "confirm" mean *paid with salary* (per-agent tick) or
 *numbers frozen* (one button)?
 
-**CONSOLE CLIENT PAGE → the portal's panel - APPROVED, in progress (Sep 17).** Mock
-`console_portal.html` (renderConsolePortal.mjs): the portal's client panel with every
-admin action inside the Console, the old page's HawkSoft/DMV/raw tables collapsed under
-"Admin · HawkSoft & raw data". Plan: step 1 move the portal's sheets and action functions
-(charge, refund, add documents, edit-before-audit, wrong client, reassign, balances,
-refreshHawkSoft, togglePolicy) into a shared module with the portal unchanged (all suites
-identical); step 2 switch the Console to it. 1-2 days.
+**CONSOLE CLIENT PAGE = THE PORTAL'S PANEL - BUILT (`927b5d8` step 1, `51ad7bd` step 2,
+`04751de`).** Mock `console_portal.html` approved; the live page matches it (Chrome shots
+`shots_panel/console_panel*.png`). **Step 1:** the portal's client panel - renderPanel,
+loadClient, the charge sheet, the refund stepper, add documents / finish the audit,
+link/unlink a balance, "client still owes more", reassign, wrong client, togglePolicy,
+refreshHawkSoft, chgSubHtml, loadStaff - lifted VERBATIM out of portal.html into
+**`/admin/shared/clientpanel.js`** (+ `clientpanel.css` for the sheet rules, in the
+portal's order). The module owns `ACTIVE_TAB`, `CLIENT_CACHE`, `POLICY_OPEN` and
+mounts the two sheets on <body>; the page provides `TOKEN EMAIL ME ROSTER OFFICES`,
+`api() esc() money() $()`, `apiPost(body)` or `apiPostBody(body)`, and a
+`#clientPanel`. The only rewrites are a **`PanelHost`** object (portal defaults; the
+Console overrides through `window.PanelHost`): `tab(no)` the client's name for the
+carrier page, `office()`, `post(body)`, `changed(no)` / `reload(no)` / `closed()`
+(re-read after a change), `todo()`, `carrier(p)` / `carrierParams` / `carrierAttr`,
+`authExpired()`; `panelHL()` guards the HawkLink launch context. Portal unchanged: every
+suite identical, mutation runs at baseline, Chrome shots of the refund sheet, the charge
+sheet (gate / purpose / total owed), the card and the tabs BYTE-IDENTICAL before/after.
+**Step 2:** the Console's client page draws the panel (`renderOurClient` → `CLIENT_CACHE[no]
+= pc; ACTIVE_TAB = no; renderPanel()`) under a one-line strip (status, branch, address,
+in-force count, DMV reminder - no duplicated <h2>); the old HawkSoft policy tables, raw
+ledger rows and audit trail sit collapsed under **"Admin · HawkSoft & raw data"**. Console
+overrides: a change re-reads the card only (`reloadCard`, not HawkSoft - that is ↻);
+carrier.html opens in a NEW tab with `from=console` (like the Audit tab); the office on a
+Console charge is Tony's home branch, else the client's own branch; Back closes an open
+sheet; `EMAIL` set at sign-in (and from our_client). CSS: the portal's page-wide rules
+(label, input, .btn, .card, .kv, .hide) are scoped to `.cpanel` (on `#clientPanel` and
+both sheets - Console only); the refund stepper is scoped to `#refundSheet` because the
+Console's Refunds tab has its own `.rq`, and the Console's green status `.dot` was
+filling the radios (`background:transparent`); `--card`/`--scrim` added to the Console
+root; Clover SDK loaded. **Found on the way (`04751de`):** after "client still owes
+more", a balance link, a reassignment, a move or a refund the portal's card said
+"Loading client…" for good (openClient only redraws an open tab) - the defaults now
+re-read (loadClient). harnessConsolePanel 39 / mutateConsolePanel 24/24;
+harnessPanelReload 5 / mutatePanelReload 4/4. Harness-side: `remap_panel.mjs` re-points
+old portal mutations at the module (7 runners), `inline_shared.mjs` inlines the module.
+**Lesson:** never `git stash` in this tree - the other session's uncommitted files went
+into the stash for a minute (restored by the pop); use `git show HEAD:path` for baselines.
 
 **READABILITY - measured (Sep 17).** Body is 15 px but most reading
 text is 11-12.5 px (portal: 42 places at 11 px, 20 at 11.5, 17 at 10-10.5, one at 9). The
@@ -1411,6 +1441,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessFees.mjs` 22 · `mutateFees.mjs` 14 · `fees_view.html` / `fees_byagent.html` | Fees by agent; By agent by earner + period |
 | `patch_text.mjs` (438 sizes, --dim) · `overflowOf.mjs` | readability build |
 | `harnessSpeed.mjs` 15 · `mutateSpeed.mjs` 12 · `shootText.mjs` | speed (parallel reads, Console cache, thumb memory); readability before/after |
+| `harnessConsolePanel.mjs` 39 · `mutateConsolePanel.mjs` 24 · `harnessPanelReload.mjs` 5 · `mutatePanelReload.mjs` 4 · `remap_panel.mjs` · `patch_clientpanel.mjs` · `patch_console_panel.mjs` · `shots_panel/` | the Console client page = the portal's panel (clientpanel.js); the card re-read |
 | `harnessShare.mjs` 77 · `mutateShare.mjs` 65 · `mutateOne.mjs` · `renderPending.mjs` · `renderPendingList.mjs` · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
 | `mutateSort.mjs` 8 · `mutateTodo.mjs` 4 · (updated) `harnessAuditReview.mjs` 162 | sort on every list; the todo banner's two numbers |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |

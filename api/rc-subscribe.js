@@ -105,6 +105,11 @@ async function refreshNumbers(token) {
   const TOLL_FREE = /^\+1(800|833|844|855|866|877|888)/;
   const { base, key } = sbEnv();
   const agents = await fetch(`${base}/rest/v1/agents?active=is.true&select=email,full_name,branch`, { headers: sbHdrs(key) }).then((x) => x.json()).catch(() => []);
+  /* what is already in the table wins where the automatic guess has nothing: Saif maps
+     the rest by hand (Sammy = Samuel, Esme = Esmeralda, Tony signs in as info@) and a
+     nightly refresh must never undo that */
+  const existing = {};
+  for (const e of await fetch(`${base}/rest/v1/rc_numbers?select=phone10,branch,agent_email`, { headers: sbHdrs(key) }).then((x) => x.json()).catch(() => [])) existing[e.phone10] = e;
   const rows = [];
   for (const n of (r.json && r.json.records) || []) {
     const phone10 = d10(n.phoneNumber); if (!phone10) continue;
@@ -123,7 +128,8 @@ async function refreshNumbers(token) {
     rows.push({
       phone10, e164: n.phoneNumber, extension_id: n.extension ? String(n.extension.id) : null, extension_number: n.extension ? String(n.extension.extensionNumber || (ext && ext.number) || '') : null,
       extension_name: extName || null, usage_type: usage || null, sms: smsCapable,
-      branch: BRANCH_LINES[phone10] || (agent && BRANCH_OF_NAME[agent.branch]) || null, agent_email: agent ? agent.email : null, label: n.label || null, updated_at: new Date().toISOString(),
+      branch: BRANCH_LINES[phone10] || (agent && BRANCH_OF_NAME[agent.branch]) || (existing[phone10] && existing[phone10].branch) || null,
+      agent_email: (existing[phone10] && existing[phone10].agent_email) || (agent ? agent.email : null), label: n.label || null, updated_at: new Date().toISOString(),
     });
   }
   if (rows.length) {

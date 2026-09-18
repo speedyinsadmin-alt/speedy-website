@@ -84,7 +84,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 17. Everything below is pushed and live unless it says
+Last written Sep 18 (Supabase advisor entry). Everything below is pushed and live unless it says
 otherwise; `git status` is clean at `04751de` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
@@ -98,6 +98,55 @@ sessions (the scratchpad does not). Run from there: `npm i` once, then
 files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` load in
 every session and carry the traps. Copy new harnesses back into that folder before
 stopping for the day.
+
+### ✅ SEP 18 · SUPABASE SECURITY ADVISORS CLEAN — no code change, database only
+**Trigger:** Supabase's weekly email "Action required: security vulnerabilities detected"
+(Sep 15) for project `speedy-insurance` (`huvpitgappdqgavrqbud`). Critical finding:
+**`refund_requests` had RLS off** and `anon` held SELECT/INSERT/UPDATE/DELETE on it —
+anyone with the project URL + the public anon key could read or edit the 2 refund rows
+(client_id, amount, carrier, notes). It was the only public table without RLS; the other
+25 already followed the pattern (RLS on, zero policies, service role only). Open item #64
+and the Aug 18 "still open" list are closed by this.
+
+**Migration `security_advisor_fixes_2026_09_18` (Supabase, not in the repo):**
+- `alter table refund_requests enable row level security` — same pattern as every other table.
+- Views `carrier_directory` and `call_sessions`: `security_invoker = on` (they ran as owner,
+  which let anon read `policies` / `call_log` through them).
+- `system_health()`: EXECUTE revoked from public/anon/authenticated, granted to service_role
+  only (it was callable at `/rest/v1/rpc/system_health` by anyone and leaked table sizes and
+  row counts); `search_path = ''`, `public.attachments` qualified.
+- `agents_touch()`, `call_log_touch()`: `search_path = ''` (they only call `now()`).
+
+**Why nothing in the app changed:** no browser code talks to Supabase; every `api/*.js`
+uses `SUPABASE_SERVICE_ROLE_KEY`, which bypasses RLS and is not subject to the grants.
+Grep proof: `refund_requests` is read/written only in `api/platform.js`;
+`carrier_directory` only in `api/carrier.js`; `call_sessions` and `rpc/system_health`
+only in `api/platform.js` — all through `sb()` = service key.
+
+**Verified:** (1) SQL — zero public tables without RLS, both views show
+`security_invoker=on`, `has_function_privilege('anon', 'system_health()')` = false,
+service_role = true, `system_health()` still returns, views return 179 / 11,372 rows for
+the server role. (2) Live probe with the anon key against `/rest/v1`: `refund_requests`,
+`carrier_directory`, `call_sessions` → `[]`; `rpc/system_health` → 401 permission denied.
+(3) Linter re-run: **0 ERROR, 0 WARN**; only the INFO `rls_enabled_no_policy` on 26
+tables, which is the intended state. (4) Vercel production logs after the change: no 5xx,
+no Postgres permission errors; the 401 rate on `/api/chat` / `/api/platform` is the same
+as the two hours before (chat widget polling without a session, pre-existing).
+
+**Performance advisors, read the same night:** all INFO. Added two covering indexes for
+unindexed foreign keys, `CREATE INDEX CONCURRENTLY` so nothing locked: `policies_client_id`
+(1 MB — the app filters by `client_no`, which was already indexed, but a delete/re-key on
+`clients` scanned all 46k policies for the FK check) and `refund_requests_refund_id`
+(16 kB, 2 rows, done only so the advisor stays quiet). **Left alone on purpose:** the nine
+"unused" indexes (4.6 MB total; `leads_*`, `audit_*`, `clients_last_name` serve features
+not yet under load — dropping them saves nothing and they would be wanted back) and the
+Auth connection-strategy note (the platform does not use Supabase Auth). `policies` health
+for the record: 46k rows, 255 MB, 851k index scans vs 1.4k seq scans since Jul 8.
+
+**Lesson:** the Supabase weekly email only fires on ERROR-level lints. INFO rows are not a
+vulnerability; the 26 "RLS enabled, no policy" rows are exactly what "service role only"
+looks like to the linter. Re-run the advisors after any `create table` — a new table
+starts with RLS off and full anon grants.
 
 ### ✅ SEP 17 · SMS INTO THE INBOX, A SECURITY HOLE CLOSED, RINGCENTRAL LIMITS LEARNED
 **The hole (`3166f34`):** `api/sms.js` compared `x-admin-key` against `process.env.ADMIN_KEY`,
@@ -3812,7 +3861,7 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 ---
 
 ## DATABASE SECURITY (Aug 18)
-**Only ONE table was actually exposed: `agent_prefs`** (three columns, zero rows), fixed with RLS. **Still open:** `system_health()` is SECURITY DEFINER and `anon`-callable · `call_sessions` view is SECURITY DEFINER · two functions have mutable search_path.
+**Only ONE table was actually exposed: `agent_prefs`** (three columns, zero rows), fixed with RLS. ~~**Still open:** `system_health()` is SECURITY DEFINER and `anon`-callable · `call_sessions` view is SECURITY DEFINER · two functions have mutable search_path.~~ **All closed Sep 18** (migration `security_advisor_fixes_2026_09_18`; see the Sep 18 entry). `refund_requests`, created later with RLS off, was caught by the Sep 15 weekly email and closed the same way.
 
 ---
 
@@ -3953,7 +4002,7 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 71. **Escalation phones** into chat_settings — still not given
 72. **Tawk items 17/18 close when the homepage cuts over** (stage 4)
 67. **Chat: silent-agent unclaim + auto off-duty at close** — server-side sweep (cron) once stage 2 exists
-64. **`refund_requests` has RLS disabled** (Supabase advisory, Sep 16) — enable + no policies like the other tables
+64. ~~**`refund_requests` has RLS disabled** (Supabase advisory, Sep 16) — enable + no policies like the other tables~~ **DONE Sep 18**, plus the two SECURITY DEFINER views, `system_health()` grants and three search_paths; advisors 0 ERROR / 0 WARN
 
 ---
 

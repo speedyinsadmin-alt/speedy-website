@@ -162,3 +162,21 @@
 .ctpanel .sbtn.off{opacity:.45;cursor:default}
 .ctpanel .scancel{text-align:center;color:var(--dim);font-size:13px;margin-top:8px;cursor:pointer}
 .ctpanel .share .msg{text-align:center}
+/* live conversations on the Log (Stage 3 item 2, Sep 18): the thread's own words, read
+   from the Inbox as they arrive - not a copy. .cv is the box under the sentence. */
+.ctlog .dot.d-chat{background:#ff5d5d}
+.ctlog .cv{margin-top:6px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.ctlog .cv .cvh{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--mute)}
+.ctlog .cv .cvh .open{color:var(--blue-l);font-weight:600;cursor:pointer;white-space:nowrap}
+.ctlog .cv .msgs{margin-top:6px;display:flex;flex-direction:column;gap:5px}
+.ctlog .cv .mg{max-width:88%;padding:6px 9px;border-radius:10px;font-size:13px;line-height:1.4;background:rgba(0,0,0,.22);border:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.ctlog .cv .mg.a{align-self:flex-end;background:rgba(77,124,254,.18);border-color:rgba(77,124,254,.45)}
+.ctlog .cv .mg small{display:block;font-size:11px;color:var(--dim);margin-top:2px;white-space:nowrap}
+.ctlog .cv .ph{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
+.ctlog .cv .cvph{display:flex;width:44px;height:44px;border-radius:6px;border:1.5px solid rgba(120,160,255,.45);background:rgba(120,160,255,.08);align-items:center;justify-content:center;font-size:16px;cursor:pointer;overflow:hidden}
+.ctlog .cv .cvph img{width:100%;height:100%;object-fit:cover;display:block}
+.ctlog .cv .more{font-size:12px;color:var(--blue-l);font-weight:600;cursor:pointer;margin-top:6px}
+.ctlog .cv.live{border-color:rgba(76,201,140,.5)}
+.ctlog .cv.guess{border-style:dashed;color:var(--mute)}
+.ctlog .cv.guess .ask{color:var(--amber-ink);font-weight:600;cursor:pointer}
+.ctlog .w .st-open{color:var(--green);font-weight:700}

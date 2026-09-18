@@ -351,6 +351,8 @@ const REASON = { charged_twice: 'charged twice', wrong_amount: 'wrong amount tak
 /* Every entry: { ts, cat, who, text (html), meta (html) }. cat: money · doc · mail · review · other */
 function logEntries(c){
   const out = [];
+  const cno = c && c.client && c.client.client_no;
+  for(const cv of ((CHATS[cno] || {}).rows || [])) out.push(chatEntry(cv, c));
   const pays = c.payments || [], docs = c.documents || [], evs = c.events || [];
   const payById = Object.fromEntries(pays.map(p => [p.id, p]));
   const attIdsInEvents = new Set(evs.map(e => e.payload && e.payload.attachment_id).filter(Boolean));
@@ -474,7 +476,99 @@ function noteCardHtml(e, c){
 }
 function jump(id){ const el = document.getElementById('note-' + id); if(el){ el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); } }
 function labelOfType(x){ if(!x) return '?'; return typeLabel({ doc_type: x.doc_type, doc_label: x.doc_label }); }
-const FILTERS = [['all', 'All'], ['money', 'Money'], ['doc', 'Documents'], ['mail', 'Client emails'], ['review', 'Reviews'], ['note', 'Notes']];
+const FILTERS = [['all', 'All'], ['money', 'Money'], ['doc', 'Documents'], ['mail', 'Client emails'], ['review', 'Reviews'], ['note', 'Notes'], ['chat', 'Chats & texts']];
+
+/* ---- conversations on the Log (Stage 3 item 2, Sep 18) ----
+   The Log READS the client's chat/text threads from /api/chat (client_log) instead of
+   copying words into events: one copy of the conversation, current the moment a text
+   arrives. Loaded when the Log opens and refreshed on every re-render older than 15 s;
+   the visitor's photos are fetched one by one through the same authenticated media call
+   the Inbox uses (the bucket is private). */
+const CHATS = {};                    // client_no -> { at, rows, loading }
+const CHATX = {};                    // conversation id -> true when "show all" was tapped
+const CPHOTO = {};                   // "c:m:i" -> data url, once fetched
+const CHAT_FRESH_MS = 15000;
+async function chatPost(body){
+  try{
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'x-id-token': pageToken(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return await r.json();
+  }catch(e){ return null; }
+}
+function loadChats(no){
+  const st = CHATS[no] || (CHATS[no] = { at: 0, rows: null, loading: false });
+  if(st.loading || (Date.now() - st.at) < CHAT_FRESH_MS || !pageToken()) return;
+  st.loading = true;
+  chatPost({ action: 'client_log', client_no: Number(no) }).then(j => {
+    st.loading = false; st.at = Date.now();
+    if(!j || !j.ok) return;
+    const before = JSON.stringify(st.rows || []); st.rows = j.conversations || [];
+    if(JSON.stringify(st.rows) !== before && CUR && CUR.opts.rerender) CUR.opts.rerender(no);
+  });
+}
+const prettyPhone = p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(p || ''); };
+function policyWords(pol){ if(!pol) return ''; if(pol.kind === 'new_quote') return 'New quote'; if(pol.kind === 'general') return 'General'; return [pol.lob, pol.carrier, pol.number].filter(Boolean).join(' · '); }
+const OUTCOME = { lead: 'a <b>lead</b>', logged: '<b>logged</b>', spam: '<b>spam</b>', abandoned: '<b>abandoned</b>', missed: '<b>missed</b> — nobody answered' };
+function chatEntry(cv, c){
+  const isSms = cv.channel === 'sms';
+  const whoWith = isSms ? prettyPhone(cv.phone) + (cv.name ? ' (' + esc(cv.name) + ')' : '') : (esc(cv.name || 'a visitor') + (cv.branch_name ? ' (' + esc(cv.branch_name) + (cv.topic ? ' · ' + esc(cv.topic) : '') + ')' : ''));
+  const where = isSms && cv.line_label ? ' on <b>' + esc(cv.line_label) + '</b>' : '';
+  /* guess: the fact only - a phone match is not a client until an agent says so */
+  if(cv.link_status === 'guess'){
+    const cl = (c && c.client) || {}; const fn = String(cl.first_name || '').trim();
+    return { ts: cv.updated_at || cv.created_at, cat: 'chat', k: 'chat_guess', who: null, ev: null,
+      text: '<b>A ' + (isSms ? 'text conversation' : 'website chat') + '</b> from a ' + (isSms ? 'number' : 'visitor') + ' matching this client is ' + (cv.status === 'closed' ? 'in the Inbox' : 'open') + where + ' — <b>not confirmed</b>',
+      meta: 'phone match only · the words stay in the Inbox until an agent says it’s them',
+      extra: '<div class="cv guess"><div class="cvh"><span>Is it ' + (fn ? esc(fn.charAt(0) + fn.slice(1).toLowerCase()) : 'this client') + '?</span><span class="ask" onclick="ClientTabs.openChat(' + Number(cv.id) + ')">Confirm or reject in Speedy Chat →</span></div></div>' };
+  }
+  const n = cv.counts ? cv.counts.messages : 0, ph = cv.counts ? cv.counts.photos : 0;
+  const counts = n + ' message' + (n === 1 ? '' : 's') + (ph ? ' · ' + ph + ' photo' + (ph === 1 ? '' : 's') : '');
+  const open = cv.status !== 'closed';
+  const state = open ? '<span class="st-open">open</span>' : ('closed' + (cv.closed_by && cv.closed_by !== 'visitor' ? ' by <b>' + esc(cv.closed_by) + '</b>' : '') + (OUTCOME[cv.outcome] ? ' as ' + OUTCOME[cv.outcome] : ''));
+  const text = '<b>' + (isSms ? 'Text conversation' : 'Website chat') + '</b> with ' + whoWith + where + ' — ' + state + ', ' + counts;
+  const metaBits = [];
+  if(cv.policy) metaBits.push('about ' + esc(policyWords(cv.policy)));
+  if(cv.linked_by) metaBits.push('linked to this client by ' + esc(cv.linked_by) + (cv.linked_at ? ' at ' + esc(timeOnly(cv.linked_at)) : ''));
+  if(cv.close_note) metaBits.push((cv.closed_by && cv.closed_by !== 'visitor' ? esc(String(cv.closed_by).split(' ')[0]) + '’s' : 'The') + ' note at close: “' + esc(cv.close_note) + '”');
+  if(!cv.visible) metaBits.push('the words on this line are private — only its owner and the owners see them');
+  /* the box: live threads show the last four, closed ones fold */
+  let extra = '';
+  const msgs = cv.messages || [];
+  if(cv.visible && msgs.length){
+    const all = !!CHATX[cv.id];
+    const openLink = '<span class="open" onclick="ClientTabs.openChat(' + Number(cv.id) + ')">Open in Speedy Chat →</span>';
+    const bubble = m => '<div class="mg' + (m.from === 'agent' ? ' a' : '') + '">' + esc(m.body)
+      + ((m.photos || []).length ? '<div class="ph">' + m.photos.map(p => '<span class="cvph" data-c="' + Number(cv.id) + '" data-m="' + Number(m.id) + '" data-i="' + Number(p.index) + '" onclick="ClientTabs.openChat(' + Number(cv.id) + ')">&#128247;</span>').join('') + '</div>' : '')
+      + '<small>' + (m.from === 'agent' ? esc(m.name || 'Speedy') : 'Client') + ' · ' + esc(timeOnly(m.ts)) + '</small></div>';
+    if(open){
+      const show = all ? msgs : msgs.slice(-4);
+      extra = '<div class="cv live"><div class="cvh"><span>Live — updates as ' + (isSms ? 'texts' : 'messages') + ' arrive</span>' + openLink + '</div><div class="msgs">' + show.map(bubble).join('') + '</div>'
+        + (all || msgs.length <= 4 ? '' : '<div class="more" onclick="ClientTabs.chatMore(' + Number(cv.id) + ')">Show the ' + (msgs.length - 4) + ' earlier message' + (msgs.length - 4 === 1 ? '' : 's') + '</div>') + '</div>';
+    }else{
+      const span = timeOnly(msgs[0].ts) + '–' + timeOnly(msgs[msgs.length - 1].ts);
+      extra = '<div class="cv"><div class="cvh"><span>' + counts + ' · ' + esc(span) + '</span>' + (all ? openLink : '<span class="open" onclick="ClientTabs.chatMore(' + Number(cv.id) + ')">Show the conversation</span>') + '</div>'
+        + (all ? '<div class="msgs">' + msgs.map(bubble).join('') + '</div>' : '') + '</div>';
+    }
+  }
+  return { ts: open ? (cv.updated_at || cv.created_at) : (cv.closed_at || cv.updated_at || cv.created_at), cat: 'chat', k: 'chat', who: null, ev: null, text, meta: metaBits.join(' · '), extra };
+}
+function chatMore(id){ CHATX[id] = true; if(CUR && CUR.opts.rerender) CUR.opts.rerender(CUR.opts.clientNo || (CUR.c && CUR.c.client && CUR.c.client.client_no)); }
+function openChat(id){
+  const tok = pageToken();
+  try{ if(tok) localStorage.setItem('speedy_handoff_tok', tok); }catch(e){}
+  const w = window.open('/admin/chat.html#c=' + Number(id) + (tok ? '&tok=' + encodeURIComponent(tok) : ''), 'speedychat'); if(w && w.focus) w.focus();
+}
+async function fillChatPhotos(root){
+  const els = [...(root || document).querySelectorAll('.cvph[data-c]')].filter(el => !el.querySelector('img'));
+  for(const el of els.slice(0, 12)){
+    const key = el.dataset.c + ':' + el.dataset.m + ':' + el.dataset.i;
+    if(!CPHOTO[key]){
+      const j = await chatPost({ action: 'media', id: Number(el.dataset.c), message_id: Number(el.dataset.m), index: Number(el.dataset.i) });
+      if(!j || !j.ok || !j.data) continue;
+      CPHOTO[key] = 'data:' + (j.content_type || 'image/jpeg') + ';base64,' + j.data;
+    }
+    if(el.isConnected) el.innerHTML = '<img src="' + CPHOTO[key] + '" alt="">';
+  }
+}
 const LOGF = {};
 const NOTEBOX = {};   // client_no -> { text, policy, about:[{type,id,label}], files:[File], reply_to, reply_label }
 function logHtml(c, opts){
@@ -506,13 +600,14 @@ function logHtml(c, opts){
   if(!list.length) h += '<div class="dnone">Nothing here yet.</div>';
   let day = null;
   const rowHtml = e => '<div class="lrow"><div class="when">' + esc(timeOnly(e.ts)) + '</div><div class="dot ' + (e.red ? 'red' : 'd-' + e.cat) + '"></div><div class="w">' + e.text + (e.meta ? '<span class="m">' + e.meta + '</span>' : '')
-    + ((e.replies || []).length ? '<div class="nreplies">' + e.replies.map(r => '<div class="nreply"><span class="rwhen">' + esc(whenShort(r.ts)) + '</span>' + r.text + '</div>').join('') + '</div>' : '') + '</div></div>';
+    + ((e.replies || []).length ? '<div class="nreplies">' + e.replies.map(r => '<div class="nreply"><span class="rwhen">' + esc(whenShort(r.ts)) + '</span>' + r.text + '</div>').join('') + '</div>' : '') + (e.extra || '') + '</div></div>';
   for(const e of list){
     const dk = dayKey(e.ts);
     if(dk !== day){ day = dk; h += '<div class="lday">' + esc(dayLabel(e.ts)) + '</div>'; }
     h += rowHtml(e);
   }
   setTimeout(() => fillThumbs(no, c, '.ctlog'), 0);
+  loadChats(no); setTimeout(() => fillChatPhotos(document.querySelector('.ctlog')), 0);
   h += '<div class="lnote">Everything the platform did on this client, in order. What happened in HawkSoft directly (CMS notes, calls) is not here.</div></div>';
   return h;
 }
@@ -606,5 +701,5 @@ async function addNote(no){
   if(CUR && CUR.opts.rerender) CUR.opts.rerender(no);
 }
 
-window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, thumbBox, setThumb, carrierPost, pageToken, forLine, bytesLabel, canRelabel, RELABEL, sort: setSort, sortRows, sortHtml, sortKey, SORTS, DOC_SORT_KEYS, DOC_SORT_FIELDS, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage, THUMB_MEM, THUMB_TRIED };
+window.ClientTabs = { html, set, current, docsHtml, logHtml, logEntries, preview, menu, relabel, upload, uploadUrl, addNote, thumbBox, setThumb, carrierPost, pageToken, forLine, bytesLabel, canRelabel, RELABEL, sort: setSort, sortRows, sortHtml, sortKey, SORTS, DOC_SORT_KEYS, DOC_SORT_FIELDS, pickFiles, unfile, unlink, replyTo, linkTo, jump, noteCardHtml, emailOf, prepNoteFile, filter, needsLabel, groupOf, typeLabel, nameOf, fillThumbs, pdfFirstPage, THUMB_MEM, THUMB_TRIED, chatMore, openChat, loadChats, chatEntry, CHATS, fillChatPhotos };
 })();

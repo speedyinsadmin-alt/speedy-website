@@ -268,7 +268,7 @@ export default async function handler(req, res) {
    is actually waiting.
    =========================================================================== */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy']);
+const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy', 'client_log']);
 const SITE = 'https://www.speedyins.com';
 const VISITOR_GONE_MS = 2 * 60 * 1000;
 const ESCALATION_THROTTLE_MS = 15 * 60 * 1000;
@@ -502,6 +502,54 @@ async function agentHandler(req, res, s, b, action) {
     return res.status(200).json({ ok: true, results });
   }
 
+  /* ---- Stage 3 item 2 (Sep 18): a client's conversations for the Log tab. The Log READS
+     the threads instead of copying texts into events, so it is current the moment a text
+     arrives and there is one copy of the words. Rules:
+       confirmed link + the caller may see the thread  -> the messages and photo indexes
+       confirmed link, thread not visible (sms_private) -> the row and the counts only
+       guess (phone match, not confirmed)              -> the fact that a matching number is
+                                                          texting, no words: a wrong guess must
+                                                          never put a stranger's texts on a client
+     Test threads never show on a client. ---- */
+  if (action === 'client_log') {
+    const no = Number(b.client_no);
+    if (!Number.isInteger(no) || no <= 0) return res.status(400).json({ ok: false, error: 'Bad client' });
+    const cv = await sbGet(s, `conversations?client_no=eq.${no}&is_test=is.false&link_status=in.(confirmed,guess)&select=id,channel,line,status,outcome,branch,topic,lang,visitor_name,visitor_phone,link_status,policy,linked_by,linked_at,claimed_by,closed_by,closed_at,close_note,created_at,updated_at,visibility&order=created_at.desc&limit=20`);
+    const priv = await privateLines(s);
+    const convs = cv.rows.map(c => ({ ...c, visible: c.link_status === 'confirmed' && canSee(c, me, priv) }));
+    const confirmedIds = convs.filter(c => c.link_status === 'confirmed').map(c => c.id);
+    const ms = confirmedIds.length ? await sbGet(s, `messages?conversation_id=in.(${confirmedIds.join(',')})&audience=eq.visitor&sender_kind=in.(visitor,agent)&select=id,conversation_id,ts,sender_kind,sender,body,attachments&order=id.asc&limit=1500`) : { rows: [] };
+    const lines = [...new Set(convs.map(c => c.line).filter(Boolean))];
+    const ln = lines.length ? await sbGet(s, `rc_numbers?phone10=in.(${lines.join(',')})&select=phone10,agent_email,usage_type,branch`) : { rows: [] };
+    const emails = new Set();
+    for (const c of convs) for (const e of [c.linked_by, c.claimed_by, c.closed_by]) if (e && e.includes('@')) emails.add(e);
+    for (const m of ms.rows) if (m.sender) emails.add(m.sender);
+    for (const l of ln.rows) if (l.agent_email) emails.add(l.agent_email);
+    const names = {};
+    if (emails.size) { const a = await sbGet(s, `agents?email=in.(${[...emails].map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = r.full_name || r.email; }
+    const nm = e => e ? (names[e] || (e.includes('@') ? e.split('@')[0] : e)) : null;
+    const lineLabel = c => {
+      if (c.channel !== 'sms' || !c.line) return null;
+      const l = ln.rows.find(x => x.phone10 === c.line);
+      if (l && l.agent_email) return `${String(nm(l.agent_email)).split(' ')[0]}’s line`;
+      return `the ${BRANCHES[(l && l.branch) || c.branch] || 'branch'} line`;
+    };
+    const out = convs.map(c => {
+      const mine = ms.rows.filter(m => m.conversation_id === c.id);
+      const photosOf = m => (Array.isArray(m.attachments) ? m.attachments : []).map((a, index) => ({ a, index })).filter(x => x.a && x.a.ok && /^image\//.test(String(x.a.content_type || ''))).map(x => ({ index: x.index, content_type: x.a.content_type }));
+      const counts = { messages: mine.length, photos: mine.reduce((n, m) => n + photosOf(m).length, 0) };
+      return {
+        id: c.id, channel: c.channel, status: c.status, outcome: c.outcome, branch: c.branch, branch_name: BRANCHES[c.branch] || c.branch || null, topic: c.topic, lang: c.lang,
+        name: c.visitor_name, phone: c.visitor_phone, link_status: c.link_status, policy: c.policy || null,
+        linked_by: nm(c.linked_by), linked_at: c.linked_at, claimed_by: nm(c.claimed_by), closed_by: c.closed_by === 'visitor' ? 'visitor' : nm(c.closed_by), closed_at: c.closed_at, close_note: c.close_note || null,
+        created_at: c.created_at, updated_at: c.updated_at, line: c.line, line_label: lineLabel(c), visible: c.visible,
+        counts: c.link_status === 'confirmed' ? counts : null,
+        messages: c.visible ? mine.map(m => ({ id: m.id, ts: m.ts, from: m.sender_kind, name: m.sender_kind === 'agent' ? String(nm(m.sender)).split(' ')[0] : null, body: m.body, photos: photosOf(m) })) : [],
+      };
+    });
+    return res.status(200).json({ ok: true, client_no: no, conversations: out });
+  }
+
   /* everything below is about one conversation */
   const id = Number(b.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Bad id' });
@@ -675,8 +723,8 @@ async function agentHandler(req, res, s, b, action) {
     const outcome = String(b.outcome || '');
     if (!['lead', 'logged', 'spam', 'abandoned'].includes(outcome)) return res.status(400).json({ ok: false, error: 'Bad outcome' });
     if (conv.status === 'closed') return res.status(409).json({ ok: false, error: 'Already closed' });
-    const patch = { status: 'closed', outcome, closed_at: now, closed_by: me.email, updated_at: now };
     const note = clean(b.note, 1000);
+    const patch = { status: 'closed', outcome, closed_at: now, closed_by: me.email, close_note: note || null, updated_at: now };
     if (outcome === 'lead') {
       if (!conv.visitor_phone && !conv.visitor_email) return res.status(400).json({ ok: false, error: 'A phone or email is needed to make a lead', code: 'need_phone' });
       const lead_id = conv.lead_id || await convertToLead(s, conv, { message: note });

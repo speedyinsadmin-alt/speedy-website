@@ -99,6 +99,36 @@ files `memory/verification-discipline.md` and `memory/gbp-scheduled-tasks.md` lo
 every session and carry the traps. Copy new harnesses back into that folder before
 stopping for the day.
 
+### ✅ SEP 18 · INBOX VISIBILITY BY OFFICE, TWO STAFF PILLS, THE CHAT CARD, THE LOG TAB READS THE THREADS
+Three pushes by the chat session (`f113375`, `8d248f9`, `f7105d9`), all harnessed +
+mutated + photographed in Chrome before push. The other session's uncommitted
+`portal.html` / `platform.js` hunks were never staged (`git apply --cached` of my hunk only).
+
+- **Who sees a text on an agent's direct number** (Saif: "by default sms show to all
+  agents per branches"): owners/admins everything; everyone else their own number + the
+  direct numbers of their **home office** (Staff page name → code via `_inbox.js
+  branchCode()`; `agents.branch` holds NAMES, threads hold CODES); Staff pills
+  **See every text** (`sms_all`, in owner+admin bundles; may whisper, never answer/take
+  over) and **Texts stay private** (`sms_private`, grant-only, on the number's OWNER:
+  theirs + owners/admins only, not even sms_all). `chat.js canSee()` + `privateLines()`
+  gate inbox/thread/media; a mirror thread on a number with no branch takes its owner's
+  home office. Two people have no home branch → they see own + queue only.
+- **Chat card "takes forever"**: it waited for the first inbox_count, which ran 2.5 s
+  after load, before Google had set TOKEN → bailed → 30-s timer. Now retries every 1.5 s
+  while signed out, shows the moment TOKEN exists, counts fill in after.
+- **Stage 3 item 2 — the Log tab reads the client's conversations live** (`client_log`
+  in chat.js; `clienttabs.js chatEntry()`): open+confirmed → last four bubbles, photo
+  tiles through the media call, "Show earlier", Open in Speedy Chat; private/other
+  office → row + counts only; **guess → the fact only, no words** (a wrong phone match
+  must never put a stranger's texts on a client); closed → outcome + the close note (now
+  `conversations.close_note`). Chip "Chats & texts". Refresh when older than 15 s on
+  re-render. Backfilled 8 pre-link threads from `none` to `guess`.
+- **Next, agreed order:** push notifications through the PWA (VAPID keys in Vercel env,
+  `push_subscriptions` per device, per-agent **mute** in the duty sheet, SMS chain stays
+  as fallback) → item 4 photos → Documents → texts per agent on the Calls page (columns
+  "Texts in / answered / median reply" on the By-agent table; Saif asked, feasible from
+  `messages.sender` + `events sms.in/out`).
+
 ### ✅ SEP 18 · SUPABASE SECURITY ADVISORS CLEAN — no code change, database only
 **Trigger:** Supabase's weekly email "Action required: security vulnerabilities detected"
 (Sep 15) for project `speedy-insurance` (`huvpitgappdqgavrqbud`). Critical finding:

@@ -22,6 +22,8 @@
 /* ---- HOST HOOKS. The portal is the default; the Console overrides in platform.html. ---- */
 const PanelHost = {
   page: 'portal',
+  /* one line per payment and the policies in a tab (the Console); the portal keeps its card */
+  compact: false,
   /* the open client's tab, for the carrier page's title: the portal's tab bar */
   tab: no => (typeof OPEN_TABS !== 'undefined' ? OPEN_TABS : []).find(t => t.client_no === no),
   /* the office a charge is stamped with: the one the agent picked at sign-in */
@@ -138,8 +140,11 @@ async function renderPanel(){
   }
 
   // policies compact
-  h += '<div style="font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Policies ('+pols.length+')</div>';
-  if(!pols.length) h += '<div class="dim" style="font-size:13px;margin-bottom:8px">No insurance policies</div>';
+  /* COMPACT (Sep 18): the Console shows the policies in a fourth tab instead of above the
+     card, so the heading and the rows are built here and placed by PanelHost.compact below. */
+  let polRows = '';
+  const polHead = '<div style="font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Policies ('+pols.length+')</div>'
+    + (!pols.length ? '<div class="dim" style="font-size:13px;margin-bottom:8px">No insurance policies</div>' : '');
   /* One row per policy, each tappable. Client 6402 has FOURTEEN tabs: the old
      "See full details" expanded every one of them at once - drivers, vehicles,
      VINs, billing - so an agent scrolled past thirteen to reach the one he wanted,
@@ -161,7 +166,7 @@ async function renderPanel(){
     /* Enough on the collapsed row to pick the right policy without opening it:
        tab number, line of business, policy number. */
     const sub = [tabN, isDmv ? 'DMV' : (p.lob || ''), p.policy_number || ''].filter(Boolean).join(' · ');
-    h += '<div style="background:var(--field);border:1px solid '+(open?'var(--blue)':'transparent')+';border-radius:10px;padding:11px 13px;margin-bottom:6px;cursor:pointer" onclick="togglePolicy('+i+')">'
+    polRows += '<div style="background:var(--field);border:1px solid '+(open?'var(--blue)':'transparent')+';border-radius:10px;padding:11px 13px;margin-bottom:6px;cursor:pointer" onclick="togglePolicy('+i+')">'
       + '<div style="display:flex;justify-content:space-between;align-items:center">'
       + '<div style="min-width:0"><b style="font-size:13px">'+esc(p.carrier || (isDmv ? 'DMV service' : '—'))+'</b>'
       + '<div style="font-size:12px;color:'+(expired?'#ff8787':'var(--mute)')+'">'+esc(sub)
@@ -174,13 +179,15 @@ async function renderPanel(){
       + (open ? policyDetailHtml(p) : '')
       + '</div>';
   }
+  if(!PanelHost.compact) h += polHead + polRows;   // the Console puts the rows in a tab instead
 
   /* THE TABS (Sep 16): Payments · Documents · Log, in the slot "Recent activity" had.
      That three-line list was a baby log; the Log tab is what it grew into. The old
      bottom toggle hid the payment card - it is the default tab now. Shared renderer,
      /admin/shared/clienttabs.js, same as the Console. */
   h += ClientTabs.html(r, { me: EMAIL, clientNo: ACTIVE_TAB, actions: true, page: PanelHost.page,
-    payHtml: payHistoryHtml(r), rerender: () => renderPanel() });
+    payHtml: payHistoryHtml(r), rerender: () => renderPanel(),
+    extra: PanelHost.compact ? { policies: { label: 'Policies', n: allPols.length, html: allPols.length ? polRows : '<div class="dim" style="font-size:13px;padding:10px 0">No insurance policies</div>' } } : null });
 
   // actions
   h += '<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px">'
@@ -248,7 +255,7 @@ function addDocsFor(paymentId, clientNo, amount){
 
 /* THE PAYMENT CARD lives in /admin/shared/paycard.js (Sep 13) - one renderer for this
    page and the Console. These names stay so nothing else here changes. */
-function payHistoryHtml(c){ return PayCard.html(c, { me: EMAIL, clientNo: ACTIVE_TAB, actions: true }); }
+function payHistoryHtml(c){ return PayCard.html(c, { me: EMAIL, clientNo: ACTIVE_TAB, actions: true, compact: !!PanelHost.compact }); }
 function noticeLineHtml(n){ return PayCard.noticeLineHtml(n); }
 function auditLineHtml(p){ return PayCard.auditLineHtml(p); }
 function sendbackLabel(code){ return PayCard.sendbackLabel(code); }

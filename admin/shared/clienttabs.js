@@ -93,7 +93,8 @@ const isImg = d => /^image\//i.test(String(d.mime || ''));
 
 /* ---------------- the strip ---------------- */
 function html(c, opts){
-  opts = Object.assign({ me: null, clientNo: null, actions: true, page: 'portal', payHtml: '', rerender: null }, opts || {});
+  /* opts.extra (Sep 18): more tabs after Log - { key: { label, n, html } }; the Console puts the policies there */
+  opts = Object.assign({ me: null, clientNo: null, actions: true, page: 'portal', payHtml: '', rerender: null, extra: null }, opts || {});
   CUR = { c, opts };
   const no = opts.clientNo || (c.client && c.client.client_no);
   const tab = TAB[no] || 'payments';
@@ -107,10 +108,12 @@ function html(c, opts){
     + tabBtn('payments', 'Payments', pays)
     + tabBtn('documents', 'Documents', docs.length, nl ? '<span class="n nwarn" title="' + nl + ' need' + (nl === 1 ? 's' : '') + ' a label">&#9888; ' + nl + '</span>' : '')
     + tabBtn('log', 'Log', logN)
+    + Object.entries(opts.extra || {}).map(([k, x]) => tabBtn(k, x.label, x.n)).join('')
     + '</div>';
   h += '<div class="ctabbody" data-tab="' + tab + '">';
   if(tab === 'payments') h += opts.payHtml || '';
   else if(tab === 'documents') h += docsHtml(c, opts);
+  else if(opts.extra && opts.extra[tab]) h += opts.extra[tab].html || '';
   else h += logHtml(c, opts);
   h += '</div>';
   return h;

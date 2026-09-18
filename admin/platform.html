@@ -476,6 +476,7 @@ let ROSTER = [], OFFICES = [];
    shared script may cost the client page, never the whole Console. */
 Object.assign(window.PanelHost || {}, {
   page: 'console',
+  compact: true,   // one line per payment, tap to open; the policies in a tab (Saif, Sep 18: "make it simple")
   /* the carrier page's title reads the open client's name: the card knows it */
   tab: no => { const c = CLIENT_CACHE[no], cl = c && c.client; return cl ? { client_no: no, name: cl.business_name || [cl.first_name, cl.last_name].filter(Boolean).join(' ') || ('#' + no) } : null; },
   /* the office a Console charge is stamped with: Tony's home branch, else the client's own */

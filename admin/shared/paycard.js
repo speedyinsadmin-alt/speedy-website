@@ -105,8 +105,23 @@ function openBalances(cache){
     return { id: p.id, ts: p.ts, owed: Number(p.total_owed), got, left: +(Number(p.total_owed) - got).toFixed(2) };
   });
 }
+/* COMPACT ROWS (Sep 18, the Console): a payment is one line - amount · purpose · date and
+   the state - and the rest of the card (who, carrier, commission, documents, actions)
+   sits in .paymore, shown when the line is tapped. Which rows are open is remembered
+   per client across redraws; the newest row starts open. The portal (compact:false)
+   renders exactly as before. */
+const OPEN_ROWS = {};   // clientNo -> Set of open payment ids
+function openSetFor(no, pays){ if(!OPEN_ROWS[no]) OPEN_ROWS[no] = new Set(pays.length ? [pays[0].id] : []); return OPEN_ROWS[no]; }
+function toggleRow(ev, el, id, no){
+  if(ev && ev.target && ev.target.closest && !ev.target.closest('.payhead')) return;   // a tap on the details is not a toggle
+  const set = openSetFor(no, []);
+  if(set.has(id)) set.delete(id); else set.add(id);
+  el.classList.toggle('open', set.has(id));
+}
 function payHistoryHtml(c, opts){
-  opts = Object.assign({ me: null, clientNo: null, actions: true }, opts || {});
+  opts = Object.assign({ me: null, clientNo: null, actions: true, compact: false }, opts || {});
+  const rowNo = (c.client && c.client.client_no) || opts.clientNo || 0;
+  const openRows = opts.compact ? openSetFor(rowNo, c.payments || []) : null;
   /* the share sheet (share.js) finds the card it was opened from here - the Console has no CLIENT_CACHE */
   window.__shareCard = c; window.__shareMe = opts.me;
   const pays = c.payments || [];
@@ -116,9 +131,9 @@ function payHistoryHtml(c, opts){
   const byPay = {};
   docs.forEach(d => { const k = d.payment_id || '_client'; (byPay[k] = byPay[k] || []).push(d); });
 
-  let h = '<div class="paycard"><div style="font-size:12px;color:var(--mute);letter-spacing:.06em;margin:14px 0 8px">PAYMENTS &amp; DOCUMENTS'
+  let h = '<div class="paycard' + (opts.compact ? ' compact' : '') + '">' + (opts.compact ? '' : '<div style="font-size:12px;color:var(--mute);letter-spacing:.06em;margin:14px 0 8px">PAYMENTS &amp; DOCUMENTS'
     + (c.producer_name ? ' <span style="text-transform:none;letter-spacing:0;color:var(--mute)">· producer ' + esc(c.producer_name) + '</span>' : '')
-    + '</div>';
+    + '</div>');
   h += pays.map(p => {
     /* Two different questions, and they used to be conflated into one broken test
        against a display name. Who EARNS it decides who finishes the audit; who
@@ -177,9 +192,10 @@ function payHistoryHtml(c, opts){
     const waiting = p.audit_status === 'ready_for_audit';
     const sentBack = !complete && !waiting && !!p.audit_sendback;
     const refParent = isRefund ? pays.find(q => q.id === p.refund_of) : null;
-    return '<div style="background:var(--field);border:1px solid ' + (isRefund ? 'rgba(224,49,49,.35)' : 'var(--line)')
+    return '<div' + (opts.compact ? ' class="payrow' + (openRows.has(p.id) ? ' open' : '') + '" onclick="PayCard.toggleRow(event,this,\'' + p.id + '\',' + Number(rowNo) + ')"' : '')
+      + ' style="background:var(--field);border:1px solid ' + (isRefund ? 'rgba(224,49,49,.35)' : 'var(--line)')
       + ';border-radius:10px;padding:10px 11px;margin-bottom:7px">'
-      + '<div class="row" style="align-items:flex-start">'
+      + '<div class="row' + (opts.compact ? ' payhead' : '') + '" style="align-items:flex-start">'
       + '<div><b style="font-size:14px' + (isRefund ? ';color:var(--red-ink)' : '') + '">' + (isInvoice ? 'Open invoice ' + money(p.total_owed) : money(p.amount)) + '</b>'
       /* Only ever true on ZZTEST for an admin (item 84). Said in amber on the row so a
          test dollar is never read as a real one. */
@@ -193,7 +209,8 @@ function payHistoryHtml(c, opts){
             + Number(p.collected || p.amount).toFixed(2) + ' of $' + Number(p.total_owed).toFixed(2))
             + ' · $' + (p.total_owed - (p.collected || p.amount)).toFixed(2) + ' still owed</span>'
           : (isInvoice && p.total_owed ? '<span style="color:var(--green);font-size:12px"> · collected in full</span>' : ''))
-      + ' <span class="dim" style="font-size:12px">' + esc(p.purpose || '') + '</span></div>'
+      + ' <span class="dim" style="font-size:12px">' + esc(p.purpose || '') + '</span>'
+      + (opts.compact ? ' <span class="dim" style="font-size:12px">· ' + esc(String(p.ts || '').slice(0, 10)) + '</span>' : '') + '</div>'
       + '<span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:7px;'
       /* GREY, not blue. The card's colour language is amber = needs attention, green =
          done, and BLUE = clickable (change, wrong client, every document chip). A blue
@@ -218,6 +235,7 @@ function payHistoryHtml(c, opts){
         : isLink ? 'link sent · not paid'
         : invoiceOpen ? 'open invoice · nothing collected'
         : isBal ? 'balance payment' : complete ? 'audited' : sentBack ? 'sent back' : waiting ? 'waiting for the auditor' : 'needs proof') + '</span></div>'
+      + (opts.compact ? '<div class="paymore">' : '')
       + '<div class="dim" style="font-size:12px;margin-top:2px">'
       + esc(String(p.ts||'').slice(0,10))
       + (p.ref ? ' · ' + esc(p.ref) : '')
@@ -388,7 +406,7 @@ function payHistoryHtml(c, opts){
                 : '')
             + '</div>'
           : '')
-      + '</div>';
+      + (opts.compact ? '</div>' : '') + '</div>';
   }).join('');
 
   const loose = byPay['_client'] || [];
@@ -446,6 +464,6 @@ async function openPortalDoc(id, win){
 }
 
 window.openRefundSlip = openRefundSlip;
-window.PayCard = { html: payHistoryHtml, noticeLineHtml, slipLineHtml, auditLineHtml, sendbackLabel, docType, docTypeLabel, bytesLabel, uploaderShort, refundable, canRefundRow, openBalances, openDoc: openPortalDoc, money };
+window.PayCard = { html: payHistoryHtml, toggleRow, noticeLineHtml, slipLineHtml, auditLineHtml, sendbackLabel, docType, docTypeLabel, bytesLabel, uploaderShort, refundable, canRefundRow, openBalances, openDoc: openPortalDoc, money };
 window.openPortalDoc = openPortalDoc;
 })();

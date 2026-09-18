@@ -131,4 +131,10 @@
 .cpanel .will li::before{content:"\2192";position:absolute;left:0;color:var(--dim)}
 .cpanel .will b{color:var(--ink)}
 .cpanel .will .neg{color:var(--red-ink);font-weight:700}
+/* COMPACT PAYMENTS (Sep 18): one line per payment on the Console; tap the line for the rest */
+.cpanel .paycard.compact .payrow{cursor:pointer}
+.cpanel .paycard.compact .payrow .payhead{cursor:pointer;align-items:center}
+.cpanel .paycard.compact .payrow .paymore{display:none}
+.cpanel .paycard.compact .payrow.open{border-color:rgba(77,124,254,.5)}
+.cpanel .paycard.compact .payrow.open .paymore{display:block;border-top:1px solid var(--hair);margin-top:8px;padding-top:6px;cursor:default}
 .cpanel .docchip{display:inline-block;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:12px;font-weight:600;color:var(--blue-l);cursor:pointer}

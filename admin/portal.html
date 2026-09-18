@@ -1230,8 +1230,15 @@ window.addEventListener('load', () => {
 /* Speedy Chat card: counts every 30s while signed in; TOKEN is the portal's own (top-level let, visible here) */
 /* its own tab (named, so a second click focuses it): the portal stays where the agent was (Saif, Sep 17) */
 function openChat(){ try{ if(TOKEN) localStorage.setItem('speedy_handoff_tok', TOKEN); }catch(e){} const w = window.open('/admin/chat.html' + (TOKEN ? '#tok=' + encodeURIComponent(TOKEN) : ''), 'speedychat'); if(w && w.focus) w.focus(); }
+/* The card used to appear only after the first successful count - and the first try ran
+   2.5 s after page load, usually BEFORE Google sign-in had set TOKEN, so it bailed and the
+   card waited for the 30-second interval ("the Chat takes forever to appear", Saif, Sep 18).
+   Now: while signed out, retry every 1.5 s (one pending retry at a time); once signed in,
+   show the card at once and let the counts fill in when the server answers. */
+let CHAT_RETRY = null;
 async function chatCounts(){
-  if(typeof TOKEN === 'undefined' || !TOKEN) return;
+  if(typeof TOKEN === 'undefined' || !TOKEN){ clearTimeout(CHAT_RETRY); CHAT_RETRY = setTimeout(chatCounts, 1500); return; }
+  document.getElementById('chatBox').classList.remove('hide');
   try{
     const r = await fetch('/api/chat', { method:'POST', headers:{ 'Content-Type':'application/json', 'x-id-token': TOKEN }, body: JSON.stringify({ action:'inbox_count' }) });
     const j = await r.json(); if(!j.ok) return;

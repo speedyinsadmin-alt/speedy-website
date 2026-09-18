@@ -3715,6 +3715,86 @@ if (view === 'portal_share_due') {
     return res.status(200).json({ ok: cl.ok, email, clients: cl.rows || [], policy_counts: counts, query: q, total_shown: (cl.rows || []).length });
   }
 
+  /* ---- RECENT CLIENTS (Sep 18): the clients someone touched lately, newest first ----
+     The Console's Clients tab used to open on the first 100 clients by number - nobody
+     needs that list. This is the one Tony reads: who was worked on in the last
+     RECENT_DAYS, what happened last (a charge, an approval, a send-back, a refund, a
+     note, documents), by whom, and the payment's state. Texts, chats and the sync's own
+     bookkeeping are not "touches" - the Inbox and the Activity tab have those. */
+  if (view === 'recent_clients') {
+    const RECENT_DAYS = 14, MAX = 40;
+    const since = new Date(Date.now() - RECENT_DAYS * 86400e3).toISOString();
+    const first = e => { const em = agentEmailOf(e); return em ? String(AGENT_NAME[em] || em.split('@')[0]).split(' ')[0] : (e ? String(e).split(' ')[0] : ''); };
+    const escT = v => String(v == null ? '' : v).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    const usd = n => '$' + Number(n || 0).toFixed(2);
+    const [led, ev] = await Promise.all([
+      sbGet(s, `bridge_ledger?select=id,ts,kind,client_id,amount,purpose,agent,audit_status,audit_sendback,helper_email,helper_share_pct,refund_of,balance_of,is_test&ts=gte.${since}&is_test=not.is.true&order=ts.desc&limit=600`),
+      sbGet(s, `events?select=ts,kind,actor,client_no,payload&ts=gte.${since}&client_no=not.is.null&kind=not.like.sms.*&kind=not.like.chat.*&kind=not.like.sync.*&kind=not.like.lead.*&kind=not.like.agent.*&kind=not.in.(payment.policy_linked,payment.note_sent)&order=ts.desc&limit=800`),
+    ]);
+    /* the state of a payment, as the card says it */
+    const stateOf = r => {
+      if (!r) return null;
+      const k = String(r.kind || ''), st = String(r.audit_status || '');
+      if (r.refund_of) return ['b', 'refunded'];
+      if (/declin|fail|void/.test(k) || ['declined', 'void', 'not_a_payment'].includes(st)) return ['r', 'declined'];
+      if (k === 'paylink_create' || st === 'link_sent') return ['m', 'link sent'];
+      if (k === 'invoice_open' || st === 'invoice_open') return ['a', 'open invoice'];
+      if (r.balance_of) return ['m', 'balance payment'];
+      if (st === 'complete') return ['g', 'approved'];
+      if (st === 'ready_for_audit') return ['a', 'waiting for the auditor'];
+      if (r.audit_sendback) return ['r', 'sent back'];
+      return ['a', 'needs proof'];
+    };
+    const byClient = {};
+    const touch = (no, ts, what, who, pill) => {
+      no = Number(no); if (!isFinite(no)) return;
+      const cur = byClient[no];
+      if (!cur || ts > cur.ts) byClient[no] = { client_no: no, ts, what, who, pill: pill || (cur && cur.pill) || null };
+      else if (cur && !cur.pill && pill) cur.pill = pill;
+    };
+    const ledRows = Array.isArray(led.rows) ? led.rows : [];
+    const byId = {}; for (const r of ledRows) byId[r.id] = r;
+    for (const r of ledRows) {
+      const k = String(r.kind || ''), amt = usd(r.amount);
+      let what;
+      if (r.refund_of) what = 'Refund <b>' + usd(Math.abs(Number(r.amount || 0))) + '</b>';
+      else if (k === 'invoice_open') what = 'Open invoice <b>' + amt + '</b> ' + escT(r.purpose || '');
+      else if (k === 'paylink_create') what = 'Pay link sent <b>' + amt + '</b> ' + escT(r.purpose || '');
+      else if (r.balance_of) what = 'Balance paid <b>' + amt + '</b>';
+      else what = 'Charged <b>' + amt + '</b> ' + escT(r.purpose || '')
+        + (r.helper_email && Number(r.helper_share_pct) > 0 ? ' — shared ' + Number(r.helper_share_pct) + '% with ' + escT(first(r.helper_email)) : '');
+      touch(r.client_id, r.ts, what, first(r.agent), stateOf(r));
+    }
+    for (const e of (Array.isArray(ev.rows) ? ev.rows : [])) {
+      const p = e.payload || {}, k = String(e.kind || ''), who = first(e.actor);
+      const row = p.payment_id ? byId[p.payment_id] : null;
+      const amt = p.amount != null ? usd(p.amount) : (row ? usd(row.amount) : '');
+      let what, pill = row ? stateOf(row) : null;
+      if (k === 'audit.approved') { what = 'Approved <b>' + amt + '</b>' + (row && row.purpose ? ' ' + escT(row.purpose) : ''); pill = ['g', 'approved']; }
+      else if (k === 'audit.sent_back') { what = 'Sent back: <b>\u201c' + escT(p.reason || p.code_label || 'see the card') + '\u201d</b>'; pill = ['r', 'sent back']; }
+      else if (k === 'audit.submitted' || k === 'audit.submitted_by_other') { what = 'Submitted for audit <b>' + amt + '</b>'; pill = pill || ['a', 'waiting for the auditor']; }
+      else if (k === 'audit.completed_by_other' || k === 'audit.repaired') { what = 'Audit ' + (k === 'audit.repaired' ? 'repaired' : 'completed') + (amt ? ' <b>' + amt + '</b>' : ''); }
+      else if (k === 'carrier_leg.saved' || k === 'carrier_leg.completed' || k === 'carrier.zero_acknowledged') { what = 'Carrier cost entered' + (amt ? ' on <b>' + amt + '</b>' : ''); }
+      else if (k === 'payment.refunded' || k === 'refund.decided') { what = (p.approved === false || p.decision === 'declined' ? 'Refund declined' : 'Refund <b>' + amt + '</b> approved'); pill = ['b', 'refunded']; }
+      else if (k === 'refund.requested') { what = 'Refund <b>' + amt + '</b> requested'; pill = ['a', 'refund requested']; }
+      else if (k === 'refund.confirmation_filed') { what = 'Refund slip filed'; }
+      else if (k === 'commission.shared') { what = 'Shared <b>' + Number(p.pct || 0) + '%</b> with ' + escT(first(p.helper)); }
+      else if (k === 'commission.reassigned') { what = 'Commission moved to ' + escT(first(p.to || p.to_email)); }
+      else if (k === 'note.added') { what = 'Note: <b>\u201c' + escT(String(p.text || '').slice(0, 90)) + (String(p.text || '').length > 90 ? '…' : '') + '\u201d</b>'; }
+      else if (k.startsWith('document.')) { what = 'Documents: ' + escT(k.slice(9).replace(/_/g, ' ')) + (p.doc_label || p.doc_type ? ' — ' + escT(p.doc_label || p.doc_type) : ''); }
+      else if (k === 'client.corrected' || k === 'client.correction_rejected') { what = k === 'client.corrected' ? 'Payment moved to this client' : 'Wrong-client request declined'; }
+      else if (k === 'invoice.converted_from_placeholder') { what = 'Invoice recorded'; }
+      else what = escT(k.replace(/[._]/g, ' '));
+      touch(e.client_no, e.ts, what, who, pill);
+    }
+    const list = Object.values(byClient).sort((a, b) => (a.ts < b.ts ? 1 : -1)).slice(0, MAX);
+    const nos = list.map(x => x.client_no);
+    const names = {};
+    if (nos.length) { const cr = await sbGet(s, `clients?client_no=in.(${nos.join(',')})&select=client_no,first_name,last_name,business_name,branch,status`); for (const c of (cr.rows || [])) names[c.client_no] = c; }
+    for (const x of list) { const c = names[x.client_no] || {}; x.name = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || ('Client #' + x.client_no); x.branch = c.branch || null; x.status = c.status || null; }
+    return res.status(200).json({ ok: true, email, days: RECENT_DAYS, clients: list });
+  }
+
   /* ---- Our single client: profile + policies + payments + events ---- */
   if (view === 'our_client') {
     const no = parseInt(String(req.query.no || ''), 10);

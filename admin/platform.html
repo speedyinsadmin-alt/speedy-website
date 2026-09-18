@@ -303,6 +303,14 @@
   .cell .k{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
   tr:last-child td{border-bottom:0}
   .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:13px;font-weight:600}
+  /* RECENT CLIENTS (Sep 18): one row per client touched lately - name, what happened last, who, when */
+  .rc{display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer}
+  .rc:hover{border-color:rgba(77,124,254,.5);background:rgba(255,255,255,.02)}
+  .rc .n{grid-column:1;grid-row:1;font-size:14px;font-weight:700} .rc .n span{color:var(--mute);font-weight:400;margin-left:6px}
+  .rc .w{grid-column:1;grid-row:2;font-size:13px;color:var(--mute)} .rc .w b{color:var(--ink);font-weight:600}
+  .rc .t{grid-column:2;grid-row:1/3;font-size:12px;color:var(--dim);white-space:nowrap;text-align:right} .rc .t .pill{margin-right:8px}
+  .pill.m{background:rgba(143,154,196,.14);color:var(--mute)}
+  @media(max-width:640px){ .rc{grid-template-columns:1fr} .rc .t{grid-column:1;grid-row:3;text-align:left;white-space:normal} }
   .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
   .perchip.sel{background:var(--blue);border-color:var(--blue);color:#fff}
   /* Trust: the search, the opened carrier, the CSV button */
@@ -721,26 +729,57 @@ function clientTable(list, counts) {
     }).join('') + '</table>';
 }
 
+/* RECENT CLIENTS (Sep 18, Saif: "the recent clients, not all of them"). The tab opens on
+   the clients someone touched in the last 14 days, newest first, with what happened last;
+   typing in the search box finds any client (the old table); the three sync buttons live
+   under "⚙ Sync". */
+const PT_WHEN = ts => { try { return new Date(ts).toLocaleString('en-US', { timeZone: PT_TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return String(ts || '').slice(0, 16); } };
+function recentHtml(list, days) {
+  if (!list.length) return '<div class="muted" style="padding:14px 0">Nobody has been worked on in the last ' + days + ' days. Search finds any client.</div>';
+  return list.map(x => '<div class="rc" onclick="openClient(' + Number(x.client_no) + ')">'
+    + '<div class="n">' + esc(x.name) + '<span>#' + esc(x.client_no) + (x.branch ? ' · ' + esc(x.branch) : '') + '</span></div>'
+    + '<div class="t">' + (x.pill ? '<span class="pill ' + esc(x.pill[0]) + '">' + esc(x.pill[1]) + '</span>' : '') + esc(PT_WHEN(x.ts)) + '</div>'
+    + '<div class="w">' + (x.what || '') + (x.who ? ' · <b>' + esc(x.who) + '</b>' : '') + '</div>'
+    + '</div>').join('')
+    + '<div class="muted" style="font-size:13px;margin-top:10px">Only clients someone touched in the last ' + days + ' days are listed. Search finds any client.</div>';
+}
+let RECENT = null;   // the last list, so clearing the search box brings it back without a read
 async function renderClients(el) {
-  const r = await api('our_clients' + (SEARCH_Q ? '&q=' + encodeURIComponent(SEARCH_Q) : ''));
-  if (!r || !r.ok) { el.innerHTML = '<div class="err">Client list failed' + (r && r.error ? ': ' + esc(r.error) : '') + '.</div>'; return; }
-  const list = r.clients || [];
-  const label = SEARCH_Q
-    ? list.length + ' match' + (list.length === 1 ? '' : 'es') + ' for \u201c' + esc(SEARCH_Q) + '\u201d'
-    : 'showing first ' + list.length + ' \u00b7 search to find any client';
-  let h = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'
-    + '<h2 style="margin:0">Clients — Speedy Platform</h2>'
-    + '<button id="deltabtn" style="margin-left:auto;background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync changes now</button>'
+  let h = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
+    + '<h2 style="margin:0">Clients</h2>'
+    + '<span id="syncToggle" class="muted" style="margin-left:auto;font-size:13px;cursor:pointer" onclick="toggleSyncPanel()">⚙ Sync · <span id="syncShort">checking…</span></span>'
+    + '</div>'
+    + '<div id="syncPanel" style="display:none;border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin:0 0 14px">'
+    + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
+    + '<button id="deltabtn" style="background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync changes now</button>'
     + '<button id="seedbtn" style="background:var(--navy);border:1px solid var(--line);color:var(--mute);padding:8px 14px;border-radius:9px;font-size:13px;cursor:pointer">⇊ Full seed</button>'
     + '<button id="resyncbtn" style="background:var(--amber);border:0;color:#2a1a00;padding:8px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer">↻ Re-sync all fields</button>'
     + '</div>'
-    + '<div id="syncline" class="muted" style="font-size:13px;margin:2px 0 12px">checking sync status…</div>'
-    + '<div id="seedprog" class="muted" style="display:none;font-size:13px;margin:4px 0 10px"></div>'
+    + '<div id="syncline" class="muted" style="font-size:13px;margin:10px 0 0">checking sync status…</div>'
+    + '<div id="seedprog" class="muted" style="display:none;font-size:13px;margin:4px 0 0"></div>'
+    + '<div class="muted" style="font-size:12px;margin-top:8px">The platform syncs itself from HawkSoft every ten minutes while anyone is signed in, and every night at 2 AM. These buttons are for when something looks stale.</div>'
+    + '</div>'
     + '<input id="csearch" placeholder="Search name, client #, phone, or email…" value="' + esc(SEARCH_Q) + '" '
-    + 'style="width:100%;max-width:380px;margin:6px 0 6px;padding:10px 13px;border-radius:9px;border:1px solid var(--line);background:#0a0f26;color:var(--ink);font-size:14px">'
-    + '<div class="muted" style="font-size:13px;margin-bottom:12px">' + label + '</div>'
-    + '<div id="ctable">' + clientTable(list, r.policy_counts) + '</div>';
+    + 'style="width:100%;max-width:420px;margin:0 0 6px;padding:10px 13px;border-radius:9px;border:1px solid var(--line);background:var(--field);color:var(--ink);font-size:14px">'
+    + '<div id="clabel" class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:8px 0 8px"></div>'
+    + '<div id="ctable"><div class="load">Loading…</div></div>';
   el.innerHTML = h;
+  const showRecent = () => {
+    if (!RECENT) return;
+    $('#clabel').textContent = 'Touched lately · newest first';
+    $('#ctable').innerHTML = recentHtml(RECENT.clients || [], RECENT.days || 14);
+  };
+  const showSearch = rr => {
+    const list = rr.clients || [];
+    $('#clabel').textContent = list.length + ' match' + (list.length === 1 ? '' : 'es') + ' for \u201c' + SEARCH_Q + '\u201d';
+    $('#ctable').innerHTML = clientTable(list, rr.policy_counts);
+  };
+  if (SEARCH_Q) { const rr = await api('our_clients&q=' + encodeURIComponent(SEARCH_Q)); if (rr && rr.ok) showSearch(rr); }
+  else {
+    const r = await api('recent_clients');
+    if (!r || !r.ok) { $('#ctable').innerHTML = '<div class="err">Client list failed' + (r && r.error ? ': ' + esc(r.error) : '') + '.</div>'; }
+    else { RECENT = r; showRecent(); }
+  }
   /* AUTO SYNC (Sep 18): opening the list nudges the server; it pulls HawkSoft's changes
      when the last sync is older than ten minutes (one instance at a time), and the
      status line catches up when it did. */
@@ -754,14 +793,9 @@ async function renderClients(el) {
     const val = srch.value;
     searchTimer = setTimeout(async () => {
       SEARCH_Q = val.trim();
-      const rr = await api('our_clients' + (SEARCH_Q ? '&q=' + encodeURIComponent(SEARCH_Q) : ''));
-      if (rr && rr.ok) {
-        $('#ctable').innerHTML = clientTable(rr.clients || [], rr.policy_counts);
-        const lbl = srch.parentElement.querySelector('#csearch + .muted');
-        if (lbl) lbl.textContent = SEARCH_Q
-          ? (rr.clients || []).length + ' match' + ((rr.clients || []).length === 1 ? '' : 'es') + ' for \u201c' + SEARCH_Q + '\u201d'
-          : 'showing first ' + (rr.clients || []).length + ' \u00b7 search to find any client';
-      }
+      if (!SEARCH_Q) { showRecent(); return; }   // cleared: back to the recent list, no read
+      const rr = await api('our_clients&q=' + encodeURIComponent(SEARCH_Q));
+      if (rr && rr.ok && SEARCH_Q === srch.value.trim()) showSearch(rr);
     }, 300);
   };
 
@@ -786,6 +820,7 @@ async function renderClients(el) {
   (async () => { const st = await api('job_status'); if (st && st.job && (st.job.status==='running'||st.job.status==='pending')) pollResync(); })();
 }
 
+function toggleSyncPanel(){ const p = $('#syncPanel'); if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none'; }
 let resyncPoll = null;
 async function startServerResync() {
   const btn = $('#resyncbtn'), prog = $('#seedprog');
@@ -848,7 +883,8 @@ async function loadSyncStatus() {
     const t2 = new Date(r.state.last_sync);
     const m2 = Math.round((Date.now() - t2.getTime()) / 60000);
     const ago2 = m2 < 1 ? 'just now' : m2 < 60 ? m2 + ' min ago' : Math.round(m2/60) + ' hr ago';
-    parts.push('nightly sync ' + ago2);
+    parts.push('last sync ' + ago2);
+    const sh = $('#syncShort'); if (sh) sh.textContent = 'last ' + ago2;
   }
   line.innerHTML = (parts.length ? parts.join(' · ') : 'No sync recorded yet') + ' · <span class="muted">live refresh when you open a client</span>';
 }

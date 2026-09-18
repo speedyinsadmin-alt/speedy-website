@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 18. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `24f4408` (another session pushes the public
+otherwise; `git status` is clean at `bedec92` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -873,7 +873,17 @@ admin reopen), agents see "✓ Paid · September" and a Paid tile, later approva
 the next month. Waiting on Tony: does "confirm" mean *paid with salary* (per-agent tick) or
 *numbers frozen* (one button)?
 
-**SEP 18 - FOUR THINGS SAIF ASKED FOR, ALL LIVE.**
+**SEP 18 - FIVE THINGS SAIF ASKED FOR, ALL LIVE.**
+
+**5. FIND A CARD (`bedec92`).** Trust tab, "💳 Find a card": the admin types the last 4
+digits, "Search every payment" - any month. View `card_find&last4=NNNN` (admin): the
+ledger by `extra->>last4` (only brand + last four exist on a card charge; cash, Zelle,
+pay links carry none), no test rows, no declined tries, refunds folded onto their charge
+("refunded 06/14"), cards counted by brand (four digits ≠ one card), names, $ collected,
+refunded count; rows open the client; the panel survives a period change (`CARD_Q`); no
+match is said with why. harnessCardFind 17, mutateCardFind 14/14; 0 under AA both themes.
+Mock `mock_cardfind_open.html` approved.
+
 
 **1. AUTO SYNC (`145e848`).** "Can we fix the auto sync?" The cron fires once a day (2 AM
 Pacific; the plan allows no more) and HawkSoft has no webhooks, so a client created at
@@ -1575,6 +1585,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessFees.mjs` 22 · `mutateFees.mjs` 14 · `fees_view.html` / `fees_byagent.html` | Fees by agent; By agent by earner + period |
 | `patch_text.mjs` (438 sizes, --dim) · `overflowOf.mjs` | readability build |
 | `harnessSpeed.mjs` 15 · `mutateSpeed.mjs` 12 · `shootText.mjs` | speed (parallel reads, Console cache, thumb memory); readability before/after |
+| `harnessCardFind.mjs` 17 · `mutateCardFind.mjs` 14 · `mockCardFind.mjs` | Find a card on the Trust tab |
 | `harnessAutoSync.mjs` 14 · `mutateAutoSync.mjs` 11 | the self-sync (sync_tick, the lease) |
 | `harnessRecent.mjs` 24 · `mutateRecent.mjs` 16 · `mockConsoleSimple.mjs` | recent clients (the list, the search, the sync panel) |
 | `harnessTheme.mjs` 28 · `auditContrast.mjs` · `auditAll.mjs` · `contrastCalc.mjs` · `shots_light/` | the light theme, the contrast gate on 35 screens |

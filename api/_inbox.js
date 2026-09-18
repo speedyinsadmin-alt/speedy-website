@@ -7,6 +7,12 @@
      3. else none
    Agents' decisions live in phone_links; the HawkSoft mirror is never written. */
 
+/* agents.branch (the Staff page) holds the office NAME; conversations.branch holds the
+   code the widget and rc_numbers use. One map, so "same branch" means the same thing
+   for a person and for a thread. Accepts either form. */
+const BRANCH_CODE = { 'moreno valley': 'mv', 'riverside van buren': 'vb', 'riverside magnolia': 'mg', 'lake elsinore': 'le', 'colton': 'co' };
+export function branchCode(b) { const k = String(b || '').trim().toLowerCase().replace(/\s*[—-]\s*/g, ' '); if (['mv', 'vb', 'mg', 'le', 'co'].includes(k)) return k; return BRANCH_CODE[k] || null; }
+
 export async function resolveClient(s, phone10) {
   if (!phone10) return { client_no: null, status: 'none' };
   const get = async path => { const r = await fetch(`${s.base}/rest/v1/${path}`, { headers: s.hdrs }); const rows = await r.json().catch(() => null); return Array.isArray(rows) ? rows : []; };

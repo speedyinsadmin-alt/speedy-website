@@ -2693,7 +2693,8 @@ const staffAt = i => (STAFF_DATA && STAFF_DATA.rows) ? STAFF_DATA.rows[Number(i)
 
 const CAP_LABEL = { refund:'Refunds', approve_month:'Approve the month',
   audit_approve:'Approve audits', correct:'Corrections', manage_agents:'Manage staff',
-  commission_override:'Override commission', console:'Console access' };
+  commission_override:'Override commission', console:'Console access',
+  sms_all:'See every text', sms_private:'Texts stay private' };
 const capLabel = c => CAP_LABEL[c] || c;
 
 /* ONE SENTENCE PER PERMISSION, in the language of what it lets someone DO to money or
@@ -2715,6 +2716,11 @@ const CAP_HELP = {
     + 'any of the permissions on this list.',
   console: 'Opens this admin console at all. Without it they only see the agent portal '
     + 'where charges are taken.',
+  sms_all: 'In the Inbox, sees the texts on every agent’s direct number in every office, '
+    + 'and can whisper on them. Without it an agent sees the branch lines plus the '
+    + 'direct numbers of their own office.',
+  sms_private: 'The texts on this person’s own direct number are shown only to them and '
+    + 'to owners and admins — not to the rest of their office.',
 };
 const capHelp = c => CAP_HELP[c] || 'No description recorded for this permission yet.';
 
@@ -2793,7 +2799,10 @@ function staffRowHtml(a) {
   /* The SUMMARY is the point of the redesign: "everything" when the role has it all,
      the actual grant names when there are some, a quiet "no extras" otherwise — instead
      of seven empty checkboxes repeated eighteen times. */
-  const summary = roleCaps.length >= (r.grantable || []).length
+  /* "everything" = every permission any ROLE carries. A grant-only pill (sms_private,
+     in no bundle by design) must not stop an owner reading as "everything". */
+  const bundled = new Set(Object.values(r.role_caps || {}).flat());
+  const summary = roleCaps.length >= (r.grantable || []).filter(c => bundled.has(c)).length
     ? '<span class="sp all">everything</span>'
     : (a.grants.length ? a.grants.map(c => '<span class="sp">' + esc(capLabel(c)) + '</span>').join('')
                        : '<span class="sp none">no extras</span>');

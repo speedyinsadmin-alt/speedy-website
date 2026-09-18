@@ -21,7 +21,7 @@
    Nothing here sends. Nothing here logs message bodies.
 --------------------------------------------------------------------------- */
 import { randomBytes } from 'node:crypto';
-import { resolveClient } from './_inbox.js';
+import { resolveClient, branchCode } from './_inbox.js';
 
 /* ---- RingCentral auth (JWT -> access token), the proven flow from sms.js, for
    downloading MMS media. Media is the whole point of many texts (licence, DMV
@@ -120,9 +120,13 @@ export async function ingest(s, m) {
 
   let created = false;
   if (!conv) {
+    /* the thread's branch decides which agents see a mirror thread (chat.js canSee):
+       the number's branch if set on the numbers table, else its owner's home branch */
+    let branch = line.branch || null;
+    if (!branch && mirror) { const ag = await sbGet(s, `agents?email=eq.${enc(line.agent_email)}&select=branch&limit=1`); branch = branchCode(ag.rows[0] && ag.rows[0].branch); }
     const prev = await sbGet(s, `conversations?visitor_phone=eq.${customer}&select=id,visitor_name&order=id.desc&limit=1`);
     const r = await sbPost(s, 'conversations', {
-      channel: 'sms', token: cryptoToken(), source_page: null, lang: 'en', branch: line.branch || null, topic: null,
+      channel: 'sms', token: cryptoToken(), source_page: null, lang: 'en', branch, topic: null,
       visitor_name: prev.rows[0] ? prev.rows[0].visitor_name : null, visitor_phone: customer, client_no, link_status, previous_id: prev.rows[0] ? prev.rows[0].id : null,
       line: line.phone10, line_extension_id: line.extension_id || null, visibility: mirror ? 'owner' : 'all',
       status: mirror ? 'active' : (m.direction === 'inbound' ? 'waiting' : 'active'),

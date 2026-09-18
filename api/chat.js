@@ -24,7 +24,7 @@
    chat_settings closes everything for a day. All Pacific.
 --------------------------------------------------------------------------- */
 import { randomBytes } from 'node:crypto';
-import { resolveClient, findClients } from './_inbox.js';
+import { resolveClient, findClients, branchCode } from './_inbox.js';
 
 const BRANCHES = {
   mv: 'Moreno Valley', vb: 'Riverside — Van Buren', mg: 'Riverside — Magnolia', le: 'Lake Elsinore', co: 'Colton',
@@ -290,11 +290,30 @@ async function verifyAgent(req, s) {
       tokCache.set(tok, c); if (tokCache.size > 500) tokCache.clear();
     } catch { return null; }
   }
-  const a = await sbGet(s, `agents?email=eq.${enc(c.email)}&active=is.true&select=email,full_name,branch,role&limit=1`);
+  const a = await sbGet(s, `agents?email=eq.${enc(c.email)}&active=is.true&select=email,full_name,branch,role,grants&limit=1`);
   if (!a.rows[0]) return null;
   const r = a.rows[0];
-  return { email: c.email, name: r.full_name || c.email, first: String(r.full_name || c.email).split(' ')[0], branch: r.branch || null, admin: r.role === 'admin' || r.role === 'owner' };
+  const admin = r.role === 'admin' || r.role === 'owner', grants = Array.isArray(r.grants) ? r.grants : [];
+  /* sms_all is a Staff-page pill (platform.js ROLE_CAPS): sees every branch's texts */
+  return { email: c.email, name: r.full_name || c.email, first: String(r.full_name || c.email).split(' ')[0], branch: r.branch || null, branch_code: branchCode(r.branch), admin, sees_all: admin || grants.includes('sms_all') };
 }
+
+/* Who may see a MIRROR thread (a text on an agent's own direct number). Sep 17, Saif:
+   "by default sms show to all agents per branches" - the whole branch sees its texts.
+     owners/admins            everything
+     sms_all (Staff pill)     every branch
+     everyone else            their own number + the numbers of their home branch
+     sms_private (Staff pill, on the number's OWNER)  that number is theirs + owners/admins only
+   Branch-line threads are visibility 'all' and never come through here. */
+async function privateLines(s) {
+  const a = await sbGet(s, 'agents?active=is.true&select=email,grants');
+  const priv = a.rows.filter(r => Array.isArray(r.grants) && r.grants.includes('sms_private')).map(r => r.email);
+  if (!priv.length) return new Set();
+  const n = await sbGet(s, `rc_numbers?agent_email=in.(${priv.map(enc).join(',')})&select=phone10`);
+  return new Set(n.rows.map(r => r.phone10));
+}
+const canSee = (c, me, priv) => c.visibility !== 'owner' || me.admin || c.claimed_by === me.email
+  || (!priv.has(c.line) && (me.sees_all || (!!c.branch && c.branch === me.branch_code)));
 
 async function smsSend(to, text, from) {
   /* through our own /api/sms with the admin key: one RingCentral auth flow in the codebase */
@@ -417,9 +436,9 @@ async function agentHandler(req, res, s, b, action) {
       sbGet(s, `agent_duty?agent_email=eq.${enc(me.email)}&select=on_duty,mobile,since&limit=1`),
       dutyRoster(s),
     ]);
-    /* an agent's own direct-number thread is theirs and the admins'; everyone else never sees it */
-    const canSee = c => c.visibility !== 'owner' || me.admin || c.claimed_by === me.email;
-    open.rows = open.rows.filter(canSee); closed.rows = closed.rows.filter(canSee);
+    /* mirror threads: the owner, their branch, sms_all, admins - see canSee() */
+    const priv = await privateLines(s);
+    open.rows = open.rows.filter(x => canSee(x, me, priv)); closed.rows = closed.rows.filter(x => canSee(x, me, priv));
     /* a text waiting on a branch line has no visitor poll to drive the chain: the inbox does it */
     for (const c of open.rows) { if (c.status === 'waiting' && c.channel === 'sms') { try { await alertChain(s, c, cfg); } catch { /* next poll */ } } }
     const convs = open.rows.concat(closed.rows);
@@ -444,7 +463,7 @@ async function agentHandler(req, res, s, b, action) {
       alerts: (c.alerts || []).length, is_test: c.is_test,
     });
     return res.status(200).json({ ok: true,
-      me: { email: me.email, name: me.name, first: me.first, admin: me.admin, on_duty: !!(dutyRow.rows[0] && dutyRow.rows[0].on_duty), mobile: dutyRow.rows[0] ? dutyRow.rows[0].mobile : null, since: dutyRow.rows[0] ? dutyRow.rows[0].since : null },
+      me: { email: me.email, name: me.name, first: me.first, admin: me.admin, sees_all: me.sees_all, branch: me.branch_code, on_duty: !!(dutyRow.rows[0] && dutyRow.rows[0].on_duty), mobile: dutyRow.rows[0] ? dutyRow.rows[0].mobile : null, since: dutyRow.rows[0] ? dutyRow.rows[0].since : null },
       waiting: open.rows.filter(c => c.status === 'waiting').map(row),
       mine: open.rows.filter(c => c.status === 'active' && c.claimed_by === me.email).map(row),
       team: open.rows.filter(c => c.status === 'active' && c.claimed_by !== me.email).map(row),
@@ -491,7 +510,7 @@ async function agentHandler(req, res, s, b, action) {
   if (!conv) return res.status(404).json({ ok: false, error: 'No such chat' });
 
   if (action === 'thread') {
-    if (conv.visibility === 'owner' && !me.admin && conv.claimed_by !== me.email) return res.status(403).json({ ok: false, error: 'Not your thread' });
+    if (conv.visibility === 'owner' && !canSee(conv, me, await privateLines(s))) return res.status(403).json({ ok: false, error: 'Not your thread' });
     const [ms, prev, card] = await Promise.all([
       sbGet(s, `messages?conversation_id=eq.${id}&select=id,ts,sender_kind,sender,audience,channel,body,sms_from,attachments&order=id.asc&limit=500`),
       conv.visitor_phone ? sbGet(s, `conversations?visitor_phone=eq.${conv.visitor_phone}&id=neq.${id}&select=id,created_at,status,outcome,topic,claimed_by,lead_id&order=id.desc&limit=5`) : { rows: [] },
@@ -503,14 +522,14 @@ async function agentHandler(req, res, s, b, action) {
     return res.status(200).json({ ok: true,
       conversation: { ...conv, token: undefined, branch_name: BRANCHES[conv.branch] || conv.branch, claimed_name: names[conv.claimed_by] || null, visitor_here: !!conv.visitor_seen_at && (Date.now() - new Date(conv.visitor_seen_at).getTime()) < VISITOR_GONE_MS, mine: conv.claimed_by === me.email },
       messages: ms.rows.map(m => ({ ...m, name: m.sender ? (names[m.sender] || m.sender) : null })),
-      previous: prev.rows, client: card, me: { email: me.email, admin: me.admin, first: me.first },
+      previous: prev.rows, client: card, me: { email: me.email, admin: me.admin, sees_all: me.sees_all, first: me.first },
     });
   }
 
   /* one attachment, as base64, after the same visibility check as the thread (the
      bucket is private; the file only ever travels through this authenticated call) */
   if (action === 'media') {
-    if (conv.visibility === 'owner' && !me.admin && conv.claimed_by !== me.email) return res.status(403).json({ ok: false, error: 'Not your thread' });
+    if (conv.visibility === 'owner' && !canSee(conv, me, await privateLines(s))) return res.status(403).json({ ok: false, error: 'Not your thread' });
     const mid = Number(b.message_id), idx = Number(b.index);
     const mm = await sbGet(s, `messages?id=eq.${mid}&conversation_id=eq.${id}&select=attachments&limit=1`);
     const att = mm.rows[0] && Array.isArray(mm.rows[0].attachments) ? mm.rows[0].attachments[idx] : null;
@@ -546,7 +565,8 @@ async function agentHandler(req, res, s, b, action) {
     return res.status(200).json({ ok: true });
   }
 
-  if (!canAct(conv, me)) return res.status(403).json({ ok: false, error: 'Not your chat' });
+  const whisperOnly = action === 'reply' && b.whisper === true && me.sees_all;
+  if (!canAct(conv, me) && !whisperOnly) return res.status(403).json({ ok: false, error: 'Not your chat' });
 
   /* ---- the client link (Sep 17): a phone match is a GUESS until an agent says so ---- */
   if (action === 'link') {
@@ -597,7 +617,7 @@ async function agentHandler(req, res, s, b, action) {
     if (!body) return res.status(400).json({ ok: false, error: 'Empty message' });
     if (conv.status === 'closed') return res.status(409).json({ ok: false, error: 'Chat is closed' });
     const whisper = b.whisper === true;
-    if (whisper && !me.admin) return res.status(403).json({ ok: false, error: 'Only an admin can whisper' });
+    if (whisper && !me.sees_all) return res.status(403).json({ ok: false, error: 'Only an admin can whisper' });
     /* Sep 17: Tony (admin) answered before claiming and the visitor got a reply from
        nobody, then "Tony joined". A visitor-facing reply on an unclaimed chat claims it
        first, atomically; if someone else just won, the reply is refused with their name. */

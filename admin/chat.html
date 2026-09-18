@@ -319,7 +319,7 @@ const CANNED = {
 };
 function renderThread(first) {
   const c = THREAD.conversation, me = THREAD.me;
-  const mine = c.claimed_by === me.email, canAct = mine || me.admin, live = c.status !== 'closed';
+  const mine = c.claimed_by === me.email, canAct = mine || me.admin, live = c.status !== 'closed', canWhisper = !!(me.admin || me.sees_all);
   $('#tName').textContent = c.visitor_name || (c.channel === 'sms' && c.visitor_phone ? pretty(c.visitor_phone) : (c.lang === 'es' ? 'Visitante' : 'Visitor'));
   $('#tSub').innerHTML = `${c.channel === 'sms' ? '<span class="chip" style="color:var(--amber-ink);border-color:var(--amber)">&#128172; SMS · ' + esc(lineLabel(c)) + '</span> ' : ''}&#128205; ${esc(c.branch_name || '—')}${c.topic ? ' · ' + esc(c.topic) : ''} · ${(c.lang || 'en').toUpperCase()} · started ${hhmm(c.created_at)} · <span class="chip ${c.status === 'waiting' ? '' : c.status === 'closed' ? 'cl' : 'me'}">${esc(c.status === 'active' ? (mine ? 'Mine' : (c.claimed_name || 'claimed')) : c.status)}</span> ${live && c.channel !== 'sms' ? (c.visitor_here ? '<span class="chip cl">visitor here</span>' : '<span class="chip">visitor away' + (c.visitor_phone ? ' — replies go by text' : '') + '</span>') : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}`;
   $('#tLinks').innerHTML = c.visitor_phone ? `<a class="chip" href="tel:+1${c.visitor_phone}">&#128222; ${esc(pretty(c.visitor_phone))}</a>` : '<span class="chip">no phone</span>';
@@ -338,8 +338,10 @@ function renderThread(first) {
   loadMedia();
   const bn = c.branch_name.replace('Riverside — ', '');
   $('#tCanned').innerHTML = (CANNED[c.lang] || CANNED.en).map(([l, f], i) => `<span onclick="useCanned(${i})">${esc(l)}</span>`).join('');
-  $('#tCanned')._bn = bn;
-  $('#replyBox').classList.toggle('hide', !(live && canAct)); $('#wToggle').classList.toggle('hide', !(live && me.admin));
+  $('#tCanned')._bn = bn; $('#tCanned').classList.toggle('hide', !(live && canAct));   /* canned answers are for the visitor, not for a whisper */
+  /* someone who may only whisper (sms_all, not the owner) gets the box in whisper mode, nothing else */
+  if (live && canWhisper && !canAct && !WHISPER) { WHISPER = true; $('#wState').textContent = 'ON'; $('#replyBox').classList.add('whisper'); }
+  $('#replyBox').classList.toggle('hide', !(live && (canAct || canWhisper))); $('#wToggle').classList.toggle('hide', !(live && canWhisper && canAct));
   $('#rText').placeholder = WHISPER ? 'Whisper to agents (the visitor never sees this)…' : (c.channel === 'sms' ? ('Text back from ' + pretty(c.line || '') + '…') : ('Reply to ' + (c.visitor_name || 'the visitor') + '…'));
   const acts = [];
   if (live && c.status === 'waiting') acts.push(`<button class="btn btn-blue" onclick="claim(${c.id})">Claim this chat</button>`);

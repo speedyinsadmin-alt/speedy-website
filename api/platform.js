@@ -352,14 +352,20 @@ async function sbInsert(s, table, rows) {
    Placed here, below sbGet/sb, so there is no question about declaration order - the
    v2.7 lesson, and again today with OWED/FEE_LOW in carrier.html. */
 const ROLE_CAPS = {
-  owner: ['console', 'audit_approve', 'correct', 'refund', 'approve_month', 'manage_agents', 'commission_override'],
+  owner: ['console', 'audit_approve', 'correct', 'refund', 'approve_month', 'manage_agents', 'commission_override', 'sms_all'],
   /* audit_approve is NOT an admin default: "Tony + admins with a grant" (Saif, Sep 12).
      It releases commission, so it is handed out by name on the Staff page. */
-  admin: ['console', 'correct'],
+  admin: ['console', 'correct', 'sms_all'],
   agent: [],
 };
+/* Grant-only capabilities: in no role bundle, handed out by name on the Staff page.
+   sms_all / sms_private are read by api/chat.js (the Inbox), not by may() here:
+     sms_all      sees every branch's texts (owners/admins have it through the bundle)
+     sms_private  the texts on THIS person's direct number stay theirs + owners/admins,
+                  instead of the default "their whole branch sees them" (Saif, Sep 17) */
+const GRANT_ONLY_CAPS = ['sms_private'];
 /* Every capability the system understands. A grant string not in here is ignored. */
-const ALL_CAPS = new Set(Object.values(ROLE_CAPS).flat());
+const ALL_CAPS = new Set([...Object.values(ROLE_CAPS).flat(), ...GRANT_ONLY_CAPS]);
 /* Send-back reasons an approver can pick. Free text always accompanies the code. */
 const AUDIT_SENDBACK_CODES = {
   receipt_missing: 'Receipt missing', receipt_unreadable: 'Receipt unreadable', wrong_amount: 'Wrong amount',

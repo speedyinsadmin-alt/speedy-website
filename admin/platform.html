@@ -741,6 +741,10 @@ async function renderClients(el) {
     + '<div class="muted" style="font-size:13px;margin-bottom:12px">' + label + '</div>'
     + '<div id="ctable">' + clientTable(list, r.policy_counts) + '</div>';
   el.innerHTML = h;
+  /* AUTO SYNC (Sep 18): opening the list nudges the server; it pulls HawkSoft's changes
+     when the last sync is older than ten minutes (one instance at a time), and the
+     status line catches up when it did. */
+  api('sync_tick').then(r => { if (r && r.ran) loadSyncStatus(); }).catch(() => {});
 
   const srch = $('#csearch');
   srch.focus();

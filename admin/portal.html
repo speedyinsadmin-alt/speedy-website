@@ -1318,7 +1318,11 @@ async function checkUpdate(){
 let newsTimer = null;
 function startNewsWatch(){
   if(newsTimer) return;
-  const tick = () => { if(!OFFICE) return; if(chargeSheetOpen()) return; loadNews(); };
+  /* AUTO SYNC (Sep 18): every open portal nudges the server; it syncs HawkSoft's changes
+     when the last sync is older than ten minutes, one instance at a time. Fire and
+     forget - the agent never waits on it and a failure is silent here (the Console's
+     Clients tab shows the last sync time). */
+  const tick = () => { if(!OFFICE) return; if(chargeSheetOpen()) return; loadNews(); try{ api('sync_tick'); }catch(e){} };
   newsTimer = setInterval(tick, 3 * 60 * 1000);
   window.addEventListener('focus', tick);
 }

@@ -1732,7 +1732,7 @@ const OPS_PLATFORM_MAP = [
   { k: 'E · Compliance', v: 'Audit trail in events. CCPA. Call recording pending attorney review' },
 ];
 
-const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients', 'activity', 'documents', 'doc_thumbs'];
+const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_thumbs', 'portal_doc', 'portal_staff', 'portal_news', 'portal_share_due', 'portal_refresh_clients', 'sync_tick', 'activity', 'documents', 'doc_thumbs'];
   if (portalViews.includes(view)) {
     const who = await verifyPortal(req.headers['x-id-token']);
     /* Declared HERE, at the top of the portal block. portal_share_due and portal_news
@@ -1788,6 +1788,38 @@ const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_th
       if (!out.ok) return res.status(200).json({ ok: false, error: out.error || 'sync failed' });
       return res.status(200).json({ ok: true, changed: out.changed, clients: out.clients,
         policies: out.policies, partial: out.partial });
+    }
+
+    if (view === 'sync_tick') {
+      /* AUTO SYNC (Sep 18, Saif: "can we fix the auto sync?"). The cron fires once a day
+         (2 AM Pacific - the plan allows no more), so a client created in HawkSoft at
+         10 AM was invisible until someone pressed a refresh button. HawkSoft has no
+         webhooks. So the platform syncs ITSELF while anyone is working: every open
+         portal calls this every three minutes, the Console when its client list opens.
+         Cheap when fresh (one row read); when the last sync is older than STALE_MS one
+         caller takes a short lease in the database (lock_until - Vercel runs many
+         instances, so an in-memory flag would not hold) and runs a 20-second delta
+         sync. Everyone else is told "fresh" or "running". A run that does not finish
+         leaves the watermark alone and the next tick continues; the lease expires on
+         its own if the function dies. Off hours nothing changes in HawkSoft anyway. */
+      const STALE_MS = 10 * 60000, LEASE_MS = 3 * 60000;
+      const st = await sbGet(s, 'sync_state?key=eq.hawksoft_clients&select=last_sync,lock_until');
+      const row = (st.rows && st.rows[0]) || {};
+      const age = row.last_sync ? Date.now() - new Date(row.last_sync).getTime() : Infinity;
+      if (age < STALE_MS) return res.status(200).json({ ok: true, skipped: 'fresh', seconds_ago: Math.round(age / 1000) });
+      if (row.lock_until && new Date(row.lock_until).getTime() > Date.now()) return res.status(200).json({ ok: true, skipped: 'running' });
+      const nowIso = new Date().toISOString(), until = new Date(Date.now() + LEASE_MS).toISOString();
+      /* the lease: a conditional PATCH - only the caller whose UPDATE matched a row holds it */
+      const lk = await fetch(`${s.base}/rest/v1/sync_state?key=eq.hawksoft_clients&or=(lock_until.is.null,lock_until.lt.${encodeURIComponent(nowIso)})`,
+        { method: 'PATCH', headers: { ...s.hdrs, Prefer: 'return=representation' }, body: JSON.stringify({ lock_until: until }) });
+      let held = []; try { held = lk.ok ? await lk.json() : []; } catch (e) { held = []; }
+      if (!Array.isArray(held) || !held.length) return res.status(200).json({ ok: true, skipped: 'running' });
+      let out;
+      try { out = await runDeltaSync(s, 'system:auto', 20000); }
+      catch (e) { out = { ok: false, error: String(e && e.message || e).slice(0, 160) }; }   // HawkSoft down is an answer, not a 500
+      finally { await sbPatch(s, 'sync_state?key=eq.hawksoft_clients', { lock_until: null }); }
+      if (!out || !out.ok) return res.status(200).json({ ok: false, ran: true, error: (out && out.error) || 'sync failed' });
+      return res.status(200).json({ ok: true, ran: true, changed: out.changed, clients: out.clients, policies: out.policies, partial: !!out.partial });
     }
 
     if (view === 'portal_staff') {

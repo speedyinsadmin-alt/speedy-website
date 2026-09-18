@@ -23,6 +23,9 @@
        unchanged. --hair and --scrim replace white-alpha values that vanish on a
        light page. */
     --amber-ink:#f5a623; --hair:rgba(255,255,255,.06); --scrim:rgba(6,9,24,.9);
+    /* Sep 18, measured: white on --blue is 3.7:1, so filled buttons use --blue-deep (5.9:1);
+       --green-ink is the pale green on green tints; --on-green the text on a green button */
+    --blue-deep:#3159d9; --green-ink:#7ee2a8; --on-green:#04220f;
     --shadow:none;
     /* --red has the same double life --amber does, and for the same reason gets its own
        text token. Measured, not eyeballed: white on --red passes as a BUTTON (4.5:1),
@@ -33,9 +36,13 @@
   /* Light. Every value is a deliberate substitution, not a lightening: #7fa8ff,
      #2fbf71 and #f5a623 all fail as text on white. */
   [data-theme="light"]{
-    --navy:#f4f6fb; --card:#ffffff; --ink:#101632; --mute:#5c6690; --dim:#5c6690;
-    --line:rgba(16,22,50,.12); --blue:#2f5fe0; --blue-l:#2f5fe0; --green:#16874a;
-    --amber:#f5a623; --amber-ink:#a35c00; --red:#d32f2f; --field:#eef1f8;
+    /* Sep 18, measured on white and on the .15 tints (the contrast audit): --mute #525d87
+       5.1:1 on the grey pill, --blue-l #2a52c9 5.6:1 on the blue tint, --green #0f6b3a
+       5.7:1 on the green tint, --amber-ink #8a4d00 6.0:1 on the amber tint. */
+    --navy:#f4f6fb; --card:#ffffff; --ink:#101632; --mute:#525d87; --dim:#525d87;
+    --line:rgba(16,22,50,.12); --blue:#2f5fe0; --blue-l:#2a52c9; --green:#0f6b3a;
+    --amber:#f5a623; --amber-ink:#8a4d00; --red:#d32f2f; --field:#eef1f8;
+    --blue-deep:#2f5fe0; --green-ink:#0f6b3a; --on-green:#ffffff;
     --hair:rgba(16,22,50,.08); --scrim:rgba(16,22,50,.45);
     --shadow:0 1px 2px rgba(16,22,50,.06);
     /* Darker than --red on white, for the same reason --amber-ink is. */
@@ -63,7 +70,7 @@
   textarea{field-sizing:content;min-height:62px;resize:vertical;line-height:1.5}
   select:focus,input:focus,textarea:focus{border-color:var(--blue)}
   .btn{display:block;width:100%;text-align:center;border:0;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
-  .btn-blue{background:var(--blue);color:#fff}
+  .btn-blue{background:var(--blue-deep);color:#fff}
   .btn-red{background:var(--red);color:#fff}
   .btn-ghost{background:transparent;color:var(--mute);border:1.5px solid var(--line);font-weight:600}
   .brand{font-size:20px;font-weight:800;letter-spacing:-.3px}
@@ -107,7 +114,7 @@
       <div class="brand" style="margin-bottom:6px"><span class="s">SPEEDY</span> <span class="i">PORTAL</span> <span class="beta">BETA</span></div>
       <div class="muted" style="margin-bottom:18px">Sign in with your @speedyins.com account</div>
       <div id="gsibtn" style="display:inline-block"></div>
-      <div id="gateerr" class="hide" style="color:var(--red);font-size:13px;margin-top:14px">That account isn't set up for the portal yet. Ask the admin to add you.</div>
+      <div id="gateerr" class="hide" style="color:var(--red-ink);font-size:13px;margin-top:14px">That account isn't set up for the portal yet. Ask the admin to add you.</div>
       <div id="hlFound" class="hide" style="background:rgba(77,124,254,.12);border:1px solid rgba(77,124,254,.45);border-radius:10px;padding:12px 14px;margin-top:16px;text-align:left">
         <div style="font-size:11px;color:var(--blue-l);text-transform:uppercase;letter-spacing:.05em">Opened from HawkSoft</div>
         <div id="hlName" style="font-size:16px;font-weight:800;margin-top:3px">&mdash;</div>
@@ -641,7 +648,7 @@ function earnPickerHtml(){
     '<div onclick="setEarnPeriod(\'' + val + '\')" style="flex:1;text-align:center;padding:7px;'
     + 'border-radius:8px;font-size:13px;cursor:pointer;'
     + (EARN_PERIOD === val
-        ? 'background:var(--blue);color:#fff;font-weight:700'
+        ? 'background:var(--blue-deep);color:#fff;font-weight:700'
         : 'background:var(--field);color:var(--blue-l);border:1px solid var(--line)')
     + '">' + label + '</div>';
   return '<div style="display:flex;gap:6px;margin-bottom:12px">'
@@ -653,7 +660,7 @@ function earnPickerHtml(){
 function openPending(){
   const m = a => '$' + Number(a || 0).toFixed(2);
   const d = ts => String(ts || '').slice(0, 10);
-  const tone = st => st === 'sent_back' ? 'var(--red)' : st === 'needs_proof' ? 'var(--amber-ink)' : st === 'balance' ? 'var(--blue-l)' : 'var(--dim)';
+  const tone = st => st === 'sent_back' ? 'var(--red-ink)' : st === 'needs_proof' ? 'var(--amber-ink)' : st === 'balance' ? 'var(--blue-l)' : 'var(--dim)';
   const total = PENDING_LINES.reduce((a, x) => a + Number(x.pending || 0), 0);
   const unknown = PENDING_LINES.filter(x => x.pending == null).length;
   let h = earnPickerHtml();

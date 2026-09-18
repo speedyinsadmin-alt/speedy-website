@@ -21,8 +21,24 @@
        Checked first: --dim, --card and --blue-l did NOT exist, and assuming they did
        would have been the fourth "CSS that exists in a sibling file" bug today. */
     --dim:#9aa5cc; --blue-l:#7fa8ff;   /* Sep 17: #5c6690 was 2.9:1 on the card - unreadable */
+    /* Sep 18, measured: white on --blue is 3.7:1, so filled buttons use --blue-deep (5.9:1);
+       --green-ink is the pale green on green tints; --on-green the text on a green button */
+    --blue-deep:#3159d9; --green-ink:#7ee2a8; --on-green:#04220f;
     /* read by the client panel (/admin/shared/clientpanel.css): the card's own surface and the sheets' scrim, the portal's values */
     --card:#0e1533; --scrim:rgba(6,9,24,.9);
+  }
+  /* LIGHT (Sep 18) - the portal's light values, one token at a time; nothing here is a
+     lightened dark colour, every one was chosen to read on white (#7fa8ff, #2fbf71 and
+     #f5a623 all fail as text on white). The inner surfaces invert their nesting: the page
+     is the light grey, the cards are white, the panel's own card is the grey again. */
+  [data-theme="light"]{
+    --navy:#f4f6fb; --navy2:#ffffff; --line:rgba(16,22,50,.12);
+    --red:#d32f2f; --blue:#2f5fe0; --green:#16874a; --amber:#f5a623;
+    --ink:#101632;
+    --field:#eef1f8; --red-ink:#b3221f; --amber-ink:#a35c00; --hair:rgba(16,22,50,.08);
+    --dim:#525d87; --mute:#525d87; --blue-l:#2a52c9; --card:#f4f6fb; --scrim:rgba(16,22,50,.45);
+    /* measured on white and on the .15 tints: #2a52c9 5.6:1, #0f6b3a 5.7:1, #8a4d00 6.0:1 */
+    --green:#0f6b3a; --amber-ink:#8a4d00; --blue-deep:#2f5fe0; --green-ink:#0f6b3a; --on-green:#ffffff;
   }
 
   /* ---------- Staff & permissions (item 70 step 4) ----------
@@ -67,14 +83,14 @@
   .spc{font-family:var(--mono);font-size:12px;color:var(--dim)}
   .srole{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
     padding:3px 9px;border-radius:6px;text-align:center;white-space:nowrap}
-  .srole.owner{background:rgba(245,166,35,.16);color:var(--amber)}
+  .srole.owner{background:rgba(245,166,35,.16);color:var(--amber-ink)}
   .srole.admin{background:rgba(77,124,254,.16);color:var(--blue-l)}
-  .srole.agent{background:rgba(143,154,196,.13);color:var(--mute)}
+  .srole.agent{background:rgba(143,154,196,.13);color:var(--dim)}
   .sperms{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
-  .sp{font-size:12px;background:rgba(47,191,113,.14);color:#7ee2a8;border-radius:6px;
+  .sp{font-size:12px;background:rgba(47,191,113,.14);color:var(--green-ink);border-radius:6px;
     padding:2.5px 8px;white-space:nowrap}
   .sp.none{background:transparent;color:var(--dim)}
-  .sp.all{background:rgba(245,166,35,.14);color:var(--amber)}
+  .sp.all{background:rgba(245,166,35,.14);color:var(--amber-ink)}
   .scar{color:var(--dim);font-size:13px;text-align:center}
   .stag{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
   .sedit{background:rgba(255,255,255,.045);border:1px solid rgba(77,124,254,.42);
@@ -110,7 +126,7 @@
      "update the design, update its details" failure. Editable now, at Saif's request. */
   .note{background:rgba(245,166,35,.07);border-left:2px solid var(--amber);
     border-radius:0 8px 8px 0;padding:10px 12px;margin-top:12px}
-  .note label{font-size:11px;color:var(--amber);text-transform:uppercase;letter-spacing:.06em}
+  .note label{font-size:11px;color:var(--amber-ink);text-transform:uppercase;letter-spacing:.06em}
   /* The note is the one field whose whole job is to be READ, and the right height
      depends on the width: 38px clipped Malcolm's third line on a phone, while a fixed
      62px left dead space on a 1280 desktop where the same note is one line. field-sizing
@@ -132,10 +148,10 @@
   .pill2 .tick{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--dim);
     display:inline-flex;align-items:center;justify-content:center;font-size:12px;
     color:transparent;flex:0 0 auto;transition:.12s}
-  .pill2.on{background:rgba(47,191,113,.16);border-color:rgba(47,191,113,.55);color:#a9edc4;font-weight:600}
-  .pill2.on .tick{background:var(--green);border-color:var(--green);color:#04220f}
+  .pill2.on{background:rgba(47,191,113,.16);border-color:rgba(47,191,113,.55);color:var(--green-ink);font-weight:600}
+  .pill2.on .tick{background:var(--green);border-color:var(--green);color:var(--on-green)}
   .pill2.via{background:rgba(245,166,35,.1);border-color:rgba(245,166,35,.35);
-    color:var(--amber);cursor:not-allowed}
+    color:var(--amber-ink);cursor:not-allowed}
   .pill2.via .tick{background:var(--amber);border-color:var(--amber);color:#2a1a00}
   .pill2 small{color:var(--dim);font-size:12px}
   /* HOVER EXPLANATION, Saif's ask: "when hover on the refund, explain what is this
@@ -169,11 +185,11 @@
     margin-top:15px;padding-top:11px;border-top:1px solid var(--line)}
   .sdiff{margin-top:13px;background:rgba(245,166,35,.09);border:1px solid rgba(245,166,35,.4);
     border-radius:9px;padding:9px 12px;font-size:13px}
-  .sdiff b{color:var(--amber)}
+  .sdiff b{color:var(--amber-ink)}
   .ssave{display:flex;gap:9px;align-items:center;margin-top:10px;flex-wrap:wrap}
   .ssave input{flex:1;min-width:180px;background:var(--navy);border:1px solid var(--line);
     border-radius:9px;padding:9px 11px;color:var(--ink);font-size:13px}
-  .ssave button{background:var(--green);color:#04220f;border:0;border-radius:9px;
+  .ssave button{background:var(--green);color:var(--on-green);border:0;border-radius:9px;
     padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;width:auto;white-space:nowrap}
   .shint{font-size:12px;color:var(--dim);line-height:1.5}
   /* ---------- Refunds tab. .will, .lbl AND .row exist in portal.html, NOT here. The
@@ -183,8 +199,8 @@
   .rq{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:9px}
   .rqnote{font-size:13px;color:var(--mute);margin-top:7px;padding-left:9px;border-left:2px solid rgba(255,255,255,.14)}
   .rqacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .rqok{background:var(--green);color:#04220f;border:0;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;width:auto;flex:1;min-width:150px}
-  .rqok.rqslip{background:var(--field);color:var(--blue);border:1px solid var(--line);flex:0 0 auto;min-width:0}
+  .rqok{background:var(--green);color:var(--on-green);border:0;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;width:auto;flex:1;min-width:150px}
+  .rqok.rqslip{background:var(--field);color:var(--blue-l);border:1px solid var(--line);flex:0 0 auto;min-width:0}
   .rqno{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:9px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;width:auto;flex:1;min-width:110px}
   /* AUDIT REVIEW (Sep 12). Row actions are small and never stretch; the bulk bar is
      the one loud element and appears only once something is ticked. */
@@ -192,19 +208,19 @@
   .selcell{width:26px;padding-right:0}
   .selcell input{width:16px;height:16px;cursor:pointer;accent-color:var(--blue)}
   .rvacts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
-  .aok{background:var(--green);color:#04220f;border:0;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .aok{background:var(--green);color:var(--on-green);border:0;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
   .ano{background:transparent;color:var(--mute);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
   .aok:disabled,.ano:disabled{opacity:.5;cursor:default}
   .rvsub{font-size:12px;color:var(--mute);margin-top:3px;max-width:240px;line-height:1.35}
   .rvsub i{color:var(--ink);font-style:italic}
-  .rvsub .re{color:var(--amber);font-weight:700}
+  .rvsub .re{color:var(--amber-ink);font-weight:700}
   .rvsub .fee{color:var(--green);font-weight:700}
   .rvsub .reply{display:block;margin-top:4px;padding:6px 9px;border-left:2px solid var(--amber);background:rgba(245,166,35,.08);color:var(--ink);font-style:normal;border-radius:0 6px 6px 0;max-width:260px}
   .rvsub .reply.note{border-left-color:var(--blue);background:rgba(77,124,254,.08)}
   .msg.note{border-color:var(--blue);background:rgba(77,124,254,.08)}
   .rvmsg{font-size:12px;margin-top:4px}
   .bulkbar{border:1px solid var(--blue);background:rgba(77,124,254,.10);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-  .bulkbar b{color:#7fa8ff}
+  .bulkbar b{color:var(--blue-l)}
   .bulkbar .hint{color:var(--mute);font-size:13px}
   /* the send-back sheet: a card over the page, same shape as the refund sheet on the portal */
   #sbSheet{position:fixed;inset:0;background:rgba(6,10,26,.72);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -217,13 +233,13 @@
   .rqnz{margin-top:10px}
   .rqchips{display:flex;flex-wrap:wrap;gap:6px}
   .rqchip{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:13px;font-weight:600;padding:6px 11px;border-radius:8px;cursor:pointer}
-  .rqchip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+  .rqchip.on{background:var(--blue-deep);border-color:var(--blue-deep);color:#fff}
   .rqin{display:block;width:100%;margin-top:6px;font-size:13px;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--navy);color:var(--ink)}
   .rqamt{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
   .rqamt input{width:110px;font-size:15px;font-weight:700;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--navy);color:var(--ink)}
-  .lbl.amber{background:rgba(245,166,35,.15);color:var(--amber)}
+  .lbl.amber{background:rgba(245,166,35,.15);color:var(--amber-ink)}
   .lbl.green{background:rgba(47,191,113,.15);color:var(--green)}
-  .lbl.red{background:rgba(224,49,49,.15);color:#ff7b7b}
+  .lbl.red{background:rgba(224,49,49,.15);color:var(--red-ink)}
   .will{margin:8px 0 0;padding:0;list-style:none;font-size:13px;line-height:1.55}
   .will li{padding:4px 0 4px 18px;position:relative;border-bottom:1px solid var(--line)}
   .will li:last-child{border-bottom:0}
@@ -312,7 +328,7 @@
   .pill.m{background:rgba(143,154,196,.14);color:var(--mute)}
   @media(max-width:640px){ .rc{grid-template-columns:1fr} .rc .t{grid-column:1;grid-row:3;text-align:left;white-space:normal} }
   .perchip{display:inline-block;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:var(--navy);border:1px solid var(--line);color:var(--mute)}
-  .perchip.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  .perchip.sel{background:var(--blue-deep);border-color:var(--blue-deep);color:#fff}
   /* Trust: the search, the opened carrier, the CSV button */
   .tsearch{width:100%;max-width:640px;background:var(--navy);border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--ink);font-size:14px;margin:0 0 6px}
   .tsub{font-size:13px;color:var(--mute);margin:0 0 14px}
@@ -321,7 +337,7 @@
   .cgrp{cursor:pointer;user-select:none}
   .cgrp td:first-child{color:var(--ink);font-weight:600}
   .cgrp .tri{display:inline-block;width:14px;color:var(--mute);transition:.12s}
-  .cgrp.open .tri{transform:rotate(90deg);color:var(--blue)}
+  .cgrp.open .tri{transform:rotate(90deg);color:var(--blue-l)}
   .cdet{background:rgba(255,255,255,.02)}
   .cdet td{padding:0 0 0 22px;border-bottom:1px solid var(--line)}
   .cdet table{font-size:13px;margin:0;min-width:0}
@@ -336,20 +352,20 @@
   .trow td{border-bottom:1px solid var(--line)}
   .dinput{background:var(--navy);border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--ink);font-size:13px}
   .abtn{display:inline-block;border:0;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.12s}
-  .abtn.go{background:var(--green,#2fbf71);color:#04220f}
+  .abtn.go{background:var(--green,#2fbf71);color:var(--on-green)}
   .abtn.go:hover{filter:brightness(1.08)}
   .abtn.no{background:transparent;color:var(--mute);border:1px solid var(--line)}
-  .abtn.no:hover{color:#ff8f8f;border-color:rgba(224,49,49,.5)}
+  .abtn.no:hover{color:var(--red-ink);border-color:rgba(224,49,49,.5)}
   .feestab{width:100%;border-collapse:collapse;margin-top:4px} .feestab th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);padding:8px 10px;border-bottom:1px solid var(--line)}
   .feestab td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px} .feestab .num{text-align:right;white-space:nowrap} .feestab tr.tot td{border-bottom:0;border-top:2px solid var(--line);font-weight:700}
   .agentcard{border:1px solid var(--line);border-radius:12px;margin-bottom:9px;overflow:hidden;transition:.12s}
   .agentcard:hover{border-color:rgba(127,168,255,.45)}
   .avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0b1220;flex-shrink:0}
   .docbtn{display:inline-block;padding:4px 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid transparent}
-  .docbtn.g{background:rgba(47,191,113,.15);color:#7ee2a8;border-color:rgba(47,191,113,.35)}
-  .docbtn.r{background:rgba(224,49,49,.15);color:#ff8f8f;border-color:rgba(224,49,49,.35)}
-  .docbtn.a{background:rgba(245,166,35,.14);border-color:rgba(245,166,35,.45);color:#f5a623}
-  .docbtn.b{background:rgba(77,124,254,.15);color:#8fadff;border-color:rgba(77,124,254,.35)}
+  .docbtn.g{background:rgba(47,191,113,.15);color:var(--green-ink);border-color:rgba(47,191,113,.35)}
+  .docbtn.r{background:rgba(224,49,49,.15);color:var(--red-ink);border-color:rgba(224,49,49,.35)}
+  .docbtn.a{background:rgba(245,166,35,.14);border-color:rgba(245,166,35,.45);color:var(--amber-ink)}
+  .docbtn.b{background:rgba(77,124,254,.15);color:var(--blue-l);border-color:rgba(77,124,254,.35)}
   #docModal{position:fixed;inset:0;background:rgba(6,9,24,.92);z-index:80;padding:20px;overflow-y:auto}
   .docwrap{max-width:1040px;margin:0 auto;background:var(--navy2);border:1px solid var(--line);border-radius:14px;padding:16px}
   .docgrid{display:flex;gap:12px;margin-top:12px}
@@ -377,12 +393,12 @@
   .msg.back{border-color:var(--red);background:rgba(224,49,49,.08)}
   .msg.reply{border-color:var(--amber);background:rgba(245,166,35,.08)}
   .msg .when{display:block;font-size:12px;color:var(--mute);margin-top:5px;white-space:normal}
-  .msg .code{font-weight:700;color:#ff8f8f}
+  .msg .code{font-weight:700;color:var(--red-ink)}
   .roompane{flex:1;display:flex;flex-direction:column;min-width:0}
   .vtool{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
   .vtool .vb{border:1px solid var(--line);background:var(--navy);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
   .vtool .vb:hover{border-color:rgba(255,255,255,.25)}
-  .vtool .vb.on{border-color:var(--blue);color:var(--blue)}
+  .vtool .vb.on{border-color:var(--blue);color:var(--blue-l)}
   .vtool .vb:disabled{opacity:.35;cursor:default}
   .vtool .pg{font-size:13px;color:var(--mute);padding:0 6px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
   .vtool .sp{flex:1}
@@ -397,20 +413,20 @@
   .roomfoot{display:flex;gap:8px;margin-top:12px;align-items:center;border-top:1px solid var(--line);padding-top:12px;flex-wrap:wrap}
   .roomfoot .rnote{flex:1;font-size:13px;color:var(--mute);min-width:160px}
   .roomfoot .close{border:1px solid var(--line);background:none;color:var(--mute);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;font-family:inherit}
-  .rvsub .more{color:var(--blue);cursor:pointer;font-weight:600;white-space:nowrap}
+  .rvsub .more{color:var(--blue-l);cursor:pointer;font-weight:600;white-space:nowrap}
   @media (max-width:760px){.roomgrid{flex-direction:column}.roomside{width:auto;max-height:none}.roompane .docpane{min-height:360px}.roompane .docpane iframe{height:360px}}
   .dchip:first-child{margin-left:0}
   td.docs,th.docs{white-space:nowrap;width:1%;text-align:right}
   .pill.g{background:rgba(47,191,113,.15);color:var(--green)}
-  .pill.a{background:rgba(245,166,35,.15);color:var(--amber)}
-  .pill.r{background:rgba(224,49,49,.15);color:var(--red)}
-  .pill.b{background:rgba(77,124,254,.15);color:var(--blue)}
+  .pill.a{background:rgba(245,166,35,.15);color:var(--amber-ink)}
+  .pill.r{background:rgba(224,49,49,.15);color:var(--red-ink)}
+  .pill.b{background:rgba(77,124,254,.15);color:var(--blue-l)}
   .kv{display:grid;grid-template-columns:170px 1fr;gap:4px 12px;font-size:13px}
   .kv b{color:var(--mute);font-weight:600}
-  pre{background:#0a0f26;border:1px solid var(--line);border-radius:10px;padding:12px;font:12px/1.5 var(--mono);overflow:auto;max-height:420px;margin:10px 0 0}
-  .raw-t{color:var(--blue);font-size:13px;cursor:pointer;user-select:none;margin-top:10px;display:inline-block}
+  pre{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px;font:12px/1.5 var(--mono);overflow:auto;max-height:420px;margin:10px 0 0}
+  .raw-t{color:var(--blue-l);font-size:13px;cursor:pointer;user-select:none;margin-top:10px;display:inline-block}
   .muted{color:var(--mute)}
-  .err{color:var(--red)}
+  .err{color:var(--red-ink)}
   .load{color:var(--mute);padding:24px;text-align:center}
   .amount{font-family:var(--mono)}
   @media(max-width:640px){.kv{grid-template-columns:1fr}.hidemob{display:none}}
@@ -432,6 +448,7 @@
       <div class="dot"></div>
       <h1>Platform Console <small id="ver">v6.0</small></h1>
       <div class="who" id="who"></div>
+      <span id="themeBtn" onclick="toggleTheme()" style="color:var(--blue-l);cursor:pointer;font-size:13px;white-space:nowrap" title="Switch light / dark">&#9789; Light</span>
     </header>
     <nav>
       <button data-tab="clients" class="on">Clients</button>
@@ -461,6 +478,24 @@
 <link rel="stylesheet" href="/admin/shared/clientpanel.css">
 <script src="/admin/shared/clientpanel.js"></script>
 <script>
+/* THEME (Sep 18): the same switch and the same stored choice as the portal (speedy_theme),
+   applied before anything renders so the page never flashes dark first. */
+(function(){
+  try{ if(localStorage.getItem('speedy_theme') === 'light') document.documentElement.setAttribute('data-theme','light'); }catch(e){}
+})();
+function applyThemeLabel(){
+  var light = document.documentElement.getAttribute('data-theme') === 'light';
+  var b = document.getElementById('themeBtn');
+  if(b) b.innerHTML = light ? '\u2600 Dark' : '\u263D Light';
+}
+function toggleTheme(){
+  var light = document.documentElement.getAttribute('data-theme') === 'light';
+  if(light) document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme','light');
+  try{ localStorage.setItem('speedy_theme', light ? 'dark' : 'light'); }catch(e){}
+  applyThemeLabel();
+}
+document.addEventListener('DOMContentLoaded', applyThemeLabel);
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
 let TOKEN = null, TAB = 'clients';
 /* ---------- THE CLIENT PANEL's host contract (Sep 17) ----------
@@ -563,7 +598,7 @@ const DOC_ROWS = {};
 function releasedNote(r){
   const ratio = r.collected_ratio != null ? Number(r.collected_ratio) : 1;
   if(r.commission == null || ratio >= 0.995) return '';
-  return '<div style="font-size:12px;color:var(--amber);font-weight:400;white-space:nowrap">'
+  return '<div style="font-size:12px;color:var(--amber-ink);font-weight:400;white-space:nowrap">'
     + money(r.commission * ratio) + ' released</div>';
 }
 
@@ -586,7 +621,7 @@ function balanceCell(r){
   const pct = Math.round((got / owed) * 100);
   return '<div style="font-size:12px;color:var(--mute);white-space:nowrap">'
       + money(got) + ' of ' + money(owed) + ' \u00b7 ' + pct + '%</div>'
-    + '<div style="font-size:12px;color:var(--amber);white-space:nowrap">'
+    + '<div style="font-size:12px;color:var(--amber-ink);white-space:nowrap">'
       + money(left) + ' still owed</div>';
 }
 
@@ -639,7 +674,7 @@ const money = v => !isFinite(v) ? '—'
    page: it means the agency lost money on the sale, and it was rendering in plain text
    two columns from a green "complete" pill. */
 const signed = v => (isFinite(v) && Number(v) < 0)
-  ? '<span style="color:var(--red)">' + money(v) + '</span>' : money(v);
+  ? '<span style="color:var(--red-ink)">' + money(v) + '</span>' : money(v);
 
 let OPEN_CLIENT = null; // client_no currently open in drill-in
 async function render() {
@@ -752,7 +787,7 @@ async function renderClients(el) {
     + '</div>'
     + '<div id="syncPanel" style="display:none;border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin:0 0 14px">'
     + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
-    + '<button id="deltabtn" style="background:var(--blue);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync changes now</button>'
+    + '<button id="deltabtn" style="background:var(--blue-deep);border:0;color:#fff;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">⟳ Sync changes now</button>'
     + '<button id="seedbtn" style="background:var(--navy);border:1px solid var(--line);color:var(--mute);padding:8px 14px;border-radius:9px;font-size:13px;cursor:pointer">⇊ Full seed</button>'
     + '<button id="resyncbtn" style="background:var(--amber);border:0;color:#2a1a00;padding:8px 14px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer">↻ Re-sync all fields</button>'
     + '</div>'
@@ -1000,7 +1035,7 @@ function policyRows(list, isDmv) {
       + '<span class="chev2" style="color:var(--mute);width:12px">' + (open?'▾':'▸') + '</span>'
       + '<div style="flex:1"><b>' + esc(p.policy_number || '—') + '</b> <span class="muted" style="font-size:13px">· ' + esc(p.carrier || '—') + '</span></div>'
       + '<span class="muted hidemob" style="font-size:13px">' + esc(p.effective_date||'') + ' → ' + esc(p.expiration_date||'') + '</span>'
-      + (_perPay ? '<span style="font-size:13px;font-weight:700;color:#7fa8ff;white-space:nowrap">' + money(_perPay) + '<span style="font-size:12px;font-weight:400;color:var(--mute)">/mo</span></span>' : '')
+      + (_perPay ? '<span style="font-size:13px;font-weight:700;color:var(--blue-l);white-space:nowrap">' + money(_perPay) + '<span style="font-size:12px;font-weight:400;color:var(--mute)">/mo</span></span>' : '')
       + '<span class="amount muted" style="font-size:13px" title="term premium">' + money(p.premium) + '</span>'
       + (live ? '<span class="pill g">in force</span>' : '<span class="pill a">' + esc(p.status||'—') + '</span>')
       + '</div>';
@@ -1066,7 +1101,7 @@ function policyRows(list, isDmv) {
     const heroPay = perPay
       ? '<div style="display:flex;align-items:baseline;gap:10px;background:linear-gradient(135deg,rgba(77,124,254,.18),rgba(47,191,113,.10));border:1px solid rgba(77,124,254,.4);border-radius:12px;padding:14px 18px;margin:8px 0 4px">'
         + '<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);font-weight:700;margin-bottom:2px">Est. monthly payment</div>'
-        + '<span style="font-size:26px;font-weight:800;color:#7fa8ff;letter-spacing:-.5px">' + money(perPay) + '</span>'
+        + '<span style="font-size:26px;font-weight:800;color:var(--blue-l);letter-spacing:-.5px">' + money(perPay) + '</span>'
         + ' <span class="muted" style="font-size:13px">× ' + nPay + ' payments</span></div>'
         + '<div style="margin-left:auto;text-align:right"><div class="muted" style="font-size:12px">Term premium</div><span class="amount" style="font-size:15px">' + money(prem) + '</span></div>'
         + '</div>'
@@ -1149,8 +1184,8 @@ async function renderOurClient(el, no, _bg, o) {
     + '<span class="pill ' + (clientActive?'g':'a') + '">' + esc(c.status || '—') + '</span>'
     + (lapsed ? '<span class="pill a">⚠ no in-force policies</span>' : '')
     + '<span class="muted">' + esc(c.branch || 'No branch') + '</span>'
-    + (c.phone ? '<a href="tel:' + esc(c.phone) + '" style="color:var(--blue);text-decoration:none">' + esc(c.phone) + '</a>' : '')
-    + (c.email ? '<a href="mailto:' + esc(c.email) + '" style="color:var(--blue);text-decoration:none">' + esc(c.email) + '</a>' : '')
+    + (c.phone ? '<a href="tel:' + esc(c.phone) + '" style="color:var(--blue-l);text-decoration:none">' + esc(c.phone) + '</a>' : '')
+    + (c.email ? '<a href="mailto:' + esc(c.email) + '" style="color:var(--blue-l);text-decoration:none">' + esc(c.email) + '</a>' : '')
     + '<span class="muted">' + esc([c.address1, c.city, c.state, c.zip].filter(Boolean).join(', ') || 'No address on file') + '</span>'
     + '<span class="pill b">' + inforce + ' in-force / ' + insurance.length + ' policies</span>'
     + (dmv.length ? '<span class="pill ' + (dmvReminder?'a':'b') + '" style="background:rgba(77,124,254,.12)">' + dmv.length + ' DMV</span>' : '')
@@ -1302,7 +1337,7 @@ let AUDIT_Q = '';            // audit search query
 let AGENT_OPEN = null;       // agent email when drilled in
 
 function auditSubNav(){
-  const btn = (id,label) => '<button onclick="setAuditSub(\''+id+'\')" style="background:'+(AUDIT_SUB===id?'var(--blue)':'var(--navy)')+';color:'+(AUDIT_SUB===id?'#fff':'var(--mute)')+';border:1px solid var(--line);padding:7px 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;margin-right:8px">'+label+'</button>';
+  const btn = (id,label) => '<button onclick="setAuditSub(\''+id+'\')" style="background:'+(AUDIT_SUB===id?'var(--blue-deep)':'var(--navy)')+';color:'+(AUDIT_SUB===id?'#fff':'var(--mute)')+';border:1px solid var(--line);padding:7px 14px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;margin-right:8px">'+label+'</button>';
   return '<div style="margin:2px 0 14px">'+btn('tx','Transactions')+btn('agents','By agent')+btn('fees','Fees by agent')+'</div>';
 }
 function setAuditSub(s){ AUDIT_SUB = s; AGENT_OPEN = null; redrawAudit(); }
@@ -1394,7 +1429,7 @@ function trustRowsHtml(list){
     h += '<tr class="trow"><td class="muted" style="white-space:nowrap">' + esc(PT_STAMP(x.ts)) + '</td>'
       + '<td>' + (x.client_name ? esc(x.client_name) + ' ' : '') + '<span class="muted">#' + esc(x.client_no) + '</span></td>'
       + '<td>' + esc(x.purpose || '') + '</td><td>' + esc(x.carrier || (x.audit_status === 'balance' ? 'on the first payment' : '')) + '</td>'
-      + trustAmt(x.amount, '', hit === 'amount') + trustAmt(x.cost, '#7fa8ff', hit === 'cost') + trustAmt(x.fee, '#2fbf71', hit === 'fee')
+      + trustAmt(x.amount, '', hit === 'amount') + trustAmt(x.cost, 'var(--blue-l)', hit === 'cost') + trustAmt(x.fee, 'var(--green)', hit === 'fee')
       + '<td class="muted">' + esc(x.agent || '') + '</td><td>' + trustStat(x.audit_status) + '</td></tr>';
   }
   return h + '</table>';
@@ -1465,16 +1500,16 @@ function trustDraw(){
     + '<div class="k">'+esc(label)+'</div>'+(sub?'<div class="muted" style="font-size:12px;margin-top:2px">'+esc(sub)+'</div>':'')+'</div>';
   h += '<div class="strip">'
     + cell('COLLECTED', money(T.collected), '', (T.payments||0)+' payments')
-    + cell('OWED / PAID TO CARRIERS', money(T.to_carriers), '#7fa8ff')
-    + cell('SPEEDY KEPT', money(T.speedy_kept), '#2fbf71')
-    + cell('UNACCOUNTED', money(T.unaccounted), T.unaccounted > 0 ? '#f5a623' : '#8f9ac4',
+    + cell('OWED / PAID TO CARRIERS', money(T.to_carriers), 'var(--blue-l)')
+    + cell('SPEEDY KEPT', money(T.speedy_kept), 'var(--green)')
+    + cell('UNACCOUNTED', money(T.unaccounted), T.unaccounted > 0 ? 'var(--amber-ink)' : 'var(--mute)',
            (T.unaccounted_count||0) + ' unfinished audits')
     /* Named, because it is what makes the three buckets exceed COLLECTED. A part-payment
        recognises the carrier cost and fee for the WHOLE obligation, so the difference is
        receivable, not an arithmetic error — and it was invisible, which made the strip
        look as though it did not add up. */
     + ((T.not_yet_collected||0) > 0
-        ? cell('NOT YET COLLECTED', money(T.not_yet_collected), '#f5a623', 'still owed on part-payments')
+        ? cell('NOT YET COLLECTED', money(T.not_yet_collected), 'var(--amber-ink)', 'still owed on part-payments')
         : '')
     + '</div>';
 
@@ -1483,7 +1518,7 @@ function trustDraw(){
       + 'Carriers + kept + unaccounted comes to <b style="color:var(--ink)">'
       + money((T.to_carriers||0) + (T.speedy_kept||0) + (T.unaccounted||0))
       + '</b>, which is more than the <b style="color:var(--ink)">' + money(T.collected)
-      + '</b> collected. The difference is the <b style="color:var(--amber)">'
+      + '</b> collected. The difference is the <b style="color:var(--amber-ink)">'
       + money(T.not_yet_collected) + '</b> above: on a part-payment the full carrier cost '
       + 'and fee are recognised at the charge, so the rest is receivable until the client pays it.</div>';
   }
@@ -1501,7 +1536,7 @@ function trustDraw(){
     for(const c of r.by_carrier){
       const open = !!TRUST_OPEN[c.carrier];
       h += '<tr class="cgrp' + (open ? ' open' : '') + '" onclick="toggleCarrier(' + JSON.stringify(c.carrier).replace(/"/g, '&quot;') + ')"><td><span class="tri">\u25b6</span></td><td>'+esc(c.carrier)+'</td><td>'+c.payments+'</td><td class="amt">'+money(c.collected)+'</td>'
-        + '<td class="amt" style="color:#7fa8ff">'+money(c.to_carrier)+'</td><td class="amt" style="color:#2fbf71">'+money(c.fees)+'</td></tr>';
+        + '<td class="amt" style="color:var(--blue-l)">'+money(c.to_carrier)+'</td><td class="amt" style="color:var(--green)">'+money(c.fees)+'</td></tr>';
       if(open){
         /* the same rows the line was summed from: attributed, and named for this carrier */
         const mine = items.filter(x => x.cost != null && x.carrier === c.carrier).map(x => ({ item: x, hit: null }));
@@ -1516,7 +1551,7 @@ function trustDraw(){
       + '<tr><th>When</th><th>Client</th><th>Amount</th><th>Purpose</th><th>Agent</th><th>Status</th></tr>';
     for(const u of r.unaccounted_items){
       h += '<tr><td class="muted">'+esc(PT_DAY(u.ts))+'</td><td>#'+esc(u.client_no)+'</td>'
-        + '<td style="color:#f5a623">'+money(u.amount)+'</td><td>'+esc(u.purpose||'')+'</td>'
+        + '<td style="color:var(--amber-ink)">'+money(u.amount)+'</td><td>'+esc(u.purpose||'')+'</td>'
         + '<td>'+esc(String(u.agent||'').replace('@speedyins.com',''))+'</td>'
         + '<td class="muted">'+esc(String(u.audit_status||'').replace(/_/g,' '))+'</td></tr>';
     }
@@ -1574,7 +1609,7 @@ function renderAgentView(r){
   const totFees = list.reduce((a,x)=>a+((FEES[x.agent]||{}).approved||0),0), totWait = list.reduce((a,x)=>a+((FEES[x.agent]||{}).waiting||0),0);
   h += '<div style="margin-bottom:14px;font-size:14px">Fees approved ' + esc(periodLabel()) + ': <b class="amount" style="color:var(--green)">'+money(totFees)+'</b>'
     + ' <span class="muted">· waiting <b class="amount">' + money(totWait) + '</b></span>'
-    + ' <span class="muted">· earned commission <b class="amount" style="color:#7fa8ff">'+money(totEarned)+'</b></span></div>';
+    + ' <span class="muted">· earned commission <b class="amount" style="color:var(--blue-l)">'+money(totEarned)+'</b></span></div>';
   h += agSort;
 
   if(!list.length) h += '<div class="muted">No agent activity.</div>';
@@ -1603,17 +1638,17 @@ function renderAgentView(r){
       + '<div class="muted" style="font-size:12px;margin-top:2px">'+g.tx.length+' payments · '+esc(period)+'</div>'
       + '<div style="display:flex;align-items:center;gap:7px;margin-top:6px">'
       + '<div style="flex:1;max-width:150px;height:4px;background:rgba(255,255,255,.09);border-radius:99px;overflow:hidden">'
-      + '<div style="width:'+pctDone+'%;height:100%;background:'+(pctDone===100?'var(--green)':pctDone>=50?'#7fa8ff':'var(--amber)')+'"></div></div>'
+      + '<div style="width:'+pctDone+'%;height:100%;background:'+(pctDone===100?'var(--green)':pctDone>=50?'var(--blue-l)':'var(--amber)')+'"></div></div>'
       + '<span class="muted" style="font-size:12px">'+done+' of '+g.tx.length+' audited</span></div>'
       + '</div>'
       + '<div style="text-align:right"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Fees approved</div>'
       + '<b class="amount" style="color:var(--green);font-size:17px">'+money((FEES[g.agent]||{}).approved||0)+'</b></div>'
       + '<div style="text-align:right;min-width:74px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Fees waiting</div>'
-      + '<span class="amount" style="color:'+(((FEES[g.agent]||{}).waiting||0)>0?'var(--amber)':'var(--mute)')+'">'+money((FEES[g.agent]||{}).waiting||0)+'</span></div>'
+      + '<span class="amount" style="color:'+(((FEES[g.agent]||{}).waiting||0)>0?'var(--amber-ink)':'var(--mute)')+'">'+money((FEES[g.agent]||{}).waiting||0)+'</span></div>'
       + '<div style="text-align:right"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Earned</div>'
-      + '<b class="amount" style="color:#7fa8ff;font-size:17px">'+money(g.earned)+'</b></div>'
+      + '<b class="amount" style="color:var(--blue-l);font-size:17px">'+money(g.earned)+'</b></div>'
       + '<div style="text-align:right;min-width:74px"><div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">Pending</div>'
-      + '<span class="amount" style="color:'+(g.pending>0?'var(--amber)':'var(--mute)')+'">'+money(g.pending)+'</span></div>'
+      + '<span class="amount" style="color:'+(g.pending>0?'var(--amber-ink)':'var(--mute)')+'">'+money(g.pending)+'</span></div>'
       + '</div>';
 
     if(open){
@@ -1750,7 +1785,7 @@ function renderFeesView(r){
     h += '<tr><td><b>' + esc(agentName(g.agent)) + '</b>' + (g.n ? '' : ' <span class="muted">(share only)</span>') + '</td>'
       + '<td class="num">' + g.n + '</td>'
       + '<td class="num amount" style="color:var(--green)">' + money(g.approved) + '</td>'
-      + '<td class="num amount" style="color:' + (g.waiting > 0 || g.unpriced ? 'var(--amber)' : 'var(--mute)') + '">' + money(g.waiting) + (g.unpriced ? ' <span class="muted" style="font-weight:400">+ ' + g.unpriced + ' not priced</span>' : '') + '</td>'
+      + '<td class="num amount" style="color:' + (g.waiting > 0 || g.unpriced ? 'var(--amber-ink)' : 'var(--mute)') + '">' + money(g.waiting) + (g.unpriced ? ' <span class="muted" style="font-weight:400">+ ' + g.unpriced + ' not priced</span>' : '') + '</td>'
       + '<td class="muted" style="font-size:12px">' + (sh || '—') + '</td></tr>';
   }
   h += '<tr class="tot"><td><b>All agents</b></td><td class="num">' + tot.n + '</td><td class="num amount" style="color:var(--green)">' + money(tot.approved) + '</td>'
@@ -1878,7 +1913,7 @@ function auditRowHtml(row, ctx){
        actually missing: a receipt, or the carrier cost. */
     const rowHasReceipt = !!row.fee_only || docs.some(d => d.payment_id === row.id && isProofDoc(d));
     const completeBtn = canComplete
-      ? '<span class="raw-t" style="color:#f5a623;font-weight:600" onclick="completeAudit(\''+row.id+'\')">'
+      ? '<span class="raw-t" style="color:var(--amber-ink);font-weight:600" onclick="completeAudit(\''+row.id+'\')">'
         + (rowHasReceipt ? '+ carrier cost' : '+ proof') + '</span>'
       : '';
     const isWait = row.audit_status === 'ready_for_audit';
@@ -1900,8 +1935,8 @@ function auditRowHtml(row, ctx){
       + '<td class="amount hidemob">'+(row.service_cost!=null?money(row.service_cost):'—')+'</td>'
       + '<td class="amount">'+(row.fee!=null?signed(row.fee):'—')+'</td>'
       + '<td class="hidemob muted" style="font-size:13px">'+esc((row.agent||'').split('@')[0]||'—')+'</td>'
-      + '<td class="amount">'+(row.commission!=null?'<b style="color:'+(row.commission<0?'var(--red)':'#7fa8ff')+'">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
-      + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:#ff8787">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+reviewSub(row)+reviewActs(row)+'</td>'
+      + '<td class="amount">'+(row.commission!=null?'<b style="color:'+(row.commission<0?'var(--red-ink)':'var(--blue-l)')+'">'+money(row.commission)+'</b>':(row.fee!=null?'<span class="muted" title="earned when audit complete">'+money(row.fee*row.pct/100)+'?</span>':'—'))+releasedNote(row)+'</td>'
+      + '<td class="stat">'+(row.receipt_pending?'<span class="pill" style="background:rgba(224,49,49,.2);color:var(--red-ink)">\u26a0 pending</span> ':'')+statusPill(row)+(completeBtn?' '+completeBtn:'')+reviewSub(row)+reviewActs(row)+'</td>'
       + '<td class="docs">'+docCell+'</td>'
       + '</tr>';
   return out;
@@ -2032,11 +2067,11 @@ async function drawAudit(el, r){
   h += periodChipsHtml();
   const schip = (k,label,count,colour) =>
     '<span class="perchip'+(AUDIT_SORT===k?' sel':'')+'" onclick="setAuditSort(\''+k+'\')">' + label
-    + (count ? ' <b style="color:'+colour+'">'+count+'</b>' : '') + '</span>';
+    + (count ? ' <b style="color:'+(AUDIT_SORT===k ? 'rgba(255,255,255,.9)' : colour)+'">'+count+'</b>' : '') + '</span>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
     + '<span class="muted" style="font-size:13px;margin-right:2px">Order</span>'
-    + (canApprove ? schip('waiting','Waiting for you', nWait, '#7fa8ff') : '')
-    + schip('action','Needs action first', nProof + nCost, '#f5a623')
+    + (canApprove ? schip('waiting','Waiting for you', nWait, 'var(--blue-l)') : '')
+    + schip('action','Needs action first', nProof + nCost, 'var(--amber-ink)')
     + schip('date','By date', 0, '')
     + (nWait || nBack || nProof || nCost
         ? '<span class="muted" style="font-size:13px;margin-left:8px">'
@@ -2054,7 +2089,7 @@ async function drawAudit(el, r){
   h += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px">'
     + '<span class="muted">'+periodRows.length+' transaction'+(periodRows.length===1?'':'s')+'</span>'
     + '<span class="muted">·</span><span>Fees '+esc(periodLabel())+': <b class="amount">'+money(totFees)+'</b></span>'
-    + '<span class="muted">·</span><span>Commission earned: <b class="amount" style="color:#7fa8ff">'+money(totComm)+'</b></span>'
+    + '<span class="muted">·</span><span>Commission earned: <b class="amount" style="color:var(--blue-l)">'+money(totComm)+'</b></span>'
     + (auditedCount < periodRows.length
         ? '<span class="muted">·</span><span class="muted" title="Fees only exist once an audit is complete">'
           + auditedCount + ' of ' + periodRows.length + ' audited</span>'
@@ -2062,7 +2097,7 @@ async function drawAudit(el, r){
     + '</div>';
   const pendingCount = periodRows.filter(x=>x.receipt_pending).length;
   if(pendingCount){
-    h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:#e03131">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
+    h += '<div style="border:1px solid #e03131;background:rgba(224,49,49,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b style="color:var(--red-ink)">\u26a0 '+pendingCount+' charge'+(pendingCount>1?'s':'')+' captured but receipt not completed</b> — card was charged but the receipt/HawkSoft step did not finish. These need attention.</div>';
   }
 
   const ctx = ctx0;
@@ -2093,7 +2128,7 @@ function clearSel(){ AUDIT_SEL.clear(); redrawAudit(); }
 async function approveAudit(id){
   const row = (window.AUDIT_ROWS||{})[id]; if(!row) return;
   const msg = $('#rvmsg_' + id);
-  const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   say('Approving…');
   const res = await apiPostBody({ action: 'approve_audit', payment_id: id });
   if(res && res.ok){ AUDIT_SEL.delete(id); await render(); return; }
@@ -2102,7 +2137,7 @@ async function approveAudit(id){
 async function approveSelected(){
   const ids = [...AUDIT_SEL]; if(!ids.length) return;
   const msg = $('#bulkmsg');
-  const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if(msg){ msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   const sel = ids.map(id => AUDIT_ROWS[id]).filter(Boolean);
   const fees = sel.reduce((a,x) => a + (x.fee || 0), 0);
   if(!confirm('Approve ' + ids.length + ' audit' + (ids.length===1?'':'s') + ' — ' + money(fees) + ' in fees — now?\n\nEach one is dated today and its commission is earned this month.')) return;
@@ -2114,7 +2149,7 @@ async function approveSelected(){
   await render();
   if(failed.length){
     /* Say which ones, on the row, so a partial success is never read as a full one. */
-    for(const f of failed){ const m = $('#rvmsg_' + f.id); if(m){ m.textContent = f.error; m.style.color = 'var(--red)'; } }
+    for(const f of failed){ const m = $('#rvmsg_' + f.id); if(m){ m.textContent = f.error; m.style.color = 'var(--red-ink)'; } }
     alert((res.approved || 0) + ' approved, ' + failed.length + ' not:\n' + failed.map(f => '· ' + ((AUDIT_ROWS[f.id]||{}).client_name || f.id) + ' — ' + f.error).join('\n'));
   }
 }
@@ -2157,7 +2192,7 @@ async function submitSendBack(){
   if(!SB) return;
   const ta = document.getElementById('sbReason'); if(ta) SB.reason = ta.value;
   const m = document.getElementById('sbmsg');
-  const say = (t, bad) => { if(m){ m.textContent = t; m.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if(m){ m.textContent = t; m.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   if(!SB.code){ say('Pick a reason.', true); return; }
   /* The seed a pick leaves is "Label — "; on its own it says nothing to the agent. */
   const txt = SB.reason.trim();
@@ -2231,7 +2266,7 @@ function openDocs(rowKey){
     const k = docKind(d);
     const isProof = isProofDoc(d);
     return '<div class="docitem' + (isProof?' carrier':'') + '" id="di'+i+'" onclick="showDoc(\''+rowKey+'\','+i+')">'
-      + '<div style="font-size:12px;font-weight:700;color:' + (isProof?'#7ee2a8':k==='client_receipt'?'#a8b2d4':'#8fadff') + '">'
+      + '<div style="font-size:12px;font-weight:700;color:' + (isProof?'var(--green-ink)':k==='client_receipt'?'var(--mute)':'var(--blue-l)') + '">'
       + esc(d.doc_label || docLabel(k)).toUpperCase() + (isProof ? ' \u00b7 PROOF' : '') + '</div>'
       + '<div style="font-size:13px;margin-top:3px;word-break:break-all">' + esc(d.filename || 'file') + '</div>'
       + '<div class="muted" style="font-size:12px">' + fmtBytes(d.bytes) + (d.filed_hawksoft ? ' \u00b7 filed \u2713' : '') + '</div></div>';
@@ -2240,7 +2275,7 @@ function openDocs(rowKey){
   let listHtml = own.length ? hdr('This payment') + own.map((d,i) => item(d,i)).join('')
                             : '<div class="muted" style="font-size:13px;margin-bottom:8px">No documents on this payment yet.</div>';
   if(other.length){
-    listHtml += '<div id="otherHdr" onclick="toggleOther()" style="cursor:pointer;color:var(--blue);font-size:12px;margin:10px 0 6px">'
+    listHtml += '<div id="otherHdr" onclick="toggleOther()" style="cursor:pointer;color:var(--blue-l);font-size:12px;margin:10px 0 6px">'
       + '\u25b8 Other files on this client (' + other.length + ')</div>'
       + '<div id="otherWrap" style="display:none">' + other.map((d,i) => item(d, own.length + i)).join('') + '</div>';
   }
@@ -2295,7 +2330,7 @@ function roomFootHtml(row){
 }
 async function roomApprove(id){
   const m = document.getElementById('roomMsg');
-  const say = (t, bad) => { if(m){ m.textContent = t; m.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if(m){ m.textContent = t; m.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   say('Approving\u2026');
   const res = await apiPostBody({ action: 'approve_audit', payment_id: id });
   if(res && res.ok){ AUDIT_SEL.delete(id); closeDocs(); await render(); return; }
@@ -2484,7 +2519,7 @@ async function renderSystemHealth(){
   const dbPct = Math.min(100, dbBytes / (8*1073741824) * 100);   // vs 8GB Pro cap
   const attPct = Math.min(100, attBytes / attWarn * 100);         // vs 500MB warn line
 
-  const barColor = pct => pct >= 90 ? '#e03131' : pct >= 70 ? '#f5a623' : '#2fbf71';
+  const barColor = pct => pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--amber)' : 'var(--green)';
 
   let h = '<h2 style="margin-top:26px">System health</h2>';
   h += '<div class="muted" style="font-size:13px;margin:-4px 0 12px">Storage usage and capacity. Updated live · '+esc(String(r.generated_at||'').replace('T',' ').slice(0,16))+'</div>';
@@ -2492,11 +2527,11 @@ async function renderSystemHealth(){
   // alerts
   if(r.alerts && r.alerts.length){
     for(const a of r.alerts){
-      const col = a.level==='critical' ? '#e03131' : '#f5a623';
+      const col = a.level==='critical' ? 'var(--red-ink)' : 'var(--amber-ink)';
       h += '<div style="border:1px solid '+col+';background:'+col+'1a;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px"><b style="color:'+col+'">'+(a.level==='critical'?'⚠ CRITICAL':'⚠ Warning')+':</b> '+esc(a.msg)+'</div>';
     }
   } else {
-    h += '<div style="border:1px solid var(--green,#2fbf71);background:rgba(47,191,113,.1);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px"><b style="color:#2fbf71">✓ Healthy</b> — all storage well within limits.</div>';
+    h += '<div style="border:1px solid var(--green,#2fbf71);background:rgba(47,191,113,.1);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px"><b style="color:var(--green)">✓ Healthy</b> — all storage well within limits.</div>';
   }
 
   // DB usage bar (vs 8GB Pro)
@@ -2543,18 +2578,18 @@ async function renderCalls(el) {
     + [1,7,30].map(d => '<button class="mini' + (CALL_DAYS===d?' on':'') + '" onclick="CALL_DAYS=' + d + ';CALL_OPEN=null;render()">'
         + (d===1?'Today':d+' days') + '</button>').join('')
     + '<button class="mini" style="margin-left:auto" onclick="recProbe()">Check recordings</button>'
-    + '<a href="/admin/calls.html" style="color:var(--blue);font-size:13px;text-decoration:none;align-self:center">Full Calls console →</a></div>'
+    + '<a href="/admin/calls.html" style="color:var(--blue-l);font-size:13px;text-decoration:none;align-self:center">Full Calls console →</a></div>'
     + '<div id="recProbeOut"></div>';
 
   h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:10px;margin-bottom:16px">'
     + [['Calls', st.total||0, ''],
        ['Answered', st.answered||0, 'color:var(--green)'],
-       ['Missed', st.missed||0, 'color:var(--red)'],
+       ['Missed', st.missed||0, 'color:var(--red-ink)'],
        ['Answer rate', (st.answerRate||0)+'%', ''],
        ['Total talk', dur(st.talkSeconds), ''],
        ['Avg length', dur(st.avgTalk), ''],
        ['Known clients', st.matched||0, '']]
-      .map(([k,v,c]) => '<div style="background:#0a0f26;border:1px solid var(--line);border-radius:10px;padding:11px 13px">'
+      .map(([k,v,c]) => '<div style="background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 13px">'
         + '<div style="font-size:21px;font-weight:700;' + c + '">' + esc(v) + '</div>'
         + '<div style="color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.5px">' + k + '</div></div>').join('')
     + '</div>';
@@ -2594,7 +2629,7 @@ async function renderCalls(el) {
         + '<td class="muted">' + esc(x.office_name || '—') + '</td>'
         + '<td>' + (x.client_number ? '<span class="pill">#' + esc(x.client_number) + '</span>' : '<span class="muted">new</span>') + '</td></tr>';
       if (CALL_OPEN === x.rc_session_id) {
-        h += '<tr><td colspan="8" id="legs-' + esc(x.rc_session_id) + '" style="background:#0a0f26"><span class="muted">Loading legs\u2026</span></td></tr>';
+        h += '<tr><td colspan="8" id="legs-' + esc(x.rc_session_id) + '" style="background:var(--field)"><span class="muted">Loading legs\u2026</span></td></tr>';
       }
     }
     h += '</table>';
@@ -2618,7 +2653,7 @@ async function recProbe() {
   }
 
   const good = r.withRecording > 0;
-  let h = '<div style="margin:10px 0;padding:12px;border-radius:9px;background:#0a0f26;border:1px solid '
+  let h = '<div style="margin:10px 0;padding:12px;border-radius:9px;background:var(--field);border:1px solid '
     + (good ? 'rgba(47,191,113,.35)' : 'rgba(245,166,35,.35)') + '">'
     + '<div style="font-weight:600;margin-bottom:6px">' + (good ? '\u2713 ' : '\u26a0 ') + esc(r.verdict) + '</div>'
     + '<div class="muted" style="font-size:13px">Last ' + esc(r.windowHours) + 'h \u00b7 '
@@ -2860,7 +2895,7 @@ function staffRowHtml(a) {
     + '<div class="swho"><span class="sdot' + (a.active ? '' : ' no') + '"></span>'
     + '<div style="min-width:0"><div class="snm">' + esc(a.full_name || a.email)
     + (isMe ? ' <span class="stag">you</span>' : '')
-    + (a.external ? ' <span class="stag" style="color:var(--red);border-color:var(--red)">not @speedyins</span>' : '')
+    + (a.external ? ' <span class="stag" style="color:var(--red-ink);border-color:var(--red)">not @speedyins</span>' : '')
     + (a.active ? '' : ' <span class="stag">cannot sign in</span>') + '</div>'
     + '<div class="sem">' + esc(a.email)
     + (a.producer_code ? ' · <span class="spc">' + esc(a.producer_code) + '</span>' : '') + '</div></div></div>'
@@ -2987,7 +3022,7 @@ function staffHtml() {
   if (rows.some(a => a.external)) {
     h += '<div style="border:1.5px solid var(--red);background:rgba(224,49,49,.08);border-radius:10px;'
       + 'padding:10px 13px;margin-bottom:14px;font-size:13px">'
-      + '<b style="color:var(--red)">A non-Speedy address is on this list.</b> '
+      + '<b style="color:var(--red-ink)">A non-Speedy address is on this list.</b> '
       + 'It is granted nothing, but it should not be here.</div>';
   }
 
@@ -3079,7 +3114,7 @@ async function saveAgent(i) {
   const a = staffAt(i); if (!a) return;
   const p = staffPending(i);
   const msg = byId('smsg_' + i);
-  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   const why = ((byId('swhy_' + i) || {}).value || '').trim();
   if (!p.changed.length) return say('Nothing has changed.', true);
   if (!why) return say('A reason is required — it is what makes this explainable later.', true);
@@ -3116,7 +3151,7 @@ function staffShowAdd() {
 async function addAgent() {
   const g = id => ((byId(id) || {}).value || '').trim();
   const msg = byId('snew_msg');
-  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   const email = g('snew_email').toLowerCase();
   if (!email) return say('An email is required.', true);
   if (!g('snew_why')) return say('A reason is required.', true);
@@ -3176,7 +3211,7 @@ function refundsHtml() {
       + '<span class="lbl amber">needs you</span></div>'
       + '<div class="muted" style="font-size:13px;margin-top:3px">Asked by <b style="color:var(--ink)">' + esc(q.requested_by_name || q.requested_by) + '</b>'
       + ' · ' + rqAgo(q.requested_at) + ' · ' + esc(rqReason(q.reason)) + ' — ' + rqOwes(q.reason)
-      + ' · carrier money ' + (q.carrier === 'yes' ? 'returned' : q.carrier === 'no' ? '<b style="color:var(--red)">not returned — a loss</b>' : 'not back yet') + '</div>'
+      + ' · carrier money ' + (q.carrier === 'yes' ? 'returned' : q.carrier === 'no' ? '<b style="color:var(--red-ink)">not returned — a loss</b>' : 'not back yet') + '</div>'
       + '<div class="muted" style="font-size:12px;margin-top:3px">Payment: ' + esc(String(p.ts || '').slice(0, 10))
       + ' · ' + esc(p.purpose || '') + (p.ref ? ' · ' + esc(p.ref) : '')
       + (p.carrier_name ? ' · ' + esc(p.carrier_name) + (p.service_cost != null ? ' ' + money(p.service_cost) : '') : '')
@@ -3184,10 +3219,10 @@ function refundsHtml() {
       + ' · commission to ' + esc(p.commission_to_name || '—') + '</div>'
       + '<div class="rqnote">“' + esc(q.note) + '”</div>'
       + '<ul class="will">'
-      + '<li>' + (nz.channel === 'email' ? 'Client emailed at <b>' + esc(nz.to) + '</b>' + (nz.source === 'typed' ? ' <span style="color:var(--amber)">(typed by the agent, not from the record)</span>' : '')
-                 : '<span style="color:var(--red)">Client NOT told</span> — ' + esc(nz.skip_reason || '')) + '</li>'
+      + '<li>' + (nz.channel === 'email' ? 'Client emailed at <b>' + esc(nz.to) + '</b>' + (nz.source === 'typed' ? ' <span style="color:var(--amber-ink)">(typed by the agent, not from the record)</span>' : '')
+                 : '<span style="color:var(--red-ink)">Client NOT told</span> — ' + esc(nz.skip_reason || '')) + '</li>'
       + (p.fee_amount != null ? '<li>' + esc(String(p.commission_to_name || 'the agent').split(' ')[0]) + '’s commission on this reverses, this month</li>' : '<li>Never audited — no commission to reverse</li>')
-      + (p.service_cost != null && q.carrier !== 'yes' ? '<li>' + money(p.service_cost) + ' carrier cost ' + (q.carrier === 'no' ? '<span style="color:var(--red)">is a loss</span>' : 'held for recovery') + '</li>' : '')
+      + (p.service_cost != null && q.carrier !== 'yes' ? '<li>' + money(p.service_cost) + ' carrier cost ' + (q.carrier === 'no' ? '<span style="color:var(--red-ink)">is a loss</span>' : 'held for recovery') + '</li>' : '')
       + '<li>A note goes on the HawkSoft file; the receipt stays</li>'
       + '</ul>'
       + '<div id="rqmsg_' + esc(q.id) + '" class="shint" style="margin-top:6px;min-height:0"></div>'
@@ -3244,8 +3279,8 @@ function refundsHtml() {
         + (q.status === 'approved' && nzd
             ? '<div class="muted" style="font-size:12px;margin-top:3px">' + (nzd.result === 'sent'
                 ? 'Client emailed at <b style="color:var(--ink)">' + esc(nzd.to) + '</b>' + (nzd.late ? ' (sent afterwards by ' + esc(String(nzd.chosen_by || '').split('@')[0]) + ')' : '')
-                : nzd.result === 'failed' ? '<span style="color:var(--red)">Email to ' + esc(nzd.to || '') + ' FAILED</span>' + (nzd.detail ? ' — ' + esc(nzd.detail) : '')
-                : '<span style="color:var(--amber)">Client not told</span>' + (nzd.skip_reason ? ' — ' + esc(nzd.skip_reason) : '')) + '</div>'
+                : nzd.result === 'failed' ? '<span style="color:var(--red-ink)">Email to ' + esc(nzd.to || '') + ' FAILED</span>' + (nzd.detail ? ' — ' + esc(nzd.detail) : '')
+                : '<span style="color:var(--amber-ink)">Client not told</span>' + (nzd.skip_reason ? ' — ' + esc(nzd.skip_reason) : '')) + '</div>'
             : '')
         + ((canMail || (q.status === 'approved' && q.refund_id))
             ? '<div id="rqdmsg_' + esc(q.id) + '" class="shint" style="margin-top:6px;min-height:0"></div><div class="rqacts">'
@@ -3273,7 +3308,7 @@ function rqNoticeOf(q){ return RQ_NZ[q.id] || q.notify || { channel: 'none', ski
 function rqNoticeHtml(q){
   const nz = rqNoticeOf(q); const emails = q.client_emails || [];
   const chip = (on, onclick, label) => '<button class="rqchip' + (on ? ' on' : '') + '" onclick="' + onclick + '">' + label + '</button>';
-  let h = '<div class="muted" style="font-size:13px;margin-bottom:4px">Tell the client' + (RQ_NZ[q.id] ? ' <span style="color:var(--amber)">(changed from what ' + esc(String(q.requested_by_name || q.requested_by).split(' ')[0]) + ' asked)</span>' : '') + '</div><div class="rqchips">'
+  let h = '<div class="muted" style="font-size:13px;margin-bottom:4px">Tell the client' + (RQ_NZ[q.id] ? ' <span style="color:var(--amber-ink)">(changed from what ' + esc(String(q.requested_by_name || q.requested_by).split(' ')[0]) + ' asked)</span>' : '') + '</div><div class="rqchips">'
     + emails.map(e => chip(nz.channel === 'email' && nz.source === 'on_file' && nz.to === String(e).toLowerCase(), "rqNotify('" + esc(q.id) + "','on_file'," + JSON.stringify(String(e).toLowerCase()).replace(/"/g, '&quot;') + ")", 'Email ' + esc(e))).join('')
     + chip(nz.channel === 'email' && nz.source === 'typed', "rqNotify('" + esc(q.id) + "','typed')", emails.length ? 'A different address…' : 'Type an address…')
     + chip(nz.channel === 'none', "rqNotify('" + esc(q.id) + "','none')", 'Don’t notify')
@@ -3300,7 +3335,7 @@ function rqNoticeOk(nz){ return !!(nz && ((nz.channel === 'email' && /^[^\s@]+@[
 async function notifyRefund(id){
   const q = (RQ_DATA.decided || []).find(x => x.id === id); if (!q || !q.refund_id) return;
   const msg = $('#rqdmsg_' + id);
-  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   const guess = (q.client_emails || [])[0] || '';
   const to = prompt('Email the client about this refund of ' + money(q.approved_amount != null ? q.approved_amount : q.amount) + '.\n\nSend to:', guess);
   if (to == null) return;
@@ -3321,7 +3356,7 @@ function rqAmtChanged(id, v) {
 }
 async function decideRefund(id, approve, note) {
   const msg = $('#rqmsg_' + id);
-  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   const q = (RQ_DATA.pending || []).find(x => x.id === id); if (!q) return;
   const box = $('#rqamt_' + id);
   const amt = approve ? (box ? rqParse(box.value) : Number(q.amount)) : null;
@@ -3353,12 +3388,12 @@ async function decideRefund(id, approve, note) {
 function declineRefund(id) {
   const why = prompt('Why is this declined? The agent will read this.');
   if (why == null) return;
-  if (!why.trim()) { const m = $('#rqmsg_' + id); if (m) { m.textContent = 'A reason is required.'; m.style.color = 'var(--red)'; } return; }
+  if (!why.trim()) { const m = $('#rqmsg_' + id); if (m) { m.textContent = 'A reason is required.'; m.style.color = 'var(--red-ink)'; } return; }
   decideRefund(id, false, why.trim());
 }
 async function settleCarrier(refundId, answer) {
   const msg = $('#crmsg_' + refundId);
-  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } };
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red-ink)' : 'var(--green)'; } };
   const why = prompt(answer === 'yes'
     ? 'How do you know the carrier paid us back? (remittance, call, statement — this is recorded)'
     : 'How do you know it is a loss? (this is recorded, and it moves to Trust’s loss line)');

@@ -3,7 +3,7 @@
    sheets. Rule order is the portal's. Loaded by both pages next to clientpanel.js. */
 .chips{display:flex;flex-wrap:wrap;gap:5px}
 .chips button{background:var(--field);border:1px solid var(--line);color:var(--mute);font-size:13px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
-.chips button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+.chips button.sel{background:var(--blue-deep);border-color:var(--blue-deep);color:#fff}
 /* THE PURPOSE GATE (Saif, Sep 14): "New business" needs a source before anything
    else - the other purposes step back, the source row lights up, Charge waits. */
 .chips button.faded{opacity:.35}
@@ -67,13 +67,13 @@
 #refundSheet .rstep.dim .rq{color:var(--dim)} #refundSheet .rstep.dim .rnum{opacity:.6}
 #refundSheet .rstep.open .rq{color:var(--ink)}
 #refundSheet .rnum{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);color:var(--dim);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;cursor:pointer}
-#refundSheet .rnum.on{border-color:var(--blue);color:var(--blue)}
-#refundSheet .rnum.done{border-color:var(--green);background:var(--green);color:#fff}
+#refundSheet .rnum.on{border-color:var(--blue);color:var(--blue-l)}
+#refundSheet .rnum.done{border-color:var(--green);background:var(--green);color:var(--on-green)}
 #refundSheet .rbody{flex:1;min-width:0}
 #refundSheet .rq{font-size:15px;font-weight:700;cursor:pointer}
 #refundSheet .rq small{font-weight:400;color:var(--mute);font-size:13px;margin-left:6px}
 #refundSheet .rdone{font-size:13.5px;margin-top:2px;color:var(--mute)} #refundSheet .rdone b{color:var(--ink)}
-#refundSheet .rchg{color:var(--blue);font-size:13px;margin-left:6px;cursor:pointer}
+#refundSheet .rchg{color:var(--blue-l);font-size:13px;margin-left:6px;cursor:pointer}
 #refundSheet .rchoice{margin-top:8px;display:flex;flex-direction:column;gap:6px}
 #refundSheet .rradio{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;cursor:pointer;background:var(--card)}
 #refundSheet .rradio.on{border-color:var(--blue);background:rgba(77,124,254,.10)}
@@ -119,7 +119,7 @@
 .cpanel textarea{field-sizing:content;min-height:62px;resize:vertical;line-height:1.5}
 .cpanel select:focus,.cpanel input:focus,.cpanel textarea:focus{border-color:var(--blue)}
 .cpanel .btn{display:block;width:100%;text-align:center;border:0;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
-.cpanel .btn-blue{background:var(--blue);color:#fff}
+.cpanel .btn-blue{background:var(--blue-deep);color:#fff}
 .cpanel .btn-red{background:var(--red);color:#fff}
 .cpanel .btn-ghost{background:transparent;color:var(--mute);border:1.5px solid var(--line);font-weight:600}
 .cpanel .row{display:flex;justify-content:space-between;align-items:center}

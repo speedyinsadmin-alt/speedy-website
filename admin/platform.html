@@ -1465,11 +1465,59 @@ async function renderTrust(el){
   let h = '<h2>Trust — premium collected and owed</h2>';
   h += '<div class="muted" style="font-size:13px;margin:-4px 0 12px">'+esc(r.source)+'</div>';
   h += '<div style="display:flex;gap:6px;margin-bottom:14px;align-items:center;flex-wrap:wrap">'+chip('this','This month')+chip('last','Last month')
-    + '<span style="flex:1"></span><button class="dl" onclick="trustCsv()" title="Every payment and refund of the period, as a spreadsheet">\u2b73 Download ' + esc(monthName) + ' (CSV) \u00b7 ' + (r.items||[]).length + ' payment' + ((r.items||[]).length === 1 ? '' : 's') + '</button></div>';
+    + '<span style="flex:1"></span><button class="dl" onclick="openCardFind()" title="Every payment ever taken on a card ending in four digits" style="margin-right:8px">&#128179; Find a card</button><button class="dl" onclick="trustCsv()" title="Every payment and refund of the period, as a spreadsheet">\u2b73 Download ' + esc(monthName) + ' (CSV) \u00b7 ' + (r.items||[]).length + ' payment' + ((r.items||[]).length === 1 ? '' : 's') + '</button></div>';
   h += '<input class="tsearch" id="trustSearch" value="' + esc(TRUST_Q) + '" oninput="trustSearch(this.value)" placeholder="Search anything \u2014 an exact amount (112.43), client name or #, carrier, agent, purpose, transaction ref">';
-  h += '<div id="trustBody"></div>';
+  h += '<div id="cardFind" class="hide"></div><div id="trustBody"></div>';
   el.innerHTML = h;
   trustDraw();
+  if (CARD_Q) { openCardFind(); }
+}
+/* ---------- FIND A CARD (Sep 18) ----------
+   An admin types the last 4 digits of a card and sees every payment ever taken on cards
+   ending in them - any month, not the period above. Only the brand and the last four
+   digits exist on the platform; four digits are not one card, so the brand is shown and
+   the cards are counted. A row opens the client. */
+let CARD_Q = '', CARD_DATA = null;
+function openCardFind(){
+  const box = $('#cardFind'); if (!box) return;
+  box.classList.remove('hide');
+  box.innerHTML = '<div style="border:1px solid rgba(77,124,254,.45);border-radius:12px;padding:14px 16px;margin:0 0 16px;background:rgba(77,124,254,.06)">'
+    + '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">'
+    + '<div><div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Last 4 digits of the card</div>'
+    + '<input id="cardLast4" value="' + esc(CARD_Q) + '" inputmode="numeric" maxlength="4" autocomplete="off" onkeydown="if(event.key===\'Enter\')cardFind()" style="width:120px;font-family:var(--mono);font-size:20px;letter-spacing:.2em;text-align:center;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--field);color:var(--ink)"></div>'
+    + '<button class="perchip sel" onclick="cardFind()" style="padding:10px 18px;font-size:14px">Search every payment</button>'
+    + '<span class="muted" style="font-size:12px;cursor:pointer;margin-left:auto" onclick="closeCardFind()">\u2715 close</span></div>'
+    + '<div class="muted" style="font-size:13px;margin:12px 0 8px">Searches every card payment on the platform, any month \u2014 not just the period above. Cash, Zelle and pay links carry no card. Only the brand and the last four digits are stored; the platform never sees the full number.</div>'
+    + '<div id="cardFindOut"></div></div>';
+  const inp = $('#cardLast4'); if (inp) { inp.focus(); if (CARD_DATA && CARD_DATA.last4 === CARD_Q) drawCardFind(CARD_DATA); }
+}
+function closeCardFind(){ const box = $('#cardFind'); if (box) { box.classList.add('hide'); box.innerHTML = ''; } }
+async function cardFind(){
+  const inp = $('#cardLast4'), out = $('#cardFindOut'); if (!inp || !out) return;
+  const last4 = String(inp.value || '').replace(/\D/g, '');
+  if (last4.length !== 4) { out.innerHTML = '<div style="color:var(--amber-ink);font-size:13px">Enter the last 4 digits of the card.</div>'; return; }
+  CARD_Q = last4; out.innerHTML = '<div class="muted" style="font-size:13px">Searching\u2026</div>';
+  const r = await api('card_find&last4=' + encodeURIComponent(last4));
+  if (!r || !r.ok) { out.innerHTML = '<div class="err">Could not search' + (r && r.error ? ': ' + esc(r.error) : '.') + '</div>'; return; }
+  CARD_DATA = r; drawCardFind(r);
+}
+function drawCardFind(r){
+  const out = $('#cardFindOut'); if (!out) return;
+  const P = r.payments || [];
+  if (!P.length) { out.innerHTML = '<div style="font-size:14px;margin:10px 0 4px">No card payment on the platform ends in <b class="amount">' + esc(r.last4) + '</b>.</div><div class="muted" style="font-size:13px">Cash, Zelle and pay-link payments carry no card; a payment older than the platform is only in HawkSoft.</div>'; return; }
+  const cards = (r.cards || []).map(c => '<b>' + esc(c.card) + '</b>' + (c.n > 1 ? ' \u00d7' + c.n : '')).join(', ');
+  out.innerHTML = '<div style="font-size:14px;margin:10px 0 8px"><b>' + P.length + ' payment' + (P.length === 1 ? '' : 's') + '</b> on cards ending <b class="amount">' + esc(r.last4) + '</b> \u00b7 '
+    + ((r.cards || []).length === 1 ? 'one card: ' : (r.cards || []).length + ' cards: ') + cards + ' \u00b7 ' + money(r.collected) + ' collected' + (r.refunded ? ' \u00b7 ' + r.refunded + ' refunded' : '') + '</div>'
+    + '<table><tr><th>When</th><th>Client</th><th>Charge</th><th>Purpose</th><th>Agent</th><th>Card</th><th>Status</th></tr>'
+    + P.map(p => '<tr style="cursor:pointer" onclick="openClient(' + Number(p.client_no) + ')">'
+      + '<td class="muted" style="white-space:nowrap">' + esc(PT_STAMP(p.ts)) + '</td>'
+      + '<td>' + esc(p.name) + ' <span class="muted">#' + esc(p.client_no) + '</span></td>'
+      + '<td class="amount">' + money(p.amount) + '</td>'
+      + '<td>' + esc(p.purpose || '\u2014') + '</td>'
+      + '<td class="muted">' + esc(p.agent || '\u2014') + '</td>'
+      + '<td style="white-space:nowrap">' + esc(p.brand) + ' <span class="amount">\u00b7\u00b7\u00b7\u00b7' + esc(p.last4) + '</span></td>'
+      + '<td><span class="pill ' + esc((p.state || [])[0] || 'm') + '">' + esc((p.state || [])[1] || '') + '</span></td></tr>').join('')
+    + '</table><div class="muted" style="font-size:12px;margin-top:8px">Click a row to open the client.</div>';
 }
 function trustDraw(){
   const r = TRUST_DATA, el = document.getElementById('trustBody');

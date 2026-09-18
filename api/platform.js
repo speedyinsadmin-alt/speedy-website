@@ -4441,6 +4441,47 @@ if (view === 'portal_share_due') {
      UNACCOUNTED is the number to act on: money collected where no carrier cost has
      been entered. It is not a hole in the data - every dollar has an agent and an
      unfinished audit behind it. */
+  /* ---- FIND A CARD (Sep 18): every payment ever taken on cards ending in four digits ----
+     Only the brand and the last four digits are stored on a card charge (extra.brand /
+     extra.last4, written by the Clover leg); the platform never sees a full number, so
+     this is safe to hand an admin. Four digits are not one card - the brand is returned
+     and the cards are counted. Cash, Zelle and pay links carry no card and are not here. */
+  if (view === 'card_find') {
+    const last4 = String(req.query.last4 || '').replace(/\D/g, '');
+    if (last4.length !== 4) return res.status(400).json({ ok: false, error: 'Enter the last 4 digits of the card.' });
+    const led = await sbGet(s, `bridge_ledger?select=id,ts,kind,client_id,amount,purpose,agent,audit_status,audit_sendback,refund_of,balance_of,extra,is_test&extra->>last4=eq.${last4}&is_test=not.is.true&refund_of=is.null&order=ts.desc&limit=300`);
+    const rows = (Array.isArray(led.rows) ? led.rows : []).filter(r => !/declin|fail|void/i.test(String(r.kind || '')));
+    const ids = rows.map(r => r.id);
+    const refunded = {};
+    if (ids.length) {
+      for (let i = 0; i < ids.length; i += 100) {
+        const rf = await sbGet(s, `bridge_ledger?select=refund_of,ts,amount&refund_of=in.(${ids.slice(i, i + 100).join(',')})&order=ts.asc`);
+        for (const x of (rf.rows || [])) { const cur = refunded[x.refund_of] || { at: x.ts, amount: 0 }; cur.amount += Math.abs(Number(x.amount || 0)); refunded[x.refund_of] = cur; }
+      }
+    }
+    const names = {};
+    const nos = [...new Set(rows.map(r => r.client_id).filter(n => n != null))];
+    if (nos.length) { const cr = await sbGet(s, `clients?client_no=in.(${nos.join(',')})&select=client_no,first_name,last_name,business_name`); for (const c of (cr.rows || [])) names[c.client_no] = c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || ('Client #' + c.client_no); }
+    const first = e => { const em = agentEmailOf(e); return em ? String(AGENT_NAME[em] || em.split('@')[0]).split(' ')[0] : ''; };
+    const stateOf = r => {
+      const rf = refunded[r.id]; const st = String(r.audit_status || '');
+      if (rf) return [rf.amount + 0.004 >= Number(r.amount || 0) ? 'r' : 'a', (rf.amount + 0.004 >= Number(r.amount || 0) ? 'refunded ' : 'part refunded ') + String(rf.at).slice(5, 10).replace('-', '/')];
+      if (r.balance_of) return ['m', 'balance payment'];
+      if (st === 'complete') return ['g', 'audited'];
+      if (st === 'ready_for_audit') return ['b', 'waiting for approval'];
+      if (r.audit_sendback) return ['r', 'sent back'];
+      return ['a', 'needs proof'];
+    };
+    const cards = {}; let collected = 0, refundedN = 0;
+    const payments = rows.map(r => {
+      const brand = String((r.extra && r.extra.brand) || '').toUpperCase() || 'CARD';
+      const k = brand + ' ····' + last4; cards[k] = (cards[k] || 0) + 1;
+      collected += Number(r.amount || 0); if (refunded[r.id]) refundedN++;
+      return { id: r.id, ts: r.ts, client_no: r.client_id, name: names[r.client_id] || ('Client #' + r.client_id), amount: Number(r.amount || 0), purpose: r.purpose || '', agent: first(r.agent), brand, last4, state: stateOf(r), refunded: refunded[r.id] ? { at: refunded[r.id].at, amount: +refunded[r.id].amount.toFixed(2) } : null };
+    });
+    return res.status(200).json({ ok: true, email, last4, payments, cards: Object.entries(cards).map(([card, n]) => ({ card, n })), collected: +collected.toFixed(2), refunded: refundedN });
+  }
+
   if (view === 'trust') {
     const s = sb();
     /* periodBounds lives inside portal_home at depth 3 and is NOT visible here - the

@@ -84,8 +84,8 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 ---
 
 ## 🔜 NEXT SESSION. START HERE.
-Last written Sep 18 (Supabase advisor entry). Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `04751de` (another session pushes the public
+Last written Sep 18. Everything below is pushed and live unless it says
+otherwise; `git status` is clean at `24f4408` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -873,6 +873,54 @@ admin reopen), agents see "✓ Paid · September" and a Paid tile, later approva
 the next month. Waiting on Tony: does "confirm" mean *paid with salary* (per-agent tick) or
 *numbers frozen* (one button)?
 
+**SEP 18 - FOUR THINGS SAIF ASKED FOR, ALL LIVE.**
+
+**1. AUTO SYNC (`145e848`).** "Can we fix the auto sync?" The cron fires once a day (2 AM
+Pacific; the plan allows no more) and HawkSoft has no webhooks, so a client created at
+10 AM was invisible until someone pressed a refresh button - every other sync in the log
+was a human. Now the platform syncs ITSELF while anyone is signed in: every open portal
+calls `view=sync_tick` on its 3-minute tick (and on focus), the Console's Clients tab when
+it opens. Server: "fresh" when the last sync is under 10 minutes old; otherwise ONE caller
+takes a 3-minute lease in the database (`sync_state.lock_until`, a conditional PATCH -
+Vercel runs many instances) and runs a 20-second delta sync, everyone else is told
+"running"; the lease clears in a finally and expires on its own; a HawkSoft failure is an
+answer, not a 500. Verified live: `actor=system:auto` synced 3 clients at 22:51 UTC.
+harnessAutoSync 14, mutateAutoSync 11/11. (Migration: `sync_state.lock_until`.)
+
+**2. RECENT CLIENTS (`13d138e`).** "The recent clients, not all of them - no reason." The
+Console's Clients tab opens on `view=recent_clients`: one row per client someone touched
+in the last 14 days, newest first, what happened last (charged $ purpose - shared 50% with
+Jorge / sent back "reason" / refund $ / balance paid / a note / documents), who, the
+payment's state pill. Ledger + events; texts, chats, sync bookkeeping and automatic policy
+links are not touches; test rows out; data escaped. Search still finds any client (the
+old table); clearing the box brings the list back without a read. The three sync buttons
+fold under "⚙ Sync · last x ago". Mock `console_simple_list.html` approved. harnessRecent
+24, mutateRecent 16/16.
+
+**3. ONE LINE PER PAYMENT ON THE CONSOLE (`e674147`).** "The client page is too much, make
+it simple." Console only (`PanelHost.compact`): a payment is one line - amount · purpose ·
+date and the state pill - the rest (who, carrier, commission, share, documents, actions)
+under it, shown when the line is tapped; the newest row starts open; what is open is
+remembered per client (`PayCard.toggleRow`, `OPEN_ROWS`); the policies move into a fourth
+tab (`ClientTabs opts.extra`). `PayCard opts.compact`; the portal (compact:false) renders
+byte-for-byte as before (Chrome shots identical). Mock `console_simple_client.html`
+approved. harnessConsolePanel 52, mutateConsolePanel 38/38.
+
+**4. LIGHT THEME ON THE CONSOLE + READABLE IN BOTH THEMES (`24f4408`).** The Console has
+the portal's switch (same key `speedy_theme`, applied before first paint). Then a CONTRAST
+AUDIT - `auditContrast.mjs` (every visible text element vs. the background it actually
+sits on, ancestors composited, WCAG AA 4.5:1 / 3:1 large) over 35 rendered screens via
+`auditAll.mjs` - found 119 text elements under AA in the dark Console, 215 light, 36/61
+on the portal. Causes: the accent blue as text (3.5:1), white on the accent blue on
+filled buttons (3.7:1), dark text on the light green, ~30 hard-coded hex colours. Fixes:
+three tokens on both pages - `--blue-deep` (filled buttons with white text, 5.9:1),
+`--green-ink` (pale green on green tints), `--on-green` (text on a green button) - and
+every text colour through a per-theme token; light values MEASURED: `--blue-l #2a52c9`,
+`--green #0f6b3a`, `--amber-ink #8a4d00`, `--mute #525d87`. Result: ZERO under AA on
+every screen, both pages, both themes. harnessTheme 28 (the gate runs the audit in Chrome;
+re-render first when CSS changes: the renderers + `harnessConsolePanel/Recent/Fees --render`).
+carrier.html has no light theme (one decorative 4.3:1 glyph) - out of scope, noted.
+
 **CONSOLE CLIENT PAGE = THE PORTAL'S PANEL - BUILT (`927b5d8` step 1, `51ad7bd` step 2,
 `04751de`).** Mock `console_portal.html` approved; the live page matches it (Chrome shots
 `shots_panel/console_panel*.png`). **Step 1:** the portal's client panel - renderPanel,
@@ -1527,7 +1575,10 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessFees.mjs` 22 · `mutateFees.mjs` 14 · `fees_view.html` / `fees_byagent.html` | Fees by agent; By agent by earner + period |
 | `patch_text.mjs` (438 sizes, --dim) · `overflowOf.mjs` | readability build |
 | `harnessSpeed.mjs` 15 · `mutateSpeed.mjs` 12 · `shootText.mjs` | speed (parallel reads, Console cache, thumb memory); readability before/after |
-| `harnessConsolePanel.mjs` 39 · `mutateConsolePanel.mjs` 24 · `harnessPanelReload.mjs` 5 · `mutatePanelReload.mjs` 4 · `remap_panel.mjs` · `patch_clientpanel.mjs` · `patch_console_panel.mjs` · `shots_panel/` | the Console client page = the portal's panel (clientpanel.js); the card re-read |
+| `harnessAutoSync.mjs` 14 · `mutateAutoSync.mjs` 11 | the self-sync (sync_tick, the lease) |
+| `harnessRecent.mjs` 24 · `mutateRecent.mjs` 16 · `mockConsoleSimple.mjs` | recent clients (the list, the search, the sync panel) |
+| `harnessTheme.mjs` 28 · `auditContrast.mjs` · `auditAll.mjs` · `contrastCalc.mjs` · `shots_light/` | the light theme, the contrast gate on 35 screens |
+| `harnessConsolePanel.mjs` 52 · `mutateConsolePanel.mjs` 38 · `harnessPanelReload.mjs` 5 · `mutatePanelReload.mjs` 4 · `remap_panel.mjs` · `patch_clientpanel.mjs` · `patch_console_panel.mjs` · `shots_panel/` | the Console client page = the portal's panel (clientpanel.js); the card re-read |
 | `harnessShare.mjs` 77 · `mutateShare.mjs` 65 · `mutateOne.mjs` · `renderPending.mjs` · `renderPendingList.mjs` · `renderShare.mjs` · `mock_share.html` | Share commission (the button, the sheet, set_share) |
 | `mutateSort.mjs` 8 · `mutateTodo.mjs` 4 · (updated) `harnessAuditReview.mjs` 162 | sort on every list; the todo banner's two numbers |
 | `harnessProbeRefund.mjs` | 122 — the probe's caps and verdict wording |

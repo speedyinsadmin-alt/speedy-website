@@ -137,6 +137,7 @@
         <section id="s-decisions"><h2>Needs a decision</h2><div id="decisions"></div></section>
         <section id="s-gbp"><h2>Google Business — live</h2><div id="gbp"></div></section>
         <section id="s-dbsec"><h2>Database security — nightly</h2><div id="dbsec"></div></section>
+        <section id="s-guardian"><h2>Guardian — weekly</h2><div id="guardian"></div></section>
         <div id="sections"></div>
         <section id="s-links"><h2>Every link, one place</h2><div class="cols" id="links"></div></section>
         <section id="s-map"><h2>Platform map</h2><div id="pmap"></div></section>
@@ -224,6 +225,8 @@ function render(r) {
     /* "clean" means the last nightly run found 0 ERROR / 0 WARN. "?" means the table
        could not be read; "never" means no run has written yet. Neither is clean. */
     { n: dbsecCell(r.dbsec).n, k: 'DB SECURITY', c: dbsecCell(r.dbsec).c },
+    /* The Guardian score: 100 means the nine Monday checks found nothing. */
+    { n: guardianCell(r.guardian).n, k: 'GUARDIAN', c: guardianCell(r.guardian).c },
   ];
   $('#strip').innerHTML = cells.map(c =>
     '<div class="cell ' + c.c + '"><div class="n">' + esc(c.n) + '</div>'
@@ -235,7 +238,8 @@ function render(r) {
     { grp: 'GO TO', links: [['s-links','Every link',''],['s-map','Platform map','A–E']] },
     { grp: 'ACT ON', links: [['s-decisions','Needs a decision', (r.decisions||[]).length],
       ['s-gbp','Google Business', r.gbp ? ((r.gbp.for_saif||[]).length ? (r.gbp.for_saif||[]).length + ' for you' : 'live') : 'no data'],
-      ['s-dbsec','Database security', dbsecCell(r.dbsec).n]] },
+      ['s-dbsec','Database security', dbsecCell(r.dbsec).n],
+      ['s-guardian','Guardian', guardianCell(r.guardian).n]] },
   ];
   const secLinks = (r.sections || []).map(s =>
     ['sec-' + s.id, s.title, s.items.length]);
@@ -266,6 +270,7 @@ function render(r) {
 
   $('#gbp').innerHTML = gbpHtml(r.gbp);
   $('#dbsec').innerHTML = dbsecHtml(r.dbsec);
+  $('#guardian').innerHTML = guardianHtml(r.guardian);
 
   $('#decisions').innerHTML = (r.decisions || []).map(d =>
     '<div class="item"><div class="who">' + esc(d.who) + '</div><div>' + esc(d.text) + '</div></div>'
@@ -368,6 +373,51 @@ function dbsecHtml(d) {
   return need + stale + '<div class="gbp-strip">' + strip + '</div>'
     + '<div class="gbp-runs">' + (runs || '<div class="note">No runs in the last 30 days.</div>') + '</div>'
     + '<div class="note">Nightly 2:08 AM while the Claude app is open · auto-fixes only a public table with RLS off · everything else is reported, never changed · emails Saif on findings · source: advisor_runs</div>';
+}
+
+/* One verdict for the Guardian strip cell and the sidebar. A score is only shown
+   when it is fresh enough to mean something - past 10 days it is "stale". */
+function guardianCell(g) {
+  if (!g) return { n: '?', c: 'warn' };
+  if (!g.last_run) return { n: 'never', c: 'warn' };
+  if (g.last_run.age_days > 10) return { n: 'stale', c: 'warn' };
+  const s = g.last_run.score;
+  return { n: s + '/100', c: g.last_run.critical ? 'hot' : s >= 90 ? 'ok' : s >= 70 ? 'warn' : 'hot' };
+}
+
+/* The Guardian block. g is ops_summary.guardian: null when guardian_runs could not
+   be read. Report-only by design, so everything here is "what it found" and "what
+   it says to do" - it never says "fixed". */
+function guardianHtml(g) {
+  if (!g) return '<div class="note">guardian_runs could not be read — the state is unknown, not clean.</div>';
+  const lr = g.last_run;
+  if (!lr) return '<div class="gbp-need"><b>NO RUN YET</b><div>Speedy Guardian runs Mondays at 7:06 AM while the Claude app is open, or when the app next opens after that.</div></div>'
+    + '<div class="note">Nine read-only checks: endpoint gates · secrets in the public repos · Supabase advisors · database health · Vercel errors · npm audit · access review · storage · RingCentral liveness · source: guardian_runs</div>';
+  const ageD = n => n === 0 ? 'today' : n === 1 ? 'yesterday' : n + 'd ago';
+  const sevCls = lr.critical ? 'hot' : lr.score >= 90 ? 'ok' : lr.score >= 70 ? 'warn' : 'hot';
+  const trend = g.prev_score == null ? 'first run' : lr.score > g.prev_score ? '▲ ' + (lr.score - g.prev_score) : lr.score < g.prev_score ? '▼ ' + (g.prev_score - lr.score) : '= same';
+  const recs = g.recommendations.length
+    ? '<div class="gbp-need"' + (lr.critical || lr.high ? '' : ' style="border-color:var(--rule)"') + '><b' + (lr.critical || lr.high ? '' : ' style="color:var(--mute)"') + '>DO THIS WEEK · TOP ' + g.recommendations.length + '</b>'
+      + g.recommendations.map((x, i) => '<div>' + (i + 1) + '. <span style="color:var(--ink)">' + esc(x.title) + '</span>' + (x.why ? ' — ' + esc(x.why) : '')
+          + (x.fix ? '<br><small style="color:var(--dim)">Fix: ' + esc(x.fix) + '</small>' : '') + '</div>').join('') + '</div>'
+    : '<div class="gbp-calm">Nothing to do. All nine checks came back clean.</div>';
+  const strip = [
+    [lr.score + '/100', 'SCORE', sevCls],
+    [lr.critical + ' / ' + lr.high, 'CRITICAL / HIGH', lr.critical ? 'hot' : lr.high ? 'warn' : 'ok'],
+    [lr.medium + ' / ' + lr.low, 'MEDIUM / LOW', ''],
+    [ageD(lr.age_days), 'LAST RUN', lr.age_days > 10 ? 'hot' : lr.age_days > 8 ? 'warn' : 'ok'],
+    [trend, 'VS LAST WEEK', g.prev_score == null ? '' : lr.score < g.prev_score ? 'warn' : 'ok'],
+  ].map(([n, k, c]) => '<div class="cell ' + c + '"><div class="n">' + esc(n) + '</div><div class="k">' + esc(k) + '</div></div>').join('');
+  const stClr = s => s === 'ok' ? 'var(--ok)' : s === 'warn' ? 'var(--warn)' : s === 'fail' ? 'var(--hot)' : 'var(--dim)';
+  const checks = g.checks.map(c =>
+    '<div class="r"><div class="d">#' + esc(c.id) + '<small>' + esc(c.name) + '</small></div>'
+    + '<div style="color:' + stClr(c.status) + ';text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding-top:2px">' + esc(c.status) + '</div>'
+    + '<div class="p"><span class="m">' + esc(c.summary) + '</span></div></div>').join('');
+  const hist = g.history.length > 1
+    ? '<div class="note">Score history: ' + g.history.map(h => esc(new Date(h.at).toLocaleDateString([], { month: 'short', day: 'numeric' })) + ' ' + h.score).join(' · ') + '</div>' : '';
+  return recs + '<div class="gbp-strip">' + strip + '</div>'
+    + '<div class="gbp-runs">' + (checks || '<div class="note">The last run recorded no per-check detail.</div>') + '</div>' + hist
+    + '<div class="note">Mondays 7:06 AM while the Claude app is open · nine read-only checks · changes nothing, emails the top 3 · ' + (lr.emailed ? 'last report emailed' : 'last report NOT emailed') + ' · source: guardian_runs</div>';
 }
 </script>
 </body>

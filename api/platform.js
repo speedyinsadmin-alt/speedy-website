@@ -1507,6 +1507,28 @@ function dbsecSummary(rows) {
   };
 }
 
+/* guardian_runs -> what Speedy Ops shows. rows arrive newest first. Speedy Guardian
+   (speedy-weekly-guardian, Mondays) is report-only: the row IS its output, so the
+   page shows the last run's score, its nine checks and its top-3 recommendations,
+   plus the score history so a slide is visible before it is a problem. */
+function guardianSummary(rows) {
+  const days = iso => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 864e5));
+  const arr = x => (Array.isArray(x) ? x : []);
+  const n = x => Number(x) || 0;
+  const last = rows[0] || null;
+  const prev = rows[1] || null;
+  return {
+    last_run: last ? { at: last.ran_at, age_days: days(last.ran_at), score: n(last.score),
+      critical: n(last.critical), high: n(last.high), medium: n(last.medium), low: n(last.low),
+      emailed: !!last.emailed, note: last.note || '' } : null,
+    prev_score: prev ? n(prev.score) : null,
+    checks: last ? arr(last.checks).map(c => ({ id: n(c.id), name: c.name || '', status: c.status || 'skipped', summary: c.summary || '' })) : [],
+    recommendations: last ? arr(last.recommendations).slice(0, 3).map(r => ({ title: r.title || '', why: r.why || '', fix: r.fix || '' })) : [],
+    findings: last ? arr(last.findings).map(f => ({ check: n(f.check), level: f.level || '', title: f.title || '', carried: !!f.carried })) : [],
+    history: rows.slice(0, 12).reverse().map(r => ({ at: r.ran_at, score: n(r.score) })),
+  };
+}
+
 const OPS_COSTS = { fixed_monthly: 190, lines: [
   { name: 'Vercel Pro', amount: 20 },
   { name: 'Supabase Pro', amount: 25 },
@@ -4651,10 +4673,18 @@ if (view === 'portal_share_due') {
       if (!r.ok || !Array.isArray(r.rows)) throw new Error('advisor_runs read failed');
       dbsec = dbsecSummary(r.rows);
     } catch {}
+    /* Guardian: last 12 weekly runs. Same contract - null when unreadable. */
+    let guardian = null;
+    try {
+      const r = await sbGet(s, 'guardian_runs?select=ran_at,score,critical,high,medium,low,checks,findings,recommendations,emailed,note&order=ran_at.desc&limit=12');
+      if (!r.ok || !Array.isArray(r.rows)) throw new Error('guardian_runs read failed');
+      guardian = guardianSummary(r.rows);
+    } catch {}
     return res.status(200).json({
       ok: true,
       gbp,
       dbsec,
+      guardian,
       generated: new Date().toISOString(),
       live: {
         open_audits: openAudits,

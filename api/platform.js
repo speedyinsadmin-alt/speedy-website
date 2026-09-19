@@ -1599,6 +1599,27 @@ function gbpSummary(rows) {
   };
 }
 
+/* advisor_runs -> what Speedy Ops shows. rows arrive newest first. The nightly task
+   (speedy-nightly-db-security) writes one row per run, silent nights included, so
+   "last run" is the proof it ran; "to_review" is whatever the LAST run reported and
+   deliberately did not change. */
+function dbsecSummary(rows) {
+  const hours = iso => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 36e5));
+  const arr = x => (Array.isArray(x) ? x : []);
+  const last = rows[0] || null;
+  return {
+    last_run: last ? { at: last.ran_at, age_hours: hours(last.ran_at),
+      errors: Number(last.errors) || 0, warns: Number(last.warns) || 0, note: last.note || '' } : null,
+    to_review: last ? arr(last.reported).map(x => ({ object: x.object || '', lint: x.lint || '',
+      level: x.level || '', suggested_fix: x.suggested_fix || '' })) : [],
+    fixed_30d: rows.reduce((t, r) => t + arr(r.fixed).length, 0),
+    runs_30d: rows.length,
+    runs: rows.slice(0, 10).map(r => ({ at: r.ran_at, errors: Number(r.errors) || 0, warns: Number(r.warns) || 0,
+      fixed: arr(r.fixed).map(f => (f && f.table) || String(f)), reported: arr(r.reported).length,
+      emailed: !!r.emailed, note: r.note || '' })),
+  };
+}
+
 const OPS_COSTS = { fixed_monthly: 190, lines: [
   { name: 'Vercel Pro', amount: 20 },
   { name: 'Supabase Pro', amount: 25 },
@@ -4732,9 +4753,19 @@ if (view === 'portal_share_due') {
       const r = await sbGet(s, `gbp_runs?run_date=gte.${since}&kind=neq.warmup&select=run_date,kind,run_by,replies,posts,for_saif,notes&order=run_date.asc,id.asc`);
       gbp = gbpSummary(r.rows || []);
     } catch {}
+    /* Database security: last 30 days of advisor_runs. Same contract as gbp - a failed
+       read is dbsec:null and the page says "unknown", never "clean". */
+    let dbsec = null;
+    try {
+      const since = new Date(Date.now() - 30 * 864e5).toISOString();
+      const r = await sbGet(s, `advisor_runs?ran_at=gte.${since}&select=ran_at,errors,warns,infos,fixed,reported,emailed,note&order=ran_at.desc&limit=30`);
+      if (!r.ok || !Array.isArray(r.rows)) throw new Error('advisor_runs read failed');
+      dbsec = dbsecSummary(r.rows);
+    } catch {}
     return res.status(200).json({
       ok: true,
       gbp,
+      dbsec,
       generated: new Date().toISOString(),
       live: {
         open_audits: openAudits,

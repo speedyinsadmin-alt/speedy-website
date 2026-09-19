@@ -136,6 +136,7 @@
       <main>
         <section id="s-decisions"><h2>Needs a decision</h2><div id="decisions"></div></section>
         <section id="s-gbp"><h2>Google Business — live</h2><div id="gbp"></div></section>
+        <section id="s-dbsec"><h2>Database security — nightly</h2><div id="dbsec"></div></section>
         <div id="sections"></div>
         <section id="s-links"><h2>Every link, one place</h2><div class="cols" id="links"></div></section>
         <section id="s-map"><h2>Platform map</h2><div id="pmap"></div></section>
@@ -220,6 +221,9 @@ function render(r) {
     { n: ago(L.last_client_sync), k: 'LAST SYNC', c: '' },
     { n: r.gbp ? (r.gbp.for_saif || []).length : '?', k: 'GBP · FOR SAIF',
       c: !r.gbp ? 'warn' : (r.gbp.for_saif || []).length ? 'hot' : 'ok' },
+    /* "clean" means the last nightly run found 0 ERROR / 0 WARN. "?" means the table
+       could not be read; "never" means no run has written yet. Neither is clean. */
+    { n: dbsecCell(r.dbsec).n, k: 'DB SECURITY', c: dbsecCell(r.dbsec).c },
   ];
   $('#strip').innerHTML = cells.map(c =>
     '<div class="cell ' + c.c + '"><div class="n">' + esc(c.n) + '</div>'
@@ -230,7 +234,8 @@ function render(r) {
   const nav = [
     { grp: 'GO TO', links: [['s-links','Every link',''],['s-map','Platform map','A–E']] },
     { grp: 'ACT ON', links: [['s-decisions','Needs a decision', (r.decisions||[]).length],
-      ['s-gbp','Google Business', r.gbp ? ((r.gbp.for_saif||[]).length ? (r.gbp.for_saif||[]).length + ' for you' : 'live') : 'no data']] },
+      ['s-gbp','Google Business', r.gbp ? ((r.gbp.for_saif||[]).length ? (r.gbp.for_saif||[]).length + ' for you' : 'live') : 'no data'],
+      ['s-dbsec','Database security', dbsecCell(r.dbsec).n]] },
   ];
   const secLinks = (r.sections || []).map(s =>
     ['sec-' + s.id, s.title, s.items.length]);
@@ -260,6 +265,7 @@ function render(r) {
     '<div class="item"><div class="pri low">·</div><div>' + esc(x) + '</div></div>').join('');
 
   $('#gbp').innerHTML = gbpHtml(r.gbp);
+  $('#dbsec').innerHTML = dbsecHtml(r.dbsec);
 
   $('#decisions').innerHTML = (r.decisions || []).map(d =>
     '<div class="item"><div class="who">' + esc(d.who) + '</div><div>' + esc(d.text) + '</div></div>'
@@ -312,6 +318,56 @@ function gbpHtml(g) {
   return need + '<div class="gbp-strip">' + strip + '</div>' + rows
     + '<div class="gbp-runs">' + runs + '</div>'
     + '<div class="note">Tue 9:09 Spanish post · Fri 9:10 English post · both answer reviews · hot past 8 days · source: gbp_runs</div>';
+}
+
+/* One verdict for the strip cell and the sidebar, so they can never disagree. */
+function dbsecCell(d) {
+  if (!d) return { n: '?', c: 'warn' };
+  if (!d.last_run) return { n: 'never', c: 'warn' };
+  if (d.to_review.length) return { n: d.to_review.length + ' to review', c: 'hot' };
+  if (d.last_run.age_hours > 72) return { n: 'stale', c: 'warn' };
+  return { n: 'clean', c: 'ok' };
+}
+
+/* The database-security block. d is ops_summary.dbsec: null when advisor_runs could
+   not be read - said out loud, never rendered as clean. The task only runs while the
+   Claude app is open, so a last run past 36 h usually means the app was closed, not
+   that the task broke - the note says which. Same visual vocabulary as the GBP block. */
+function dbsecHtml(d) {
+  if (!d) return '<div class="note">advisor_runs could not be read — the state is unknown, not clean.</div>';
+  const lr = d.last_run;
+  const ageH = h => h == null ? 'never' : h < 1 ? 'just now' : h < 48 ? h + 'h ago' : Math.round(h / 24) + 'd ago';
+  const cls = h => h == null || h > 72 ? 'hot' : h > 36 ? 'warn' : 'ok';
+  const need = d.to_review.length
+    ? '<div class="gbp-need"><b>NEEDS YOUR DECISION · ' + d.to_review.length + ' · nothing was changed</b>'
+      + d.to_review.map(x => '<div>' + esc(x.object) + ' — ' + esc(x.lint) + (x.level ? ' (' + esc(x.level) + ')' : '')
+          + (x.suggested_fix ? '<br><small style="color:var(--dim)">' + esc(x.suggested_fix) + '</small>' : '') + '</div>').join('')
+      + '</div>'
+    : lr
+      ? '<div class="gbp-calm">Clean at the last run — ' + lr.errors + ' error / ' + lr.warns + ' warn. Nothing changed, nothing waiting.</div>'
+      : '<div class="gbp-need"><b>NO RUN YET</b><div>The nightly task has not written a row. It runs at 2:08 AM while the Claude app is open, or when the app next opens.</div></div>';
+  const stale = lr && lr.age_hours > 36
+    ? '<div class="note" style="margin:0 0 12px;color:var(--warn)">Last run ' + ageH(lr.age_hours) + ' — the task runs only while the Claude app is open; open the app and it catches up.</div>' : '';
+  const strip = [
+    [lr ? ageH(lr.age_hours) : 'never', 'LAST RUN', cls(lr ? lr.age_hours : null)],
+    [lr ? lr.errors + ' / ' + lr.warns : '—', 'ERROR / WARN', lr && (lr.errors || lr.warns) ? 'hot' : lr ? 'ok' : ''],
+    [d.fixed_30d, 'AUTO-FIXED 30D', d.fixed_30d ? 'warn' : ''],
+    [d.runs_30d, 'RUNS 30D', ''],
+  ].map(([n, k, c]) => '<div class="cell ' + c + '"><div class="n">' + esc(n) + '</div><div class="k">' + esc(k) + '</div></div>').join('');
+  const when = iso => { const t = new Date(iso); return [t.toLocaleDateString([], { month: 'short', day: 'numeric' }), t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })]; };
+  const runs = d.runs.map(r => {
+    const [day, time] = when(r.at);
+    return '<div class="r"><div class="d">' + esc(day) + '<small>' + esc(time) + '</small></div>'
+      + '<div style="color:var(--' + (r.errors || r.warns ? 'hot' : 'ok') + ')">' + r.errors + ' / ' + r.warns + '</div><div class="p">'
+      + (r.fixed.length ? '<span class="full">fixed ' + esc(r.fixed.join(', ')) + '</span>' : '')
+      + (r.reported ? '<span class="part">' + r.reported + ' to review</span>' : '')
+      + (!r.fixed.length && !r.reported ? '<span class="m">clean</span>' : '')
+      + (r.emailed ? '<span class="m">· emailed</span>' : '')
+      + (r.note && r.note !== 'clean' ? '<em>' + esc(r.note) + '</em>' : '') + '</div></div>';
+  }).join('');
+  return need + stale + '<div class="gbp-strip">' + strip + '</div>'
+    + '<div class="gbp-runs">' + (runs || '<div class="note">No runs in the last 30 days.</div>') + '</div>'
+    + '<div class="note">Nightly 2:08 AM while the Claude app is open · auto-fixes only a public table with RLS off · everything else is reported, never changed · emails Saif on findings · source: advisor_runs</div>';
 }
 </script>
 </body>

@@ -4188,6 +4188,12 @@ Shipped: `#zeroAck` shown only on an exact `0`, **no purpose gate**, "Not applic
 70. **Per-agent RingCentral OAuth** so mirror threads can be answered from the agent's own number (stage later)
 71. **Escalation phones** into chat_settings — still not given
 72. **Tawk items 17/18 close when the homepage cuts over** (stage 4)
+73. **VAPID keys into Vercel** (VAPID_PUBLIC / VAPID_PRIVATE / VAPID_SUBJECT from `speedy-secretsapid.txt`, then redeploy) — Saif, or this session out of auto mode for three `vercel env add` commands. Until then push is a quiet no-op.
+74. **Texts per agent on the Calls page** — Saif asked Sep 18; mockup first (By-agent table: Answered calls · Talk · Texts in · Texts answered · Median reply · Open threads; summary tiles). Data: `messages.sender` + `events sms.in/out`.
+75. **Console Inbox tab** (supervisor: all live threads, whisper, take over, duty roster with muted, block list, settings incl. escalation phones, the numbers table with vacation coverage "also visible to").
+76. **Documents-tab relabel should also file to HawkSoft** (today only the thread's picker does set_doc_type + retry_hawksoft) — ask Saif.
+77. **Home branch missing on two active agents** — until set on the Staff page they see own texts + the queue only.
+78. **Item 2 photos on the Log tab** are tiles through the media call; the Documents copy (item 4) is the one with thumbnails — consider pointing the Log tile at the document once typed.
 67. **Chat: silent-agent unclaim + auto off-duty at close** — server-side sweep (cron) once stage 2 exists
 64. ~~**`refund_requests` has RLS disabled** (Supabase advisory, Sep 16) — enable + no policies like the other tables~~ **DONE Sep 18**, plus the two SECURITY DEFINER views, `system_health()` grants and three search_paths; advisors 0 ERROR / 0 WARN
 

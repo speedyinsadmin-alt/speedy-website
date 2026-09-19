@@ -930,6 +930,9 @@ appears at once." / "HawkSoft has no client #N." harnessFirstCharge 52, mutateFi
 week (26192, 26196, 26197, 26198, 26259), pulled in through the search path (the bulk
 `seed_batch` write was blocked by the permission mode). Nothing else is absent except
 archived clients, which HawkSoft withholds by design.
+**Closed the same night:** the agent unarchived 25356 in CMS, Saif said "check again", and the
+first search pulled her in - MARIA GALVEZ PLASCENCIA, Riverside Magnolia, Active, Bridger
+CAINBG-10177517 (Renewal, exp 03/19/2027). The path works end to end on a real file.
 
 **SEP 18 - SIX THINGS SAIF ASKED FOR, ALL LIVE.**
 

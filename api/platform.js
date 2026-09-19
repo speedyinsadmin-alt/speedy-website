@@ -1,5 +1,6 @@
 export const config = { maxDuration: 300 };
 import { randomUUID } from 'node:crypto';
+import { AGENCY_ID, TEST_CLIENT, OFFICE_MAP, hsCall, hsFetchClient, hsAllClientIds, hsChangedSince, hsClientBatch, sbUpsert, upsertHsClient } from './_hs.js';
 // /api/platform — backend for the Platform Console (admin/platform.html).
 // ACCESS: Google ID token (header x-id-token), allowlist below.
 // GET  = reads (HawkSoft ZZTEST, our clients/policies/events, ledger, tables)
@@ -188,40 +189,14 @@ const AGENT_ALLOWLIST = [
   'tony@speedyins.com', 'lana@speedyins.com',
 ];
 const ALLOWLIST = ADMIN_ALLOWLIST; // back-compat for existing admin checks
-const AGENCY_ID = 15112;
-const TEST_CLIENT = 26081; // ZZTEST — the only client sync/HawkSoft-read will touch
-const HS_BASE = 'https://integration.hawksoft.app';
-// HawkSoft office ids (NOT RingCentral office groups — see the calls view).
-const OFFICE_MAP = { '1': 'Moreno Valley', '2': 'Riverside Van Buren', '3': 'Riverside Magnolia', '4': 'Lake Elsinore', '5': 'Colton' };
+/* AGENCY_ID, TEST_CLIENT, HS_BASE, OFFICE_MAP, the carrier classifier, the HawkSoft
+   calls, sbUpsert and upsertHsClient live in api/_hs.js since Sep 18 (first-charge
+   sync): hawksoft.js maps a client with the SAME code this file syncs with. */
 /* The five office NAMES, in office order — served to the Staff page so its branch
    dropdown and this map can never drift apart. Written as a name list because the
    agents table stores the name, not the id. */
 const OFFICE_NAMES = Object.keys(OFFICE_MAP).sort().map(k => OFFICE_MAP[k]);
 
-// Carrier name normalization (misspellings / variants -> canonical). Grow as needed.
-const CARRIER_NORMALIZE = {
-  'MAPFREE': 'MAPFRE',
-  'MAPFRE': 'MAPFRE',
-  'MCGRAW INSURANCE SERVICES': 'MCGRAW',
-  'MCGRAW': 'MCGRAW',
-};
-function normalizeCarrier(name) {
-  if (!name) return null;
-  const key = String(name).trim().toUpperCase();
-  return CARRIER_NORMALIZE[key] || String(name).trim();
-}
-// Classify a HawkSoft "policy" container into what it really is.
-// Returns { record_type, renewal_months, carrier } — carrier cleared for non-insurance.
-function classifyRecord(rawCarrier) {
-  const c = String(rawCarrier || '').toUpperCase();
-  if (c.includes('DEPARTMENT OF MOTOR VEHICLES') || /\bDMV\b/.test(c)) {
-    return { record_type: 'dmv_service', renewal_months: 12, carrier: null };
-  }
-  if (rawCarrier && rawCarrier.trim()) {
-    return { record_type: 'insurance', renewal_months: null, carrier: normalizeCarrier(rawCarrier) };
-  }
-  return { record_type: 'unknown', renewal_months: null, carrier: null };
-}
 
 /* Verified-claims cache.
    The tokeninfo round trip to Google ran on EVERY request - client search fires
@@ -315,14 +290,6 @@ async function storageGet(objectPath) {
 async function sbGet(s, path) {
   const r = await fetch(`${s.base}/rest/v1/${path}`, { headers: s.hdrs });
   return { ok: r.ok, rows: await r.json().catch(() => []) , headers: r.headers };
-}
-async function sbUpsert(s, table, rows, conflict) {
-  const r = await fetch(`${s.base}/rest/v1/${table}?on_conflict=${conflict}`, {
-    method: 'POST',
-    headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify(rows),
-  });
-  return { ok: r.ok, status: r.status, body: await r.json().catch(() => null) };
 }
 async function sbInsert(s, table, rows) {
   const r = await fetch(`${s.base}/rest/v1/${table}`, {
@@ -479,102 +446,7 @@ async function may(email, cap) {
   return caps.has(cap);
 }
 
-function hsAuth() {
-  const ID = process.env.HAWKSOFT_CLIENT_ID, SECRET = process.env.HAWKSOFT_SECRET;
-  if (!ID || !SECRET) return null;
-  return 'Basic ' + Buffer.from(`${ID}:${SECRET}`).toString('base64');
-}
-async function hsCall(path, opts = {}) {
-  const AUTH = hsAuth();
-  if (!AUTH) return { error: 'HawkSoft env vars missing' };
-  const r = await fetch(HS_BASE + path, { ...opts, headers: { Authorization: AUTH, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
-  const text = await r.text();
-  let body = null; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  return { status: r.status, body };
-}
-const hsFetchClient = (no = TEST_CLIENT) => hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Details,People,Contacts,Policies,Invoices`);
-const hsAllClientIds = () => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=2000-01-01T00:00:00Z`);
-const hsChangedSince = (iso) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=${encodeURIComponent(iso)}`);
-const hsClientBatch = (ids) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&include=Details,People,Contacts,Policies`, { method: 'POST', body: JSON.stringify({ clientNumbers: ids }) });
 
-const pick = (o, ...keys) => { for (const k of keys) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
-const dateOnly = v => { const s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null; };
-
-/* ============ Shared: map + upsert one HawkSoft client object ============ */
-async function upsertHsClient(s, c) {
-  const cn = Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id'));
-  if (!isFinite(cn)) return { ok: false, error: 'no client number' };
-  const people = c.people || [];
-  const p0 = people[0] || {};
-  const details = c.details || {};
-  const addr = details.mailingAddress || details.physicalAddress || {};
-  const contacts = c.contacts || [];
-  const phone = (contacts.find(x => /phone|cell|mobile/i.test(x.type || '')) || {}).data || null;
-  const email = (contacts.find(x => /email/i.test(x.type || '')) || {}).data || null;
-  const officeId = details.officeId != null ? details.officeId : c.officeId;
-  // Find the TRUE named insured from policy drivers (relationship='Insured' / status='Principal').
-  // people[0] is unreliable — it can be an excluded driver. Drivers carry the real role.
-  let insuredFirst = null, insuredLast = null;
-  const polsForName = c.policies || c.Policies || [];
-  outer: for (const pol of polsForName) {
-    for (const dr of (pol.drivers || pol.Drivers || [])) {
-      const rel = String(dr.relationship || '').toLowerCase();
-      const st = String((dr.personalInfo && dr.personalInfo.status) || '').toLowerCase();
-      if (rel === 'insured' || st === 'principal') {
-        insuredFirst = dr.firstName || null;
-        insuredLast = dr.lastName || null;
-        break outer;
-      }
-    }
-  }
-  const clientRow = {
-    client_no: cn,
-    kind: details.isCommercial ? 'business' : 'person',
-    first_name: insuredFirst || p0.firstName || null,
-    last_name: insuredLast || p0.lastName || null,
-    business_name: details.companyName || details.dbaName || null,
-    email,
-    phone,
-    address1: addr.address1 || null,
-    city: addr.city || null,
-    state: addr.state || null,
-    zip: addr.zip || null,
-    branch: OFFICE_MAP[String(officeId)] || (officeId != null ? 'Office ' + officeId : null),
-    status: details.status || 'Active',
-    extras: { office_id: officeId ?? null, client_type: details.clientType || null, producer: details.producer || null, source: details.source || null, hawksoft_snapshot_at: new Date().toISOString() },
-    updated_at: new Date().toISOString(),
-  };
-  const up1 = await sbUpsert(s, 'clients', [clientRow], 'client_no');
-  if (!up1.ok) return { ok: false, error: 'clients upsert failed', detail: up1.body };
-  const ourClient = up1.body && up1.body[0];
-  const hsPols = c.policies || c.Policies || [];
-  let polCount = 0;
-  for (const p of hsPols) {
-    const guid = pick(p, 'id', 'policyId', 'guid', 'Id', 'PolicyId');
-    const _cls = classifyRecord(p.carrier || p.writingCarrier);
-    const row = {
-      client_id: ourClient.id,
-      client_no: cn,
-      hs_policy_guid: p.id ? String(p.id) : (guid ? String(guid) : null),
-      policy_number: p.policyNumber || null,
-      lob: (Array.isArray(p.loBs) && p.loBs.length ? p.loBs.map(l => (l && (l.lineOfBusiness || l.lob || l.code || l.type)) || l).filter(Boolean).join(', ') : null) || p.applicationType || p.title || p.type || null,
-      carrier: _cls.carrier,
-      carrier_normalized: _cls.carrier,
-      record_type: _cls.record_type,
-      renewal_months: _cls.renewal_months,
-      effective_date: dateOnly(p.effectiveDate),
-      expiration_date: dateOnly(p.expirationDate),
-      premium: (p.premium != null ? Number(p.premium) : null),
-      status: p.status || 'Active',
-      billing: p.billingType || null,
-      carrier_extras: p,
-      updated_at: new Date().toISOString(),
-    };
-    const up = await sbUpsert(s, 'policies', [row], 'hs_policy_guid');
-    if (up.ok) polCount++;
-  }
-  return { ok: true, client_no: cn, policies: polCount };
-}
 
 
 /* ---------- Link a down payment to the policy it bought ----------

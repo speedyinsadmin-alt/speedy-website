@@ -1,5 +1,6 @@
 export const config = { maxDuration: 60 };
 import { createHmac } from 'node:crypto';
+import { ensureClientSynced, sbEnv } from './_hs.js';
 // /api/hawksoft — server-side proxy to the HawkSoft Partner API (v4.0).
 // Reads HAWKSOFT_CLIENT_ID + HAWKSOFT_SECRET from Vercel env vars.
 //
@@ -358,6 +359,13 @@ async function ledger(event) {
     if (r.status !== 201) return false;
     let newId = null;
     try { const rows = await r.json(); newId = Array.isArray(rows) && rows[0] ? rows[0].id : null; } catch { newId = null; }
+    /* FIRST-CHARGE SYNC (Sep 18, Saif). A client created in HawkSoft today and charged
+       before the next sync showed as "Client #26427" on every list until the 9 AM run.
+       If we hold no row for this client, pull it now - the row is written, so nothing
+       here can cost the charge; see ensureClientSynced in _hs.js. */
+    if (row.client_id && !row.is_test) {
+      try { await ensureClientSynced(sbEnv(), row.client_id, { actor: 'system:first_charge', reason: kind }); } catch { /* next sync */ }
+    }
     /* money on an open invoice: the invoice becomes the sale to audit */
     if (row.balance_of && auditStatusFor(kind) === 'client_paid') {
       try {
@@ -890,6 +898,8 @@ export default async function handler(req, res) {
       if (r.body && typeof r.body === 'object') {
         clientNumber = r.body.clientNumber || r.body.clientId || r.body.id || null;
       }
+      /* the new record is on the platform before the first charge (Sep 18) */
+      if (clientNumber) { try { await ensureClientSynced(sbEnv(), clientNumber, { actor: 'system:first_charge', reason: 'charge_create_client' }); } catch { /* next sync */ } }
       const auditSaved = await audit({ action: 'charge_create_client', who, officeId, clientNumber, httpStatus: r.status });
       return res.status(200).json({ ok: r.status === 200 || r.status === 202, httpStatus: r.status, clientNumber, result: r.body, auditSaved });
     }

@@ -23,6 +23,7 @@
 import { randomBytes } from 'node:crypto';
 import { resolveClient, branchCode } from './_inbox.js';
 import { pushOwner, alertChain, chatSettings } from './chat.js';
+import { savePhotosOnThread } from './_docs.js';
 
 /* ---- RingCentral auth (JWT -> access token), the proven flow from sms.js, for
    downloading MMS media. Media is the whole point of many texts (licence, DMV
@@ -152,6 +153,8 @@ export async function ingest(s, m) {
     await sbPatch(s, `messages?id=eq.${msg.row.id}`, { attachments: atts });
   }
 
+  /* item 4: a photo on a thread that is already a confirmed client is a client document at once */
+  if (stored && conv.client_no && conv.link_status === 'confirmed' && conv.is_test !== true) { try { await savePhotosOnThread(s, conv, 'customer', msg.row.id); } catch (e) { console.error('[rc-sms] photo->document failed:', e && e.message); } }
   const patch = { updated_at: now, line: conv.line || line.phone10, line_extension_id: conv.line_extension_id || line.extension_id || null };
   if (m.direction === 'inbound') { patch.visitor_seen_at = now; if (!conv.client_no && client_no) { patch.client_no = client_no; patch.link_status = link_status; } }
   else {

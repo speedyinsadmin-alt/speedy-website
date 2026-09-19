@@ -119,9 +119,19 @@
   .att .ph img{width:100%;height:100%;object-fit:cover;display:block}
   .att .ph.file{width:auto;height:auto;padding:8px 10px}
   .att .ph.bad{color:var(--red-ink)}
+  /* item 4: the tile says what the photo became */
+  .att .ph{position:relative} .att .ph .doc{position:absolute;left:0;right:0;bottom:0;background:rgba(6,9,24,.78);color:#fff;font-size:10.5px;font-weight:700;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .att .ph .doc.typed{background:rgba(47,191,113,.85)}
+  .lbdoc{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:12px 16px 16px;cursor:default;max-height:46vh;overflow:auto}
+  .lbdoc .st{font-size:13px;color:var(--mute);margin-bottom:8px} .lbdoc .st b{color:var(--ink)} .lbdoc .st.ok{color:var(--green)} .lbdoc .st.warn{color:var(--amber-ink)}
+  .lbdoc .types{display:flex;gap:6px;flex-wrap:wrap} .lbdoc .types span{font-size:12.5px;font-weight:600;padding:7px 11px;border-radius:99px;border:1px solid var(--line);color:var(--ink);cursor:pointer;background:var(--field)}
+  .lbdoc .types span.on{border-color:var(--green);color:var(--green)} .lbdoc .types span.no{color:var(--mute);background:transparent}
+  .lbdoc .other{display:none;gap:8px;margin-top:8px} .lbdoc .other.on{display:flex} .lbdoc .other input{flex:1}
   .lightbox{position:fixed;inset:0;background:rgba(6,9,24,.92);display:none;align-items:center;justify-content:center;z-index:60;cursor:zoom-out}
   .lightbox.on{display:flex} .lightbox img{max-width:96vw;max-height:92vh;border-radius:8px}
   .lightbox a{position:absolute;bottom:18px;right:18px;color:#fff;background:var(--blue);padding:8px 12px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700}
+  /* item 4: the picker sits under the image, Save moves to the top corner */
+  .lightbox img{max-height:52vh} .lightbox a{bottom:auto;top:14px;right:14px}
   .canned{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px}
   .canned span{flex:none;font-size:12px;padding:6px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute);background:var(--card);cursor:pointer;white-space:nowrap}
   .reply{display:flex;gap:8px;align-items:flex-end}
@@ -223,7 +233,8 @@
   <div class="acts" id="closeActs"></div>
 </div></div>
 <div class="toast" id="toast"></div>
-<div class="lightbox" id="lightbox" onclick="if(event.target===this)this.classList.remove('on')"><img id="lbImg" alt=""><a id="lbDl" download>Save</a></div>
+<div class="lightbox" id="lightbox" onclick="if(event.target===this)this.classList.remove('on')"><img id="lbImg" alt=""><a id="lbDl" download>Save</a>
+  <div class="lbdoc" id="lbDoc" onclick="event.stopPropagation()"></div></div>
 
 <script>
 const GOOGLE_CLIENT_ID = '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
@@ -470,9 +481,11 @@ async function openThread(id) {
   await loadThread(true);
   clearInterval(pollT); pollT = setInterval(() => loadThread(false), 3000);
 }
+/* what the photos became (item 4): a change here re-renders the tiles too */
+const docSig = t => (t && t.messages || []).map(m => (Array.isArray(m.attachments) ? m.attachments : []).map(a => a && a.doc ? (a.doc.doc_type || '?') + (a.doc.doc_label || '') + (a.doc.filed_hawksoft ? '!' : '') : '-').join(',')).join('|');
 async function loadThread(first) {
   const j = await api({ action: 'thread', id: OPEN }); if (!j.ok || OPEN !== j.conversation.id) return;
-  const changed = !THREAD || THREAD.messages.length !== j.messages.length || THREAD.conversation.status !== j.conversation.status || THREAD.conversation.claimed_by !== j.conversation.claimed_by || THREAD.conversation.client_no !== j.conversation.client_no || THREAD.conversation.link_status !== j.conversation.link_status || JSON.stringify(THREAD.conversation.policy || null) !== JSON.stringify(j.conversation.policy || null);
+  const changed = !THREAD || THREAD.messages.length !== j.messages.length || THREAD.conversation.status !== j.conversation.status || THREAD.conversation.claimed_by !== j.conversation.claimed_by || THREAD.conversation.client_no !== j.conversation.client_no || THREAD.conversation.link_status !== j.conversation.link_status || JSON.stringify(THREAD.conversation.policy || null) !== JSON.stringify(j.conversation.policy || null) || docSig(THREAD) !== docSig(j);
   THREAD = j; if (first || changed) renderThread(first);
 }
 const CANNED = {
@@ -526,8 +539,51 @@ function attHtml(m) {
     const key = m.id + ':' + i; const isImg = /^image\//.test(a.content_type || '');
     if (!a.ok) return `<div class="ph file bad" title="${esc(a.error || '')}">not stored yet</div>`;
     if (!isImg) return `<div class="ph file" data-key="${key}" data-m="${m.id}" data-i="${i}">${esc((a.content_type || 'file').split('/')[1] || 'file')} · ${a.size ? Math.round(a.size / 1024) + ' KB' : ''}</div>`;
-    return `<div class="ph" data-key="${key}" data-m="${m.id}" data-i="${i}">${MEDIA[key] ? '<img src="' + MEDIA[key] + '">' : 'loading…'}</div>`;
+    return `<div class="ph" data-key="${key}" data-m="${m.id}" data-i="${i}">${MEDIA[key] ? '<img src="' + MEDIA[key] + '">' : 'loading…'}${docBadge(a)}</div>`;
   }).join('') + '</div>';
+}
+/* ---- item 4: what a photo became (Sep 18). The tile carries a badge; the lightbox carries the
+   picker. Typing goes through photo_doc (carrier: set_doc_type + retry_hawksoft). ---- */
+const DOC_TYPES = [['driver_license', "Driver's license"], ['id_card', 'ID card'], ['dec_page', 'Dec page'], ['vehicle_photo', 'Vehicle photo'], ['carrier_application', 'Signed application'], ['cancellation', 'Cancellation request'], ['other', 'Something else…']];
+const docLabel = d => { const t = DOC_TYPES.find(x => x[0] === d.doc_type); return d.doc_type === 'other' && d.doc_label ? d.doc_label : (t ? t[1] : null); };
+function docBadge(a) {
+  if (!a || !a.doc) return '';
+  const d = a.doc; const l = docLabel(d);
+  return l ? `<div class="doc typed">${esc(l)}${d.filed_hawksoft ? ' ✓' : ''}</div>` : '<div class="doc">Saved · what is it?</div>';
+}
+let LB = null;   /* the photo open in the lightbox: { m, i } */
+function attOf(mid, i) { const m = (THREAD && THREAD.messages || []).find(x => x.id === mid); return m && Array.isArray(m.attachments) ? m.attachments[i] : null; }
+function renderLbDoc() {
+  const box = $('#lbDoc'); if (!LB || !THREAD) { box.innerHTML = ''; return; }
+  const c = THREAD.conversation, a = attOf(LB.m, LB.i), d = a && a.doc;
+  const confirmed = !!c.client_no && c.link_status === 'confirmed';
+  const cl = THREAD.client;
+  const who = cl ? (cl.name || ('Client ' + cl.client_no)) : (c.client_no ? 'Client ' + c.client_no : 'the client');
+  let st;
+  if (!confirmed) st = c.client_no ? '<div class="st warn">Confirm the client on this thread first — then this photo goes to their Documents.</div>' : '<div class="st warn">Link a client to this thread — then this photo goes to their Documents.</div>';
+  else if (d && docLabel(d)) st = `<div class="st ok"><b>${esc(docLabel(d))}</b> · in ${esc(who)}’s Documents${d.filed_hawksoft ? ' · filed to HawkSoft ✓' : ' · on the platform only'}</div>`;
+  else if (d) st = `<div class="st">In <b>${esc(who)}</b>’s Documents, no type yet. <b>What is it?</b> Picking one files it to HawkSoft.</div>`;
+  else st = `<div class="st">Not in <b>${esc(who)}</b>’s Documents. <b>What is it?</b> Picking one saves it there and files it to HawkSoft.</div>`;
+  const disabled = !confirmed;
+  box.innerHTML = st + (disabled ? '' : '<div class="types">' + DOC_TYPES.map(([k, l]) => `<span class="${d && d.doc_type === k ? 'on' : ''}" onclick="pickDocType('${k}')">${esc(l)}</span>`).join('')
+    + (d && !d.filed_hawksoft ? '<span class="no" onclick="unfilePhoto()">Not a client document</span>' : '') + '</div>'
+    + '<div class="other" id="lbOther"><input id="lbOtherIn" maxlength="41" placeholder="What is it? (up to 41 letters)"><button class="btn btn-blue" onclick="pickDocType(\'other\', true)">Save</button></div>');
+}
+async function pickDocType(kind, withLabel) {
+  if (!LB) return;
+  if (kind === 'other' && !withLabel) { $('#lbOther').classList.add('on'); $('#lbOtherIn').focus(); return; }
+  const label = kind === 'other' ? $('#lbOtherIn').value.trim() : null;
+  if (kind === 'other' && !label) { toast('Say what the document is'); return; }
+  const j = await api({ action: 'photo_doc', id: OPEN, message_id: LB.m, index: LB.i, doc_type: kind, doc_label: label });
+  if (!j.ok) { toast(j.error || 'Could not file it'); return; }
+  toast(j.filed_hawksoft ? 'Filed to HawkSoft as ' + (label || (DOC_TYPES.find(x => x[0] === kind) || [])[1]) : 'Saved on the platform' + (j.hawksoft_why ? ' — ' + j.hawksoft_why : ''));
+  await loadThread(false); renderLbDoc();
+}
+async function unfilePhoto() {
+  if (!LB) return;
+  const j = await api({ action: 'photo_unfile', id: OPEN, message_id: LB.m, index: LB.i });
+  if (!j.ok) { toast(j.error || 'Could not remove it'); return; }
+  toast('Removed from the client — the photo stays with the text'); await loadThread(false); renderLbDoc();
 }
 async function loadMedia() {
   for (const ph of document.querySelectorAll('#tThread .ph[data-key]')) {
@@ -537,8 +593,8 @@ async function loadMedia() {
         if (!j.ok) { ph.classList.add('bad'); ph.textContent = j.pending ? 'not stored yet' : 'unavailable'; continue; }
         MEDIA[key] = 'data:' + j.content_type + ';base64,' + j.data; } catch (e) { continue; }
     }
-    if (/^data:image\//.test(MEDIA[key])) ph.innerHTML = '<img src="' + MEDIA[key] + '">';
-    ph.onclick = () => { if (/^data:image\//.test(MEDIA[key])) { $('#lbImg').src = MEDIA[key]; $('#lbDl').href = MEDIA[key]; $('#lbDl').download = 'speedy-chat-' + key.replace(':', '-'); $('#lightbox').classList.add('on'); } else { const a = document.createElement('a'); a.href = MEDIA[key]; a.download = 'speedy-chat-' + key.replace(':', '-'); a.click(); } };
+    if (/^data:image\//.test(MEDIA[key])) ph.innerHTML = '<img src="' + MEDIA[key] + '">' + docBadge(attOf(Number(ph.dataset.m), Number(ph.dataset.i)));   /* the badge survives the image */
+    ph.onclick = () => { if (/^data:image\//.test(MEDIA[key])) { LB = { m: Number(ph.dataset.m), i: Number(ph.dataset.i) }; $('#lbImg').src = MEDIA[key]; $('#lbDl').href = MEDIA[key]; $('#lbDl').download = 'speedy-chat-' + key.replace(':', '-'); renderLbDoc(); $('#lightbox').classList.add('on'); } else { const a = document.createElement('a'); a.href = MEDIA[key]; a.download = 'speedy-chat-' + key.replace(':', '-'); a.click(); } };
   }
 }
 /* ---- the client link card: guess / none / confirmed ---- */

@@ -26,6 +26,7 @@
 import { randomBytes } from 'node:crypto';
 import { resolveClient, findClients, branchCode } from './_inbox.js';
 import { pushTo, withdraw, pushReady } from './_push.js';
+import { savePhotosOnThread, removePhotos } from './_docs.js';
 
 const BRANCHES = {
   mv: 'Moreno Valley', vb: 'Riverside — Van Buren', mg: 'Riverside — Magnolia', le: 'Lake Elsinore', co: 'Colton',
@@ -271,7 +272,7 @@ export default async function handler(req, res) {
    is actually waiting.
    =========================================================================== */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy', 'client_log', 'push_subscribe', 'push_unsubscribe', 'mute', 'sms_alerts', 'search']);
+const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy', 'client_log', 'push_subscribe', 'push_unsubscribe', 'mute', 'sms_alerts', 'search', 'photo_doc', 'photo_unfile']);
 const SITE = 'https://www.speedyins.com';
 const VISITOR_GONE_MS = 2 * 60 * 1000;
 const ESCALATION_THROTTLE_MS = 15 * 60 * 1000;
@@ -683,11 +684,15 @@ async function agentHandler(req, res, s, b, action) {
       clientCard(s, conv),
     ]);
     if (conv.claimed_by === me.email) await sbPatch(s, `conversations?id=eq.${id}`, { agent_seen_at: now });
+    /* item 4: the documents the thread's photos became, for the tiles */
+    const docIds = [...new Set(ms.rows.flatMap(m => (Array.isArray(m.attachments) ? m.attachments : []).map(a => a && a.doc_id).filter(Boolean)))];
+    const docs = {};
+    if (docIds.length) { const d = await sbGet(s, `attachments?id=in.(${docIds.join(',')})&select=id,doc_type,doc_label,filed_hawksoft`); for (const r of d.rows) docs[r.id] = { id: r.id, doc_type: r.doc_type, doc_label: r.doc_label, filed_hawksoft: r.filed_hawksoft === true }; }
     const names = {}; const emails = [...new Set(ms.rows.map(m => m.sender).filter(Boolean).concat(conv.claimed_by ? [conv.claimed_by] : []))];
     if (emails.length) { const a = await sbGet(s, `agents?email=in.(${emails.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = String(r.full_name || r.email).split(' ')[0]; }
     return res.status(200).json({ ok: true,
       conversation: { ...conv, token: undefined, branch_name: BRANCHES[conv.branch] || conv.branch, claimed_name: names[conv.claimed_by] || null, visitor_here: !!conv.visitor_seen_at && (Date.now() - new Date(conv.visitor_seen_at).getTime()) < VISITOR_GONE_MS, mine: conv.claimed_by === me.email },
-      messages: ms.rows.map(m => ({ ...m, name: m.sender ? (names[m.sender] || m.sender) : null })),
+      messages: ms.rows.map(m => ({ ...m, name: m.sender ? (names[m.sender] || m.sender) : null, attachments: Array.isArray(m.attachments) ? m.attachments.map(a => a && a.doc_id ? { ...a, doc: docs[a.doc_id] || { id: a.doc_id } } : a) : m.attachments })),
       previous: prev.rows, client: card, me: { email: me.email, admin: me.admin, sees_all: me.sees_all, first: me.first },
     });
   }
@@ -751,7 +756,9 @@ async function agentHandler(req, res, s, b, action) {
     if (b.policy && typeof b.policy === 'object') patch.policy = cleanPolicy(b.policy);
     await sbPatch(s, `conversations?id=eq.${id}`, patch);
     await record(s, { actor: me.email, kind: 'chat.linked', source: 'chat', client_no, payload: { conversation_id: id, phone: conv.visitor_phone, was: conv.client_no || null, how: conv.client_no === client_no ? 'confirmed' : 'chosen', policy: patch.policy || null, is_test: conv.is_test } });
-    return res.status(200).json({ ok: true, client_no, link_status: 'confirmed', policy: patch.policy || conv.policy || null });
+    /* item 4: every photo already on the thread becomes a client document now (untyped, platform only) */
+    const photos = await savePhotosOnThread(s, { ...conv, ...patch, id }, me.email);
+    return res.status(200).json({ ok: true, client_no, link_status: 'confirmed', policy: patch.policy || conv.policy || null, photos });
   }
   if (action === 'unlink') {
     if (!conv.client_no) return res.status(409).json({ ok: false, error: 'Nothing linked' });
@@ -761,7 +768,32 @@ async function agentHandler(req, res, s, b, action) {
     }
     await sbPatch(s, `conversations?id=eq.${id}`, { client_no: null, link_status: 'none', policy: null, linked_by: me.email, linked_at: now, updated_at: now });
     await record(s, { actor: me.email, kind: 'chat.unlinked', source: 'chat', client_no: conv.client_no, payload: { conversation_id: id, phone: conv.visitor_phone, rejected: conv.client_no, is_test: conv.is_test } });
-    return res.status(200).json({ ok: true, client_no: null, link_status: 'none' });
+    const photos = conv.link_status === 'confirmed' ? await removePhotos(s, conv, me.email) : { removed: 0, kept: 0 };
+    return res.status(200).json({ ok: true, client_no: null, link_status: 'none', photos });
+  }
+  if (action === 'photo_doc' || action === 'photo_unfile') {
+    const mid = Number(b.message_id), idx = Number(b.index);
+    const mm = await sbGet(s, `messages?id=eq.${mid}&conversation_id=eq.${id}&select=id,ts,attachments`);
+    const msg = mm.rows[0]; const att = msg && Array.isArray(msg.attachments) ? msg.attachments[idx] : null;
+    if (!att) return res.status(404).json({ ok: false, error: 'No such photo' });
+    if (action === 'photo_unfile') {
+      if (!att.doc_id) return res.status(200).json({ ok: true, unchanged: true });
+      const r = await removePhotos(s, conv, me.email, { attachment_id: att.doc_id });
+      if (!r.removed) return res.status(409).json({ ok: false, error: 'HawkSoft already has this document - it stays on the client' });
+      return res.status(200).json({ ok: true, removed: r.removed });
+    }
+    /* photo_doc: make sure it is a document first (a thread linked before item 4 existed), then type + file via carrier */
+    if (!conv.client_no || conv.link_status !== 'confirmed') return res.status(409).json({ ok: false, error: 'Confirm the client first', code: 'not_confirmed' });
+    if (!att.doc_id) { const r = await savePhotosOnThread(s, conv, me.email, mid); if (!r.saved && !r.dup && !r.skipped) return res.status(502).json({ ok: false, error: 'Could not save the photo: ' + (r.errors[0] || 'unknown') }); }
+    const fresh = await sbGet(s, `messages?id=eq.${mid}&select=attachments`); const docId = fresh.rows[0] && fresh.rows[0].attachments[idx] && fresh.rows[0].attachments[idx].doc_id;
+    if (!docId) return res.status(502).json({ ok: false, error: 'The photo is not a document yet' });
+    const tok = String(req.headers['x-id-token'] || '');
+    const carrier = async body => { const r = await fetch(`${SITE}/api/carrier`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-id-token': tok }, body: JSON.stringify(body) }); return r.json().catch(() => ({ ok: false, error: 'carrier: bad reply' })); };
+    const typed = await carrier({ action: 'set_doc_type', attachment_id: docId, doc_type: String(b.doc_type || ''), doc_label: b.doc_label || null });
+    if (!typed.ok && !typed.unchanged) return res.status(400).json({ ok: false, error: typed.message || typed.error || 'Could not set the type' });
+    const filed = conv.is_test ? { ok: true, filed_hawksoft: false, skipped: true } : await carrier({ action: 'retry_hawksoft', attachment_id: docId });
+    await record(s, { actor: me.email, kind: 'document.typed_from_text', source: 'chat', client_no: conv.client_no, payload: { attachment_id: docId, conversation_id: id, message_id: mid, index: idx, doc_type: b.doc_type, doc_label: b.doc_label || null, filed_hawksoft: !!filed.filed_hawksoft, hawksoft_why: filed.hawksoft_why || filed.message || null, is_test: conv.is_test } });
+    return res.status(200).json({ ok: true, attachment_id: docId, doc_type: b.doc_type, doc_label: b.doc_label || null, filed_hawksoft: !!filed.filed_hawksoft, hawksoft_why: filed.filed_hawksoft ? null : (filed.hawksoft_why || filed.message || filed.error || null) });
   }
   if (action === 'set_policy') {
     if (!conv.client_no) return res.status(409).json({ ok: false, error: 'Link a client first' });

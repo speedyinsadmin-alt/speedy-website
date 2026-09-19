@@ -125,7 +125,10 @@ function set(no, tab){
 function current(no){ return TAB[no] || 'payments'; }
 
 /* ---------------- Documents ---------------- */
+const fromText = d => { const m = String(d.filename || '').match(/^text_(\d{10})_(\d{4}-\d{2}-\d{2})_\d+\./); return m ? { phone: m[1], day: m[2] } : null; };
+const prettyPhone10 = p => '(' + p.slice(0, 3) + ') ' + p.slice(3, 6) + '-' + p.slice(6);
 function forLine(d, c){
+  const ft = fromText(d); if(ft && !d.payment_id) return 'From a text with ' + prettyPhone10(ft.phone) + ' on ' + t(ft.day + 'T12:00:00Z', { month: 'short', day: 'numeric' });
   if(!d.payment_id) return 'Not tied to a payment';
   const p = (c.payments || []).find(x => x.id === d.payment_id);
   if(!p) return 'For a payment not on this card';
@@ -432,6 +435,11 @@ function logEntries(c){
       case 'sync.first_charge': row = { cat: 'other', text: 'Client record pulled from HawkSoft at the first charge', meta: p.policies_synced != null ? p.policies_synced + ' polic' + (p.policies_synced === 1 ? 'y' : 'ies') : '' }; break;
       case 'sync.searched': row = { cat: 'other', text: 'Client record pulled from HawkSoft when ' + who + ' searched for it', meta: p.policies_synced != null ? p.policies_synced + ' polic' + (p.policies_synced === 1 ? 'y' : 'ies') : '' }; break;
       case 'note.added': row = { cat: 'note', k: 'note', text: who + ' noted:' + noteCardHtml(e, c), meta: '' }; break;
+      /* item 4 (Sep 18): a photo in a text became a document */
+      case 'document.added_from_text': row = { cat: 'doc', k: 'upload', text: 'A <a class="dlink" onclick="ClientTabs.preview(\'' + esc(p.attachment_id) + '\')">photo</a> from the text with ' + (p.phone ? esc(prettyPhone10(String(p.phone))) : 'the client') + ' was saved to Documents', meta: 'needs a label · on the platform only until an agent says what it is' + (p.bytes ? ' · ' + bytesLabel(p.bytes) : '') }; break;
+      case 'document.typed_from_text': row = { cat: 'doc', k: 'upload', text: who + ' filed a <a class="dlink" onclick="ClientTabs.preview(\'' + esc(p.attachment_id) + '\')">' + esc(labelOfType({ doc_type: p.doc_type, doc_label: p.doc_label })) + '</a> from the text', meta: p.filed_hawksoft ? 'HawkSoft &#10003;' : 'on the platform only' + (p.hawksoft_why ? ' — ' + esc(String(p.hawksoft_why)) : '') }; break;
+      case 'document.removed_from_text': row = { cat: 'doc', text: (p.why === 'unlinked' ? 'The text was unlinked from this client: an unlabelled photo was removed' : who + ' removed a photo from this client — not a client document'), meta: esc(p.filename || '') + ' · the photo stays with the text' }; break;
+      case 'document.kept_after_unlink': row = { cat: 'doc', text: 'The text was unlinked from this client, but ' + Number(p.kept || 0) + ' document' + (Number(p.kept) === 1 ? '' : 's') + ' from it stay' + (Number(p.kept) === 1 ? 's' : ''), meta: 'an agent said what they are (or HawkSoft already has them) — check them if the link was wrong' }; break;
       case 'invoice.converted_from_placeholder': row = { cat: 'money', text: who + ' converted a placeholder into an open invoice', meta: [p.was ? 'was: ' + esc(p.was) : '', p.now ? 'now: ' + esc(p.now) : ''].filter(Boolean).join(' · ') }; break;
       case 'ledger.status_corrected': row = { cat: 'money', text: 'A ' + money(p.amount) + ' row was corrected from ' + esc(p.from_status) + ' to ' + esc(p.to_status), meta: esc(p.reason || '') }; break;
       case 'ledger.corrected': row = { cat: 'money', text: 'A payment row was corrected', meta: esc(p.note || '') }; break;

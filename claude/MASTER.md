@@ -123,7 +123,17 @@ mutated + photographed in Chrome before push. The other session's uncommitted
   must never put a stranger's texts on a client); closed → outcome + the close note (now
   `conversations.close_note`). Chip "Chats & texts". Refresh when older than 15 s on
   re-render. Backfilled 8 pre-link threads from `none` to `guess`.
-- **Next, agreed order:** push notifications through the PWA (VAPID keys in Vercel env,
+- **Push notifications shipped (`a15cabd`)**: `api/_push.js` + `push_subscriptions`;
+  the chain / owner replies / whispers / escalation push to every device an agent turned
+  on in the **Alerts sheet** (bell beside the duty pill); claim withdraws the alert on the
+  other phones; **Mute** 1 h / tomorrow 8 AM / off (chain skips, roster says "(muted)",
+  pill reads "Muted 42 min", duty-on clears it); SMS fallback switch; the webhook starts
+  the chain itself for a waiting branch-line text. **Keys:** generated into
+  `C:UsersspeedClaudeProjectsspeedy-secretsapid.txt` (outside every repo) — Saif
+  puts VAPID_PUBLIC / VAPID_PRIVATE / VAPID_SUBJECT into Vercel env; until then push is
+  a quiet no-op and the sheet says "not set up on the server yet". iPhone needs the PWA
+  on the Home Screen. Test hook: `globalThis.__speedyPushSender` (harness captures).
+- **Next, agreed order:** ~~push notifications through the PWA~~ DONE above (VAPID keys in Vercel env,
   `push_subscriptions` per device, per-agent **mute** in the duty sheet, SMS chain stays
   as fallback) → item 4 photos → Documents → texts per agent on the Calls page (columns
   "Texts in / answered / median reply" on the By-agent table; Saif asked, feasible from

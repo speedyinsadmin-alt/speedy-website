@@ -133,7 +133,23 @@ mutated + photographed in Chrome before push. The other session's uncommitted
   puts VAPID_PUBLIC / VAPID_PRIVATE / VAPID_SUBJECT into Vercel env; until then push is
   a quiet no-op and the sheet says "not set up on the server yet". iPhone needs the PWA
   on the Home Screen. Test hook: `globalThis.__speedyPushSender` (harness captures).
-- **Next, agreed order:** ~~push notifications through the PWA~~ DONE above (VAPID keys in Vercel env,
+- **Inbox search + filters (`f1fca1a`)**: search box (digits → phone in any form; letters →
+  visitor name + words said, visitor-facing only, ALL time), chips All/Web/Text, agent
+  picker only where someone holds a thread (never on Waiting); chips/picker remembered
+  per device; results replace the list with highlight + "Sep 11 · 7 days ago"; the queue
+  row is one function (`rowOf`) shared by inbox + search; SMS thread with no name no
+  longer shows its number twice.
+- **Item 4 — photos → Documents (`1125989`)**: `api/_docs.js`. Confirmed link ⇒ every
+  photo on the thread (past + future, webhook too) copied to `client-documents` as an
+  untyped attachment (`source` jsonb, filename `text_<phone>_<date>_n.ext`) on the
+  "Needs a label" shelf; the lightbox picker types it via carrier `set_doc_type` +
+  `retry_hawksoft` with the agent's token (`photo_doc`), `photo_unfile` takes an
+  unfiled one off; unlink removes untyped, keeps typed/filed with a Log note; guess /
+  rejected / test ⇒ nothing. Log + Documents tab sentences in clienttabs.js.
+  **Not done:** the Documents tab's own relabel ("Say what it is…") still does not file
+  to HawkSoft (pre-existing); the thread's picker does.
+- **Next:** texts per agent on the Calls page (mockup first); Console Inbox tab; Tawk
+  cutover; VAPID keys still to enter in Vercel (file in speedy-secrets). (VAPID keys in Vercel env,
   `push_subscriptions` per device, per-agent **mute** in the duty sheet, SMS chain stays
   as fallback) → item 4 photos → Documents → texts per agent on the Calls page (columns
   "Texts in / answered / median reply" on the By-agent table; Saif asked, feasible from

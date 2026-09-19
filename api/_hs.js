@@ -162,7 +162,9 @@ export async function upsertHsClient(s, c) {
 
    Fail-soft and bounded: the money is recorded before this runs, a HawkSoft hiccup must
    never turn a charge into an error, and anything missed here is caught by the next
-   sync. Every read carries a timeout so a slow HawkSoft cannot hold the charge. */
+   sync. Every read carries a timeout so a slow HawkSoft cannot hold the charge.
+   Also used by a search for a client NUMBER that finds nothing (opts.kind
+   'sync.searched'): the seed left gaps and the delta sync only brings changed clients. */
 export async function ensureClientSynced(s, clientNo, opts = {}) {
   const cn = parseInt(clientNo, 10);
   if (!s) return { ok: false, skipped: 'no supabase' };
@@ -181,7 +183,7 @@ export async function ensureClientSynced(s, clientNo, opts = {}) {
     /* the evidence, on the client's own log; kind sync.* so the recent-clients list
        keeps showing the charge, not this */
     await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' }, signal: AbortSignal.timeout(ms),
-      body: JSON.stringify([{ actor: opts.actor || 'system:first_charge', kind: 'sync.first_charge', client_no: cn, source: 'hawksoft_sync', payload: { policies_synced: up.policies, reason: opts.reason || null } }]) }).catch(() => null);
+      body: JSON.stringify([{ actor: opts.actor || 'system:first_charge', kind: opts.kind || 'sync.first_charge', client_no: cn, source: 'hawksoft_sync', payload: { policies_synced: up.policies, reason: opts.reason || null } }]) }).catch(() => null);
     return { ok: true, existed: false, client_no: cn, policies: up.policies };
   } catch (e) { return { ok: false, error: String(e && e.message || e).slice(0, 160) }; }
 }

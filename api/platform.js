@@ -1,6 +1,6 @@
 export const config = { maxDuration: 300 };
 import { randomUUID } from 'node:crypto';
-import { AGENCY_ID, TEST_CLIENT, OFFICE_MAP, hsCall, hsFetchClient, hsAllClientIds, hsChangedSince, hsClientBatch, sbUpsert, upsertHsClient } from './_hs.js';
+import { AGENCY_ID, TEST_CLIENT, OFFICE_MAP, hsCall, hsFetchClient, hsAllClientIds, hsChangedSince, hsClientBatch, sbUpsert, upsertHsClient, ensureClientSynced } from './_hs.js';
 // /api/platform — backend for the Platform Console (admin/platform.html).
 // ACCESS: Google ID token (header x-id-token), allowlist below.
 // GET  = reads (HawkSoft ZZTEST, our clients/policies/events, ledger, tables)
@@ -1395,6 +1395,21 @@ function phonePatterns(digits) {
   }
   return out;
 }
+/* A search that IS a client number and finds no row with that number pulls it from
+   HawkSoft right then (Sep 18: client 25356 was never in our table - the seed left gaps,
+   and the delta sync only brings clients CHANGED in HawkSoft, so an old untouched record
+   could never appear). Returns the fresh rows to add, or []. Never throws. */
+async function pullSearchedNumber(s, q, rows, actor, select) {
+  const no = /^\d{3,7}$/.test(String(q || '').trim()) ? parseInt(q, 10) : 0;
+  if (!no || no === TEST_CLIENT) return [];
+  if ((rows || []).some(c => Number(c.client_no) === no)) return [];
+  try {
+    const r = await ensureClientSynced(s, no, { actor: actor || 'search', reason: 'search', kind: 'sync.searched' });
+    if (!r || !r.ok || r.existed) return [];
+    const cl = await sbGet(s, `clients?select=${select || '*'}&client_no=eq.${no}`);
+    return cl.rows || [];
+  } catch { return []; }
+}
 function buildClientSearch(q) {
   const digits = q.replace(/\D/g, '');
   /* a phone search from the third digit, as long as the agent typed only phone-ish
@@ -1649,6 +1664,7 @@ const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_th
       const cl = await sbGet(s, `clients?select=client_no,first_name,last_name,business_name,email,phone,branch&or=(${ors.join(',')})&order=client_no.asc&limit=${multi ? 800 : 25}`);
       let rows = cl.rows || [];
       if (multi) rows = rows.filter(c => matchesAllTokens(c, toks)).slice(0, 25);
+      rows = rows.concat(await pullSearchedNumber(s, q, rows, who.email, 'client_no,first_name,last_name,business_name,email,phone,branch'));
       const results = rows.map(c => ({
         client_no: c.client_no,
         name: c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' '),
@@ -3588,6 +3604,7 @@ if (view === 'portal_share_due') {
        client_no returned, so filtering after it would build an 800-id IN list to
        answer a search that shows 100. */
     if (MULTI) cl.rows = (cl.rows || []).filter(c => matchesAllTokens(c, TOKS)).slice(0, 100);
+    if (q) cl.rows = (cl.rows || []).concat(await pullSearchedNumber(s, q, cl.rows, email, '*'));
     // policy counts only for the returned clients
     const nos = (cl.rows || []).map(c => c.client_no).filter(n => n != null);
     let counts = {};

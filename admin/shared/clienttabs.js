@@ -430,6 +430,7 @@ function logEntries(c){
       case 'payment.policy_linked': row = { cat: 'other', text: 'The ' + money(p.amount) + ' payment was linked to policy ' + esc(p.policy_number || '') + (p.carrier ? ' (' + esc(p.carrier) + ')' : ''), meta: '' }; break;
       case 'client.synced': row = { cat: 'other', text: 'Client record synced from HawkSoft', meta: p.policies_synced != null ? p.policies_synced + ' polic' + (p.policies_synced === 1 ? 'y' : 'ies') : '' }; break;
       case 'sync.first_charge': row = { cat: 'other', text: 'Client record pulled from HawkSoft at the first charge', meta: p.policies_synced != null ? p.policies_synced + ' polic' + (p.policies_synced === 1 ? 'y' : 'ies') : '' }; break;
+      case 'sync.searched': row = { cat: 'other', text: 'Client record pulled from HawkSoft when ' + who + ' searched for it', meta: p.policies_synced != null ? p.policies_synced + ' polic' + (p.policies_synced === 1 ? 'y' : 'ies') : '' }; break;
       case 'note.added': row = { cat: 'note', k: 'note', text: who + ' noted:' + noteCardHtml(e, c), meta: '' }; break;
       case 'invoice.converted_from_placeholder': row = { cat: 'money', text: who + ' converted a placeholder into an open invoice', meta: [p.was ? 'was: ' + esc(p.was) : '', p.now ? 'now: ' + esc(p.now) : ''].filter(Boolean).join(' · ') }; break;
       case 'ledger.status_corrected': row = { cat: 'money', text: 'A ' + money(p.amount) + ' row was corrected from ' + esc(p.from_status) + ' to ' + esc(p.to_status), meta: esc(p.reason || '') }; break;

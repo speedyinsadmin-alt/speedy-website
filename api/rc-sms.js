@@ -22,6 +22,7 @@
 --------------------------------------------------------------------------- */
 import { randomBytes } from 'node:crypto';
 import { resolveClient, branchCode } from './_inbox.js';
+import { pushOwner, alertChain, chatSettings } from './chat.js';
 
 /* ---- RingCentral auth (JWT -> access token), the proven flow from sms.js, for
    downloading MMS media. Media is the whole point of many texts (licence, DMV
@@ -110,7 +111,7 @@ export async function ingest(s, m) {
   if (!body) return { skipped: 'empty' };
 
   /* the customer's open thread, if any: newest first, prefer one on this line */
-  const open = await sbGet(s, `conversations?visitor_phone=eq.${customer}&status=in.(waiting,active)&select=id,channel,line,status,claimed_by,client_no,link_status,visibility,lang,is_test&order=id.desc&limit=5`);
+  const open = await sbGet(s, `conversations?visitor_phone=eq.${customer}&status=in.(waiting,active)&select=id,channel,line,status,claimed_by,client_no,link_status,visibility,lang,is_test,alerts,branch,topic,visitor_name,visitor_phone,created_at&order=id.desc&limit=5`);
   let conv = open.rows.find(c => c.line === line.phone10) || open.rows[0] || null;
   const now = new Date().toISOString();
   const mirror = line.usage_type === 'DirectNumber' && !!line.agent_email;   /* an agent's own number */
@@ -160,6 +161,16 @@ export async function ingest(s, m) {
     else if (conv.status === 'waiting' && !line.agent_email) { /* answered from a branch line by someone we cannot name: leave it waiting for a claim */ }
   }
   await sbPatch(s, `conversations?id=eq.${conv.id}`, patch);
+  /* Sep 18 - tell someone (never for a test thread; nothing here may fail the ingest):
+       a text on a thread an agent owns  -> push that agent (a mirror thread's owner too)
+       a text waiting on a branch line   -> start the chain now, not at the next inbox poll */
+  if (m.direction === 'inbound' && conv.is_test !== true) {
+    try {
+      const after = { ...conv, ...patch };
+      if (after.claimed_by && after.status !== 'closed') await pushOwner(s, after, 'msg', `Text from (${customer.slice(0, 3)}) ${customer.slice(3, 6)}-${customer.slice(6)}${mirror ? ' on your line' : ''}`, body + (stored ? ` · ${stored} photo${stored === 1 ? '' : 's'}` : ''));
+      else if (after.status === 'waiting') await alertChain(s, after, await chatSettings(s));
+    } catch (e) { console.error('[rc-sms] notify failed:', e && e.message); }
+  }
   await record(s, { actor: m.direction === 'inbound' ? 'customer' : (line.agent_email || 'ringcentral'), kind: m.direction === 'inbound' ? 'sms.in' : 'sms.out', source: 'ringcentral', client_no: client_no || null,
     payload: { conversation_id: conv.id, line: line.phone10, branch: line.branch || null, mirror, created, chars: body.length, rc_message_id: m.rc_id, media: m.attachments || 0, stored } });
   return { ok: true, conversation_id: conv.id, created, mirror, direction: m.direction, client_no: client_no || null, media: m.attachments || 0, stored };

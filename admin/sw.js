@@ -10,7 +10,7 @@
       carrier.html sit inside this scope and must behave exactly as today.
 */
 
-const VERSION     = 'speedy-portal-v1';
+const VERSION     = 'speedy-portal-v2';   /* v2: push notifications (Sep 18) */
 const SHELL_CACHE = VERSION + '-shell';
 const PORTAL      = '/admin/portal.html';
 
@@ -90,4 +90,65 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Rule 4: everything else untouched.
+});
+/* ---- Push notifications (Sep 18). Payloads come from api/_push.js:
+     { type, tag, title, body, url, id, claim }   show it (same tag replaces)
+     { type: 'withdraw', tag }                     someone else took that chat: close it
+   Rule 1 still holds: nothing here touches /api/ except the Claim button, which is the
+   agent's own action from the notification. ---- */
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: 'Speedy Chat', body: event.data ? event.data.text() : '' }; }
+  if (d.type === 'withdraw') {
+    event.waitUntil(self.registration.getNotifications({ tag: d.tag }).then((ns) => ns.forEach((n) => n.close())));
+    return;
+  }
+  const opts = {
+    body: d.body || '', tag: d.tag || 'speedy-chat', renotify: true,
+    icon: '/assets/pwa/icon-192.png', badge: '/assets/pwa/icon-192.png',
+    data: { url: d.url || '/admin/chat.html', id: d.id || null, type: d.type || 'alert' },
+    actions: d.claim ? [{ action: 'claim', title: 'Claim' }, { action: 'open', title: 'Open' }] : [{ action: 'open', title: 'Open' }],
+    requireInteraction: d.type === 'alert' || d.type === 'escalation'
+  };
+  event.waitUntil(self.registration.showNotification(d.title || 'Speedy Chat', opts));
+});
+
+/* the sign-in token, written by chat.html into IndexedDB so the Claim button can act
+   without opening the page first. Missing or expired: we open the thread instead. */
+function readToken() {
+  return new Promise((resolve) => {
+    try {
+      const open = indexedDB.open('speedy', 1);
+      open.onupgradeneeded = () => { open.result.createObjectStore('kv'); };
+      open.onerror = () => resolve(null);
+      open.onsuccess = () => {
+        try {
+          const tx = open.result.transaction('kv', 'readonly'); const req = tx.objectStore('kv').get('tok');
+          req.onsuccess = () => resolve(req.result || null); req.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      };
+    } catch (e) { resolve(null); }
+  });
+}
+
+self.addEventListener('notificationclick', (event) => {
+  const n = event.notification; n.close();
+  const d = n.data || {}; const url = d.url || '/admin/chat.html';
+  event.waitUntil((async () => {
+    let claimed = false;
+    if (event.action === 'claim' && d.id) {
+      const tok = await readToken();
+      if (tok) {
+        try {
+          const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-id-token': tok }, body: JSON.stringify({ action: 'claim', id: d.id }) });
+          const j = await r.json(); claimed = !!j.ok;
+          if (!j.ok && j.error) await self.registration.showNotification('Speedy Chat', { body: j.error, tag: 'c' + d.id, icon: '/assets/pwa/icon-192.png', data: { url, id: d.id } });
+        } catch (e) { /* the page will say */ }
+      }
+    }
+    const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const chat = cs.find((c) => c.url.indexOf('/admin/chat.html') !== -1);
+    if (chat) { try { chat.postMessage({ type: 'SPEEDY_OPEN', id: d.id, claimed }); } catch (e) {} return chat.focus(); }
+    return self.clients.openWindow(url);
+  })());
 });

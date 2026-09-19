@@ -3,7 +3,8 @@
   "private": true,
   "dependencies": {
     "pdf-lib": "^1.17.1",
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "web-push": "^3.6.7"
   },
   "type": "module"
 }

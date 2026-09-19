@@ -31,8 +31,26 @@
   /* header */
   .hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
   .hdr .back{color:var(--mute);text-decoration:none;font-size:20px;padding:4px 8px}
-  .duty{margin-left:auto;display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:7px 12px 7px 9px;font-size:12.5px;font-weight:700;background:var(--field);border:1.5px solid var(--line);cursor:pointer;user-select:none}
+  .brand{white-space:nowrap}
+  .duty{margin-left:auto;display:inline-flex;white-space:nowrap;align-items:center;gap:8px;border-radius:999px;padding:7px 12px 7px 9px;font-size:12.5px;font-weight:700;background:var(--field);border:1.5px solid var(--line);cursor:pointer;user-select:none}
   .duty i{width:10px;height:10px;border-radius:50%;background:var(--dim)} .duty.on{border-color:var(--green)} .duty.on i{background:var(--green);box-shadow:0 0 0 3px rgba(47,191,113,.25)}
+  .duty.on.muted{border-color:var(--amber)} .duty.on.muted i{background:var(--amber);box-shadow:0 0 0 3px rgba(245,166,35,.25)}
+  /* the Alerts bell (Sep 18): beside the duty pill; a slash when muted, dim when push is off */
+  .bell{margin-left:auto;width:36px;height:36px;border-radius:50%;background:var(--field);border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;cursor:pointer;flex:none}
+  .bell + .duty{margin-left:0}
+  .bell.muted{border-color:var(--amber)} .bell.muted::after{content:"";position:absolute;width:2px;height:20px;background:var(--amber);transform:rotate(45deg);border-radius:2px}
+  .bell.off{opacity:.55}
+  .srow{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line)}
+  .srow .ic{width:34px;height:34px;border-radius:10px;background:var(--field);display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}
+  .srow .t{flex:1;min-width:0} .srow .t b{display:block;font-size:14px} .srow .t span{font-size:12.5px;color:var(--mute)} .srow .t a{color:var(--blue-l);cursor:pointer}
+  .srow .btn{padding:8px 12px;font-size:13px;flex:none}
+  .tog{width:44px;height:26px;border-radius:99px;background:var(--dim);position:relative;flex:none;cursor:pointer} .tog::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
+  .tog.on{background:var(--green)} .tog.on::after{left:21px}
+  .mutes{display:flex;gap:6px;margin-top:8px} .mutes span{flex:1;text-align:center;font-size:12.5px;font-weight:600;padding:9px 6px;border-radius:10px;border:1.5px solid var(--line);color:var(--mute);cursor:pointer}
+  .mutes span.on{border-color:var(--amber);color:var(--amber);background:rgba(245,166,35,.1)}
+  .mstate{margin-top:8px;font-size:12.5px;color:var(--amber);background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.35);border-radius:10px;padding:8px 10px;line-height:1.45}
+  .fine{font-size:12px;color:var(--dim);margin-top:12px;line-height:1.5}
+  .dev{font-size:12.5px;color:var(--mute);display:flex;justify-content:space-between;padding:6px 0} .dev i{font-style:normal;color:var(--dim);cursor:pointer;padding:0 6px}
   /* segments + rows */
   .seg{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px}
   .seg span{flex:none;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:99px;border:1px solid var(--line);color:var(--mute);cursor:pointer;white-space:nowrap}
@@ -124,7 +142,7 @@
     <div class="hdr">
       <a class="back" href="/admin/portal.html" id="backPortal" title="Portal">&larr;</a>
       <div><div class="brand" style="font-size:17px"><span class="s">SPEEDY</span> <span class="i">CHAT</span></div><div class="dim" style="font-size:11px" id="meLine">—</div></div>
-      <div class="duty" id="duty" onclick="toggleDuty()"><i></i><span id="dutyText">Off duty</span></div>
+      <div class="bell off" id="bell" onclick="openAlerts()" title="Alerts">&#128276;</div><div class="duty" id="duty" onclick="toggleDuty()"><i></i><span id="dutyText">Off duty</span></div>
     </div>
 
     <!-- queue -->
@@ -161,6 +179,20 @@
   <label>Mobile</label><input id="mobileIn" type="tel" placeholder="(951) 555-0100">
   <div id="mobileErr" style="color:var(--red-ink);font-size:12.5px;margin-top:6px" class="hide"></div>
   <div class="acts"><button class="btn btn-ghost" onclick="closeSheet('mobileSheet')">Cancel</button><button class="btn btn-green" onclick="saveMobileAndGoOn()">Go on duty</button></div>
+</div></div>
+<div class="sheet" id="alertSheet"><div class="card">
+  <div style="font-weight:800;font-size:16px;margin-bottom:4px">Alerts</div>
+  <div class="muted" style="font-size:13px;margin-bottom:8px">How you find out when a chat or text needs you.</div>
+  <div class="srow"><div class="ic">&#128241;</div><div class="t"><b>Push on this device</b><span id="pushLine">—</span></div><div id="pushCtl"></div></div>
+  <div class="srow"><div class="ic">&#128172;</div><div class="t"><b id="smsTitle">Text to your mobile</b><span>The fallback while on duty · <a onclick="closeSheet('alertSheet');openSheet('mobileSheet')">change</a></span></div><div class="tog" id="smsTog" onclick="toggleSmsAlerts()"></div></div>
+  <div class="srow" style="display:block">
+    <div style="display:flex;gap:10px;align-items:center"><div class="ic">&#128263;</div><div class="t"><b>Mute</b><span>No pushes, no texts, the chain skips you. Your open chats still update on screen.</span></div></div>
+    <div class="mutes"><span id="mu1h" onclick="mute('1h')">1 hour</span><span id="muTom" onclick="mute('tomorrow')">Until tomorrow 8 AM</span><span id="muOff" onclick="mute('off')">Off</span></div>
+    <div class="mstate hide" id="muState"></div>
+  </div>
+  <div id="devList"></div>
+  <div class="fine" id="alertFine">Going on duty clears a mute, so nobody sits on duty and silent by accident.<br>iPhone: first <b>Share &rarr; Add to Home Screen</b> for Speedy Portal, then turn on here.</div>
+  <div class="acts"><button class="btn btn-ghost" onclick="closeSheet('alertSheet')">Done</button></div>
 </div></div>
 <div class="sheet" id="handSheet"><div class="card">
   <div style="font-weight:800;font-size:16px;margin-bottom:10px">Hand this chat to</div>
@@ -211,7 +243,68 @@ async function api(body) {
   if (r.status === 401) { signedOut(); throw new Error('Signed out'); }
   return j;
 }
-function onCred(resp) { TOKEN = resp.credential; try { sessionStorage.setItem('speedy_chat_tok', TOKEN); } catch (e) {} boot(); }
+function onCred(resp) { TOKEN = resp.credential; try { sessionStorage.setItem('speedy_chat_tok', TOKEN); } catch (e) {} idbPut('tok', TOKEN); boot(); }
+/* ---------- Alerts: push, the SMS switch, mute (Sep 18) ----------
+   The service worker (admin/sw.js) shows the notification and can Claim from it with the
+   token kept in IndexedDB. PUSH_SUB is this device's own subscription, if any. */
+let PUSH_SUB = null, PUSH_REG = null;
+function idbPut(k, v) { try { const o = indexedDB.open('speedy', 1); o.onupgradeneeded = () => o.result.createObjectStore('kv'); o.onsuccess = () => { try { o.result.transaction('kv', 'readwrite').objectStore('kv').put(v, k); } catch (e) {} }; } catch (e) {} }
+const pushHere = () => !!PUSH_SUB;
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+async function swReady() {
+  if (!pushSupported()) return null;
+  try { PUSH_REG = PUSH_REG || await navigator.serviceWorker.register('/admin/sw.js'); await navigator.serviceWorker.ready; PUSH_SUB = await PUSH_REG.pushManager.getSubscription(); } catch (e) { PUSH_REG = null; }
+  return PUSH_REG;
+}
+function b64ToBytes(b64) { const p = '='.repeat((4 - b64.length % 4) % 4); const raw = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
+function deviceLabel() { const ua = navigator.userAgent; const os = /iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : 'device'; const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'browser'; return ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ? 'App' : br) + ' · ' + os; }
+function openAlerts() { renderAlerts(); openSheet('alertSheet'); swReady().then(renderAlerts); }
+function renderAlerts() {
+  if (!ME) return;
+  const st = INBOX && INBOX.settings ? INBOX.settings : {};
+  const line = $('#pushLine'), ctl = $('#pushCtl');
+  if (!pushSupported()) { line.textContent = /iPhone|iPad/.test(navigator.userAgent) && !(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ? 'On iPhone, add Speedy Portal to your Home Screen first, then open Speedy Chat from there.' : 'This browser cannot receive push.'; ctl.innerHTML = ''; }
+  else if (!st.push_ready) { line.textContent = 'Not set up on the server yet — texts to your mobile still work.'; ctl.innerHTML = ''; }
+  else if (PUSH_SUB) { const others = (ME.push_devices || []).filter(d => d.endpoint !== PUSH_SUB.endpoint); line.textContent = 'On' + (others.length ? ' · also on ' + others.map(d => d.label).join(', ') : '') + '. Works even when Speedy Chat is closed.'; ctl.innerHTML = '<div class="tog on" onclick="pushOff()"></div>'; }
+  else if (Notification.permission === 'denied') { line.textContent = 'Blocked in this browser — allow notifications for speedyins.com in the browser settings, then try again.'; ctl.innerHTML = ''; }
+  else { line.textContent = 'Off — tap to turn on. Works even when Speedy Chat is closed.'; ctl.innerHTML = '<button class="btn btn-blue" onclick="pushOn()">Turn on</button>'; }
+  $('#smsTitle').textContent = ME.mobile ? 'Text to ' + pretty(String(ME.mobile).replace(/\D/g, '').replace(/^1(\d{10})$/, '$1')) : 'Text to your mobile (none set)';
+  $('#smsTog').classList.toggle('on', ME.sms_alerts !== false);
+  const m = ME.muted_until && new Date(ME.muted_until).getTime() > Date.now();
+  const kind = ME._muteKind || (m ? ((new Date(ME.muted_until).getTime() - Date.now()) > 2 * 3600 * 1000 ? 'tomorrow' : '1h') : 'off');
+  $('#mu1h').classList.toggle('on', m && kind === '1h'); $('#muTom').classList.toggle('on', m && kind === 'tomorrow'); $('#muOff').classList.toggle('on', !m);
+  $('#muState').classList.toggle('hide', !m);
+  if (m) { const mins = Math.max(1, Math.round((new Date(ME.muted_until).getTime() - Date.now()) / 60000)); $('#muState').innerHTML = '&#128263; Muted until <b>' + esc(hhmm(ME.muted_until)) + '</b> (' + (mins >= 90 ? Math.round(mins / 60) + ' h' : mins + ' min') + '). Waiting chats go to the next agent on duty; the roster shows you as muted.'; }
+  const devs = ME.push_devices || [];
+  $('#devList').innerHTML = devs.length ? '<div style="margin-top:10px;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">Devices with push</div>' + devs.map(d => '<div class="dev"><span>' + esc(d.label) + (PUSH_SUB && d.endpoint === PUSH_SUB.endpoint ? ' (this one)' : '') + ' · added ' + new Date(d.created_at).toLocaleDateString() + '</span><i onclick="dropDevice(' + Number(d.id) + ')" title="Remove">&#10005;</i></div>').join('') : '';
+}
+async function pushOn() {
+  const st = INBOX.settings || {};
+  if (!st.vapid_public) { toast('Push is not set up on the server yet'); return; }
+  const reg = await swReady(); if (!reg) { toast('This browser cannot receive push'); return; }
+  try {
+    const perm = await Notification.requestPermission(); if (perm !== 'granted') { renderAlerts(); return; }
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(st.vapid_public) });
+    const j = await api({ action: 'push_subscribe', subscription: sub.toJSON(), label: deviceLabel() });
+    if (!j.ok) { toast(j.error || 'Could not save this device'); try { await sub.unsubscribe(); } catch (e) {} return; }
+    PUSH_SUB = sub; toast('Push is on for this device'); await refreshInbox(); renderAlerts();
+  } catch (e) { toast('Could not turn on push: ' + (e && e.message ? e.message : e)); }
+}
+async function pushOff() {
+  if (!PUSH_SUB) return;
+  const ep = PUSH_SUB.endpoint;
+  try { await PUSH_SUB.unsubscribe(); } catch (e) {}
+  PUSH_SUB = null; await api({ action: 'push_unsubscribe', endpoint: ep }); toast('Push is off for this device'); await refreshInbox(); renderAlerts();
+}
+async function dropDevice(id) {
+  const d = (ME.push_devices || []).find(x => x.id === id); if (!d) return;
+  if (PUSH_SUB && d.endpoint === PUSH_SUB.endpoint) return pushOff();
+  await api({ action: 'push_unsubscribe', id }); await refreshInbox(); renderAlerts();
+}
+async function toggleSmsAlerts() { const on = ME.sms_alerts === false; const j = await api({ action: 'sms_alerts', on }); if (j.ok) { ME.sms_alerts = on; toast(on ? 'Texts to your mobile are on' : 'Texts to your mobile are off'); renderAlerts(); refreshInbox(); } }
+async function mute(kind) { const j = await api({ action: 'mute', until: kind }); if (!j.ok) { toast(j.error || 'Could not mute'); return; } ME.muted_until = j.muted_until; ME._muteKind = kind; toast(kind === 'off' ? 'Unmuted' : 'Muted until ' + hhmm(j.muted_until)); renderAlerts(); refreshInbox(); }
+/* a tap on a notification while this tab exists: the service worker sends the thread here */
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { const d = e.data || {}; if (d.type === 'SPEEDY_OPEN' && d.id) { openThread(Number(d.id)); if (d.claimed) toast('Claimed from the notification'); refreshInbox(); } });
 function signedOut() { TOKEN = null; ME = null; stopPolls(); $('#app').classList.add('hide'); $('#gate').classList.remove('hide'); if (window.google) google.accounts.id.prompt(); }
 function stopPolls() { clearInterval(pollQ); clearInterval(pollT); pollQ = pollT = null; }
 async function boot() {
@@ -237,6 +330,7 @@ window.addEventListener('load', () => {
   $('#seg').addEventListener('click', e => { const s = e.target.closest('[data-seg]'); if (!s) return; SEG = s.dataset.seg; renderList(); });
   $('#rText').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && TOKEN) refreshInbox(); });
+  swReady().then(() => { if (ME) applyInbox(INBOX); });
 });
 
 /* ---------- the queue ---------- */
@@ -244,9 +338,14 @@ async function refreshInbox() { try { const j = await api({ action: 'inbox' }); 
 function applyInbox(j) {
   INBOX = j; ME = j.me;
   $('#meLine').textContent = ME.name + (ME.admin ? ' · admin' : '');
-  $('#duty').classList.toggle('on', ME.on_duty); $('#dutyText').textContent = ME.on_duty ? 'On duty' : 'Off duty';
+  const mutedMin = ME.muted_until ? Math.max(1, Math.round((new Date(ME.muted_until).getTime() - Date.now()) / 60000)) : 0;
+  $('#duty').classList.toggle('on', ME.on_duty); $('#duty').classList.toggle('muted', !!mutedMin);
+  /* the pill stays one word wide on a phone: a mute REPLACES "On duty" (amber says it is still on duty) */
+  $('#dutyText').textContent = ME.on_duty && mutedMin ? 'Muted ' + (mutedMin >= 90 ? 'until ' + hhmm(ME.muted_until) : mutedMin + ' min') : (ME.on_duty ? 'On duty' : 'Off duty');
+  $('#bell').classList.toggle('muted', !!mutedMin); $('#bell').classList.toggle('off', !mutedMin && !pushHere());
+  if ($('#alertSheet').classList.contains('on')) renderAlerts();
   $('#nW').textContent = j.waiting.length; $('#nM').textContent = j.mine.length; $('#nT').textContent = j.team.length; $('#nC').textContent = j.closed.length;
-  const on = j.on_duty.map(a => a.name).join(', ');
+  const on = j.on_duty.map(a => a.name + (a.muted ? ' (muted)' : '')).join(', ');
   $('#dutyNote').innerHTML = `<b style="color:var(--ink)">On duty now:</b> ${on ? esc(on) : '<span style="color:var(--amber-ink)">nobody — chats go straight to leads</span>'}. New chats text the on-duty agents in turn; unclaimed after ${esc(j.settings.claim_window_s)}s they text the next in line.`;
   /* a new waiting chat: sound + title */
   const ids = new Set(j.waiting.map(c => c.id));

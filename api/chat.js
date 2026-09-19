@@ -25,6 +25,7 @@
 --------------------------------------------------------------------------- */
 import { randomBytes } from 'node:crypto';
 import { resolveClient, findClients, branchCode } from './_inbox.js';
+import { pushTo, withdraw, pushReady } from './_push.js';
 
 const BRANCHES = {
   mv: 'Moreno Valley', vb: 'Riverside — Van Buren', mg: 'Riverside — Magnolia', le: 'Lake Elsinore', co: 'Colton',
@@ -101,6 +102,7 @@ export function openState(branch, now, closedDates = []) {
 }
 const fmt = m => { const h = Math.floor(m / 60), mm = m % 60; return `${h % 12 || 12}:${String(mm).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 
+export { alertChain, settings as chatSettings };
 async function settings(s) {
   const r = await sbGet(s, 'chat_settings?select=key,value');
   const o = { claim_window_s: 60, silent_agent_s: 180, escalation_phones: [], closed_dates: [], blocked: { phones: [], ips: [] } };
@@ -205,6 +207,7 @@ export default async function handler(req, res) {
     const m = await sbPost(s, 'messages', { conversation_id: conv.id, sender_kind: 'visitor', audience: 'visitor', channel: 'web', body, is_test: conv.is_test });
     if (!m.ok) return res.status(502).json({ ok: false, error: 'Could not send' });
     await sbPatch(s, `conversations?id=eq.${conv.id}`, { visitor_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    if (conv.status === 'active' && conv.claimed_by) await pushOwner(s, conv, 'msg', `${who(conv)}: new message`, body);
     return res.status(200).json({ ok: true, id: m.row.id });
   }
 
@@ -268,7 +271,7 @@ export default async function handler(req, res) {
    is actually waiting.
    =========================================================================== */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy', 'client_log']);
+const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy', 'client_log', 'push_subscribe', 'push_unsubscribe', 'mute', 'sms_alerts']);
 const SITE = 'https://www.speedyins.com';
 const VISITOR_GONE_MS = 2 * 60 * 1000;
 const ESCALATION_THROTTLE_MS = 15 * 60 * 1000;
@@ -332,11 +335,35 @@ const who = conv => conv.visitor_name || (conv.channel === 'sms' && conv.visitor
 /* on-duty agents with a fresh heartbeat and a mobile, with names */
 async function dutyRoster(s) {
   const since = new Date(Date.now() - HEARTBEAT_MS).toISOString();
-  const d = await sbGet(s, `agent_duty?on_duty=is.true&last_seen_at=gte.${since}&select=agent_email,mobile,since,last_seen_at&order=since.asc`);
+  const d = await sbGet(s, `agent_duty?on_duty=is.true&last_seen_at=gte.${since}&select=agent_email,mobile,since,last_seen_at,muted_until,sms_alerts&order=since.asc`);
   const emails = d.rows.map(r => r.agent_email);
   const names = {};
   if (emails.length) { const a = await sbGet(s, `agents?email=in.(${emails.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = r.full_name; }
-  return d.rows.map(r => ({ email: r.agent_email, name: names[r.agent_email] || r.agent_email, first: String(names[r.agent_email] || r.agent_email).split(' ')[0], mobile: r.mobile, since: r.since }));
+  const nowMs = Date.now();
+  return d.rows.map(r => ({ email: r.agent_email, name: names[r.agent_email] || r.agent_email, first: String(names[r.agent_email] || r.agent_email).split(' ')[0], mobile: r.mobile, since: r.since,
+    /* muted = on duty but not to be alerted (Sep 18): the chain skips them, the roster shows it */
+    muted: !!(r.muted_until && new Date(r.muted_until).getTime() > nowMs), muted_until: r.muted_until || null, sms_alerts: r.sms_alerts !== false }));
+}
+
+/* ---- push (Sep 18): the same moments that text an agent also push to their devices.
+   Every push is a no-op without VAPID keys or devices; nothing here can fail a request. */
+const convUrl = id => `/admin/chat.html#c=${id}`;
+const shortBody = t => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+async function lastVisitorLine(s, id) { const m = await sbGet(s, `messages?conversation_id=eq.${id}&sender_kind=eq.visitor&audience=eq.visitor&select=body&order=id.desc&limit=1`); return m.rows[0] ? shortBody(m.rows[0].body) : ''; }
+async function adminEmails(s) { const a = await sbGet(s, 'agents?active=is.true&role=in.(admin,owner)&select=email'); return a.rows.map(r => r.email); }
+/* a chat someone just took: close its alert on every other phone */
+async function withdrawAlerts(s, conv, except) {
+  if (conv.is_test) return;
+  const alerts = Array.isArray(conv.alerts) ? conv.alerts : [];
+  let emails = alerts.filter(a => a.kind === 'agent' && a.to).map(a => a.to);
+  if (alerts.some(a => a.kind === 'escalation')) emails = emails.concat(await adminEmails(s));
+  emails = emails.filter(e => e !== except);
+  if (emails.length) await withdraw(s, emails, 'c' + conv.id);
+}
+/* the thread's owner hears about a new visitor message / a whisper on their thread */
+export async function pushOwner(s, conv, kind, title, body) {
+  if (!conv || !conv.claimed_by || conv.is_test) return { sent: 0 };
+  return pushTo(s, [conv.claimed_by], { type: kind, tag: 'c' + conv.id + (kind === 'whisper' ? 'w' : 'm'), title, body: shortBody(body), url: convUrl(conv.id), id: conv.id });
 }
 
 async function escalate(s, cfg, text, conv) {
@@ -360,15 +387,20 @@ async function alertChain(s, conv, cfg) {
   if (last && Date.now() - new Date(last.at).getTime() < window) return null;   /* still inside the current window */
   const roster = await dutyRoster(s);
   const tried = new Set(alerts.filter(a => a.kind === 'agent').map(a => a.to));
-  const next = roster.find(a => !tried.has(a.email));
+  const next = roster.find(a => !tried.has(a.email) && !a.muted);
   let entry;
+  const headline = `${who(conv)} is waiting · ${BRANCHES[conv.branch] || conv.branch}${conv.topic ? ' · ' + conv.topic : ''}`;
   if (next) {
     const text = `Speedy Chat: ${who(conv)} is waiting (${BRANCHES[conv.branch] || conv.branch}${conv.topic ? ' · ' + conv.topic : ''}). Claim it: ${chatLink(conv.id)}`;
-    const r = (conv.is_test || !next.mobile) ? { ok: !!next.mobile, skipped: true } : await smsSend(next.mobile, text);
-    entry = { kind: 'agent', to: next.email, at: new Date().toISOString(), ok: !!(r && r.ok), error: (r && r.ok) ? null : String((r && r.error) || 'send failed') };
+    /* the text goes unless they switched it off in Alerts (push carries it then); a push
+       goes to every device they turned on. Neither for a test chat. */
+    const r = (conv.is_test || !next.mobile || next.sms_alerts === false) ? { ok: !!next.mobile, skipped: true } : await smsSend(next.mobile, text);
+    const push = conv.is_test ? { sent: 0 } : await pushTo(s, [next.email], { type: 'alert', tag: 'c' + conv.id, title: headline, body: await lastVisitorLine(s, conv.id), url: convUrl(conv.id), id: conv.id, claim: true });
+    entry = { kind: 'agent', to: next.email, at: new Date().toISOString(), ok: !!(r && r.ok), error: (r && r.ok) ? null : String((r && r.error) || 'send failed'), push: push.sent || 0, sms: !r.skipped };
   } else if (!alerts.some(a => a.kind === 'escalation')) {
     const r = await escalate(s, cfg, `Speedy Chat: nobody claimed ${who(conv)} (${BRANCHES[conv.branch] || conv.branch}) after ${alerts.length} agent alert${alerts.length === 1 ? '' : 's'}. ${chatLink(conv.id)}`, conv);
-    entry = { kind: 'escalation', to: 'escalation', at: new Date().toISOString(), ok: r.sent > 0, reason: r.reason || null };
+    const push = conv.is_test ? { sent: 0 } : await pushTo(s, await adminEmails(s), { type: 'escalation', tag: 'c' + conv.id, title: `Nobody claimed ${who(conv)} (${BRANCHES[conv.branch] || conv.branch}) after ${alerts.length} alert${alerts.length === 1 ? '' : 's'}`, body: 'Escalation · tap to take it', url: convUrl(conv.id), id: conv.id, claim: true });
+    entry = { kind: 'escalation', to: 'escalation', at: new Date().toISOString(), ok: r.sent > 0 || push.sent > 0, reason: r.reason || null, push: push.sent || 0 };
   } else return null;
   alerts.push(entry);
   await sbPatch(s, `conversations?id=eq.${conv.id}`, { alerts, updated_at: new Date().toISOString() });
@@ -430,12 +462,15 @@ async function agentHandler(req, res, s, b, action) {
     /* heartbeat: the inbox open IS being present */
     await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, last_seen_at: now, updated_at: now }]) });
     const dayStart = new Date(); dayStart.setUTCHours(dayStart.getUTCHours() - 7); dayStart.setUTCHours(7, 0, 0, 0);   /* Pacific midnight, approx */
-    const [open, closed, dutyRow, roster] = await Promise.all([
+    const [open, closed, dutyRow, roster, devices] = await Promise.all([
       sbGet(s, 'conversations?status=in.(waiting,active)&select=*&order=created_at.asc&limit=100'),
       sbGet(s, `conversations?status=in.(closed,missed,offline)&updated_at=gte.${dayStart.toISOString()}&select=*&order=updated_at.desc&limit=50`),
-      sbGet(s, `agent_duty?agent_email=eq.${enc(me.email)}&select=on_duty,mobile,since&limit=1`),
+      sbGet(s, `agent_duty?agent_email=eq.${enc(me.email)}&select=on_duty,mobile,since,muted_until,sms_alerts&limit=1`),
       dutyRoster(s),
+      sbGet(s, `push_subscriptions?agent_email=eq.${enc(me.email)}&select=id,label,endpoint,created_at&order=created_at.asc`),
     ]);
+    const myDuty = dutyRow.rows[0] || {};
+    const mutedUntil = myDuty.muted_until && new Date(myDuty.muted_until).getTime() > Date.now() ? myDuty.muted_until : null;
     /* mirror threads: the owner, their branch, sms_all, admins - see canSee() */
     const priv = await privateLines(s);
     open.rows = open.rows.filter(x => canSee(x, me, priv)); closed.rows = closed.rows.filter(x => canSee(x, me, priv));
@@ -463,13 +498,15 @@ async function agentHandler(req, res, s, b, action) {
       alerts: (c.alerts || []).length, is_test: c.is_test,
     });
     return res.status(200).json({ ok: true,
-      me: { email: me.email, name: me.name, first: me.first, admin: me.admin, sees_all: me.sees_all, branch: me.branch_code, on_duty: !!(dutyRow.rows[0] && dutyRow.rows[0].on_duty), mobile: dutyRow.rows[0] ? dutyRow.rows[0].mobile : null, since: dutyRow.rows[0] ? dutyRow.rows[0].since : null },
+      me: { email: me.email, name: me.name, first: me.first, admin: me.admin, sees_all: me.sees_all, branch: me.branch_code, on_duty: !!myDuty.on_duty, mobile: myDuty.mobile || null, since: myDuty.since || null,
+        muted_until: mutedUntil, sms_alerts: myDuty.sms_alerts !== false, push_devices: devices.rows.map(d => ({ id: d.id, label: d.label || 'device', endpoint: d.endpoint, created_at: d.created_at })) },
       waiting: open.rows.filter(c => c.status === 'waiting').map(row),
       mine: open.rows.filter(c => c.status === 'active' && c.claimed_by === me.email).map(row),
       team: open.rows.filter(c => c.status === 'active' && c.claimed_by !== me.email).map(row),
       closed: closed.rows.map(row),
-      on_duty: roster.map(r => ({ email: r.email, name: r.first, since: r.since })),
-      settings: me.admin ? { claim_window_s: cfg.claim_window_s, silent_agent_s: cfg.silent_agent_s, escalation_phones: cfg.escalation_phones, closed_dates: cfg.closed_dates, blocked: cfg.blocked } : { claim_window_s: cfg.claim_window_s },
+      on_duty: roster.map(r => ({ email: r.email, name: r.first, since: r.since, muted: r.muted })),
+      settings: Object.assign(me.admin ? { claim_window_s: cfg.claim_window_s, silent_agent_s: cfg.silent_agent_s, escalation_phones: cfg.escalation_phones, closed_dates: cfg.closed_dates, blocked: cfg.blocked } : { claim_window_s: cfg.claim_window_s },
+        { push_ready: pushReady(), vapid_public: process.env.VAPID_PUBLIC || null }),
     });
   }
 
@@ -479,9 +516,49 @@ async function agentHandler(req, res, s, b, action) {
     let mobile = cur.rows[0] ? cur.rows[0].mobile : null;
     if (b.mobile != null && String(b.mobile).trim()) { const d = digits10(b.mobile); if (!d) return res.status(400).json({ ok: false, error: 'A 10-digit mobile number is needed', code: 'need_mobile' }); mobile = '+1' + d; }
     if (on && !mobile) return res.status(400).json({ ok: false, error: 'Enter the mobile number that should be texted when a chat arrives', code: 'need_mobile' });
-    await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, on_duty: on, since: on ? now : null, mobile, last_seen_at: now, updated_at: now }]) });
+    await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, on_duty: on, since: on ? now : null, mobile, last_seen_at: now, updated_at: now, ...(on ? { muted_until: null } : {}) }]) });
     await record(s, { actor: me.email, kind: on ? 'chat.duty_on' : 'chat.duty_off', source: 'chat', client_no: null, payload: { mobile_set: !!mobile } });
     return res.status(200).json({ ok: true, on_duty: on, mobile });
+  }
+
+  /* ---- Alerts (Sep 18): push devices, mute, the SMS switch ---- */
+  if (action === 'push_subscribe') {
+    const sub = b.subscription && typeof b.subscription === 'object' ? b.subscription : null;
+    const endpoint = sub ? String(sub.endpoint || '') : '';
+    const keys = sub && sub.keys && typeof sub.keys === 'object' ? sub.keys : {};
+    if (!/^https:\/\/[^\s]{10,1900}$/.test(endpoint) || !keys.p256dh || !keys.auth) return res.status(400).json({ ok: false, error: 'Bad subscription' });
+    const label = clean(b.label, 60) || 'device';
+    /* the endpoint is the device: re-subscribing the same one updates its keys and owner */
+    const r = await fetch(`${s.base}/rest/v1/push_subscriptions?on_conflict=endpoint`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify([{ agent_email: me.email, endpoint, p256dh: String(keys.p256dh).slice(0, 200), auth: String(keys.auth).slice(0, 100), label, last_ok_at: now, fails: 0 }]) });
+    const rows = await r.json().catch(() => []);
+    if (!r.ok) return res.status(502).json({ ok: false, error: 'Could not save the device' });
+    await record(s, { actor: me.email, kind: 'chat.push_on', source: 'chat', client_no: null, payload: { label } });
+    return res.status(200).json({ ok: true, id: rows[0] ? rows[0].id : null, push_ready: pushReady() });
+  }
+  if (action === 'push_unsubscribe') {
+    const endpoint = String(b.endpoint || ''); const id = Number(b.id);
+    if (!endpoint && !Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Which device?' });
+    const q = endpoint ? `endpoint=eq.${enc(endpoint)}` : `id=eq.${id}`;
+    await fetch(`${s.base}/rest/v1/push_subscriptions?${q}&agent_email=eq.${enc(me.email)}`, { method: 'DELETE', headers: s.hdrs });   /* only their own */
+    await record(s, { actor: me.email, kind: 'chat.push_off', source: 'chat', client_no: null, payload: {} });
+    return res.status(200).json({ ok: true });
+  }
+  if (action === 'mute') {
+    /* '1h' | 'tomorrow' (8 AM Pacific) | 'off' */
+    const kind = String(b.until || 'off');
+    let until = null;
+    if (kind === '1h') until = new Date(Date.now() + 3600 * 1000).toISOString();
+    else if (kind === 'tomorrow') { const d = new Date(Date.now() - 7 * 3600 * 1000); d.setUTCDate(d.getUTCDate() + 1); d.setUTCHours(8, 0, 0, 0); until = new Date(d.getTime() + 7 * 3600 * 1000).toISOString(); }
+    else if (kind !== 'off') return res.status(400).json({ ok: false, error: 'Bad mute' });
+    await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, muted_until: until, updated_at: now }]) });
+    await record(s, { actor: me.email, kind: until ? 'chat.muted' : 'chat.unmuted', source: 'chat', client_no: null, payload: { until } });
+    return res.status(200).json({ ok: true, muted_until: until });
+  }
+  if (action === 'sms_alerts') {
+    const on = b.on !== false;
+    await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, sms_alerts: on, updated_at: now }]) });
+    return res.status(200).json({ ok: true, sms_alerts: on });
   }
 
   if (action === 'set_setting') {
@@ -600,6 +677,7 @@ async function agentHandler(req, res, s, b, action) {
     }
     await sysMsg(s, conv, conv.lang === 'es' ? `${me.first} se unió al chat` : `${me.first} joined the chat`);
     await record(s, { actor: me.email, kind: 'chat.claimed', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, waited_s: secs(conv.created_at, now), alerts: (conv.alerts || []).length, is_test: conv.is_test } });
+    await withdrawAlerts(s, conv, me.email);
     return res.status(200).json({ ok: true, claimed_by: me.email });
   }
 
@@ -608,6 +686,7 @@ async function agentHandler(req, res, s, b, action) {
     if (conv.status === 'closed') return res.status(409).json({ ok: false, error: 'Chat is closed' });
     await sbPatch(s, `conversations?id=eq.${id}`, { claimed_by: me.email, claimed_at: conv.claimed_at || now, status: 'active', agent_seen_at: now, updated_at: now });
     await sysMsg(s, conv, `${me.first} took over from ${conv.claimed_by || 'the queue'}`, 'agents');
+    if (conv.status === 'waiting') await withdrawAlerts(s, conv, me.email);
     await sysMsg(s, conv, conv.lang === 'es' ? `${me.first} se unió al chat` : `${me.first} joined the chat`);
     await record(s, { actor: me.email, kind: 'chat.takeover', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, from: conv.claimed_by, is_test: conv.is_test } });
     return res.status(200).json({ ok: true });
@@ -679,6 +758,7 @@ async function agentHandler(req, res, s, b, action) {
       await sysMsg(s, conv, conv.lang === 'es' ? `${me.first} se unió al chat` : `${me.first} joined the chat`);
       await record(s, { actor: me.email, kind: 'chat.claimed', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, waited_s: secs(conv.created_at, now), alerts: (conv.alerts || []).length, by_reply: true, is_test: conv.is_test } });
       conv.claimed_by = me.email; conv.status = 'active';
+      await withdrawAlerts(s, conv, me.email);
     }
     /* the visitor left the page and gave a phone: the reply goes out as a text too */
     let via = 'web', rc_message_id = null, sms_from = null;
@@ -701,6 +781,7 @@ async function agentHandler(req, res, s, b, action) {
     }
     const m = await sbPost(s, 'messages', { conversation_id: id, sender_kind: 'agent', sender: me.email, audience: whisper ? 'agents' : 'visitor', channel: via, body, rc_message_id, sms_from, is_test: conv.is_test });
     if (!m.ok) return res.status(502).json({ ok: false, error: 'Could not send' });
+    if (whisper && conv.claimed_by && conv.claimed_by !== me.email) await pushOwner(s, conv, 'whisper', `${me.first} whispered on your chat with ${who(conv)}`, body);
     const patch = { agent_seen_at: now, updated_at: now }; if (!whisper && !conv.first_reply_at) patch.first_reply_at = now;
     await sbPatch(s, `conversations?id=eq.${id}`, patch);
     if (!whisper && !conv.first_reply_at) await record(s, { actor: me.email, kind: 'chat.first_reply', source: 'chat', client_no: conv.client_no || null, payload: { conversation_id: id, seconds: secs(conv.created_at, now), via, is_test: conv.is_test } });

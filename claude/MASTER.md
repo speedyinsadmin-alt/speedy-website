@@ -202,7 +202,14 @@ on quiet nights) → emails speedyinsadmin@gmail.com **only when something was f
 found**, table names only. Hard rules in the prompt: never policies, drops, grants, views,
 functions, storage/auth schemas, business rows. Tools pre-approved by the warm-up trick
 (swap prompt → Saif clicks Run now → restore; warm-up sent the test email 23:54 UTC).
-Speedy Ops has no card for `advisor_runs` yet — small follow-up if wanted.
+**Speedy Ops card (`e85a87d`):** `ops_summary` returns `dbsec` (30 days of `advisor_runs`,
+null when unreadable — the page then says "unknown, not clean"). Strip cell **DB SECURITY**
+(clean / N to review / stale / never / ?), sidebar link, section "Database security — nightly"
+right after Google Business: needs-decision list from the last run, LAST RUN · ERROR/WARN ·
+AUTO-FIXED 30D · RUNS 30D, the run log, a warn note past 36 h ("the app was closed"). Harness
+`speedy-harnessenderOpsDbsec.mjs` renders the real page in jsdom — 26 checks across null /
+no-run / clean / stale / to-review / escaping; the mutation (rename `dbsecCell`) is caught.
+First real run of the task at 00:05 UTC Sep 19: clean, row 1 written, no email, 24 s.
 
 ### ✅ SEP 17 · SMS INTO THE INBOX, A SECURITY HOLE CLOSED, RINGCENTRAL LIMITS LEARNED
 **The hole (`3166f34`):** `api/sms.js` compared `x-admin-key` against `process.env.ADMIN_KEY`,

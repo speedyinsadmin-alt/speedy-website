@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 18. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `bedec92` (another session pushes the public
+otherwise; `git status` is clean at `a549c40` (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -906,7 +906,24 @@ admin reopen), agents see "✓ Paid · September" and a Paid tile, later approva
 the next month. Waiting on Tony: does "confirm" mean *paid with salary* (per-agent tick) or
 *numbers frozen* (one button)?
 
-**SEP 18 - FIVE THINGS SAIF ASKED FOR, ALL LIVE.**
+**SEP 18 - SIX THINGS SAIF ASKED FOR, ALL LIVE.**
+
+**6. FIRST-CHARGE SYNC (`a549c40`).** "sync a client the moment it is first charged":
+a client created in HawkSoft today and charged before the next sync showed as "Client
+#26427" on every list until the 9 AM run. Now `hawksoft.js ledger()` - every charge,
+cash, terminal, pay link, invoice writes through it - calls `ensureClientSynced` after
+the row lands (money first): no row in `clients` → pull from HawkSoft, upsert, event
+`sync.first_charge` (a `sync.*` kind, so the recent list keeps the charge as the
+headline; the Log tab says "Client record pulled from HawkSoft at the first charge").
+A held row is left alone; ZZTEST rows skip it; every read has an 8-s timeout; a
+HawkSoft failure never costs the charge. `charge_create_client` pulls the new record at
+once too. **The mapper moved:** `api/_hs.js` (underscore = not a function, like
+`_inbox.js`) now holds AGENCY_ID/TEST_CLIENT/OFFICE_MAP, the carrier classifier, the
+HawkSoft calls, `sbUpsert`, `upsertHsClient`; platform.js imports them back - one
+mapping, not two that drift. harnessFirstCharge 29, mutateFirstCharge 16/16; every
+platform.js and hawksoft.js harness re-run green (harnessRefund's regex count moved to 3
+for card_find).
+
 
 **5. FIND A CARD (`bedec92`).** Trust tab, "💳 Find a card": the admin types the last 4
 digits, "Search every payment" - any month. View `card_find&last4=NNNN` (admin): the
@@ -1041,8 +1058,8 @@ the Console with no home branch on Tony's staff record is stamped with the CLIEN
 approval rule (the one known difference between the tiles and Fees by agent).
 
 **Next (Saif's list):** My activity could gain a Reply on notes; a sentence for
-`audit.submitted_by_other`; sync a client the moment it is first charged (the "Client
-#26427" gap until the 9 AM sync).
+`audit.submitted_by_other`. ~~Sync a client the moment it is first charged~~ done
+(`a549c40`, item 6 above).
 
 **Next conversation: the document center** (see the block above). Saif's questions to
 answer first: who uses it and what they do first; honest-and-partial (platform documents
@@ -1618,6 +1635,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessFees.mjs` 22 · `mutateFees.mjs` 14 · `fees_view.html` / `fees_byagent.html` | Fees by agent; By agent by earner + period |
 | `patch_text.mjs` (438 sizes, --dim) · `overflowOf.mjs` | readability build |
 | `harnessSpeed.mjs` 15 · `mutateSpeed.mjs` 12 · `shootText.mjs` | speed (parallel reads, Console cache, thumb memory); readability before/after |
+| `harnessFirstCharge.mjs` 29 · `mutateFirstCharge.mjs` 16 | first-charge sync: `_hs.js`, the ledger hook, the Log tab |
 | `harnessCardFind.mjs` 17 · `mutateCardFind.mjs` 14 · `mockCardFind.mjs` | Find a card on the Trust tab |
 | `harnessAutoSync.mjs` 14 · `mutateAutoSync.mjs` 11 | the self-sync (sync_tick, the lease) |
 | `harnessRecent.mjs` 24 · `mutateRecent.mjs` 16 · `mockConsoleSimple.mjs` | recent clients (the list, the search, the sync panel) |

@@ -68,6 +68,18 @@
   .chip.br{color:var(--blue-l)} .chip.me{background:var(--green);color:#fff;border-color:var(--green)} .chip.cl{color:var(--green);border-color:var(--green)} .chip.un{background:var(--red);color:#fff;border-color:var(--red)}
   .claim{background:var(--blue);color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;border:0;flex:none;align-self:center;cursor:pointer;font-family:inherit}
   .empty{text-align:center;color:var(--dim);padding:28px 10px;font-size:13.5px}
+  /* search + filters (Sep 18): one box, one row of chips, the agent picker on the right */
+  .qtools{margin:-2px 0 10px}
+  .search{display:flex;align-items:center;gap:8px;background:var(--field);border:1.5px solid var(--line);border-radius:12px;padding:0 12px}
+  .search input{border:0;background:transparent;padding:11px 0;font-size:14px;border-radius:0} .search .x{color:var(--dim);font-size:16px;cursor:pointer;padding:6px 0 6px 6px}
+  .fil{display:flex;gap:6px;margin-top:8px;align-items:center}
+  .fil span{flex:none;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:99px;border:1px solid var(--line);color:var(--mute);cursor:pointer;white-space:nowrap;user-select:none}
+  .fil span.on{background:rgba(77,124,254,.16);color:var(--blue-l);border-color:var(--blue)}
+  .fil select.who{margin-left:auto;width:auto;max-width:46%;background:var(--field);border:1px solid var(--line);border-radius:99px;padding:6px 28px 6px 11px;font-size:12.5px;font-weight:600;color:var(--ink);appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--mute) 50%),linear-gradient(135deg,var(--mute) 50%,transparent 50%);background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+  .fil select.who.on{border-color:var(--blue);color:var(--blue-l)}
+  .res{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--mute);margin:0 2px 8px} .res a{color:var(--blue-l);font-weight:600;cursor:pointer} .res b{color:var(--ink)}
+  mark{background:rgba(245,166,35,.35);color:inherit;border-radius:3px;padding:0 2px}
+  .conv .stale{font-size:11px;color:var(--dim);margin-top:2px}
   /* thread */
   .thead{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
   .thead .n{font-weight:800;font-size:17px;line-height:1.15} .thead .s{font-size:12px;color:var(--mute);margin-top:2px;line-height:1.5}
@@ -150,6 +162,11 @@
       <div class="seg" id="seg">
         <span data-seg="waiting" class="on">Waiting<b id="nW">0</b></span><span data-seg="mine">Mine<b id="nM">0</b></span><span data-seg="team">Team<b id="nT">0</b></span><span data-seg="closed">Closed today<b id="nC">0</b></span>
       </div>
+      <div class="qtools" id="qtools">
+        <div class="search"><span>&#128269;</span><input id="qIn" placeholder="Search a phone, name or word…" autocomplete="off"><span class="x hide" id="qX" onclick="clearSearch()">&#10005;</span></div>
+        <div class="fil"><span data-ch="all">All</span><span data-ch="web">&#128172; Web</span><span data-ch="sms">&#128241; Text</span><select class="who hide" id="who" onchange="setWho(this.value)"></select></div>
+      </div>
+      <div class="res hide" id="res"></div>
       <div id="list"></div>
       <div class="note" id="dutyNote">—</div>
     </div>
@@ -328,6 +345,9 @@ window.addEventListener('load', () => {
     google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCred, auto_select: false });
     google.accounts.id.renderButton($('#gsibtn'), { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'signin_with' }); }, 150);
   $('#seg').addEventListener('click', e => { const s = e.target.closest('[data-seg]'); if (!s) return; SEG = s.dataset.seg; renderList(); });
+  $('#qtools').addEventListener('click', e => { const s = e.target.closest('[data-ch]'); if (s) setCh(s.dataset.ch); });
+  $('#qIn').addEventListener('input', onSearchInput);
+  $('#qIn').addEventListener('keydown', e => { if (e.key === 'Escape') clearSearch(); });
   $('#rText').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && TOKEN) refreshInbox(); });
   swReady().then(() => { if (ME) applyInbox(INBOX); });
@@ -358,19 +378,66 @@ function applyInbox(j) {
   document.title = (j.waiting.length ? `(${j.waiting.length}) ` : '') + 'Speedy Chat';
   if (!OPEN) renderList();
 }
+/* ---------- filters + search (Sep 18) ----------
+   FILT (channel, agent) is remembered per device; the search box is not. A search asks
+   the server (all time, the inbox's visibility) and its results replace the list until
+   Clear. The chips and the picker narrow both the queue and the results. The queue is
+   never re-sorted: oldest-waiting-first in Waiting, newest-activity elsewhere. */
+let FILT = { ch: 'all', who: '' }, SEARCH = null, qTimer = null, qSeq = 0;
+try { const f = JSON.parse(localStorage.getItem('speedy_chat_filters') || '{}'); if (f && ['all', 'web', 'sms'].includes(f.ch)) FILT.ch = f.ch; if (f && typeof f.who === 'string') FILT.who = f.who; } catch (e) {}
+function saveFilt() { try { localStorage.setItem('speedy_chat_filters', JSON.stringify(FILT)); } catch (e) {} }
+function setCh(ch) { FILT.ch = ch; saveFilt(); renderList(); }
+function setWho(who) { FILT.who = who || ''; saveFilt(); renderList(); }
+/* the agent choice only narrows where the picker is on screen (Team, Closed, a search):
+   a remembered "Sammy" must never empty the Waiting queue, where nobody holds anything */
+const whoActive = () => !!SEARCH || SEG === 'team' || SEG === 'closed';
+const passes = c => (FILT.ch === 'all' || (c.channel || 'web') === FILT.ch) && (!whoActive() || !FILT.who || c.claimed_by === FILT.who);
+/* escape, then wrap the matches - never the other way round */
+function hl(text, q) { const e = esc(text); if (!q) return e; const d = q.replace(/\D/g, ''); const needle = (SEARCH && SEARCH.by === 'phone') ? null : q; if (!needle) return e; const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'); return e.replace(re, m => '<mark>' + m + '</mark>'); }
+function onSearchInput() {
+  const q = $('#qIn').value.trim(); $('#qX').classList.toggle('hide', !q);
+  clearTimeout(qTimer);
+  /* the server wants 2 letters or 3 digits; do not ask before that */
+  const tooShort = q.length < 2 || (/^[\d\s().+-]+$/.test(q) && q.replace(/\D/g, '').length < 3);
+  if (!q || tooShort) { if (SEARCH) { SEARCH = null; renderList(); } return; }
+  qTimer = setTimeout(() => runSearch(q), 350);
+}
+async function runSearch(q) {
+  const seq = ++qSeq;
+  const j = await api({ action: 'search', q, channel: FILT.ch === 'all' ? null : FILT.ch, agent: FILT.who || null });
+  if (seq !== qSeq) return;   /* a newer search is already out */
+  if (!j.ok) { SEARCH = { q, by: 'text', results: [], error: j.error }; renderList(); return; }
+  SEARCH = { q: j.q, by: j.by, results: j.results || [] }; renderList();
+}
+function clearSearch() { $('#qIn').value = ''; $('#qX').classList.add('hide'); SEARCH = null; qSeq++; renderList(); }
+const dayOf = ts => ts ? new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+const isToday = ts => ts && new Date(ts).toDateString() === new Date().toDateString();
 function renderList() {
   document.querySelectorAll('#seg [data-seg]').forEach(s => s.classList.toggle('on', s.dataset.seg === SEG));
-  const rows = INBOX[SEG] || [];
-  if (!rows.length) { $('#list').innerHTML = `<div class="empty">${SEG === 'waiting' ? 'Nobody waiting.' : SEG === 'mine' ? 'No chats claimed by you.' : SEG === 'team' ? 'No other agent has a chat open.' : 'Nothing closed today.'}</div>`; return; }
+  document.querySelectorAll('#qtools [data-ch]').forEach(s => s.classList.toggle('on', s.dataset.ch === FILT.ch));
+  /* the agent picker: the people who hold threads where you are looking; hidden on Waiting/Mine unless searching */
+  const pool = SEARCH ? SEARCH.results : (INBOX[SEG] || []);
+  const agents = {}; pool.forEach(c => { if (c.claimed_by) agents[c.claimed_by] = c.claimed_name || c.claimed_by.split('@')[0]; });
+  const who = $('#who'); const showWho = whoActive();
+  who.classList.toggle('hide', !showWho);
+  if (FILT.who && !agents[FILT.who]) agents[FILT.who] = FILT.who.split('@')[0];   /* keep a remembered choice visible */
+  who.innerHTML = '<option value="">Anyone</option>' + Object.entries(agents).sort((a, b) => a[1].localeCompare(b[1])).map(([e, n]) => `<option value="${esc(e)}"${e === FILT.who ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  who.classList.toggle('on', !!FILT.who);
+  const q = SEARCH ? SEARCH.q : '';
+  const rows = pool.filter(passes);
+  const res = $('#res'); res.classList.toggle('hide', !SEARCH);
+  if (SEARCH) res.innerHTML = SEARCH.error ? `<span style="color:var(--amber-ink)">${esc(SEARCH.error)}</span><a onclick="clearSearch()">Clear</a>` : `<span><b>${rows.length} result${rows.length === 1 ? '' : 's'}</b> for “${esc(q)}” · all time${rows.length !== pool.length ? ' · ' + (pool.length - rows.length) + ' hidden by the filters' : ''}</span><a onclick="clearSearch()">Clear</a>`;
+  if (!rows.length) { $('#list').innerHTML = `<div class="empty">${SEARCH ? 'Nothing matches.' : (pool.length ? 'Nothing here with these filters.' : SEG === 'waiting' ? 'Nobody waiting.' : SEG === 'mine' ? 'No chats claimed by you.' : SEG === 'team' ? 'No other agent has a chat open.' : 'Nothing closed today.')}</div>`; return; }
   $('#list').innerHTML = rows.map(c => `
-    <div class="conv ${c.status === 'waiting' ? 'wait' : ''} ${SEG === 'closed' ? 'dimmed' : ''}" onclick="openThread(${c.id})">
+    <div class="conv ${c.status === 'waiting' ? 'wait' : ''} ${c.status === 'closed' ? 'dimmed' : ''}" onclick="openThread(${c.id})">
       <div class="av">${esc(initials(c.name || (c.lang === 'es' ? 'ES' : 'V')))}</div>
       <div class="t">
-        <div class="n">${esc(c.name || (c.channel === 'sms' && c.phone ? pretty(c.phone) : 'Visitor'))} <small>${c.phone ? esc(pretty(c.phone)) : (c.status === 'waiting' ? 'no phone yet' : '')}</small>${c.unread ? `<span class="chip un">${c.unread} new</span>` : ''}</div>
-        <div class="p">${c.last ? (c.last.from === 'agent' ? '<span class="dim">You:</span> ' : '') + esc(c.last.body) : ''}</div>
+        <div class="n">${hl(c.name || (c.channel === 'sms' && c.phone ? pretty(c.phone) : 'Visitor'), q)} <small>${c.name && c.phone ? hl(pretty(c.phone), q) : (!c.phone && c.status === 'waiting' ? 'no phone yet' : '')}</small>${c.unread ? `<span class="chip un">${c.unread} new</span>` : ''}</div>
+        <div class="p">${c.match ? hl(c.match, q) : (c.last ? (c.last.from === 'agent' ? '<span class="dim">' + (c.claimed_by === ME.email ? 'You' : esc(c.claimed_name || 'Agent')) + ':</span> ' : '') + hl(c.last.body, q) : '')}</div>
         <div class="chips">${c.channel === 'sms' ? `<span class="chip" style="color:var(--amber-ink);border-color:var(--amber)">&#128172; SMS · ${esc(lineLabel(c))}</span>` : ''}<span class="chip br">&#128205; ${esc(c.branch_name || '—')}</span>${c.topic ? `<span class="chip">${esc(c.topic)}</span>` : ''}${c.lang === 'es' ? '<span class="chip">ES</span>' : ''}${c.client_no ? `<span class="chip cl">Client ${c.client_no}</span>` : '<span class="chip">New</span>'}${c.claimed_name ? `<span class="chip me">${esc(c.claimed_name)}</span>` : ''}${c.outcome ? `<span class="chip cl">&rarr; ${esc(c.outcome)}${c.lead_id ? ' #' + c.lead_id : ''}</span>` : ''}${c.is_test ? '<span class="chip">TEST</span>' : ''}</div>
+        ${SEARCH && c.status === 'closed' && !isToday(c.closed_at || c.updated_at || c.created_at) ? `<div class="stale">${esc(dayOf(c.closed_at || c.updated_at || c.created_at))} · ${Math.round((Date.now() - new Date(c.closed_at || c.updated_at || c.created_at).getTime()) / 86400000)} days ago</div>` : ''}
       </div>
-      <div class="r">${c.status === 'waiting' ? `<b>${mmss(c.waited_s)}</b>waiting` : hhmm(c.claimed_at || c.created_at)}</div>
+      <div class="r">${c.status === 'waiting' ? `<b>${mmss(c.waited_s)}</b>waiting` : (isToday(c.claimed_at || c.created_at) ? hhmm(c.claimed_at || c.created_at) : dayOf(c.claimed_at || c.created_at))}</div>
       ${c.status === 'waiting' ? `<button class="claim" onclick="event.stopPropagation();claim(${c.id})">Claim</button>` : ''}
     </div>`).join('');
 }

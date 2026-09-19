@@ -271,7 +271,7 @@ export default async function handler(req, res) {
    is actually waiting.
    =========================================================================== */
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '495028615728-djctotdqcp1340ef3n8t339q873ok7db.apps.googleusercontent.com';
-const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy', 'client_log', 'push_subscribe', 'push_unsubscribe', 'mute', 'sms_alerts']);
+const AGENT_ACTIONS = new Set(['inbox', 'inbox_count', 'thread', 'claim', 'unclaim', 'reply', 'handoff', 'close', 'duty', 'takeover', 'set_setting', 'media', 'find_client', 'link', 'unlink', 'set_policy', 'client_log', 'push_subscribe', 'push_unsubscribe', 'mute', 'sms_alerts', 'search']);
 const SITE = 'https://www.speedyins.com';
 const VISITOR_GONE_MS = 2 * 60 * 1000;
 const ESCALATION_THROTTLE_MS = 15 * 60 * 1000;
@@ -423,6 +423,35 @@ function cleanPolicy(p) {
 }
 const canAct = (conv, me) => me.admin || conv.claimed_by === me.email || (conv.status === 'waiting' && !conv.claimed_by);
 
+/* the queue row, one shape for the inbox and the search (Sep 18). lastAndUnread() reads
+   the visitor-facing messages once for a set of threads; rowOf() is the row itself. */
+async function lastAndUnread(s, convs) {
+  const ids = convs.map(c => c.id);
+  const lastMsg = {}, unread = {};
+  if (ids.length) {
+    const ms = await sbGet(s, `messages?conversation_id=in.(${ids.join(',')})&audience=eq.visitor&select=conversation_id,ts,sender_kind,body&order=id.desc&limit=2000`);
+    for (const m of ms.rows) {
+      if (!lastMsg[m.conversation_id]) lastMsg[m.conversation_id] = { ts: m.ts, from: m.sender_kind, body: String(m.body || '').slice(0, 140) };
+      const c = convs.find(x => x.id === m.conversation_id);
+      if (c && m.sender_kind === 'visitor' && (!c.agent_seen_at || m.ts > c.agent_seen_at)) unread[m.conversation_id] = (unread[m.conversation_id] || 0) + 1;
+    }
+  }
+  return { lastMsg, unread };
+}
+async function firstNames(s, emails) {
+  const names = {}; const list = [...new Set(emails.filter(Boolean))];
+  if (list.length) { const a = await sbGet(s, `agents?email=in.(${list.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = String(r.full_name || r.email).split(' ')[0]; }
+  return names;
+}
+const rowOf = (c, names, lastMsg, unread, now) => ({
+  id: c.id, status: c.status, outcome: c.outcome, created_at: c.created_at, closed_at: c.closed_at || null, updated_at: c.updated_at || null, branch: c.branch, branch_name: BRANCHES[c.branch] || c.branch, lang: c.lang, topic: c.topic,
+  channel: c.channel || 'web', line: c.line || null, visibility: c.visibility || 'all',
+  name: c.visitor_name, phone: c.visitor_phone, client_no: c.client_no, claimed_by: c.claimed_by, claimed_name: names[c.claimed_by] || null, claimed_at: c.claimed_at,
+  waited_s: c.status === 'waiting' ? secs(c.created_at, now) : (c.claimed_at ? secs(c.created_at, c.claimed_at) : null),
+  last: lastMsg[c.id] || null, unread: unread[c.id] || 0, lead_id: c.lead_id, visitor_here: !!c.visitor_seen_at && (Date.now() - new Date(c.visitor_seen_at).getTime()) < VISITOR_GONE_MS,
+  alerts: (c.alerts || []).length, is_test: c.is_test,
+});
+
 /* the client card: who this phone is, what they hold, what they last paid */
 async function clientCard(s, conv) {
   if (!conv.client_no) return null;
@@ -458,6 +487,35 @@ async function agentHandler(req, res, s, b, action) {
     return res.status(200).json({ ok: true, waiting: w.rows.length, mine: m.rows.length, on_duty: !!duty.on_duty });
   }
 
+  /* ---- search (Sep 18): a phone (any digits), a name, or a word said in the conversation,
+     across ALL time - closed threads from last week included. The same visibility as
+     the inbox; optional channel / agent narrowing. Rows come back in the queue's shape
+     plus `match`: the message line that matched, for the highlight. ---- */
+  if (action === 'search') {
+    const q = String(clean(b.q, 80) || '').replace(/[,()*\\]/g, ' ').trim();
+    const digits = q.replace(/\D/g, '');
+    const allDigits = /^[\d\s().+-]+$/.test(q);   /* typed as a number, not a word with a digit in it */
+    const byPhone = allDigits && digits.length >= 3;
+    if (q.length < 2 || (allDigits && digits.length < 3)) return res.status(400).json({ ok: false, error: 'Type at least 2 letters or 3 digits' });
+    const channel = ['web', 'sms'].includes(b.channel) ? b.channel : null;
+    const agent = String(clean(b.agent, 120) || '').toLowerCase();
+    const narrow = (channel ? `&channel=eq.${channel}` : '') + (agent ? `&claimed_by=eq.${enc(agent)}` : '');
+    let ors, matchBy = {};
+    if (byPhone) ors = `visitor_phone.like.*${digits}*`;
+    else {
+      const hits = await sbGet(s, `messages?body=ilike.*${enc(q)}*&audience=eq.visitor&select=conversation_id,body&order=id.desc&limit=400`);
+      for (const m of hits.rows) if (!matchBy[m.conversation_id]) matchBy[m.conversation_id] = String(m.body || '').slice(0, 160);
+      const ids = Object.keys(matchBy).slice(0, 200);
+      ors = `visitor_name.ilike.*${enc(q)}*` + (ids.length ? `,id.in.(${ids.join(',')})` : '');
+    }
+    const cv = await sbGet(s, `conversations?or=(${ors})${narrow}&select=*&order=updated_at.desc.nullslast,id.desc&limit=40`);
+    const priv = await privateLines(s);
+    const convs = cv.rows.filter(x => canSee(x, me, priv));
+    const { lastMsg, unread } = await lastAndUnread(s, convs);
+    const names = await firstNames(s, convs.map(c => c.claimed_by));
+    return res.status(200).json({ ok: true, q, by: byPhone ? 'phone' : 'text', results: convs.map(c => ({ ...rowOf(c, names, lastMsg, unread, now), match: matchBy[c.id] || null })) });
+  }
+
   if (action === 'inbox') {
     /* heartbeat: the inbox open IS being present */
     await fetch(`${s.base}/rest/v1/agent_duty`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ agent_email: me.email, last_seen_at: now, updated_at: now }]) });
@@ -477,26 +535,9 @@ async function agentHandler(req, res, s, b, action) {
     /* a text waiting on a branch line has no visitor poll to drive the chain: the inbox does it */
     for (const c of open.rows) { if (c.status === 'waiting' && c.channel === 'sms') { try { await alertChain(s, c, cfg); } catch { /* next poll */ } } }
     const convs = open.rows.concat(closed.rows);
-    const ids = convs.map(c => c.id);
-    let lastMsg = {}, unread = {};
-    if (ids.length) {
-      const ms = await sbGet(s, `messages?conversation_id=in.(${ids.join(',')})&audience=eq.visitor&select=conversation_id,ts,sender_kind,body&order=id.desc&limit=2000`);
-      for (const m of ms.rows) {
-        if (!lastMsg[m.conversation_id]) lastMsg[m.conversation_id] = { ts: m.ts, from: m.sender_kind, body: m.body.slice(0, 140) };
-        const c = convs.find(x => x.id === m.conversation_id);
-        if (m.sender_kind === 'visitor' && (!c.agent_seen_at || m.ts > c.agent_seen_at)) unread[m.conversation_id] = (unread[m.conversation_id] || 0) + 1;
-      }
-    }
-    const names = {}; const emails = [...new Set(convs.map(c => c.claimed_by).filter(Boolean))];
-    if (emails.length) { const a = await sbGet(s, `agents?email=in.(${emails.map(enc).join(',')})&select=email,full_name`); for (const r of a.rows) names[r.email] = String(r.full_name || r.email).split(' ')[0]; }
-    const row = c => ({
-      id: c.id, status: c.status, outcome: c.outcome, created_at: c.created_at, branch: c.branch, branch_name: BRANCHES[c.branch] || c.branch, lang: c.lang, topic: c.topic,
-      channel: c.channel || 'web', line: c.line || null, visibility: c.visibility || 'all',
-      name: c.visitor_name, phone: c.visitor_phone, client_no: c.client_no, claimed_by: c.claimed_by, claimed_name: names[c.claimed_by] || null, claimed_at: c.claimed_at,
-      waited_s: c.status === 'waiting' ? secs(c.created_at, now) : (c.claimed_at ? secs(c.created_at, c.claimed_at) : null),
-      last: lastMsg[c.id] || null, unread: unread[c.id] || 0, lead_id: c.lead_id, visitor_here: !!c.visitor_seen_at && (Date.now() - new Date(c.visitor_seen_at).getTime()) < VISITOR_GONE_MS,
-      alerts: (c.alerts || []).length, is_test: c.is_test,
-    });
+    const { lastMsg, unread } = await lastAndUnread(s, convs);
+    const names = await firstNames(s, convs.map(c => c.claimed_by));
+    const row = c => rowOf(c, names, lastMsg, unread, now);
     return res.status(200).json({ ok: true,
       me: { email: me.email, name: me.name, first: me.first, admin: me.admin, sees_all: me.sees_all, branch: me.branch_code, on_duty: !!myDuty.on_duty, mobile: myDuty.mobile || null, since: myDuty.since || null,
         muted_until: mutedUntil, sms_alerts: myDuty.sms_alerts !== false, push_devices: devices.rows.map(d => ({ id: d.id, label: d.label || 'device', endpoint: d.endpoint, created_at: d.created_at })) },

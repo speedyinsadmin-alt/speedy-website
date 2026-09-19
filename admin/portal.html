@@ -839,7 +839,7 @@ async function runSearch(q){
   box.innerHTML = '<div class="dim" style="font-size:13px;padding:8px 0">Searching…</div>';
   const r = await api('portal_search&q=' + encodeURIComponent(q));
   if(!r || !r.ok){ box.innerHTML = '<div class="dim" style="font-size:13px;padding:8px 0">Search failed</div>'; return; }
-  if(!r.results.length){ box.innerHTML = emptySearchHtml(q); return; }
+  if(!r.results.length){ box.innerHTML = emptySearchHtml(q, r.note); return; }
   renderSearchResults(r.results);
 }
 
@@ -946,8 +946,11 @@ function renderSearchResults(results){
    pull the change themselves instead of asking Saif or Tony to run a resync.
    HawkSoft only exposes a client once the file has been SAVED in CMS — which is why
    the "nothing new" message says so rather than leaving them clicking. */
-function emptySearchHtml(q){
+/* note: the server's reason when the search was a client NUMBER and HawkSoft could not
+   hand it over - archived in CMS (restore it there), or no such number (Sep 18). */
+function emptySearchHtml(q, note){
   return '<div class="dim" style="font-size:13px;padding:8px 0">No clients found</div>'
+    + (note ? '<div id="searchNote" style="font-size:13px;color:var(--amber-ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin-bottom:8px">' + esc(note) + '</div>' : '')
     + '<div id="refreshBox" style="background:var(--card);border:1px solid var(--line);border-radius:9px;padding:12px 13px;margin-top:2px">'
     + '<div class="dim" style="font-size:13px;margin-bottom:9px">A client added in HawkSoft in the last few minutes may not be here yet.</div>'
     + '<span id="refreshBtn" onclick="refreshClients(\'' + esc(q).replace(/\x27/g,'') + '\')" '

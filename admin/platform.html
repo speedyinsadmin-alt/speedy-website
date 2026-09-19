@@ -808,7 +808,8 @@ async function renderClients(el) {
   const showSearch = rr => {
     const list = rr.clients || [];
     $('#clabel').textContent = list.length + ' match' + (list.length === 1 ? '' : 'es') + ' for \u201c' + SEARCH_Q + '\u201d';
-    $('#ctable').innerHTML = clientTable(list, rr.policy_counts);
+    /* rr.note: the searched number is archived in HawkSoft (restore it in CMS) or unknown there (Sep 18) */
+    $('#ctable').innerHTML = (rr.note ? '<div id="searchNote" style="font-size:13px;color:var(--amber-ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin:6px 0 10px">' + esc(rr.note) + '</div>' : '') + clientTable(list, rr.policy_counts);
   };
   if (SEARCH_Q) { const rr = await api('our_clients&q=' + encodeURIComponent(SEARCH_Q)); if (rr && rr.ok) showSearch(rr); }
   else {

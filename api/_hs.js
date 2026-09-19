@@ -75,6 +75,21 @@ export const hsAllClientIds = () => hsCall(`/vendor/agency/${AGENCY_ID}/clients?
 export const hsChangedSince = (iso) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=${encodeURIComponent(iso)}`);
 export const hsClientBatch = (ids, opts = {}) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&include=Details,People,Contacts,Policies`, { ...opts, method: 'POST', body: JSON.stringify({ clientNumbers: ids }) });
 
+/* The numbers HawkSoft's API treats as deleted - which is what an ARCHIVED client is to
+   it (Sep 18: 499 numbers, every one 404 on a read). A Set, or null when HawkSoft did
+   not answer. Cached for five minutes per instance: a miss is rare and the list is
+   the same for every miss in that window. */
+let _archived = { at: 0, set: null };
+export async function hsArchivedNumbers(opts = {}) {
+  if (_archived.set && Date.now() - _archived.at < 5 * 60000) return _archived.set;
+  try {
+    const r = await hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=2000-01-01T00:00:00Z&deleted=true`, opts);
+    if (r.error || r.status !== 200 || !Array.isArray(r.body)) return null;
+    _archived = { at: Date.now(), set: new Set(r.body.map(Number).filter(isFinite)) };
+    return _archived.set;
+  } catch { return null; }
+}
+
 export const pick = (o, ...keys) => { for (const k of keys) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 export const dateOnly = v => { const s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null; };
 
@@ -186,10 +201,16 @@ export async function ensureClientSynced(s, clientNo, opts = {}) {
       const b = await hsClientBatch([cn], { signal: AbortSignal.timeout(ms) });
       const row = (!b.error && b.status === 200 && Array.isArray(b.body)) ? b.body.find(c => Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id')) === cn) : null;
       if (!row) {
-        /* say so where it can be read - a miss used to be silent (client 25356, Sep 18) */
+        /* ARCHIVED IN CMS = deleted to the API (client 25356, Sep 18: Archived in CMS,
+           the single read 404, the batch read empty, and the number on the
+           `deleted=true` list with 498 others). The record cannot be fetched until it
+           is restored in CMS, so the caller is told which it is - archived or unknown. */
+        const archived = await hsArchivedNumbers({ signal: AbortSignal.timeout(ms) });
+        const isArchived = archived ? archived.has(cn) : null;
+        /* say so where it can be read - a miss used to be silent */
         await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' }, signal: AbortSignal.timeout(ms),
-          body: JSON.stringify([{ actor: opts.actor || 'system', kind: 'sync.pull_miss', client_no: null, source: 'hawksoft_sync', payload: { client_no: cn, reason: opts.reason || null, single: one, batch: b.error || ('HTTP ' + b.status + (Array.isArray(b.body) ? ' · ' + b.body.length + ' rows' : '')) } }]) }).catch(() => null);
-        return { ok: false, error: 'HawkSoft: ' + one + ' / batch ' + (b.error || ('HTTP ' + b.status)) };
+          body: JSON.stringify([{ actor: opts.actor || 'system', kind: 'sync.pull_miss', client_no: null, source: 'hawksoft_sync', payload: { client_no: cn, reason: opts.reason || null, archived: isArchived, single: one, batch: b.error || ('HTTP ' + b.status + (Array.isArray(b.body) ? ' · ' + b.body.length + ' rows' : '')) } }]) }).catch(() => null);
+        return { ok: false, archived: isArchived, error: isArchived ? 'archived in HawkSoft' : ('HawkSoft: ' + one + ' / batch ' + (b.error || ('HTTP ' + b.status))) };
       }
       fresh = { status: 200, body: row }; how = 'batch';
     }

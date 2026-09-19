@@ -1398,17 +1398,21 @@ function phonePatterns(digits) {
 /* A search that IS a client number and finds no row with that number pulls it from
    HawkSoft right then (Sep 18: client 25356 was never in our table - the seed left gaps,
    and the delta sync only brings clients CHANGED in HawkSoft, so an old untouched record
-   could never appear). Returns the fresh rows to add, or []. Never throws. */
+   could never appear). Returns { rows: the fresh rows to add, note: a sentence for
+   the agent when there are none }. An ARCHIVED client is deleted to HawkSoft's API
+   (25356 was archived in CMS - 404, empty batch, on the deleted list), so the note
+   says to restore it in CMS; nothing else can fetch it. Never throws. */
 async function pullSearchedNumber(s, q, rows, actor, select) {
   const no = /^\d{3,7}$/.test(String(q || '').trim()) ? parseInt(q, 10) : 0;
-  if (!no || no === TEST_CLIENT) return [];
-  if ((rows || []).some(c => Number(c.client_no) === no)) return [];
+  if (!no || no === TEST_CLIENT) return { rows: [], note: null };
+  if ((rows || []).some(c => Number(c.client_no) === no)) return { rows: [], note: null };
   try {
     const r = await ensureClientSynced(s, no, { actor: actor || 'search', reason: 'search', kind: 'sync.searched' });
-    if (!r || !r.ok || r.existed) return [];
+    if (r && r.archived === true) return { rows: [], note: 'Client #' + no + ' is archived in HawkSoft. Restore it in CMS (Client \u2192 Unarchive), then search again \u2014 it appears at once.' };
+    if (!r || !r.ok || r.existed) return { rows: [], note: r && r.archived === false ? 'HawkSoft has no client #' + no + '.' : null };
     const cl = await sbGet(s, `clients?select=${select || '*'}&client_no=eq.${no}`);
-    return cl.rows || [];
-  } catch { return []; }
+    return { rows: cl.rows || [], note: null };
+  } catch { return { rows: [], note: null }; }
 }
 function buildClientSearch(q) {
   const digits = q.replace(/\D/g, '');
@@ -1686,13 +1690,14 @@ const portalViews = ['portal_home', 'portal_search', 'portal_client', 'portal_th
       const cl = await sbGet(s, `clients?select=client_no,first_name,last_name,business_name,email,phone,branch&or=(${ors.join(',')})&order=client_no.asc&limit=${multi ? 800 : 25}`);
       let rows = cl.rows || [];
       if (multi) rows = rows.filter(c => matchesAllTokens(c, toks)).slice(0, 25);
-      rows = rows.concat(await pullSearchedNumber(s, q, rows, who.email, 'client_no,first_name,last_name,business_name,email,phone,branch'));
+      const pulled = await pullSearchedNumber(s, q, rows, who.email, 'client_no,first_name,last_name,business_name,email,phone,branch');
+      rows = rows.concat(pulled.rows);
       const results = rows.map(c => ({
         client_no: c.client_no,
         name: c.business_name || [c.first_name, c.last_name].filter(Boolean).join(' '),
         phone: c.phone || null, branch: c.branch || null,
       }));
-      return res.status(200).json({ ok: true, results });
+      return res.status(200).json({ ok: true, results, note: pulled.note || null });
     }
 
     if (view === 'portal_refresh_clients') {
@@ -3626,7 +3631,8 @@ if (view === 'portal_share_due') {
        client_no returned, so filtering after it would build an 800-id IN list to
        answer a search that shows 100. */
     if (MULTI) cl.rows = (cl.rows || []).filter(c => matchesAllTokens(c, TOKS)).slice(0, 100);
-    if (q) cl.rows = (cl.rows || []).concat(await pullSearchedNumber(s, q, cl.rows, email, '*'));
+    let note = null;
+    if (q) { const pulled = await pullSearchedNumber(s, q, cl.rows, email, '*'); cl.rows = (cl.rows || []).concat(pulled.rows); note = pulled.note; }
     // policy counts only for the returned clients
     const nos = (cl.rows || []).map(c => c.client_no).filter(n => n != null);
     let counts = {};
@@ -3644,7 +3650,7 @@ if (view === 'portal_share_due') {
         }
       }
     }
-    return res.status(200).json({ ok: cl.ok, email, clients: cl.rows || [], policy_counts: counts, query: q, total_shown: (cl.rows || []).length });
+    return res.status(200).json({ ok: cl.ok, email, clients: cl.rows || [], policy_counts: counts, query: q, total_shown: (cl.rows || []).length, note });
   }
 
   /* ---- RECENT CLIENTS (Sep 18): the clients someone touched lately, newest first ----

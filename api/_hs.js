@@ -73,7 +73,7 @@ export async function hsCall(path, opts = {}) {
 export const hsFetchClient = (no = TEST_CLIENT, opts = {}) => hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Details,People,Contacts,Policies,Invoices`, opts);
 export const hsAllClientIds = () => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=2000-01-01T00:00:00Z`);
 export const hsChangedSince = (iso) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=${encodeURIComponent(iso)}`);
-export const hsClientBatch = (ids) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&include=Details,People,Contacts,Policies`, { method: 'POST', body: JSON.stringify({ clientNumbers: ids }) });
+export const hsClientBatch = (ids, opts = {}) => hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&include=Details,People,Contacts,Policies`, { ...opts, method: 'POST', body: JSON.stringify({ clientNumbers: ids }) });
 
 export const pick = (o, ...keys) => { for (const k of keys) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 export const dateOnly = v => { const s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null; };
@@ -176,8 +176,23 @@ export async function ensureClientSynced(s, clientNo, opts = {}) {
     const rows = await have.json().catch(() => null);
     if (!Array.isArray(rows)) return { ok: false, error: 'clients read unreadable' };
     if (rows.length) return { ok: true, existed: true, client_no: cn };
-    const fresh = await hsFetchClient(cn, { signal: AbortSignal.timeout(ms) });
-    if (fresh.error || fresh.status !== 200 || !fresh.body || typeof fresh.body !== 'object') return { ok: false, error: fresh.error || ('HawkSoft HTTP ' + fresh.status) };
+    let fresh = await hsFetchClient(cn, { signal: AbortSignal.timeout(ms) });
+    let how = 'client';
+    if (fresh.error || fresh.status !== 200 || !fresh.body || typeof fresh.body !== 'object') {
+      /* Second try the way the seed and the syncs read: the batch call, no Invoices.
+         A record the single-client call refuses (HawkSoft answers 500 on some files
+         when invoices are included) is still readable this way. */
+      const one = String(fresh.error || ('HTTP ' + fresh.status));
+      const b = await hsClientBatch([cn], { signal: AbortSignal.timeout(ms) });
+      const row = (!b.error && b.status === 200 && Array.isArray(b.body)) ? b.body.find(c => Number(pick(c, 'clientNumber', 'clientNo', 'number', 'id', 'Id')) === cn) : null;
+      if (!row) {
+        /* say so where it can be read - a miss used to be silent (client 25356, Sep 18) */
+        await fetch(`${s.base}/rest/v1/events`, { method: 'POST', headers: { ...s.hdrs, Prefer: 'return=minimal' }, signal: AbortSignal.timeout(ms),
+          body: JSON.stringify([{ actor: opts.actor || 'system', kind: 'sync.pull_miss', client_no: null, source: 'hawksoft_sync', payload: { client_no: cn, reason: opts.reason || null, single: one, batch: b.error || ('HTTP ' + b.status + (Array.isArray(b.body) ? ' · ' + b.body.length + ' rows' : '')) } }]) }).catch(() => null);
+        return { ok: false, error: 'HawkSoft: ' + one + ' / batch ' + (b.error || ('HTTP ' + b.status)) };
+      }
+      fresh = { status: 200, body: row }; how = 'batch';
+    }
     const up = await upsertHsClient(s, fresh.body);
     if (!up.ok) return { ok: false, error: up.error || 'upsert failed' };
     /* the evidence, on the client's own log; kind sync.* so the recent-clients list

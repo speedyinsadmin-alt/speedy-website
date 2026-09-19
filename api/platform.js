@@ -4384,25 +4384,6 @@ if (view === 'portal_share_due') {
      extra.last4, written by the Clover leg); the platform never sees a full number, so
      this is safe to hand an admin. Four digits are not one card - the brand is returned
      and the cards are counted. Cash, Zelle and pay links carry no card and are not here. */
-  /* ---- PROBE (Sep 18, read-only, admin): how HawkSoft's API answers for an ARCHIVED client.
-     Client 25356 is Archived in CMS, the single read says 404 and the id list omits it.
-     Tries the documented `Deleted` flag on the changed-clients list and the batch read.
-     Changes nothing anywhere. Delete once the answer is recorded in MASTER. */
-  if (view === 'probe_archived') {
-    const no = parseInt(String(req.query.no || ''), 10);
-    if (!isFinite(no)) return res.status(400).json({ ok: false, error: 'no= required' });
-    const out = { ok: true, no };
-    const single = await hsCall(`/vendor/agency/${AGENCY_ID}/client/${no}?version=4.0&include=Details`);
-    out.single = { status: single.status, error: single.error || null, body: single.status === 200 ? { status: single.body && single.body.details && single.body.details.status } : (typeof single.body === 'string' ? single.body.slice(0, 200) : single.body) };
-    const del = await hsCall(`/vendor/agency/${AGENCY_ID}/clients?version=4.0&asOf=2000-01-01T00:00:00Z&deleted=true`);
-    const delIds = Array.isArray(del.body) ? del.body.map(Number) : null;
-    out.deleted_list = { status: del.status, error: del.error || null, count: delIds ? delIds.length : null, has: delIds ? delIds.includes(no) : null, sample: delIds ? delIds.slice(0, 5) : (typeof del.body === 'string' ? del.body.slice(0, 200) : del.body) };
-    const batch = await hsClientBatch([no]);
-    const rows = Array.isArray(batch.body) ? batch.body : [];
-    out.batch = { status: batch.status, error: batch.error || null, rows: rows.length, first: rows[0] ? { clientNumber: rows[0].clientNumber, status: rows[0].details && rows[0].details.status, people: (rows[0].people || []).length, policies: (rows[0].policies || []).length } : null };
-    return res.status(200).json(out);
-  }
-
   if (view === 'card_find') {
     const last4 = String(req.query.last4 || '').replace(/\D/g, '');
     if (last4.length !== 4) return res.status(400).json({ ok: false, error: 'Enter the last 4 digits of the card.' });

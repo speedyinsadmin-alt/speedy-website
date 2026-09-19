@@ -85,7 +85,7 @@ Building the **Speedy Platform** — a proprietary AMS to eventually replace Haw
 
 ## 🔜 NEXT SESSION. START HERE.
 Last written Sep 18. Everything below is pushed and live unless it says
-otherwise; `git status` is clean at `a549c40` (another session pushes the public
+otherwise; `git status` is clean at the archived-search commit (another session pushes the public
 site - commercial lines, intake - alongside; pull before touching this file).
 
 **If this is a NEW chat session:** read this block, then "HOW TO CONTINUE IN A NEW CHAT"
@@ -906,6 +906,31 @@ admin reopen), agents see "✓ Paid · September" and a Paid tile, later approva
 the next month. Waiting on Tony: does "confirm" mean *paid with salary* (per-agent tick) or
 *numbers frozen* (one button)?
 
+**⛔ HAWKSOFT FACT, LEARNED THE HARD WAY (Sep 18 night): AN ARCHIVED CLIENT IS A
+DELETED ONE TO THE PARTNER API.** Saif: "Agent want to find this client ID 25356 and he
+cant find it" → "it was working before we did the update for the client tab, what have
+you done!" Nothing of the day's work was involved. 25356 (Galvez Plascencia, Maria Elena)
+is **Status: Archived** in CMS. Proved with Saif's sign-in against HawkSoft: single read
+**404**, batch read **0 rows**, and the number on the changed-clients list with
+`deleted=true` (**499** numbers, every archived client). The seed (July) never received
+it, no sync can, and "Refresh client list" cannot either. The only way in: **Unarchive
+in CMS, then search the number** - the search pull (below) fetches it at once.
+
+Built for it (`3923e1d`, `8cb6393`, `f1561d2`): (1) a search that IS a client number
+and finds no row pulls it from HawkSoft right then, portal and Console
+(`pullSearchedNumber` → `ensureClientSynced`, event `sync.searched`: "pulled from HawkSoft
+when Yasmin searched for it"); (2) the pull falls back to the batch read when the single
+read fails; (3) a miss is written as `sync.pull_miss` with HawkSoft's answers and
+`archived: true/false` (`hsArchivedNumbers()`, the deleted list cached 5 min); (4) the
+search answers with a note the pages draw above the empty result: "Client #25356 is
+archived in HawkSoft. Restore it in CMS (Client → Unarchive), then search again — it
+appears at once." / "HawkSoft has no client #N." harnessFirstCharge 52, mutateFirstCharge
+27/27. **Gap-fill pass run the same night:** HawkSoft's full id list (25,746) vs ours
+(25,753 - we keep files HawkSoft has since archived): only 5 missing, all created that
+week (26192, 26196, 26197, 26198, 26259), pulled in through the search path (the bulk
+`seed_batch` write was blocked by the permission mode). Nothing else is absent except
+archived clients, which HawkSoft withholds by design.
+
 **SEP 18 - SIX THINGS SAIF ASKED FOR, ALL LIVE.**
 
 **6. FIRST-CHARGE SYNC (`a549c40`).** "sync a client the moment it is first charged":
@@ -1635,7 +1660,7 @@ Harnesses live in the session scratchpad, not the repo. They need `jsdom` and
 | `harnessFees.mjs` 22 · `mutateFees.mjs` 14 · `fees_view.html` / `fees_byagent.html` | Fees by agent; By agent by earner + period |
 | `patch_text.mjs` (438 sizes, --dim) · `overflowOf.mjs` | readability build |
 | `harnessSpeed.mjs` 15 · `mutateSpeed.mjs` 12 · `shootText.mjs` | speed (parallel reads, Console cache, thumb memory); readability before/after |
-| `harnessFirstCharge.mjs` 29 · `mutateFirstCharge.mjs` 16 | first-charge sync: `_hs.js`, the ledger hook, the Log tab |
+| `harnessFirstCharge.mjs` 52 · `mutateFirstCharge.mjs` 27 | first-charge sync: `_hs.js`, the ledger hook, the Log tab; search pulls by number; archived = deleted to the API |
 | `harnessCardFind.mjs` 17 · `mutateCardFind.mjs` 14 · `mockCardFind.mjs` | Find a card on the Trust tab |
 | `harnessAutoSync.mjs` 14 · `mutateAutoSync.mjs` 11 | the self-sync (sync_tick, the lease) |
 | `harnessRecent.mjs` 24 · `mutateRecent.mjs` 16 · `mockConsoleSimple.mjs` | recent clients (the list, the search, the sync panel) |
